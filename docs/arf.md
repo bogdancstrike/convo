@@ -1,10 +1,12 @@
 # Enclave — Architecture Reference File (ARF)
 
+> Current launch contract: ADR-025 and specs §0/§31 supersede historical feature staging; ADR-026 defines the single Spring Modulith runtime.
+
 | Field | Value |
 |---|---|
 | Document | Architecture reference: structure, trust model, threat model, deployment, operations, architecture decision records |
-| Status | Draft v1.2 — 1v1, groups, communities; Android/web first, not implemented |
-| Updated | 2026-10-16 |
+| Status | Draft v1.3 — complete Android/web launch scope, Spring Modulith, not implemented |
+| Updated | 2026-10-17 |
 | Related | [Specs](specs.md), [UI](UI.md), [Mobile](mobile.md), [Tasks](tasks.md), [Sources](sources.md), [Diagram catalogue](diagrams/README.md) |
 
 ---
@@ -14,10 +16,10 @@
 | Driver | Source | Architectural consequence |
 |---|---|---|
 | Server must never access content | Specs §0, NFR-SEC-01 | All crypto on clients; server is a relay for opaque bytes; no server-side features requiring plaintext. |
-| Operator is an adversary | Specs §0 security promise | Minimize stored metadata; detectable key changes; audit log; key transparency roadmap. |
+| Operator is an adversary | Specs §0 security promise | Minimize stored metadata; detectable key changes; audit log; independently witnessed key transparency at launch. |
 | Fully on-prem, including air-gapped | FR-OPS-01 | No SaaS dependencies; self-hosted push alternatives; offline release bundles. |
 | Multi-device with consistent state | FR-DEV-01 | Device as unit of delivery; Sesame-style fan-out; MLS leaves per device. |
-| Groups, communities, and later group calls | FR-GRP-02, FR-COM-01, FR-CAL-05 | Independent MLS scopes, authenticated roles/link delegation and pending removal; SFU media remains P1. |
+| Groups, communities, and launch group calls | FR-GRP-02, FR-COM-01, FR-CAL-05 | Independent MLS scopes, authenticated roles/link delegation and pending removal; SFU media is launch-required on Android/web. |
 | Android and web first | User scope, FR-UX-01 | Flutter Android + React/TypeScript web; shared Rust protocol code; native Swift/iOS work deferred. Staffing and Java/Python expertise are planning assumptions, not confirmed team facts. |
 | Reliability equals security | NFR-REL-01 | Transactional envelopes/outbox, idempotent submissions, strict client persistence before acknowledgement. |
 | Friendly, accessible daily use | FR-UX-01 | One clear onboarding route, local search, keyboard/TalkBack access, honest privacy/status language. |
@@ -56,8 +58,8 @@ Runtime data, identity, storage, and media remain on-prem. Connected profiles ma
 flowchart TB
     subgraph Clients
         AND["Android app<br/>Flutter + enclave-core (Rust)"]
-        IOS["iOS app (P1)<br/>Flutter + Swift + enclave-core"]
-        DSK["Desktop app (P2)<br/>Optional packaging"]
+        IOS["iOS app (client follow-on)<br/>Flutter + Swift + enclave-core"]
+        DSK["Desktop app (client follow-on)<br/>Optional packaging"]
         WEB["Web app (P0, lower trust)<br/>React / TypeScript + browser core"]
         ADMUI["Admin console (separate origin)<br/>React / TypeScript"]
     end
@@ -65,15 +67,18 @@ flowchart TB
     subgraph Edge["Edge (DMZ / ingress nodes)"]
         ING["Ingress (Envoy Gateway reference)<br/>TLS, WebSocket upgrade, static web"]
         TURN["coturn<br/>hostNetwork, UDP 3478 + relay range, TLS 443"]
-        SFU["LiveKit SFU (P1)<br/>UDP mux 7882, TCP 7881"]
+        SFU["LiveKit SFU (launch)<br/>UDP mux 7882, TCP 7881"]
     end
 
-    subgraph App["Application tier"]
+    subgraph App["One Spring Modulith deployment per replica · logical adapters"]
         GW["enclave-gateway<br/>WebSocket, drain, routing"]
         API["enclave-api<br/>REST: devices, keys, groups, attachments, calls"]
         PUSH["enclave-push<br/>Leased durable intents / UnifiedPush / FCM"]
-        BRIDGE["Local-push bridge (P1)<br/>iOS provider ingress"]
+        BRIDGE["Local-push bridge (iOS client follow-on)<br/>iOS provider ingress"]
         ADMB["enclave-admin<br/>policies, audit, health"]
+    end
+
+    subgraph Infrastructure["Separate identity / push infrastructure"]
         KC["Keycloak (HA)"]
         NTFY["ntfy (UnifiedPush distributor)"]
     end
@@ -85,7 +90,7 @@ flowchart TB
         OBJ[("S3-compatible object store<br/>encrypted blobs")]
         OUT[("Transactional outbox<br/>within PostgreSQL")]
         KCDB[("Keycloak DB")]
-        VAULT[("OpenBao / Vault<br/>secrets, peppers, signing keys")]
+        VAULT[("OpenBao / Vault<br/>secrets, signing keys")]
     end
 
     AND & IOS & DSK & WEB --> ING
@@ -108,30 +113,22 @@ flowchart TB
     SFU --> VK
 ```
 
-### 3.1 Backend internal structure (hexagonal / modular monolith)
+### 3.1 Backend internal structure (Spring Modulith)
 
-```
-enclave-server/
-├── enclave-domain/            # pure domain: DeviceAddress, Envelope, Roster, policies (no Spring)
-├── enclave-application/       # use cases: SendMessage, ClaimPreKeys, SubmitCommit, RevokeDevice
-├── enclave-adapters-in/
-│   ├── rest/                  # Spring MVC controllers
-│   ├── websocket/             # gateway handlers
-│   └── keycloak-events/       # Keycloak event listener webhook
-├── enclave-adapters-out/
-│   ├── postgres/              # JdbcTemplate repositories, Flyway migrations
-│   ├── valkey/                # presence, mail/ctl signals, optional outbox hints, rate limiting
-│   ├── objectstore/           # S3 presigning (AWS SDK v2 with custom endpoint)
-│   ├── livekit/               # token minting, RemoveParticipant
-│   └── push/                  # UnifiedPush / FCM; APNs and local bridge in P1
-├── enclave-boot-gateway/      # Spring Boot app: gateway profile
-├── enclave-boot-api/          # Spring Boot app: api profile
-├── enclave-boot-push/
-├── enclave-boot-admin/
-└── enclave-boot-all/          # single deployable for small tier
+The launch backend is one Spring Boot **Spring Modulith** application, horizontally replicated as needed. Gateway, REST, push and admin identify responsibilities/adapters within that runtime. Their earlier separate boot profiles are migration experiments, not launch microservices. Each feature module owns domain/application/adapters and its persistence; pure domain code stays framework-free.
+
+```text
+server/
+├── enclave-contracts/                 # narrow shared IDs and versioned event contracts
+├── enclave-modules/
+│   └── <identity|messaging|groups|communities|attachments|calls|notifications|
+│        policy|administration|audit|federation|integrations>/
+│       ├── api/                       # declared named interfaces and public events
+│       └── internal/                  # domain, use cases, inbound/outbound adapters, persistence
+└── enclave-boot-all/                   # one production Spring Modulith runtime
 ```
 
-Module boundaries are enforced with ArchUnit tests (domain must not depend on Spring; adapters must not depend on each other).
+Use declared in-process APIs and durable module events, with `ApplicationModules.verify()`, ArchUnit and module `Scenario` tests in CI. No module reaches into another's internal types, tables or repositories. Messaging still commits mailbox/submission/notification intent together; calls to identity authorization interfaces participate in the documented transaction/locking protocol. Durable module events use the persistent publication registry with explicit consumer dedupe/retry. Valkey only coordinates disposable hints between replicas. See specs §1.1–1.2 and ADR-026 for event/outbox ownership and service-extraction limits.
 
 ---
 
@@ -155,7 +152,7 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 | Device list per account, registration IDs, platform | Yes | Until revoked | Fan-out necessity. |
 | Public prekeys, KeyPackages | Yes | Until consumed/expired | |
 | Encrypted envelopes | Yes | Until acked or 30 days | Ciphertext + routing fields. |
-| Sender of 1:1 messages | P0 authenticated sender; P1 sealed transport omits durable sender | Envelope retention; short operational metadata | Sealed transport cannot use an authenticated messaging socket. |
+| Sender of 1:1 messages | Authenticated policy mode; launch sealed transport omits durable sender | Envelope retention; short operational metadata | Sealed transport cannot use an authenticated messaging socket. |
 | Group/community roster, parent-child IDs, link visibility and operation state | Yes | Space lifetime plus bounded operation cleanup | Routing/authorization mirrors expose relationship metadata (R3); titles/content remain encrypted. |
 | Group name, avatar, description | **No** | — | Inside MLS application messages. |
 | Profile (display name, photo) | Encrypted blob | Account lifetime | Profile key shared only with contacts. |
@@ -189,8 +186,8 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 |---|---|---|---|
 | Read message content in transit | A1 | E2EE (Signal/MLS) + TLS 1.3 with pinned CA | Conditional on endpoint/code integrity and validated protocol implementation |
 | Read stored content on server | A2, A3 | Server stores ciphertext only; keys never leave devices | Conditional on endpoint/code integrity and validated protocol implementation |
-| Register ghost device to receive messages | A2, A3 | Existing-device transcript approval and account-key bindings; verified identity-change blocking; independent key transparency (P2) | Reset/substitution, first-use trust, or compromise of any device holding shared IK remain risks (R1). |
-| Replace a user's identity key (MITM) | A2, A3 | Identity-change warnings; blocking for verified contacts; KT (P2) | Unverified contacts accept new key with a notice (R1) |
+| Register ghost device to receive messages | A2, A3 | Existing-device transcript approval and account-key bindings; verified identity-change blocking; independent key transparency (launch) | Reset/substitution, first-use trust, or compromise of any device holding shared IK remain risks (R1). |
+| Replace a user's identity key (MITM) | A2, A3 | Identity-change warnings; blocking for verified contacts; KT (launch) | Unverified contacts accept new key with a notice (R1) |
 | Traffic analysis (who talks to whom, when) | A2, A3 | Sealed sender for 1:1; minimal logs; no conversation tables | Timing/IP correlation at gateway possible (R2) |
 | Group membership exposure | A2, A3 | — (required for fan-out) | Roster visible to server (R3); future: anonymous credentials (zkgroup-like) |
 | Malicious served web client | A2, A3 | Web is P0 and enabled in pilot; policy may disable it; strict CSP/SRI/update integrity and explicit reduced-trust UX | Inherent to web model (R4) |
@@ -200,8 +197,8 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 | Stolen unlocked device | A4 | App lock with timeout, biometric; remote revoke + wipe directive; disappearing messages | Data on device until wipe reaches it |
 | Stolen locked device | A4 | SQLCipher key in hardware keystore, `ThisDeviceOnly`; excluded from OS backups | Device-level OS exploits |
 | Prekey exhaustion DoS | any client | Rate limits per target; last-resort Kyber key | Forward secrecy of first message reduced when OPKs exhausted |
-| Malicious client build | A6 | Signed builds, SBOM, reproducible builds (P2), MDM-pinned app signatures | Trust in build infra |
-| Harvest now, decrypt later | A7 | PQXDH for 1:1 now; PQ ratchet (ADR-007); PQ MLS ciphersuite post-GA | Group traffic classically protected until PQ MLS (R5) |
+| Malicious client build | A6 | Signed builds, SBOM, reproducible builds (launch), MDM-pinned app signatures | Trust in build infra |
+| Harvest now, decrypt later | A7 | PQXDH for 1:1 now; PQ ratchet (ADR-007); reviewed PQ MLS launch profile | Classical baseline remains explicit; unproven PQ MLS gate blocks launch (R5) |
 | Push metadata leakage to Apple/Google | external | Content-free pushes; restricted/air-gapped profiles avoid them | Apple learns "device X got a push at time T" in connected profile |
 | SFU learns call metadata | A2, A3 | Opaque participant IDs, room tokens via HMAC | IPs, timing, speaking activity (audio levels) visible |
 | Compliance archive abuse | A3 | Archive agent must be added via visible MLS commit; non-dismissible banner; audit log | Users must notice banner |
@@ -228,17 +225,14 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 
 | Namespace | Workload | Kind | Replicas (medium tier) | Notes |
 |---|---|---|---|---|
-| `enclave` | enclave-gateway | Deployment | 4 (HPA on connections) | ~10k sockets per pod target with virtual threads; PDB minAvailable 75% |
-| `enclave` | enclave-api | Deployment | 3 (HPA on CPU/RPS) | Stateless |
-| `enclave` | enclave-push | Deployment | 2 (HPA on oldest eligible intent/throughput) | Primary DB leases + optional stream hints; no ingress; allowlisted provider egress |
-| `enclave` | enclave-admin | Deployment | 2 | Separate ingress host, IP allowlist |
+| `enclave` | enclave-backend (Spring Modulith) | Deployment | 4 initial benchmark target | Same gateway/API/push/admin modules per replica; HPA uses socket/CPU/outbox pressure, PDB protects capacity. Per-device/worker leases coordinate replicas. Separate admin ingress origin, allowlisted provider egress. |
 | `enclave-data` | PostgreSQL | CloudNativePG Cluster | 3 (1 primary, 2 sync/async replicas) | Configure a required synchronous standby; `remote_apply` alone is insufficient. Local single-failure RPO 0 only within this quorum policy |
 | `enclave-data` | PgBouncer | CNPG Pooler | 3 `rw` + 2 `ro` | Transaction mode; flyway bypasses it |
-| `enclave-data` | Valkey | StatefulSet + independent Sentinel voters | 3 data + 3 voters | Presence, pub/sub, optional outbox hints, rate limits; separate credentials/keyspace or instance for P1 LiveKit |
+| `enclave-data` | Valkey | StatefulSet + independent Sentinel voters | 3 data + 3 voters | Presence, pub/sub, optional outbox hints, rate limits; separate credentials/keyspace or instance for LiveKit |
 | `enclave-data` | Object store | SeaweedFS / Garage / Ceph RGW | 3+ | Erasure coding or 3x replication |
 | `iam` | Keycloak | Keycloak Operator | 3 | Infinispan clustering; own PostgreSQL |
 | `media` | coturn | DaemonSet on `media` node pool | 1 per media node | `hostNetwork: true`; UDP relay range 49152–65535 |
-| `media` | LiveKit (P1) | Deployment/DaemonSet on `media` pool | 3+ | `hostNetwork: true` or UDP mux on fixed port behind L4 LB |
+| `media` | LiveKit (launch) | Deployment/DaemonSet on `media` pool | 3+ | `hostNetwork: true` or UDP mux on fixed port behind L4 LB |
 | `push` | ntfy | Deployment | 2 | UnifiedPush distributor |
 | `platform` | OpenBao/Vault, External Secrets, cert-manager, ingress, Prometheus/Grafana/Loki/Tempo, ArgoCD | various | — | Shared platform |
 
@@ -259,7 +253,7 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 | LiveKit signaling | 443 (via ingress) | TCP WSS | Clients |
 | LiveKit media | 7882 (UDP mux), 7881 (TCP fallback) | UDP/TCP | Clients |
 | ntfy | 443 (via ingress) | TCP | Android clients |
-| Local-push bridge (P1) | 443 dedicated host | TCP | iOS provider on configured SSIDs; separate from no-ingress worker |
+| Local-push bridge (iOS client follow-on) | 443 dedicated host | TCP | iOS provider on configured SSIDs; separate from no-ingress worker |
 
 Network policies: default deny; database access is allowlisted by source workload/IP plus distinct database roles. Kubernetes NetworkPolicy normally selects pods/namespaces, not service accounts; use supported CNI identity features where required. hostNetwork media requires host firewall controls in addition to pod policy.
 
@@ -291,7 +285,7 @@ ArgoCD phases precede waves: a `PreSync` migration does not wait for ordinary Sy
 
 | Secret | Location | Rotation |
 |---|---|---|
-| Device credential pepper | OpenBao KV | Rotation requires dual-pepper verification window |
+| Device proof verification keys | Identity-owned PostgreSQL; private keys remain client-bound | Versioned key rotation/revocation; proof nonces short-lived and single-use |
 | Server certificate signing key (sealed sender) | OpenBao Transit (non-exportable) | Yearly; trust root offline (HSM / air-gapped laptop) |
 | Policy signing key | OpenBao Transit | Yearly |
 | coturn static auth secret | OpenBao KV → coturn + api | Quarterly with overlap |
@@ -356,7 +350,7 @@ Safety nets: keepalive mailbox checks for lost online signals; periodic primary 
 
 ## 8. Capacity planning (reference)
 
-Illustrative direct-message baseline: 50 sends/user/day, 3 target device envelopes/send including own sync, 1.5 KiB/envelope. Group traffic multiplies by actual roster leaves and must be modeled separately. These are sizing hypotheses, not benchmark results; 10M envelopes/day is a separate stress scenario, not the medium-tier nominal baseline. P1 media adds its own workload.
+Illustrative direct-message baseline: 50 sends/user/day, 3 target device envelopes/send including own sync, 1.5 KiB/envelope. Group traffic multiplies by actual roster leaves and must be modeled separately. These are sizing hypotheses, not benchmark results; 10M envelopes/day is a separate stress scenario, not the medium-tier nominal baseline. Launch group media adds its own workload.
 
 | Tier | Envelope writes/day | Peak writes/s | Mailbox steady size | Gateway pods | PG sizing | Media nodes |
 |---|---|---|---|---|---|---|
@@ -377,7 +371,7 @@ Group call capacity rule of thumb for LiveKit: plan ~150–250 published video t
 | Object store | Replication/EC | Cross-site async replication | Loss follows documented object-store RPO; missing objects render unavailable and raise an operator alert, not a misleading normal-expiry diagnosis |
 | Keycloak | 3 replicas | DB backups | Restored with PostgreSQL |
 | Secrets | OpenBao Raft 3 nodes | Encrypted snapshots, offline unseal keys split (Shamir) | Restore runbook |
-| Client data | n/a | Devices are the source of truth; optional encrypted backup (P2) | — |
+| Client data | n/a | Devices are the source of truth; optional encrypted backup (launch) | — |
 
 **Restore is a protocol event.** A backup can omit accepted but not-yet-delivered envelopes after its RPO; server-side absence of plaintext does not mean ciphertext delivery cannot be lost. Older snapshots can resurrect consumed prekeys, undo revocations, and roll back group state. Follow §16 and ADR-022: maintenance/fencing first, reconcile current identity/device status, discard restored unconsumed-key pools, bump credential/control generations, quarantine uncertain groups, and require verified catch-up or explicit rejoin/recreation. Never accept a client’s largest epoch as proof of the correct group branch.
 
@@ -396,7 +390,7 @@ Group call capacity rule of thumb for LiveKit: plan ~150–250 published video t
 | Signing | cosign keyless-in-airgap alternative: cosign with key in OpenBao; Kyverno policy only admits signed images |
 | Registry | Harbor (on-prem) with replication to air-gapped registries |
 | Delivery | ArgoCD; air-gapped bundles with image tarballs + charts + checksums + signature |
-| Reproducible clients (P2) | Pinned toolchains in containers; publish build recipe so customers can verify APK/desktop binaries; iOS reproducibility is limited by Apple signing |
+| Reproducible clients (launch) | Pinned toolchains in containers; publish build recipe so customers can verify APK/desktop binaries; iOS reproducibility is limited by Apple signing |
 
 ---
 
@@ -416,7 +410,7 @@ enclave/
 ├── apps/
 │   ├── enclave_app/            # Flutter Android first; iOS target later
 │   ├── web/                    # React/TypeScript, browser core worker adapter
-│   ├── ios_extensions/         # P1: NSE / Local Push (Swift); ReplayKit later
+│   ├── ios_extensions/         # iOS client: NSE / Local Push / ReplayKit (Swift)
 │   ├── android_native/         # ConnectionService, foreground services (Kotlin)
 │   └── admin_console/          # React/TypeScript, separate origin/auth context
 ├── proto/                      # .proto sources (single source of truth)
@@ -436,18 +430,18 @@ enclave/
 ### ADR-001: Untrusted-server ("dumb relay") architecture
 **Status:** Accepted
 **Context:** Customers deploy on-prem, which makes the operator a realistic adversary (insider, coercion, breach).
-**Decision:** Infrastructure never holds user content private keys or plaintext profiles/group titles; it does hold server TLS/signing secrets and routing metadata. A P2 archive endpoint is an explicit separate recipient trust boundary. All features are designed client-side first; a feature requiring plaintext on the server is rejected or redesigned.
+**Decision:** Infrastructure never holds user content private keys or plaintext profiles/group titles; it does hold server TLS/signing secrets and routing metadata. A launch opt-in archive endpoint is an explicit separate recipient trust boundary. All features are designed client-side first; a feature requiring plaintext on the server is rejected or redesigned.
 **Consequences:** (+) Stored ciphertext alone does not expose content; malicious served web code can expose browser-session content (TB3/R4). (−) No server-side content search, previews, moderation, or AI features; more client complexity; compliance needs client-visible mechanisms (archive agent).
 
 ### ADR-002: Spring Boot on Java 21+ with virtual threads for the backend
 **Status:** Accepted
 **Context:** Team expertise in Spring Boot; the gateway needs tens of thousands of concurrent WebSockets; blocking JDBC is simpler than reactive stacks.
 **Options:** Spring Boot + virtual threads; Spring WebFlux; Go; Elixir/Phoenix; Rust (axum).
-**Decision:** Spring Boot (3.5.x, migrate to 4.x when ecosystem stable) on Java 21 LTS (25 LTS when adopted), `spring.threads.virtual.enabled=true`, Tomcat/Jetty WebSocket, JdbcTemplate.
+**Decision:** Spring Boot and Spring Modulith with a mutually supported Java/toolchain version set pinned in the release BOM, `spring.threads.virtual.enabled=true`, Tomcat/Jetty WebSocket, JdbcTemplate.
 **Consequences:** (+) Team velocity, mature ecosystem, Signal-Server precedent (Java). (−) Higher per-connection memory than Go/Elixir; mitigated by horizontal scaling; avoid `synchronized` blocks around I/O (pinning) in hot paths.
 
 ### ADR-003: Modular monolith first, split by deployment profile
-**Status:** Accepted
+**Status:** Superseded by ADR-026; retained as architecture history
 **Decision:** One codebase with hexagonal modules; separate Spring Boot apps (gateway, api, push, admin) built from the same modules; `enclave-boot-all` for small deployments.
 **Consequences:** (+) Simple small-tier operations; independent scaling of the gateway in larger tiers. (−) Shared DB schema across apps requires migration discipline (Flyway owned by api).
 
@@ -472,7 +466,7 @@ enclave/
 
 ### ADR-007: Post-quantum posture
 **Status:** Accepted
-**Decision:** PQXDH using the exact pinned upstream KEM/profile mandatory for 1:1 session setup at GA; enable libsignal's post-quantum ratchet when available in the pinned version and interoperable across all client platforms; adopt a hybrid PQ MLS ciphersuite post-GA. Track via crypto-agility fields (protocol versions in device capabilities).
+**Decision:** PQXDH using the exact pinned upstream KEM/profile mandatory for 1:1 session setup at GA; enable libsignal's post-quantum ratchet when available in the pinned version and interoperable across all client platforms; adopt a hybrid reviewed PQ MLS launch profile. Track via crypto-agility fields (protocol versions in device capabilities).
 **Consequences:** (+) Direct-message session setup has the certified hybrid PQ protection at GA; ordinary DTLS-SRTP call key agreement remains classical. (−) Larger key bundles and messages; group traffic classical until PQ MLS (R5).
 
 ### ADR-008: PostgreSQL for the mailbox, not Kafka
@@ -489,6 +483,8 @@ enclave/
 **Consequences:** (+) Permissive license, familiar tooling, one system for presence, signals and jobs. (−) Pub/sub is fire-and-forget; correctness relies on store-then-notify, drain on reconnect, and keepalive-triggered mailbox checks. Durable wake-up intent uses a transactional outbox (ADR-019); streams are optional acceleration and cannot guarantee no duplicate provider effects.
 
 ### ADR-010: Flutter + shared Rust core for all clients
+
+> Historical feature staging is superseded by ADR-025; technical decisions remain subject to current specs.
 **Status:** Superseded for web/scope by ADR-021; retained as historical rationale
 **Options:**
 
@@ -503,29 +499,33 @@ enclave/
 **Consequences:** (+) Single UI team; one protocol implementation for all platforms (no cross-platform crypto divergence). (−) Rust expertise required (1 dedicated engineer); iOS NSE and extensions are Swift + Rust without Flutter.
 
 ### ADR-011: Device credentials instead of OIDC tokens for messaging traffic
-**Status:** Accepted (P0: static secret; P2: proof-of-possession)
-**Decision:** Keycloak authenticates account-level actions (registration, linking, step-up); messaging uses per-device credentials. Upgrade to hardware-bound proof-of-possession (DPoP-style signatures) post-GA.
+**Status:** Credential separation retained; static-secret-only launch staging superseded by ADR-025 and specs §30.9
+**Decision:** Keycloak authenticates account-level actions (registration, linking, step-up); messaging uses per-device credentials. The original post-GA proof-of-possession staging is superseded: versioned client-bound proofs are launch-required under specs §4.2/§30.9, with native/browser assurance distinguished.
 **Consequences:** (+) Robust long-lived connections; per-device revocation. (−) Two auth paths to secure and test.
 
-### ADR-012: Key transparency post-GA
+### ADR-012: Key transparency (historical post-GA staging)
+
+> Historical feature staging is superseded by ADR-025; technical decisions remain subject to current specs.
 **Status:** Proposed
 **Decision:** Implement an auditable key directory (Merkle prefix tree, AKD-style) with client inclusion/consistency checks and a customer-run auditor.
 **Consequences:** Verifiable detection of directory inconsistency when clients and independent witnesses enforce proofs; adds a service, proof sizes, and client verification logic.
 
 ### ADR-013: Calls: P2P for 1:1, LiveKit SFU with MLS-derived frame keys for groups
-**Status:** Retained technical direction; release scope and removal rotation refined by ADR-023/specs §15 (SFU P1)
+**Status:** Technical direction retained; SFU staging superseded by ADR-025 (Android/web launch requirement)
 **Options for SFU:** LiveKit (Apache-2.0, Go, SDKs for all client targets, E2EE support), mediasoup (library, more custom work), Jitsi Videobridge (Java, Jitsi-centric clients), Janus (GPLv3).
 **Decision:** 1:1 calls P2P WebRTC with E2EE signaling and TURN fallback (lowest latency, no SFU metadata). Group calls via LiveKit with frame encryption keys derived from the MLS exporter; ad-hoc calls with keys distributed over 1:1 sessions.
 **Consequences:** (+) Media never decryptable by infrastructure; membership-bound call keys. (−) Two call paths (P2P and SFU); escalation transition; SFU sees IPs and speaking activity.
 
 ### ADR-014: Web client as a configurable lower-trust tier
+
+> Historical feature staging is superseded by ADR-025; technical decisions remain subject to current specs.
 **Status:** Superseded for release scope/technology by ADR-021; trust warning retained
 **Context:** A web client's code is delivered by the server on every load; a compromised server can serve key-exfiltrating code.
 **Decision:** Provide the web client (Flutter web + WASM core), **disabled by default** via policy; when enabled: strict CSP, Subresource Integrity, signed bundle manifest verified by a service worker on updates, visible "Web session (reduced security)" indicator, shorter session lifetimes, no history transfer beyond 7 days. Recommend desktop apps.
 **Consequences:** (+) Meets "web app" requirement for low-sensitivity use or kiosks. (−) Cannot match native trust guarantees; documented to customers.
 
 ### ADR-015: Content-free push with self-hosted alternatives
-**Status:** Retained direction; durable dispatch refined by ADR-019, iOS/local bridge deferred to P1
+**Status:** Durable dispatch refined by ADR-019; Android/web feature staging superseded by ADR-025; iOS/local bridge follows separate client certification
 **Decision:** Pushes carry no content or sender; Android uses UnifiedPush (ntfy) or foreground service; iOS uses APNs in connected profile and Local Push Connectivity in restricted/air-gapped profiles.
 **Consequences:** (+) Push providers receive no message content, but observe tokens/network/timing metadata. (−) iOS background delivery outside configured networks impossible in air-gapped profile; requires Apple entitlement and MDM.
 
@@ -535,7 +535,9 @@ enclave/
 **Consequences:** (+) No lock-in, licensing flexibility. (−) Test matrix across stores.
 
 ### ADR-017: No direct service calls; Valkey streams for push jobs; no Kafka
-**Status:** Superseded for job durability by ADR-019; no-direct-app-calls/no-Kafka rationale retained
+
+> Historical feature staging is superseded by ADR-025; technical decisions remain subject to current specs.
+**Status:** Job durability superseded by ADR-019; runtime/module communication updated by ADR-026. No mandatory launch Kafka remains the infrastructure baseline.
 **Context:** gateway, api, push and admin must coordinate. The first design had push subscribe to `mail:*` pub/sub. Pub/sub delivers every message to every subscriber, so N push replicas would send N copies of each wake-up, and a restarting pod would miss jobs.
 **Options:** (A) service-to-service HTTP; (B) pub/sub only; (C) Kafka topics; (D) PostgreSQL state + Valkey pub/sub for signals + Valkey stream with a consumer group for push jobs.
 **Decision:** (D). No synchronous calls between services. Signals stay on pub/sub (losing one is harmless). Push jobs use the `push:jobs` stream with consumer group `push-workers`, `XACK` after delivery, `XAUTOCLAIM` for crashed consumers, and a 5 s coalescing key.
@@ -544,6 +546,8 @@ enclave/
 **Consequences:** (+) Consumer-group dispatch with possible duplicate provider attempts; push scales horizontally on stream lag; nothing new to operate. (−) Valkey durability matters a little more (AOF `everysec`); a failover can drop about a second of jobs, which is tolerable because messages remain in PostgreSQL.
 
 ### ADR-018: Read-only consumers use replicas through the `ro` pooler
+
+> Historical feature staging is superseded by ADR-025; technical decisions remain subject to current specs.
 **Status:** Superseded for push freshness and leases by ADR-019; dashboards may still use replicas
 **Context:** `enclave-push` only reads push registrations; admin dashboards only read aggregates. Both previously pointed at the primary.
 **Decision:** Both use the PgBouncer `ro` pooler (replicas). Writes from push (deleting registrations rejected by APNs/ntfy) go through `rw`.
@@ -559,8 +563,8 @@ enclave/
 | Federation between deployments | Inter-org collaboration | v2+ (consider MLS-based federation, MIMI working group) |
 | On-device AI features (summaries, smart replies) using local models | Preserve E2EE while adding productivity features | v2 |
 | Mailbox migration path to ScyllaDB | Large tier scale | When > 50M envelopes/day |
-| Encrypted cloud-free backup with recovery key | Device loss resilience | P2 |
-| PQ MLS ciphersuite | R5 | Post-GA |
+| Encrypted cloud-free backup with recovery key | Device loss resilience | Launch gate; AC-SYNC-03 |
+| PQ MLS ciphersuite | R5 | Launch feasibility/review gate; AC-SEC-08 |
 
 ---
 
@@ -576,7 +580,7 @@ These decisions describe the proposed implementation baseline. “Accepted” in
 
 **Options:** Valkey-only durable queue; Kafka/RabbitMQ with distributed transaction/outbox; PostgreSQL outbox with optional Valkey hints.
 
-**Decision:** Persist envelope, submission result, and required intent atomically in PostgreSQL. Workers lease/retry on the primary and poll independently of hints. Use replicas only for freshness-tolerant reads; token invalidation compares the exact generation. Keep synchronous calls between the four apps prohibited, while allowing infrastructure adapter calls.
+**Decision:** Persist envelope, submission result, and required intent atomically in PostgreSQL. Workers lease/retry on the primary and poll independently of hints. Use replicas only for freshness-tolerant reads; token invalidation compares the exact generation. This historical separate-app topology is superseded by ADR-026: local named module APIs and durable module events are permitted, module HTTP/RPC is not used at launch, and configured infrastructure adapter calls remain bounded.
 
 **Consequences:** Reliable intent recovery after crash/Valkey loss and no new mandatory broker; additional indexed DB work and cleanup. External push remains best effort and can duplicate.
 
@@ -626,6 +630,8 @@ These decisions describe the proposed implementation baseline. “Accepted” in
 
 ### ADR-023: P0 scope includes direct calls; group media and iOS follow
 
+> Historical feature staging is superseded by ADR-025; technical decisions remain subject to current specs.
+
 **Status:** Proposed baseline.
 
 **Context:** Android/web-first delivery needs a complete everyday messenger before optional media/extension complexity expands.
@@ -641,24 +647,27 @@ These decisions describe the proposed implementation baseline. “Accepted” in
 | Tier | Baseline | Availability expectation |
 |---|---|---|
 | Development | Compose/local containers, isolated test identity, Android emulator + browser | No production HA guarantee; no real user keys in fixtures. |
-| Small production | One Spring Boot deployable with bounded modules; PostgreSQL primary + certified backup; local Valkey/object store/IdP/TURN | Explicit single-site/single-node failure limitations; HA option adds replicas without changing protocols. |
-| Medium production | Separate gateway/API/push/admin; CNPG synchronous quorum; independent failure domains; dedicated media nodes where enabled | Reference SLO profile; prove measured resource/network budgets. |
+| Small production | One Spring Modulith runtime with verified modules; PostgreSQL primary + certified backup; local Valkey/object store/IdP/TURN | Explicit single-site/single-node failure limitations; HA option adds replicas without changing protocols. |
+| Medium production | Replicated Spring Modulith runtime; CNPG synchronous quorum; independent infrastructure failure domains; dedicated media nodes | Reference SLO profile; prove measured resource/network budgets. |
 | Restricted / air-gapped overlay | Offline registry, vendored toolchains/assets, private PKI/DNS/NTP, local identity/push | No runtime internet dependency; closed browser notifications and future iOS caveats explicitly surfaced. |
 
 The reference production ingress is Envoy Gateway; select and pin a supported release in the BOM. Encrypt edge-to-service and service-to-data traffic; use mTLS where workload identity is required. Default-deny egress includes public STUN, crash reporting, font endpoints, and cloud SDK defaults. The web static host is a separate workload/origin; no third-party content execution.
 
 ### 15.2 Data and mutation ownership
 
+Spring Modulith boundaries provide verified code/data ownership, not a process-level security sandbox. All modules in a compromised runtime share its memory/OS privileges; database roles and separately protected signing paths limit accidental access but do not create microservice isolation. One allowlisted backend egress policy covers required infrastructure; module adapters enforce narrower destinations. Separate infrastructure processes remain explicit trust boundaries. A future hard isolation requirement needs ADR-026 extraction/isolation work.
+
+
 | Owner | Mutations / capability | Database permissions |
 |---|---|---|
 | Messaging application module | Submission dedupe, mailbox insert/ack, delivery intents | Scoped tables/functions; no policy-signing or audit rewrite permissions. |
 | Identity/device module | Enrollment, prekeys, revocation, provisioning relay, push registrations | Primary transactions with version checks; never content private keys. |
 | Group/community modules | Public admission, ordered events, mirrored roles, link/join lifecycle and tracked cross-group removal | Group locks/CAS, independent subgroup keys, durable operation state; no content keys or automatic subgroup readership. |
-| Push adapter | Intent lease/outcome, exact invalid-token removal | Narrow primary writes; allowlisted provider egress only. |
-| Administration | Authorized policy/device actions and audit append | Separate role; primary for mutations, replicas for aggregates; cannot bypass group-client validation. |
+| Notification worker | Claims/outcomes through messaging-owned outbox API; exact token-generation invalidation through identity API | No direct cross-module SQL; allowlisted provider egress. |
+| Administration | Calls declared policy/identity/audit APIs after role checks | Separate API roles; owned functions enforce mutations; cannot bypass group-client validation. |
 | Migration Job | DDL, schema version | Exclusive elevated role, unavailable to normal applications. |
 
-All applications come from one schema-versioned release. Splitting deployables is for scaling/isolation, not independent ownership of undocumented shared tables. Make transactions/use cases callable in process with the same boundaries in the small profile. Quotas, feature modules, and failure budgets must behave the same in both deployment modes.
+All logical backend responsibilities ship in one schema-versioned Spring Modulith release. Future extraction is governed by ADR-026 and owned data contracts; undocumented shared-table access is prohibited. All launch replicas use the same Spring Modulith runtime and module APIs. Record cross-module transactions and test the extraction contracts; profiles change infrastructure capacity, not architecture ownership. Quotas, feature modules, and failure budgets must behave the same in both deployment modes.
 
 ### 15.3 Repository contracts
 
@@ -698,8 +707,8 @@ Drill primary failover and replica lag before every infrastructure version chang
 | Group/community roles, joins, linking, removal and recovery | Protocol lead + independent reviewer | Reviewed application/link-delegation profile, vectors and adversarial simulator; GRP-01/02/03, COM-01/02. |
 | Certified storage/IdP/PKI/version set | Platform lead | Release BOM and offline install/rotation tests; FND-03, OPS-01/03. |
 | Web trust acceptance / allowed deployment policy | Product + customer security owner | Explicit browser UX and policy defaults; WEB-01/02, UI-01. |
-| First production release | Security + QA + operations | Android/web scenario evidence, performance/failure reports, external review and rollback/runbooks; REL-01. |
-| iOS entitlement/distribution feasibility | Mobile lead, P1 | Signed physical-device prototype and restricted-network delivery matrix; IOS-01. |
+| First production release | Security + QA + operations | Complete Android/web §31 acceptance catalogue, all extension/PQ/federation gates, performance/failure reports, external review and rollback/runbooks; REL-01. |
+| iOS entitlement/distribution feasibility | Mobile lead, client follow-on | Signed physical-device prototype and restricted-network delivery matrix; IOS-01. |
 
 No accepted draft ADR overrides a failed feasibility gate. Update this document, the specification, task dependencies, and maintained diagrams together when a gate changes the design. Historical PNGs are retained for provenance; [the diagram catalogue](diagrams/README.md) identifies their differences from this revision.
 
@@ -729,3 +738,47 @@ FR-COM-02/03 add announcement acknowledgements and community welcome/rules/recom
 ### 18.2 User-centric chat state and notification behavior
 
 Specs §30.8 adds rich encrypted descriptions, private themes/wallpapers, authorized local member/common-group discovery, ordered photo albums, mentions-only notifications, unread catch-up, bounded batch actions, accessible shortcuts/gestures and timed snoozing to Android/web P0. Reuse existing client storage/sync and encrypted attachment/message contracts: descriptions and album metadata are encrypted space content; appearance/notification preferences are E2EE own-device state; scroll anchors stay device-local. Common-group discovery derives from current authorized local rosters rather than a new social-graph endpoint. Mentions are verified after decryption, and snooze is a deadline overlay on the underlying notification mode. Batch actions revalidate each item and do not promise atomic cross-message success. FND-01/FEAT-01/02/03 and UI-01 provide schema and behavioral evidence; no new plaintext service or iOS prerequisite is introduced.
+
+
+## 19. Spring Modulith and account authentication decisions
+
+### ADR-025: One complete Android/web feature launch
+
+**Status:** Accepted product direction, 2026-10-16; supersedes feature staging in ADR-010/011/012/014/017/018/023 and any earlier P1/P2 feature labels. ADR-021's Android/web UI priority remains; iOS/native desktop are separate client targets.
+
+**Context:** The user requires every advertised feature at launch and concrete test scenarios, procedures and acceptance criteria for all features.
+
+**Decision:** All Android/web feature workstreams, including group media, collaboration, sealed sender, history transfer, recovery backup, transparency, reviewed PQ MLS, federation, local assistance and visible archive/bot extensions, gate one GA release. Optional means delivered and tested with opt-in policy, never postponed. Internal milestones order implementation. Specs §31 is the normative acceptance catalogue; tasks §6 workstreams feed REL-01 rather than depend on a prior release.
+
+**Consequences:** The product has a larger release critical path. Failed feasibility/security/capacity gates block GA; they cannot be hidden by disabled controls or relabeled as research. Unsupported network/OS capabilities remain honest profile limits, tested alongside enabled supported profiles. No completed implementation or release date is asserted. Scope changes require explicit user direction and synchronized docs, never an implementation shortcut.
+
+**Verification:** Every README feature and §0 requirement maps to one or more AC IDs, owning tasks, real harness commands and sanitized evidence. No unmapped or unexecuted launch feature, unresolved critical/high finding or unsupported security claim passes REL-01. Historical decisions and PNGs preserve provenance, not current release staging.
+
+### ADR-026: Spring Modulith backend with explicit extraction contracts
+
+**Status:** Accepted product direction, 2026-10-16; supersedes ADR-003 deployment layout and horizontal shared-repository structure.
+
+**Context:** The backend must start as a maintainable modulith and permit later microservice extraction if operational evidence justifies it.
+
+**Decision:** Deploy one Spring Modulith application per replica. Declare feature modules with named interfaces, internal packages and owned records; verify the module graph and isolation in CI. Use in-process APIs and typed durable events, with a persistent event publication registry and idempotent handlers. Keep the messaging delivery outbox's atomic acceptance guarantee distinct. Pin Spring Boot/Modulith/Java compatibility in the release BOM. Generate a module catalogue and extraction contracts. Prove a separate-process adapter in tests without requiring production microservices at launch.
+
+**Consequences:** Simpler deployment and refactoring with visible boundaries. A single database/runtime still couples failures, releases and selected transactions. Extraction requires deliberate database ownership, consistent event delivery, authorization semantics and migration/rollback; Spring Modulith makes these boundaries testable, not automatically distributed. No cross-module SQL or entity access is allowed, including in the small profile. Existing diagrams' API/gateway/push/admin boxes are logical responsibilities in one runtime.
+
+**Alternatives:** Independent services at launch add unnecessary coordination. An unconstrained monolith lacks enforceable ownership. Both were rejected. Verification is AC-ARCH-01/02, FND-03 and SEC-01.
+
+### ADR-027: Keycloak passwordless choice and user-enabled authenticator 2FA
+
+**Status:** Accepted product direction, 2026-10-16; extends account authentication in specs §4.
+
+**Context:** Users should be able to choose passwordless authentication and enable 2FA with Google Authenticator or another compatible app.
+
+**Decision:** Keycloak owns WebAuthn/passkey credentials, TOTP enrollment/validation and account recovery. All clients use the trusted OIDC system-browser/redirect flow and Account Console actions. Certify optional, organization-required and combined passwordless-plus-TOTP paths. Explicitly enabled TOTP cannot be bypassed by a passkey or SSO-cookie alternative unless a disclosed organization assurance policy defines an approved alternative. Validate token assurance/freshness for sensitive operations.
+
+**Consequences:** Account credentials/OTP secrets do not enter chat services. Passwordless, account recovery and successful MFA cannot supply E2EE keys, approve device linking or restore old plaintext. Restricted deployments certify local authenticators. Authentication recovery codes and encrypted-backup recovery keys remain separate. Verification is AC-ID-01–05 and ID-01/02.
+
+
+### 19.1 Review clarifications for anonymous routes and integrations
+
+Sealed sender removes account identity from ingress, so server-side sender revocation cannot be promised on that anonymous path. Specs §5.4 instead requires authenticated sender lifecycle evidence ≤60 s fresh at the recipient before accepting new content, with stale/offline quarantine and explicitly disclosed anonymous-admission residuals. This lookup has account/timing metadata costs. Authenticated requests, credential renewal and revoked recipient fan-out remain authoritatively denied. PRIV-01/AC-SEC-06 review and test the precise tradeoff.
+
+An MLS-member bot/archive is a full reader of its enrolled group's traffic. Mention-only response behavior is not addressed-only cryptographic access. Addressed-only bots receive separately encrypted explicit copies and no parent MLS epoch key; AC-INT-02 attempts raw unaddressed ciphertext decryption. Backup restore likewise requires fresh authenticated deletion evidence; an old manifest cannot prove later deletions. Missing/rolled-back E2EE tombstone checkpoints quarantine affected restore ranges (BACKUP-01/AC-SYNC-03).

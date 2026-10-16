@@ -2,10 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.2, 2026-10-16 |
+| Status | Draft v1.3, 2026-10-17 |
 | First delivery | Android and web, equal product priority |
 | Later | iOS after Android/web stabilization; desktop packaging optional |
 | Related | [Specs](specs.md), [ARF](arf.md), [Mobile](mobile.md), [Tasks](tasks.md) |
+
+Every advertised Android/web feature is a launch requirement; optional controls reflect policy or user choice, not release staging. Specs §31 defines verification for each feature.
 
 ## 1. Product experience
 
@@ -28,7 +30,7 @@ Android and web implement the same message, identity, group-role, and sync seman
 |---|---|---|---|
 | Chats | Primary bottom-navigation destination | Primary side-navigation destination | Conversations, pinned section, unread filter, archive, Note to self, new 1v1 chat/group/community and type filters |
 | Communities | Bottom-navigation destination | Dedicated sidebar destination | Joined spaces, admin-only announcements, linked discussion groups, membership/manage actions |
-| Calls | Bottom-navigation destination | Sidebar destination | Local recent direct calls; start audio/video; group call entry in P1 |
+| Calls | Bottom-navigation destination | Sidebar destination | Local recent direct calls; start audio/video; direct/group call entry, screen sharing and member call links |
 | People | Search/new-chat entry; optional destination on wide layouts | Directory panel/new-chat flow | Org handles, local contacts, guests, blocked accounts; no phonebook import |
 | Settings | Avatar/menu entry | Sidebar/footer entry | Profile, appearance, notifications, privacy, devices, storage, connectivity/help |
 | Administration | Separate authorized web origin | Separate app | Users/guests/devices, policy, health, audit; no chat-content browser |
@@ -84,6 +86,11 @@ Motion normally lasts 120–200 ms and respects reduced-motion/system animation 
 
 ## 4. Onboarding, identity, and devices
 
+### 4.0 Account authentication choices
+
+Organization sign-in offers the trusted Keycloak passwordless/passkey path and approved password/SSO alternatives. Security → Account authentication opens trusted Keycloak actions for named passkeys, Enable authenticator 2FA (Google Authenticator-compatible), recovery codes and credential removal. Show whether 2FA is user-enabled or organization-required; never imply successful SSO grants chat-history access. A user-enabled TOTP factor must apply to both password and passwordless paths unless a disclosed certified organization policy permits another MFA method. Cancellation, unsupported authenticators, incorrect/expired codes, lost factors, IdP outage and enforced settings have actionable states. QR/OTP secrets stay on Keycloak pages. Reauthentication for sensitive changes is distinct from local app unlock. See specs §4.1.1 and AC-ID-01–05.
+
+
 ### 4.1 Organization entry and first registration
 
 1. Welcome screen: “Private messaging for your organization.” Primary action: “Connect to your organization.” Support manual HTTPS URL and authenticated managed configuration; Android may scan an organization QR.
@@ -99,7 +106,7 @@ A failed/expired SSO flow keeps the organization choice and resumes safely. Repe
 
 An existing-account sign-in offers “Link from a trusted device” and, behind a deliberate secondary path, “I no longer have a trusted device”. Web shows a single-use QR, organization domain, browser/device name, and expiry. Android scanner confirms the browser/session details before sending account keys over the authenticated provisioning channel. An existing browser can approve another device by scan or a manual challenge with a transcript fingerprint comparison on both devices; it must not trust an unverified link pasted into navigation.
 
-Use explicit approval copy: “Link Firefox on Linux to your account? It can receive future messages.” History transfer is absent in P0. Say explicitly: “Earlier messages will not be copied to this device in this release.” Expired/cancelled QR sessions show a fresh-code action. QR and connection details must not appear in analytics, logs, or screenshots created for diagnostics.
+Use explicit approval copy: “Link Firefox on Linux to your account? It can receive future messages.” Offer explicit optional bounded encrypted history transfer from a trusted source device. Default copy is off; explain the date range, expiry and “Copying history” state. If no source/backup is available, explain that earlier messages cannot be recovered merely by signing in. Expired/cancelled QR sessions show a fresh-code action. QR and connection details must not appear in analytics, logs, or screenshots created for diagnostics.
 
 The Devices page lists current device first, platform, decrypted user label, linked date, and coarse activity. “Unlink” states that future access stops and local deletion is attempted when the device contacts the service. The user can review a persistent own-device security notice after an unexpected link. Organization reset is distinct from ordinary sign-out.
 
@@ -149,7 +156,7 @@ If a revoked device requires removal, show “Updating this group's security” 
 
 Group details provide named “Add members”, “Remove from group”, “Make group admin”, “Remove admin role”, “Transfer ownership”, “Invite link”, “Join requests”, “Posting permissions”, and “Pinned messages” actions. Hide or explain unauthorized actions according to specs §30.2. Admins can promote ordinary members under default policy; only the owner demotes/removes peer admins. A promotion confirmation summarizes granted powers; ownership transfer requires acceptance by the new owner. Never use an unlabeled generic role toggle for destructive privilege changes.
 
-Communities is a first-class Android/web destination. A community page has **Announcements**, **Groups**, **About/rules**, and role-appropriate **Manage** views. Ordinary members see the announcement feed with “Only community admins can post”; there is no enabled composer for new posts/comments. Allowed reactions appear only when community policy enables them. Admins see a Publish action and the same protected role/ownership operations. Optional P1 replies link to a discussion group with explicit membership.
+Communities is a first-class Android/web destination. A community page has **Announcements**, **Groups**, **About/rules**, and role-appropriate **Manage** views. Ordinary members see the announcement feed with “Only community admins can post”; there is no enabled composer for new posts/comments. Allowed reactions appear only when community policy enables them. Admins see a Publish action and the same protected role/ownership operations. Optional launch replies link to a discussion group with explicit membership.
 
 Groups within a community show joined, available-to-request, pending approval, and restricted states; unauthorized private groups are not listed. Any limited private-link label shown to a linkage manager is explicitly shared by the subgroup owner and does not grant message/roster access. Community admin status does not imply subgroup membership or access. Linking an existing group requires community/admin and subgroup-owner approvals plus affected users' community-enrollment consent; show whose membership/visibility changes before applying it.
 
@@ -157,7 +164,7 @@ Removal dialogs explain whether the operation affects the root announcements, se
 
 Shared pinned messages appear in the thread/header and are governed by group permissions. Private bookmarks and conversation pins stay in the user's own organization controls. “Removed by a group admin” identifies a moderation action; administrators cannot edit another author's words. A pin unavailable on this device shows a placeholder; joining a space does not automatically copy old pinned content.
 
-Forwarding opens a destination picker, identifies the selected content/new audience, and respects the target's posting rights. Preserve a Forwarded label without leaking the source group/community identity by default. Offer View once, Schedule, Topics, Events, and Polls only in releases where those P1 features are implemented; no placeholder controls imply shipped functionality.
+Forwarding opens a destination picker, identifies the selected content/new audience, and respects the target's posting rights. Preserve a Forwarded label without leaking the source group/community identity by default. Offer View once, Schedule, Topics, Events and Polls at launch when policy permits; disabled controls explain a real permission/profile limit, never missing feature implementation.
 
 ### 5.4b Announcement acknowledgements and welcome flow
 
@@ -183,13 +190,13 @@ Search scopes: current conversation, all local chats, people, files. Separate �
 
 Pin/save/archive/mute remain private account preferences. A saved message still follows expiration policy. Clearing local data has a confirmation naming this device and explains recovery limits; it does not imply remote deletion for all recipients.
 
-## 6. Direct calls first; group calls later
+## 6. Direct and group calls at launch
 
 P0 direct audio/video entry points appear in the conversation header and Calls page. Pre-call UI shows microphone/camera choice, selected device, and permissions. Incoming call UI has caller identity after authenticated local decryption, Accept, Decline, and “Answered on another device” handling. Android uses native Telecom integration; browser incoming calls depend on an active permitted browser session.
 
 During a call show mute, camera, audio route, connection/reconnecting state, duration, and a clearly labeled End call. Keyboard shortcuts must not fire while typing in another control. Camera is off until explicitly enabled; never auto-answer during simultaneous dialing. “Always relay calls” explains privacy/bandwidth implications; it is on for guests/external contacts by default.
 
-P1 adds group grid/active speaker, participant list, raise hand, screen sharing, and P2P escalation. Do not show enabled group-call buttons in P0 with fake functionality. E2EE failure stops media and shows “Could not establish a secure call”; never offer an insecure retry mode. Future visible recording/archive participants produce a persistent banner before media/content is shared.
+Launch includes group grid/active speaker, participant list, raise hand, screen sharing, authenticated member call links and P2P escalation. E2EE failure stops media and shows “Could not establish a secure call”; never offer an insecure retry mode. Visible recording/archive participants produce a persistent banner before media/content is shared.
 
 ## 7. Privacy, notifications, and settings
 
@@ -254,3 +261,12 @@ Policy editing shows current version, changed fields, client-visible effects, an
 ## 12. UI completion evidence
 
 Produce Android and web flows from shared scenario fixtures, not screenshots alone. Capture compact/wide and light/dark states, keyboard/TalkBack/screen-reader recordings, first-use trials, offline/restart scenarios, and security-change decisions. Use golden/component checks only for durable layout contracts; avoid brittle pixel snapshots of every message variant. [tasks.md](tasks.md) maps this work to UI-01, AND-01/02, WEB-01/02, and REL-01.
+
+
+## 12. Complete launch feature journeys and evidence
+
+All capabilities in specs §30.9 are present in Android/web launch UI. Topics/folders, quiet/scheduled send/reminders, polls/quizzes/events/RSVP, view-once, local transcription/assistance, history transfer/recovery backup, visible integrations and federation have creation/enrollment, normal use, permission-denied, offline, cancel/edit/delete/expiry and recovery states. Security settings expose sealed transport mode, witnessed verification and applicable reviewed PQ group capabilities without claiming stronger security than the certified profile. External deployments and plaintext-receiving integration audiences are clearly labeled before sharing.
+
+Scheduled send names the executing device and explains next-allowed execution offline. Backup setup requires saving the distinct client recovery key; account recovery cannot replace it. Assistance previews selected sources and editable results, never auto-sends or invokes tools. Polls disclose visible ballots; topic screens do not imply a private audience. Every enabled optional feature has real functionality; opt-in/default-off status is a privacy preference, not a deferred feature.
+
+Specs §31 supplies test scripts, methods and pass/fail criteria for all journeys. UI-01/AND-02/WEB-02/03 supply accessible interactive fixtures and real-client evidence; catalogue coverage is required before launch.

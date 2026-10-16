@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.2, 2026-10-16; no implementation task is complete |
-| Goal | Deliver a secure on-prem messenger for Android and web first, then iOS |
-| Architecture | Spring Boot modules, PostgreSQL mailbox/outbox, Signal direct sessions, MLS groups, Flutter Android, React web, shared Rust protocol core subject to feasibility gates |
+| Status | Draft v1.3, 2026-10-17; no implementation task is complete |
+| Goal | Deliver every advertised feature at Android/web launch; iOS is a separate client target |
+| Architecture | Spring Modulith, verified feature-module boundaries, PostgreSQL mailbox/outbox, Signal direct sessions, MLS groups, Flutter Android, React web, shared Rust protocol core subject to feasibility gates |
 | Related | [Specs](specs.md), [ARF](arf.md), [UI](UI.md), [Mobile](mobile.md), [Sources](sources.md) |
 
 This is a product delivery backlog, not a claim that the named files or build commands already exist. Each task names planned artifacts, dependencies, and measurable acceptance. Split a task into reviewable implementation issues when its interfaces are agreed; keep its ID in commits/issues and release evidence. All checkboxes remain open until the acceptance evidence exists. Implementation may use the available executing-plans workflow, but this document does not authorize unrelated deployment or messaging actions.
@@ -13,13 +13,15 @@ This is a product delivery backlog, not a claim that the named files or build co
 
 | Milestone | Outcome | Exit gate |
 |---|---|---|
-| M0 — prove the design | Android/browser crypto, storage, roles, dependency/license feasibility | FND-01/02/03; stop and revise ADRs if browser E2EE or group profile cannot be implemented safely |
+| M0 — prove the design | Native/browser crypto, passwordless/2FA, Modulith boundaries and all launch extension feasibility | FND-01/02/03; resolve protocol/license/extension risks before dependent implementation |
 | M1 — secure walking slice | Organization login, Android primary, web link, direct encrypted offline-capable exchange | ID-01/02, CORE-01/02, MSG-01/02, AND-01, WEB-01 |
-| M2 — everyday messenger | 1v1 chats, managed groups, admin-posting communities, files/voice notes, shared pins, search, sync, direct calls | GRP-01/02/03, COM-01/02, FEAT-01/02/03, CALL-01, UI-01, AND-02, WEB-02 |
-| M3 — Android/web production | Admin, privacy, load/failover, signed offline install/upgrade/restore, independent security review | ADM-01, OPS-01/02/03/04, SEC-01/02, REL-01 |
-| M4 — later releases | iOS, group video/screen share, history transfer and richer features | Separate IOS-01/02, CALL-02, EXT-01/02/03 acceptance; no back-edge to M0–M3 |
+| M2 — full product implementation | Every messaging, community, media, collaboration, privacy/recovery, federation and integration feature | All feature tasks in §3/4/6; no advertised feature is postponed |
+| M3 — complete launch qualification | Full feature catalogue, admin/ops, load/failure, independent review, signed offline delivery | ADM-01, OPS-01/02/03/04, SEC-01/02, REL-01; §31 coverage is mandatory |
+| Client follow-on | iOS and native desktop certification using the complete feature/protocol contracts | IOS-01/02, DESK-01; separate client gate under the current Android/web scope |
 
-Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web cross-client scenarios → groups/communities/features/direct calls → security/operations release evidence. UI exploration and platform provisioning may progress while protocol gates run, but use fixtures only until real interfaces are certified. Do not expand P0 with SFU group calls or iOS extension work.
+These are internal build milestones, not partial feature releases. Every feature task below is a launch prerequisite unless explicitly identified as a client-platform follow-on. Optional means policy/user opt-in at launch. Unresolved feasibility is a blocker, never a silent deferral.
+
+Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web exchange → complete groups/communities/media/collaboration/trust/recovery/federation → security/operations evidence → REL-01. UI work and infrastructure preparation may proceed in parallel with protocol proof. Resolve the PQ MLS/federation/local model feasibility gates early; do not defer their design until production readiness.
 
 ### 1.1 Planned artifact ownership
 
@@ -27,8 +29,8 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 |---|---|---|
 | `proto/`, `contracts/openapi/` | Versioned wire/API schema and generated contracts | FND-01, ID-01, MSG-01 |
 | `core/enclave-{core,proto,store,direct,group,browser,sim}/` | Shared protocol logic, native/browser persistence, simulator | FND-02, CORE-01/02, GRP-01/02/03 |
-| `server/enclave-domain/`, `server/enclave-application/` | Framework-free model and transactional use cases | FND-03, ID-01, MSG-01 |
-| `server/enclave-adapters-{in,out}/`, `server/enclave-boot-*/` | Ingress/infrastructure adapters and deployable profiles | FND-03, MSG-02, OPS-01 |
+| `server/enclave-modules/<feature>/{api,internal}/` | Named APIs/events and owned domain/use cases/persistence | FND-03, ID-01, MSG-01 |
+| `server/enclave-boot-all/`, `server/enclave-contracts/` | Spring Modulith runtime, narrow shared IDs and event contracts | FND-03, MSG-02, OPS-01 |
 | `apps/enclave_app/`, `apps/android_native/` | Flutter Android and native adapters | AND-01/02, CALL-01 |
 | `apps/web/`, `apps/admin_console/` | React web user/admin apps on separate origins | WEB-01/02, ADM-01 |
 | `packages/design-tokens/` | Semantic colors/spacing/typography and UI fixtures | UI-01 |
@@ -44,7 +46,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Artifacts:** `proto/enclave/{content,transport}/v1/`, `contracts/openapi/enclave-v1.yaml`, `docs/evidence/requirements-map.md`, updates to specs/ARF.
 
-- [ ] Map every P0 requirement in specs §0 to task, API/event, UI journey, and verification scenario.
+- [ ] Map every README bullet, specs §0 FR/NFR and §31 launch AC to task, API/event, UI journey and real automated/manual verification. CI rejects missing, duplicated or deferred coverage.
 - [ ] Define canonical ID/encoding/domain-separation rules, typed safe rich descriptions and ordered photo-album metadata/captions, reserved protobuf tags, unknown critical/noncritical feature behavior, error codes, and N/N−1 compatibility policy.
 - [ ] Walk adversaries through first use, compromised IdP/server, linked-device compromise, browser malicious update, group/community-role misuse, parent-removal delegation, metadata correlation, and restore.
 - [ ] Record accepted metadata, unavailable guarantees, independent review boundaries, and the provisional framework/protocol decisions.
@@ -63,18 +65,19 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 - [ ] Measure bridge payload/copy costs, worker startup, browser memory, persistent encrypted-store behavior, Android keystore wrapping, and browser passphrase unlock.
 - [ ] Prototype direct WebRTC with encrypted signaling and TURN fallback on Android/web; validate required browser/media capabilities.
 - [ ] Evaluate Flutter Android vs KMP mobile integration against the criteria in mobile §2; choose one, retain the same protocol contracts, and record the decision.
+- [ ] Produce named feasibility artifacts for Keycloak passwordless + optional/enforced TOTP (including combined paths), device PoP/canonicalization, PQ MLS suite/implementation availability, two-deployment federation identity/routing and offline native/browser local models. Each records a runnable spike, pinned dependencies, failure cases, resource budget and a proceed/revise decision; later workstreams still implement/review the production behavior.
 - [ ] Obtain qualified distribution/license assessment; if browser crypto or licensing fails, publish a superseding ADR with a reviewed protocol/portability choice before building dependent production code.
 
-**Done when:** repeatable native/browser build and cross-decryption evidence exists for the pinned set. No backend decryption, unreviewed crypto replacement, unsupported “WASM should work” assertion, or iOS task can satisfy this gate.
+**Done when:** repeatable native/browser build/cross-decryption and all named launch-extension feasibility decisions exist for the pinned set. An unresolved PQ, federation, proof-of-possession, authentication-flow or local-model feasibility failure blocks M0 rather than silently deferring the capability. No backend decryption, unreviewed crypto replacement, unsupported “WASM should work” assertion, or iOS task can satisfy this gate.
 
 ### FND-03 — Repository, CI, local services, and module skeleton
 
 **Priority/owner:** P0, backend/platform leads. **Dependencies:** FND-01; production dependency pins from FND-02.
 
-**Artifacts:** `server/`, `core/Cargo.toml`, `deploy/dev/compose.yaml`, CI workflows, `docs/development.md`, release BOM.
+**Artifacts:** `server/enclave-modules/`, `server/enclave-boot-all/`, `core/Cargo.toml`, `deploy/dev/compose.yaml`, CI workflows, `docs/development.md`, release BOM.
 
 - [ ] Create the documented Gradle/Rust/app structure and reproducible local PostgreSQL/Valkey/IdP/object-store/TURN setup with test-only identity and keys.
-- [ ] Enforce module boundaries with ArchUnit, generate schema bindings deterministically, and document actual boot/build/check commands once runnable.
+- [ ] Enforce Spring Modulith `ApplicationModules.verify()` and ArchUnit rules; use named interfaces, module-owned tables, persistent event publication and scoped module/Scenario tests. Generate module docs and deterministic contracts; record real build/test commands once runnable. Demonstrate failed boundary violations and idempotent listener recovery (AC-ARCH-01/02).
 - [ ] Add locked dependencies, secret/dependency/license scanning, SBOM/provenance, isolated signing paths, and redacted CI logs.
 - [ ] Prove clean-checkout builds and an offline dependency mirror; separate unit tests from infrastructure scenarios.
 
@@ -111,8 +114,9 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Priority/owner:** P0, identity/backend lead. **Dependencies:** FND-01/03, CORE-02.
 
-**Artifacts:** identity/device use cases and adapters, Flyway migrations, OpenAPI enrollment/key endpoints, OIDC test scenarios.
+**Artifacts:** sanitized Keycloak realm/client exports and auth journey fixtures, identity/device use cases and adapters, Flyway migrations, OpenAPI enrollment/key endpoints, OIDC test scenarios.
 
+- [ ] Deliver Keycloak passwordless/passkey choice and Google Authenticator-compatible TOTP enrollment, combined optional/enforced flows, safe credential changes and recovery; export sanitized realm/client policy fixtures and prove AC-ID-01–05.
 - [ ] Map `(issuer, sub)` to app IDs; implement trusted deployment config, PKCE, reservations, signed address bindings, device limits, credential hashing/rotation, and first-device atomic registration.
 - [ ] Claim prekeys/KeyPackages once under concurrency; expire/replenish without assumed last-resort MLS reuse.
 - [ ] Restrict REST scopes and browser tickets; enforce authoritative active-device/account checks and exact `Origin`/CORS rules.
@@ -135,7 +139,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Priority/owner:** P0, messaging lead. **Dependencies:** ID-01, CORE-01/02.
 
-**Artifacts:** send/ack/drain use cases, protobuf transport, mailbox/submission migrations, `tests/scenarios/delivery/`.
+**Artifacts:** messaging module send/ack/drain APIs, owned persistence and versioned events, protobuf transport, mailbox/submission migrations, `tests/scenarios/delivery/`.
 
 - [ ] Implement per-device fan-out, roster-version rejection, submission digest/result dedupe, stable pagination, ack scoping, expiry, size/quota admission, and client durable outbox states.
 - [ ] Recover lost send responses with the same stored ciphertext/submission ID; preserve semantic message ID on explicit re-encryption.
@@ -271,7 +275,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 - [ ] Implement ordered 2–10-photo albums with stable item IDs, album/per-photo captions, grid/viewer, atomic logical publication after retained uploads succeed, resumable stored ciphertext and expiry/unavailable-slot handling.
 - [ ] Reject truncation/reordering/tag failure/counter overflow/MIME mismatch/oversized decoders; test missing/expired objects and quota failure.
 
-**Done when:** Android/web can exchange valid files/voice notes without server plaintext and neither opens unverified content. P1 multipart upload is optional.
+**Done when:** Android/web can exchange valid files/voice notes without server plaintext and neither opens unverified content. Multipart upload is an optional configuration delivered and tested at launch (AC-MED-07).
 
 ### FEAT-02 — Mutations, sync, privacy, local search
 
@@ -340,7 +344,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 ### OPS-01 — Certified deployment, networking, and offline install
 
-**Priority/owner:** P0, platform lead. **Dependencies:** FND-03, MSG-02, CALL-01, GRP-02/03, COM-02.
+**Priority/owner:** P0, platform lead. **Dependencies:** FND-03, MSG-02, CALL-01/02, GRP-02/03, COM-02.
 
 **Artifacts:** `deploy/charts/enclave/`, `deploy/airgap/`, network/port matrix, `docs/runbooks/install.md`.
 
@@ -348,7 +352,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 - [ ] Use supported CNI/host firewall controls for media; test client access to presigned URLs and all discovery endpoints.
 - [ ] Build signed fully offline bundles/assets/dependencies and prove no public fonts/CDN/STUN/license/update requests at runtime.
 
-**Done when:** a clean customer-like restricted network installs and runs Android/web direct/group chat and direct calls using the documented prerequisites.
+**Done when:** a clean customer-like restricted network installs the signed runtime/infrastructure, proves bootstrap/direct/group walking-slice exchange and TURN/SFU/push connectivity, and rejects prohibited egress. This closes deployment foundations only; full feature/profile qualification is mandatory at REL-01 after dependent feature workstreams finish.
 
 ### OPS-02 — Capacity, observability, and failure recovery
 
@@ -360,7 +364,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 - [ ] Instrument API/drain/ack, oldest outbox intent, leases/retries, replica lag, queue bytes, key health, revoke latency, and provider/device outcomes without payloads or stable personal identifiers.
 - [ ] Fail gateway, worker, Valkey, and PostgreSQL primary; demonstrate HA durability, bounded overload, reconnect recovery, and independent worker polling.
 
-**Done when:** advertised SLO/limits have workload-specific results and dashboards/runbooks explain both successful recovery and remaining failure boundaries.
+**Done when:** medium-profile delivery/failure and observability foundations have workload-specific results, with dashboards/runbooks explaining recovery boundaries. This does not close large-announcement/large-deployment/100-video certification; SCALE-01 and REL-01 must complete those AC-OPS-02 assertions after these foundations.
 
 ### OPS-03 — Signed upgrades, compatibility, and trust rotation
 
@@ -399,36 +403,43 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Done when:** release claims are supported by repeatable checks and external review; “uses Signal” is never treated as sufficient assurance.
 
-### REL-01 — Android/web GA readiness
+### REL-01 — Complete Android/web launch readiness
 
-**Priority/owner:** P0, product + QA + operations + security. **Dependencies:** all preceding P0 tasks, including SEC-01/02.
+**Priority/owner:** P0, product + QA + operations + security. **Dependencies:** every other P0 task in §2–5, all Launch rows in §6, and SEC-01/02; client-platform follow-on rows are excluded.
 
-**Artifacts:** `docs/evidence/ga-readiness.md`, signed Android/web/backend release, release notes, support/runbook links.
+**Artifacts:** `docs/evidence/ga-readiness.md`, `docs/evidence/feature-acceptance.csv`, signed Android/web/backend release, release notes, support/runbook links.
 
 - [ ] Assemble requirement coverage, device/browser/profile matrix, accessibility/usability evidence, load/chaos/restore results, audit remediation, license/support findings, and rollback instructions.
 - [ ] Run clean-install → Android registration → web link (also browser-primary → Android link) → offline direct/group/community exchange → add/remove/promote/demote/join approval → community removal recovery → album/file/voice → member/common-group search → catch-up/selection → mentions-only/snooze recovery → identity change → revoke → direct call → signed upgrade acceptance.
-- [ ] Publish exact supported platforms/versions, capacity, metadata/notification limits, and deferred P1/P2 features without claiming implementation of the roadmap.
+- [ ] Execute every AC scenario in specs §31, with both enabled and disabled policy paths for opt-in features, and retain linked results for every supported Android/browser/profile combination. Publish exact supported versions, capacity and metadata/notification limits; no advertised Android/web feature may be listed as deferred.
+- [ ] Include group calls/screen share/call links, polls/events/topics, scheduling/view-once, transfer/backup recovery, sealed sender, witnessed transparency, reviewed PQ MLS, opt-in archive/bot/local assistance and federated cross-deployment lifecycle in the final acceptance run.
 
-**Done when:** named release owners approve documented evidence and there are no open P0 tasks or undisclosed critical/high defects. iOS and group video remain separately scheduled.
+**Done when:** named release owners approve documented evidence and there are no open P0 tasks or undisclosed critical/high defects. iOS/native desktop are separate client certification work; group media and all extension features are required for Android/web launch.
 
-## 6. P1/P2 — later work, never a P0 prerequisite
+## 6. Additional launch workstreams and separate client targets
 
-| ID | Priority | Deliverable / planned artifacts | Depends on | Acceptance |
+Every **Launch** row is P0 and feeds REL-01. Dependencies reference implementation foundations, never REL-01; final independent review runs over all completed launch modules. Early security consultation is part of each workstream rather than a cycle back from final SEC-02. Specs §31 contains the normative scenarios and pass/fail criteria for these tasks.
+
+| ID | Gate | Deliverable / planned artifacts | Depends on | Acceptance / evidence |
 |---|---|---|---|---|
-| IOS-01 | P1 | Entitlement/distribution and Swift/Rust extension spike; `apps/ios_extensions/`, physical-device evidence | REL-01, CORE-02 | APNs/NSE/PushKit/CallKit and local SSID-push feasibility demonstrated with signed builds; unsupported profiles explicit. |
-| IOS-02 | P1 | Flutter iOS app, Keychain/App Group concurrency, native lifecycle/accessibility | IOS-01 | Mobile §10/11 matrix passes with existing Android/web; no separate protocol fork. |
-| CALL-02 | P1 | Self-hosted LiveKit group video, screen share, removal rotation, participant binding | REL-01, GRP-02 | 50-participant target benchmarked; captured SFU media unreadable; removal pauses old-key publication; key-slot wrap/rejoin safe. |
-| EXT-01 | P1 | Polls/quizzes, community events/RSVP, stickers/approved GIFs, optional local-only transcription, guest invites, user-selected abuse evidence | REL-01, FEAT-02 | Specs §25 semantics, explicit destination/privacy behavior, and abuse/expiry cases covered on Android/web. |
-| EXT-03 | P1 | Topics/threads, private folders, quiet/scheduled sends/reminders, view-once media, custom admin grants/member restrictions/slow mode | REL-01, FEAT-02, COM-02 | Specs §30.4 permissions/retention apply; view-once is not screenshot-proof, topics do not create private audiences, scheduling needs an online device. |
-| EXT-02 | P1 | Approved encrypted history transfer, optional multipart attachment upload | REL-01, FEAT-01/02 | Historical content transfer cannot restore live ratchet state or fire old calls/notifications. |
-| PRIV-01 | P1 | Separate sealed-sender REST transport and abuse controls | REL-01, SEC-02 | No authenticated-socket anonymity claim; recipient/certificate/rate-limit/replay tests and metadata review pass. |
-| WEB-03 | P1 | Safari certification and optional connected-profile Web Push | REL-01, WEB-02 | Actual worker/storage/media support matrix; provider egress/consent/privacy policy explicit. |
-| TRUST-01 | P2 | Independent key transparency and auditor/witness deployment | REL-01, SEC-02 | Inclusion/consistency/split-view tests; no replacement of out-of-band verification by untrusted server signature. |
-| BACKUP-01 | P2 | Recovery-key encrypted backup with reviewed restore semantics | OPS-04, SEC-02 | No server recovery key; no stale ratchet/MLS state reuse; loss and recovery UX tested. |
-| ARCHIVE-01 | P2 | Visible archive/bot participants with separate recipient trust boundary | GRP-01, SEC-02 | Explicit membership/consent banner and role audit; no invisible 1:1 interception. |
-| FED-01 | P2 | Cross-deployment identity/routing/protocol research and ADR | REL-01 | Written threat/metadata/namespace/revocation model before implementation. |
-| PQ-01 | P2 | Reviewed supported PQ MLS profile | GRP-01, FND-02 | Negotiated version/ciphersuite and interoperable vectors; no unstandardized silent upgrade. |
-| DESK-01 | P2 | Signed native desktop packaging | REL-01 | Native keystore/update/trust model certified separately from web. |
+| CALL-02 | Launch | Self-hosted LiveKit group media, screen sharing, raise hand, authenticated links, escalation, AV1 where certified | CALL-01, GRP-02, MSG-02 | AC-CALL-04–08; 50/100-participant profiles, removal/key-slot/rejoin, SFU ciphertext captures and real Android/web screen sharing. |
+| EXT-01 | Launch | Polls/quizzes, events/RSVP, stickers/GIFs, on-device transcription, guests and abuse evidence | FEAT-02, COM-02, ID-02 | AC-COL-01/02/06, AC-MED-04/06, AC-ID-07, AC-SEC-09; mutation, permission, expiry and offline cases. |
+| EXT-03 | Launch | Topics/threads, folders/filters, quiet/scheduled sends/reminders, view-once, custom grants/restrictions/slow mode | FEAT-02/03, COM-02 | AC-MSG-11, AC-ORG-02/03, AC-COL-03/04/05, AC-GRP-05, AC-MED-05; no audience/notification/retention bypass. |
+| EXT-02 | Launch | Explicit bounded E2EE history transfer and resumable multipart attachments | FEAT-01/02, ID-02 | AC-SYNC-02, AC-MED-07; historical-only import, tamper/cancel/expiry, safe byte-for-byte upload resumption. |
+| PRIV-01 | Launch | Separate sealed-sender transport, certificates, UAK access, unlinkable dedupe and abuse controls | ID-01, MSG-01, FND-02 | AC-SEC-06; recipient-side ≤60 s authenticated sender-status freshness and offline quarantine, explicit anonymous admission residual, no ambient device auth on sealed route, replay/rate-limit/metadata review. |
+| PRIV-02 | Launch | Versioned device proof-of-possession with native/browser binding and rollover | ID-01, CORE-02, FND-02 | AC-ID-06; method/path/body/nonce binding, replay/cross-device/stolen-secret rejection. |
+| WEB-03 | Launch | Safari certification and connected-profile opt-in browser Web Push | WEB-02, MSG-02, CALL-02 | AC-NOT-04 and AC-PLAT-01; browser crypto/storage/media/worker evidence, egress/consent and closed-browser limits. |
+| TRUST-01 | Launch | Independently witnessed key transparency, customer-operated auditor/witness | ID-02, FND-02, OPS-01 | AC-SEC-07; inclusion/consistency/split-view/rotation, witness outage and signed checkpoint recovery. |
+| BACKUP-01 | Launch | Recovery-key encrypted content backup, safe new-device import | CORE-01, FEAT-02, ID-02 | AC-SYNC-03; reviewed E2EE deletion journal/current independent checkpoint, no server-held recovery key or live-state rollback, wrong/lost key and expiry-aware restore. |
+| ARCHIVE-01 | Launch | Visible policy-approved archive/bot participants and scoped integrations | GRP-02, ADM-01, FEAT-02 | AC-INT-01/02; disclosed full-group MLS reader versus separately encrypted addressed-only bot, audience/consent banner, ordinary key lifecycle, no silent direct-chat interception. |
+| FED-01 | Launch | Opt-in mutually trusted on-prem federation, identity namespaces and routing | FND-01/02, ID-02, GRP-02, MSG-01 | AC-INT-03/04; two deployments, identity/PKI/revocation, offline dedupe, authorization, no plaintext relay. |
+| PQ-01 | Launch | Reviewed supported PQ MLS profile and explicit negotiation | GRP-01/02, FND-02 | AC-SEC-08; pinned suite/implementation, independent review/vectors, interop and downgrade rejection; absence blocks GA. |
+| ASSIST-01 | Launch | Optional local-only assistance/transcription models and offline signed model delivery | FEAT-02, CORE-01, OPS-01 | AC-INT-05 and AC-MED-06; summary/draft/translation of explicit local selections, no network inference or automatic sending. |
+| SCALE-01 | Launch | Large-announcement, large deployment and media certification | GRP-03, COM-02, CALL-02, OPS-02 | AC-OPS-02/03; 5,000-account announcements, 100-video calls and named large deployment workload/limits measured. |
+| BUILD-01 | Launch | Reproducible Android/web/backend artifacts and signed customer verification recipe | FND-03, OPS-03 | AC-OPS-06; isolated rebuild of unsigned payloads, explained signing differences, tampered artifact rejection. |
+| IOS-01 | Client follow-on | Entitlement/distribution and Swift/Rust extension prototype | CORE-02, ID-02 | AC-PLAT-03 and mobile §10; signed physical-device APNs/NSE/PushKit/CallKit/local-push proof. |
+| IOS-02 | Client follow-on | iOS app, native storage/lifecycle, accessibility, ReplayKit screen share | IOS-01, CALL-02, FEAT-03 | Complete §31 feature catalogue on iOS when that client ships; no reduced feature interpretation. |
+| DESK-01 | Client follow-on | Signed native desktop packaging, native keystore/update/trust model | CORE-02, WEB-03, BUILD-01 | AC-PLAT-04; certify packaging separately from browser mode and repeat applicable feature catalogue. |
 
 ## 7. Definition of done and scope discipline
 

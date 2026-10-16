@@ -1,20 +1,20 @@
 flowchart TB
-    A["Android P0<br/>Flutter + Kotlin + native core"]
-    W["Web P0<br/>React + TypeScript + browser core"]
-    I["iOS P1<br/>Flutter + Swift + native core"]
+    A["Android launch<br/>Flutter + Kotlin + native core"]
+    W["Web launch<br/>React + TypeScript + browser core"]
+    I["iOS client follow-on<br/>Flutter + Swift + native core"]
     EDGE["Private ingress + static web<br/>TLS / exact origin checks"]
     IDP["Keycloak / corporate IdP"]
-    APP["API / gateway / push / admin<br/>Modular Spring Boot apps"]
+    APP["API / gateway / push / admin<br/>Single Spring Modulith runtime"]
     PG[("PostgreSQL primary<br/>mailbox / submissions / intents / group events")]
     VK["Valkey<br/>ephemeral hints / rate limits"]
     OBJ[("Encrypted object storage")]
-    TURN["Self-hosted TURN<br/>direct calls P0"]
-    SFU["Self-hosted SFU<br/>group calls P1"]
+    TURN["Self-hosted TURN<br/>direct calls launch"]
+    SFU["Self-hosted SFU<br/>group calls launch"]
     PUSH["Optional vendor push<br/>FCM / browser push / APNs later"]
     A & W --> EDGE
     I -.-> EDGE
     EDGE --> APP & IDP
     APP --> PG & VK & OBJ
     A & W --> TURN
-    A & W -.-> SFU
+    A & W --> SFU
     APP -.-> PUSH

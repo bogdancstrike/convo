@@ -6,10 +6,10 @@ All six original PNGs were inspected when enriching the specification. They are 
 
 | Diagram | Description | Revision note |
 |---|---|---|
-| [1. Platform overview](enclave-1-overview-light.png) | Clients above the plaintext boundary; Kubernetes ingress, backend apps, IAM, PostgreSQL poolers, object storage, media, and shared platform operations | Android/web are P0; iOS/SFU are later. Durable outbox now lives with PostgreSQL. |
+| [1. Platform overview](enclave-1-overview-light.png) | Clients above the plaintext boundary; Kubernetes ingress, backend apps, IAM, PostgreSQL poolers, object storage, media, and shared platform operations | Android/web and all features, including SFU, are launch scope; iOS is a client follow-on. Durable outbox now lives with PostgreSQL. |
 | [2. Backend services](enclave-2-services-light.png) | API/gateway/admin/push coordinate via shared data and Valkey; separate writer/replica poolers; Keycloak disable events | Push correctness no longer depends on Valkey-only jobs; worker leases/freshness checks use the primary. |
 | [3. Messaging](enclave-3-messaging-light.png) | User HTTPS/WSS, encrypted object transfer, mailbox persistence, wake-up adapters, and no plaintext below endpoint boundary | Native/browser storage differ; durable submission/outbox closes commit-to-notify crash gaps. |
-| [4. Calls](enclave-4-calls-light.png) | REST token issuance, client signaling/media paths, L4 media exposure, TURN and SFU participant removal | P0 direct calls use TURN; SFU group media is P1 with explicit E2EE/key-rotation gates. |
+| [4. Calls](enclave-4-calls-light.png) | REST token issuance, client signaling/media paths, L4 media exposure, TURN and SFU participant removal | Launch direct calls use TURN; SFU group media is also launch-required with explicit E2EE/key-rotation gates. |
 | [5. Identity and secrets](enclave-5-identity-secrets-light.png) | SSO/Keycloak, user-disable event intake, admin role access, OpenBao/PKI and secret synchronization | IdP identity is distinct from content identity; existing-device consent, binding, reconciliation, and reset risks are explicit. |
 | [6. Platform operations](enclave-6-platform-ops-light.png) | Harbor/Git/Kyverno/ArgoCD, migration Job, CNPG/backup, telemetry collector, and SIEM audit export | ArgoCD phases/waves require a tested bootstrap/migration health gate; restored security state is fenced/reconciled. |
 
@@ -17,31 +17,31 @@ The plaintext boundary concerns user message/media plaintext and private content
 
 ## Maintained diagrams
 
-- [Current system context — Mermaid source](current-context.mmd): Android/web first, future iOS, local services, and optional external wake-ups.
+- [Current system context — Mermaid source](current-context.mmd): Android/web first, client-follow-on iOS, a Spring Modulith backend, local services, and optional external wake-ups.
 - [Durable delivery — Mermaid source](durable-delivery.mmd): one transaction for submission/mailbox/intent, primary leases, provider retry, client commit-before-ack.
 
 ### Current system context
 
 ```mermaid
 flowchart TB
-    A["Android P0<br/>Flutter + Kotlin + native core"]
-    W["Web P0<br/>React + TypeScript + browser core"]
-    I["iOS P1<br/>Flutter + Swift + native core"]
+    A["Android launch<br/>Flutter + Kotlin + native core"]
+    W["Web launch<br/>React + TypeScript + browser core"]
+    I["iOS client follow-on<br/>Flutter + Swift + native core"]
     EDGE["Private ingress + static web<br/>TLS / exact origin checks"]
     IDP["Keycloak / corporate IdP"]
-    APP["API / gateway / push / admin<br/>Modular Spring Boot apps"]
+    APP["API / gateway / push / admin<br/>Single Spring Modulith runtime"]
     PG[("PostgreSQL primary<br/>mailbox / submissions / intents / group events")]
     VK["Valkey<br/>ephemeral hints / rate limits"]
     OBJ[("Encrypted object storage")]
-    TURN["Self-hosted TURN<br/>direct calls P0"]
-    SFU["Self-hosted SFU<br/>group calls P1"]
+    TURN["Self-hosted TURN<br/>direct calls launch"]
+    SFU["Self-hosted SFU<br/>group calls launch"]
     PUSH["Optional vendor push<br/>FCM / browser push / APNs later"]
     A & W --> EDGE
     I -.-> EDGE
     EDGE --> APP & IDP
     APP --> PG & VK & OBJ
     A & W --> TURN
-    A & W -.-> SFU
+    A & W --> SFU
     APP -.-> PUSH
 ```
 
@@ -49,4 +49,4 @@ Render source with a pinned Mermaid toolchain when implementation tooling is add
 
 ## Conversation spaces (v1.2)
 
-[Editable source: conversation-spaces.mmd](conversation-spaces.mmd) shows the new P0 conversation model: direct chats, standalone groups, and a community's admin-only root announcements with separately encrypted discussion groups. Links require both authorities; root/community administration does not automatically grant subgroup readership or ownership. Membership removal can be pending across independent MLS contexts, so affected sends remain gated until valid removals complete. See [specs §30](../specs.md#30-direct-chats-groups-communities-and-feature-roadmap) and ADR-024.
+[Editable source: conversation-spaces.mmd](conversation-spaces.mmd) shows the new P0 conversation model: direct chats, standalone groups, and a community's admin-only root announcements with separately encrypted discussion groups. Links require both authorities; root/community administration does not automatically grant subgroup readership or ownership. Membership removal can be pending across independent MLS contexts, so affected sends remain gated until valid removals complete. See [specs §30](../specs.md#30-direct-chats-groups-communities-and-launch-features) and ADR-024.

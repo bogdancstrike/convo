@@ -25,6 +25,10 @@ Reviewed on **2026-10-16**. Linked upstream pages describe their own protocols/p
 | [Android background task restrictions](https://developer.android.com/develop/background-work/background-tasks/bg-work-restrictions) | OS/OEM/user restrictions affect delivery; deferred work is not guaranteed real-time wake-up. |
 | [Apple Local Push Connectivity](https://developer.apple.com/documentation/networkextension/local-push-connectivity) | Later iOS local-network provider/SSID/entitlement model and limits. |
 | [Apple PushKit and VoIP handling](https://developer.apple.com/documentation/pushkit/responding-to-voip-notifications-from-pushkit) | Later iOS incoming VoIP/CallKit obligations; not a general message push bypass. |
+| [Keycloak administration](https://www.keycloak.org/docs/latest/server_admin/index.html) | WebAuthn passwordless, TOTP/Google Authenticator, recovery and assurance configuration; certify pinned realm exports and combined flows. |
+| [Spring Modulith verification](https://docs.spring.io/spring-modulith/reference/verification.html), [module testing](https://docs.spring.io/spring-modulith/reference/testing.html), [events](https://docs.spring.io/spring-modulith/reference/events.html) | Verified boundaries, isolated integration tests and persistent publication; do not infer automatic microservice extraction or exactly-once effects. |
+
+Additional current user direction: every advertised feature is a launch requirement; Keycloak passwordless is user-selectable and authenticator-app 2FA can be enabled; the backend uses Spring Modulith with later service extraction possible. Earlier staged feature labels are superseded by the current release contract.
 
 ## Assumptions to validate
 
@@ -37,19 +41,19 @@ Reviewed on **2026-10-16**. Linked upstream pages describe their own protocols/p
 | React web meets accessibility/browser lifecycle needs | Proposed updated UI baseline | WEB-01/02 and UI-01 |
 | Large-group/medium-tier sizing and SLOs | Targets, not measured capacity | GRP-03 and OPS-02 |
 | Private CA, LAN/VPN, MDM/distributor availability | Customer prerequisites; do not assume all users have them | OPS-01 deployment certification |
-| iOS entitlement/signing/local delivery is available | Deferred P1 gate; no Android/web dependency | IOS-01 |
+| iOS entitlement/signing/local delivery is available | Separate iOS client gate; no Android/web dependency | IOS-01 |
 | Product/client distribution license is compatible with dependencies | Unresolved release gate; no internal-use exemption assumed | FND-02 qualified license assessment |
 
 When an assumption fails, update specs, ARF, tasks, UI/mobile behavior, and maintained diagrams together. Keep historical ADR status and provenance visible.
 
 ## Product feature inspiration
 
-The following primary product pages were reviewed on 2026-10-16. They inform the selected interaction patterns, not a claim of complete parity or a plan to copy another product's infrastructure/security model. The normative feature choices are Enclave's own requirements in [specs §30](specs.md#30-direct-chats-groups-communities-and-feature-roadmap).
+The following primary product pages were reviewed on 2026-10-16. They inform the selected interaction patterns, not a claim of complete parity or a plan to copy another product's infrastructure/security model. The normative feature choices are Enclave's own requirements in [specs §30](specs.md#30-direct-chats-groups-communities-and-launch-features).
 
 | Source | Selected inspiration |
 |---|---|
 | [Signal group features](https://support.signal.org/hc/en-us/articles/360007319331-Group-chats) | Group administration, invite/QR links, approval, posting/info/timer permissions. Enclave's roster metadata differs from Signal's private-group service. |
-| [Signal view-once media](https://support.signal.org/hc/en-us/articles/360038443071-View-Once-Media) | A P1 media experience with short local retention; not a guarantee against copies/recording. |
+| [Signal view-once media](https://support.signal.org/hc/en-us/articles/360038443071-View-Once-Media) | A launch media experience with short local retention; not a guarantee against copies/recording. |
 | [Telegram topics](https://telegram.org/blog/topics-in-groups-collectible-usernames) | Topic-based discussion and administrator topic controls; Enclave topics initially share parent membership. |
 | [Telegram folders](https://telegram.org/blog/folders) | Private conversation organization and filters, implemented via encrypted own-device preferences. |
 | [Telegram silent send / slow mode](https://telegram.org/blog/silent-messages-slow-mode) | Quiet delivery preference and bounded member posting, subject to recipient/OS policy and authenticated permissions. |

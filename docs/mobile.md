@@ -2,16 +2,16 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.2, 2026-10-16 |
+| Status | Draft v1.3, 2026-10-17 |
 | Current focus | Android alongside the P0 web client |
-| Deferred | iOS P1 after Android/web stabilization; no iOS prerequisite in P0 |
+| Client follow-on | iOS after Android/web stabilization; every Android/web feature is launch-required |
 | Related | [UI](UI.md), [Specs](specs.md), [ARF](arf.md), [Tasks](tasks.md), [Sources](sources.md) |
 
 ## 1. Release scope
 
 P0 Android includes organization bootstrap, SSO, first-device registration, browser/device linking, 1v1/group/community messaging, add/remove/promote/demote and join approval, admin-only announcements with explicit acknowledgements, community welcome/rules/checklists and eligible group recommendations, shared pins and bounded batch forwarding/copy/save/delete, rich descriptions and private chat themes, member search/groups in common, encrypted files/photo albums/voice notes, mentions-only and snooze notifications, unread catch-up and fast accessible actions, local search, own-device sync, identity verification, disappearing messages, direct audio/video calls, privacy settings, app lock, and reliable recovery from process death. It works against on-prem services in connected and restricted profiles, with explicitly certified notification behavior.
 
-The web client is a peer P0 product, with its own UI and browser platform adapters. Android must link and exchange messages/calls with web throughout development; a mobile-only prototype is insufficient for P0 acceptance. P1 adds iOS, encrypted history transfer, and group media in independently gated workstreams. ReplayKit/special extensions do not block Android/web.
+The web client is a peer P0 product, with its own UI and browser platform adapters. Android must link and exchange messages/calls with web throughout development; a mobile-only prototype is insufficient for P0 acceptance. Every advertised feature, including encrypted history transfer and group media/screen sharing, is an Android/web launch gate. iOS and ReplayKit remain a separate client workstream; this does not defer any Android/web feature.
 
 ## 2. Framework decision and evaluation
 
@@ -61,6 +61,9 @@ Core operations include `register_device`, `approve_link`, `queue_message`, `pro
 
 ## 4. Android identity, local storage, and lock
 
+Keycloak sign-in runs in the system authentication browser with PKCE and supports user-chosen WebAuthn/passwordless plus Google Authenticator-compatible TOTP 2FA at launch. Security settings open the trusted Keycloak Account Console/required action for enrollment, recovery and changes; OTP secrets never traverse the Flutter/Rust chat core. Certify local hardware/platform authenticators without cloud requirements in restricted profiles. Passwordless-plus-TOTP, cancellation, stale SSO, unavailable authenticators and required step-up are physical-device cases (AC-ID-01–05). IdP recovery and local biometric unlock cannot replace trusted-device encryption provisioning.
+
+
 Generate account/protocol keys locally using a certified CSPRNG. Protect a random SQLCipher DB key with Android Keystore wrapping keys; request hardware backing/StrongBox when available and record only coarse capability status. Signal/MLS private keys generally live encrypted in the local DB because the protocol library needs them; do not claim all protocol operations execute inside StrongBox.
 
 Exclude messages, protocol state, attachments, keys, and credentials from Android backup/device-transfer defaults. Reinstall/keystore invalidation is a fresh device enrollment, not a silent restoration of old ratchet state. A passcode/biometric lock must define how background decryption works: a key requiring user auth for every use cannot also decrypt locked-screen content unattended. Hardened mode stays generic while locked; foreground unlock is required for content.
@@ -90,7 +93,7 @@ Use native Android Telecom/ConnectionService or the certified current Telecom in
 
 Signal-encrypted offers/answers/ICE bind caller, device, call instance, generation, and deadline. Reject unverified identity changes before starting media. The first accepted answer wins; all other devices close their incoming state. Process-killed/background/foreground paths share the same persisted ended-call marker, so a delayed push cannot resurrect a call. Do not automatically answer glare or open a microphone merely because the server delivered an urgent event.
 
-Test Wi-Fi/cellular/VPN handover with ICE restart, TURN UDP/TCP/TLS fallback, headset disconnect, another phone call, audio-focus loss, camera denial/revocation, and process interruption. Keep native call state and UI state consistent after navigation or app restart. P1 group calls require a tested SDK E2EE provider, participant binding, removal-triggered media pause, and key-slot wrap tests before any media is published.
+Test Wi-Fi/cellular/VPN handover with ICE restart, TURN UDP/TCP/TLS fallback, headset disconnect, another phone call, audio-focus loss, camera denial/revocation, and process interruption. Keep native call state and UI state consistent after navigation or app restart. Launch group calls require a tested SDK E2EE provider, participant binding, removal-triggered media pause, and key-slot wrap tests before any media is published.
 
 ## 7. Media, permissions, and resource use
 
@@ -124,7 +127,7 @@ Target current distribution requirements at implementation/release time; do not 
 
 Updates test encrypted-DB migrations, backward protocol compatibility, process death mid-upgrade, certificate rollover, and retained offline drafts. Rollback must not reopen a schema or ratchet state incompatible with the older binary. A forced upgrade displays a trusted internal distribution path and preserves encrypted data until safe handling is possible.
 
-## 10. Later iOS workstream (P1)
+## 10. Separate iOS client workstream
 
 ### 10.1 Reuse and native boundaries
 
@@ -138,11 +141,11 @@ Connected iOS uses APNs alert pushes with the required `aps` wrapper and `mutabl
 
 Restricted iOS requires Local Push Connectivity (`NEAppPushProvider`) and Apple's app-push-provider entitlement, with configured matching SSIDs and a dedicated local bridge. MDM is the managed configuration/distribution route. Outside the supported network, restricted devices fall back to foreground delivery; do not promise unrestricted background messaging without APNs. [Apple Local Push Connectivity](https://developer.apple.com/documentation/networkextension/local-push-connectivity).
 
-P1 starts with a signed physical-device entitlement/notification/call prototype. Signing/provisioning and initial distribution may require connectivity even if the eventual runtime deployment is air-gapped; document the operational boundary. Safari web certification is independently scheduled and does not require completing the iOS app.
+The iOS workstream starts with a signed physical-device entitlement/notification/call prototype. Signing/provisioning and initial distribution may require connectivity even if the eventual runtime deployment is air-gapped; document the operational boundary. Safari web certification is an Android/web launch gate and does not require completing the iOS app.
 
 ### 10.3 iOS completion gates
 
-Validate fresh install, reboot before first unlock, locked app, NSE contention/timeout, APNs token changes, PushKit/CallKit acceptance, SSID transition/local push, revoked device, low memory, keychain invalidation, OS backup exclusion, VoiceOver, and signed upgrade. P2 ReplayKit screen-sharing needs a separate minimal publisher and E2EE key handoff review. No iOS work is required to declare Android/web P0 complete.
+Validate fresh install, reboot before first unlock, locked app, NSE contention/timeout, APNs token changes, PushKit/CallKit acceptance, SSID transition/local push, revoked device, low memory, keychain invalidation, OS backup exclusion, VoiceOver, and signed upgrade. iOS ReplayKit screen-sharing needs a separate minimal publisher and E2EE key handoff review. No iOS work is required to declare Android/web P0 complete.
 
 ## 11. Mobile acceptance matrix
 
@@ -157,3 +160,8 @@ Validate fresh install, reboot before first unlock, locked app, NSE contention/t
 | Security | No sensitive logs/backups, app lock behavior, revoked credentials, malformed media | Equivalent checks across main app and every extension |
 
 Keep sanitized device/OS/build/network evidence for each supported profile. Synthetic tests cannot replace physical-device notification/call checks. [tasks.md](tasks.md) assigns Android work before iOS-specific tasks.
+
+
+## 12. Complete Android feature release gate
+
+Android ships the full specs §30.9 capability set, including group media/screen capture, collaboration and scheduling, optional backup/history import, local inference/model delivery, witnessed trust/PQ profiles, federation and visible integrations. Native adapters must cover capture/permissions, secure signing, background execution, local model resource budgets and offline stores. No feature is postponed because a cross-platform plugin or native bridge is missing. Specs §31 is the shared acceptance catalogue; physical-device results supplement, rather than replace, Android↔web interoperability evidence.
