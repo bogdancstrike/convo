@@ -16,14 +16,16 @@ A secure everyday messenger that feels approachable to employees and manageable 
 
 | First release: Android + web | Later releases |
 |---|---|
-| Encrypted direct chats and groups | iOS app and its native notification/call integrations |
-| Replies, reactions, mentions, edits, and delete requests | Group video, screen sharing, and call escalation |
-| Encrypted photos, files, and voice notes | Polls, stickers, guest invitations, and history transfer |
-| Local search, drafts, pins, mute, archive, Note to self | Sealed-sender transport and optional Web Push |
+| Encrypted 1v1 chats, managed groups, and communities | iOS app and its native notification/call integrations |
+| Add/remove members, promote/demote admins, admin-only announcements | Group video, screen sharing, and call escalation |
+| Encrypted photos, files, and voice notes | Polls, events/RSVP, topics, stickers, guest invitations, and history transfer |
+| Replies/reactions, edits/moderation, shared pins, forwarding, local search | Sealed-sender transport and optional Web Push |
 | Linked devices, identity verification, disappearing messages | Independent key transparency and encrypted recovery backup |
 | Direct audio/video calls with TURN fallback | Federation, desktop packaging, and visible archive/bot participants |
 | Accessible UI, light/dark themes, English/Romanian | Additional locales and certified deployment integrations |
 | SSO, admin policies, audit, signed on-prem delivery | Separately reviewed optional extensions |
+
+Communities organize an encrypted announcement feed and separately permissioned discussion groups. Community admins can publish/manage the community; they do not automatically gain subgroup content access. The [conversation and feature matrix](docs/specs.md#30-direct-chats-groups-communities-and-feature-roadmap) defines the Signal/Telegram/WhatsApp-inspired roadmap.
 
 This is the intended scope, not a list of shipped features. Acceptance criteria and dependencies live in [tasks.md](docs/tasks.md).
 
@@ -72,7 +74,7 @@ The platform will support small installations and a tested HA profile. Capacity,
 
 1. **Prove the design:** Android/browser encryption, persistence, framework integration, group roles, and dependency/distribution feasibility.
 2. **Build a secure walking slice:** Android registration, browser linking, direct encrypted chat, offline recovery, and notifications.
-3. **Complete the everyday messenger:** groups, media/voice notes, local search, private sync, direct calls, and accessible UI.
+3. **Complete the everyday messenger:** groups with explicit member/admin controls, communities with admin-only announcements and linked discussions, media/voice notes, local search, private sync, direct calls, and accessible UI.
 4. **Prepare Android/web for production:** administration, load/failure evidence, independent security review, signed offline install/upgrade, and safe restore.
 5. **Expand after stabilization:** iOS, group media, and separately gated privacy/productivity features.
 

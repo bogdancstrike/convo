@@ -1,0 +1,15 @@
+flowchart TB
+    DIRECT["1v1 chat<br/>Signal sessions per device"]
+    GROUP["Standalone discussion group<br/>Independent MLS + owner/admin/member"]
+    COMMUNITY["Community descriptor<br/>Authenticated roles and links"]
+    ROOT["Root announcement group<br/>Independent MLS / admins publish"]
+    CHILD1["Discussion subgroup A<br/>Independent MLS / selected members"]
+    CHILD2["Discussion subgroup B<br/>Independent MLS / selected members"]
+    REMOVE["Tracked community removal<br/>Verified delegation / pending rekey gates"]
+    COMMUNITY --> ROOT
+    COMMUNITY -->|"two-sided accepted link"| CHILD1
+    COMMUNITY -->|"two-sided accepted link"| CHILD2
+    COMMUNITY --> REMOVE
+    REMOVE -.->|"authorized removals only"| ROOT & CHILD1 & CHILD2
+    NOTE["Community admin role grants no automatic subgroup read/admin access"]
+    COMMUNITY --- NOTE

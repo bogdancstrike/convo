@@ -2,14 +2,14 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.1, 2026-10-16 |
+| Status | Draft v1.2, 2026-10-16 |
 | Current focus | Android alongside the P0 web client |
 | Deferred | iOS P1 after Android/web stabilization; no iOS prerequisite in P0 |
 | Related | [UI](UI.md), [Specs](specs.md), [ARF](arf.md), [Tasks](tasks.md), [Sources](sources.md) |
 
 ## 1. Release scope
 
-P0 Android includes organization bootstrap, SSO, first-device registration, browser/device linking, direct/group messaging, encrypted files/photos/voice notes, local search, own-device sync, identity verification, disappearing messages, direct audio/video calls, privacy settings, app lock, and reliable recovery from process death. It works against on-prem services in connected and restricted profiles, with explicitly certified notification behavior.
+P0 Android includes organization bootstrap, SSO, first-device registration, browser/device linking, 1v1/group/community messaging, add/remove/promote/demote and join approval, admin-only announcements, shared pins and forwarding, encrypted files/photos/voice notes, local search, own-device sync, identity verification, disappearing messages, direct audio/video calls, privacy settings, app lock, and reliable recovery from process death. It works against on-prem services in connected and restricted profiles, with explicitly certified notification behavior.
 
 The web client is a peer P0 product, with its own UI and browser platform adapters. Android must link and exchange messages/calls with web throughout development; a mobile-only prototype is insufficient for P0 acceptance. P1 adds iOS, encrypted history transfer, and group media in independently gated workstreams. ReplayKit/special extensions do not block Android/web.
 
@@ -38,6 +38,7 @@ apps/enclave_app/
   lib/app/                  # navigation, lifecycle state, dependency wiring
   lib/features/onboarding/  # organization, SSO, device link/reset UI
   lib/features/chats/       # lists, thread, composer, attachments
+  lib/features/communities/  # announcement feed, linked groups, roles/removal progress
   lib/features/calls/       # call UI fed by shared call state
   lib/features/settings/    # privacy, devices, storage, diagnostics
   lib/platform/             # narrow native plugin contracts
@@ -108,6 +109,7 @@ Voice notes support local playback speed, waveform from decrypted local data, in
 | Both send/react/edit concurrently | Idempotent message mutations and deterministic own-device preference convergence. |
 | Android revokes web | Subsequent server calls denied, socket closed within bound, group removal initiated; web local erasure attempted. |
 | Web storage is cleared | Explicit lost-device state and re-link, never reuse partially restored protocol state. |
+| Community announcement/member-removal across Android/web | Admin-only posts, independent subgroup keys/roles, private discovery, pending cross-group removal and explicit completion. |
 | Both enter same group during concurrent commits | Authorized device joins and sequenced catch-up; no duplicate leaf/rogue role. |
 | Direct call rings both | One answer wins; no duplicate ringing after delayed push/reconnect. |
 | Expiry/read settings change | Authenticated settings and earliest expiry-start propagation; independent notification cleanup. |

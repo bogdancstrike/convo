@@ -41,3 +41,18 @@ Reviewed on **2026-10-16**. Linked upstream pages describe their own protocols/p
 | Product/client distribution license is compatible with dependencies | Unresolved release gate; no internal-use exemption assumed | FND-02 qualified license assessment |
 
 When an assumption fails, update specs, ARF, tasks, UI/mobile behavior, and maintained diagrams together. Keep historical ADR status and provenance visible.
+
+## Product feature inspiration
+
+The following primary product pages were reviewed on 2026-10-16. They inform the selected interaction patterns, not a claim of complete parity or a plan to copy another product's infrastructure/security model. The normative feature choices are Enclave's own requirements in [specs §30](specs.md#30-direct-chats-groups-communities-and-feature-roadmap).
+
+| Source | Selected inspiration |
+|---|---|
+| [Signal group features](https://support.signal.org/hc/en-us/articles/360007319331-Group-chats) | Group administration, invite/QR links, approval, posting/info/timer permissions. Enclave's roster metadata differs from Signal's private-group service. |
+| [Signal view-once media](https://support.signal.org/hc/en-us/articles/360038443071-View-Once-Media) | A P1 media experience with short local retention; not a guarantee against copies/recording. |
+| [Telegram topics](https://telegram.org/blog/topics-in-groups-collectible-usernames) | Topic-based discussion and administrator topic controls; Enclave topics initially share parent membership. |
+| [Telegram folders](https://telegram.org/blog/folders) | Private conversation organization and filters, implemented via encrypted own-device preferences. |
+| [Telegram silent send / slow mode](https://telegram.org/blog/silent-messages-slow-mode) | Quiet delivery preference and bounded member posting, subject to recipient/OS policy and authenticated permissions. |
+| [Telegram scheduled messages](https://core.telegram.org/api/scheduled-messages) | Scheduling/reminder interaction; Enclave's initial scheduling remains local/device-dependent. |
+| [WhatsApp communities](https://about.fb.com/news/2022/04/our-vision-for-communities-on-whatsapp/) | A community organizing linked groups and administrator announcements. |
+| [WhatsApp community events/replies](https://about.fb.com/news/2024/05/events-in-whatsapp-communities/) | Later events/RSVP and organized discussion responses; Enclave P0 announcement feeds still prohibit member posts/comments. |

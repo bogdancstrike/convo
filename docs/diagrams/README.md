@@ -46,3 +46,7 @@ flowchart TB
 ```
 
 Render source with a pinned Mermaid toolchain when implementation tooling is added. Do not claim the historical PNGs were regenerated. Update both the editable source and this preview together.
+
+## Conversation spaces (v1.2)
+
+[Editable source: conversation-spaces.mmd](conversation-spaces.mmd) shows the new P0 conversation model: direct chats, standalone groups, and a community's admin-only root announcements with separately encrypted discussion groups. Links require both authorities; root/community administration does not automatically grant subgroup readership or ownership. Membership removal can be pending across independent MLS contexts, so affected sends remain gated until valid removals complete. See [specs §30](../specs.md#30-direct-chats-groups-communities-and-feature-roadmap) and ADR-024.

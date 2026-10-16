@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document | Architecture reference: structure, trust model, threat model, deployment, operations, architecture decision records |
-| Status | Draft v1.1 — Android/web first, design baseline; not implemented |
+| Status | Draft v1.2 — 1v1, groups, communities; Android/web first, not implemented |
 | Updated | 2026-10-16 |
 | Related | [Specs](specs.md), [UI](UI.md), [Mobile](mobile.md), [Tasks](tasks.md), [Sources](sources.md), [Diagram catalogue](diagrams/README.md) |
 
@@ -17,7 +17,7 @@
 | Operator is an adversary | Specs §0 security promise | Minimize stored metadata; detectable key changes; audit log; key transparency roadmap. |
 | Fully on-prem, including air-gapped | FR-OPS-01 | No SaaS dependencies; self-hosted push alternatives; offline release bundles. |
 | Multi-device with consistent state | FR-DEV-01 | Device as unit of delivery; Sesame-style fan-out; MLS leaves per device. |
-| Large groups and group calls | FR-GRP-02, FR-CAL-05 | MLS (log N rekey); SFU with frame-level E2EE. |
+| Groups, communities, and later group calls | FR-GRP-02, FR-COM-01, FR-CAL-05 | Independent MLS scopes, authenticated roles/link delegation and pending removal; SFU media remains P1. |
 | Android and web first | User scope, FR-UX-01 | Flutter Android + React/TypeScript web; shared Rust protocol code; native Swift/iOS work deferred. Staffing and Java/Python expertise are planning assumptions, not confirmed team facts. |
 | Reliability equals security | NFR-REL-01 | Transactional envelopes/outbox, idempotent submissions, strict client persistence before acknowledgement. |
 | Friendly, accessible daily use | FR-UX-01 | One clear onboarding route, local search, keyboard/TalkBack access, honest privacy/status language. |
@@ -156,7 +156,7 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 | Public prekeys, KeyPackages | Yes | Until consumed/expired | |
 | Encrypted envelopes | Yes | Until acked or 30 days | Ciphertext + routing fields. |
 | Sender of 1:1 messages | P0 authenticated sender; P1 sealed transport omits durable sender | Envelope retention; short operational metadata | Sealed transport cannot use an authenticated messaging socket. |
-| Group roster (accounts, devices, roles) | Yes | Group lifetime | Required for fan-out and ACL; accepted metadata (residual risk R3). |
+| Group/community roster, parent-child IDs, link visibility and operation state | Yes | Space lifetime plus bounded operation cleanup | Routing/authorization mirrors expose relationship metadata (R3); titles/content remain encrypted. |
 | Group name, avatar, description | **No** | — | Inside MLS application messages. |
 | Profile (display name, photo) | Encrypted blob | Account lifetime | Profile key shared only with contacts. |
 | Attachments | Encrypted blob | ≤ 30 days | No durable content-recipient map; transient upload authorization and access metadata are still observable. |
@@ -629,7 +629,7 @@ These decisions describe the proposed implementation baseline. “Accepted” in
 
 **Context:** Android/web-first delivery needs a complete everyday messenger before optional media/extension complexity expands.
 
-**Decision:** Ship P0 direct text/media/voice notes, groups, multi-device, direct audio/video, admin, and offline on-prem operation. Ship SFU group calls/screen sharing and iOS in separate P1 workstreams after the P0 gates. Desktop packaging, federation, archive agents, and recovery backups remain P2.
+**Decision:** Ship P0 direct text/media/voice notes, managed groups and communities (extended by ADR-024), multi-device, direct audio/video, admin, and offline on-prem operation. Ship SFU group calls/screen sharing and iOS in separate P1 workstreams after the P0 gates. Desktop packaging, federation, archive agents, and recovery backups remain P2.
 
 **Consequences:** Faster validation of the highest-risk browser/mobile contracts; no silent deletion of future features. Direct-call setup remains E2EE and permission-bound. Product targets are mapped to task IDs rather than speculative dates.
 
@@ -652,7 +652,7 @@ The reference production ingress is Envoy Gateway; select and pin a supported re
 |---|---|---|
 | Messaging application module | Submission dedupe, mailbox insert/ack, delivery intents | Scoped tables/functions; no policy-signing or audit rewrite permissions. |
 | Identity/device module | Enrollment, prekeys, revocation, provisioning relay, push registrations | Primary transactions with version checks; never content private keys. |
-| Group module | Validated public admission, ordered events, mirrored authenticated roles | Group locks/CAS and atomic fan-out; no group secrets. |
+| Group/community modules | Public admission, ordered events, mirrored roles, link/join lifecycle and tracked cross-group removal | Group locks/CAS, independent subgroup keys, durable operation state; no content keys or automatic subgroup readership. |
 | Push adapter | Intent lease/outcome, exact invalid-token removal | Narrow primary writes; allowlisted provider egress only. |
 | Administration | Authorized policy/device actions and audit append | Separate role; primary for mutations, replicas for aggregates; cannot bypass group-client validation. |
 | Migration Job | DDL, schema version | Exclusive elevated role, unavailable to normal applications. |
@@ -694,10 +694,27 @@ Drill primary failover and replica lag before every infrastructure version chang
 |---|---|---|
 | libsignal support/license and browser viability | Security + client leads | Exact pinned revisions, license inventory/review, build/interoperability proof; FND-02. |
 | Flutter vs KMP mobile baseline | Client lead | Android native call/notification/keystore spike and bridge costs; baseline is Flutter unless a superseding ADR is approved. |
-| Group roles/external joins/recovery | Protocol lead + independent reviewer | Written application profile, vectors and adversarial simulator; GRP-01/02/03. |
+| Group/community roles, joins, linking, removal and recovery | Protocol lead + independent reviewer | Reviewed application/link-delegation profile, vectors and adversarial simulator; GRP-01/02/03, COM-01/02. |
 | Certified storage/IdP/PKI/version set | Platform lead | Release BOM and offline install/rotation tests; FND-03, OPS-01/03. |
 | Web trust acceptance / allowed deployment policy | Product + customer security owner | Explicit browser UX and policy defaults; WEB-01/02, UI-01. |
 | First production release | Security + QA + operations | Android/web scenario evidence, performance/failure reports, external review and rollback/runbooks; REL-01. |
 | iOS entitlement/distribution feasibility | Mobile lead, P1 | Signed physical-device prototype and restricted-network delivery matrix; IOS-01. |
 
 No accepted draft ADR overrides a failed feasibility gate. Update this document, the specification, task dependencies, and maintained diagrams together when a gate changes the design. Historical PNGs are retained for provenance; [the diagram catalogue](diagrams/README.md) identifies their differences from this revision.
+
+
+## 18. Communities and expanded conversation controls
+
+### ADR-024: Independent group keys and authenticated community administration
+
+**Status:** Proposed v1.2 baseline; extends ADR-020/023 and P0 scope.
+
+**Context:** The product requires 1v1 chats, groups with explicit member/admin controls, and communities with admin-only announcements. A community is not an organization-admin backdoor or a shared key covering every discussion.
+
+**Decision:** Use a root MLS announcement group per community and independent MLS groups for linked discussions. Authenticate owner/admin/member roles, posting/invite/moderation policy, accepted two-sided links, and narrowly scoped parent-removal delegation. Community admins do not automatically become subgroup readers/admins. Stage removal across root/subgroups as a durable idempotent operation with send gating and explicit pending outcomes; do not claim cross-group cryptographic atomicity.
+
+**Consequences:** Reuses the group protocol while preserving subgroup isolation. Adds observable community/group relationship metadata, cross-group proof validation, ownership/partial-failure cases, and client UI. Community roles alone do not entitle a user to modify subgroup membership except the accepted removal delegation. Post deletion is an honest-client moderation request, not remote erasure or author editing.
+
+**Alternatives:** One community-wide key was rejected because it makes every member a recipient of all discussions. A server-only parent ACL was rejected because it cannot provide client-validated authority under a malicious operator. Standalone admin-only groups remain supported but do not replace the community entity/navigation.
+
+**Verification and implementation:** Specs §30, COM-01/02 and GRP-01/02/03 define role matrices, link consent/proofs, pending removals, old-pin/history behavior and benchmark targets. Test a forged parent role, admin demotion with queued posts, subgroup-admin outage, revoked links, final-owner removal, and recovery of partial operations. Independent profile review is required before shipping. See [conversation-spaces.mmd](diagrams/conversation-spaces.mmd).

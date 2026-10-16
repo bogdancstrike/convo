@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document | Technical specification |
-| Status | Draft v1.1 — Android and web first; implementation not started |
+| Status | Draft v1.2 — direct chats, groups, communities; Android/web first |
 | Updated | 2026-10-16 |
 | Related | [Architecture](arf.md), [UI](UI.md), [Mobile](mobile.md), [Tasks](tasks.md), [Sources](sources.md), [Diagrams](diagrams/README.md) |
 | Normative language | MUST, SHOULD, MAY as in RFC 2119 |
@@ -16,7 +16,7 @@ This document specifies **how** Enclave works: components, identities, cryptogra
 
 Enclave is a customer-operated, secure messaging platform with a friendly Android app and a full web client in the first release. iOS follows after Android/web stabilization; desktop packaging is optional later work. One deployment represents one organization/security domain. Development, test, and production have separate keys, storage, and identity issuers.
 
-**Security promise:** message bodies, attachments, profiles, and call media are encrypted between authorized endpoints. The infrastructure still processes routing and operational metadata. A compromised endpoint or malicious web bundle can expose content available to that endpoint. This is a product inspired by Signal, not a Signal-network client, interoperable Signal service, or claim of equivalent assurance.
+**Security promise:** message bodies, attachments, profiles, and call media are encrypted between authorized endpoints. The infrastructure still processes routing and operational metadata. A compromised endpoint or malicious web bundle can expose content available to that endpoint. The product combines useful interaction patterns from Signal, Telegram, and WhatsApp while retaining its own on-prem E2EE model; it does not claim network interoperability, exhaustive feature parity, or equivalent security assurance.
 
 **Priorities:** P0 is required for Android/web general availability (GA); P1 is a subsequent release; P2 is research or an optional extension. A P0 prototype is not a production release. No milestone dates are asserted without a staffed estimate.
 
@@ -28,7 +28,9 @@ Enclave is a customer-operated, secure messaging platform with a friendly Androi
 | FR-DEV-01 | P0 | Link Android and web, list/revoke devices, show identity changes, and sync own sent/read state; new devices cannot silently obtain old history. |
 | FR-MSG-01 | P0 | E2EE direct text, emoji, replies, reactions, mentions, edits, delete requests, encrypted files/photos, voice notes, delivery/read preferences, drafts, mute/archive/pin, and Note to self. Offline retries do not create duplicate messages. |
 | FR-MSG-08 | P1 | Sealed-sender deliveries use a separate unauthenticated transport and abuse controls; authenticated WebSockets must never advertise sender anonymity. |
-| FR-GRP-02 | P0 | E2EE groups, roles, invites, removal, disappearing timers, encrypted group metadata; targets of 1,000 interactive accounts subject to the leaf limits in §6. |
+| FR-GRP-02 | P0 | E2EE groups: add/remove users, promote members to admin, demote admins under policy, transfer ownership, approve join requests, manage links/permissions, shared pins and moderation; targets of 1,000 accounts subject to §6/§30 limits. |
+| FR-COM-01 | P0 | E2EE communities with admin-only announcement feeds, owner/admin/member roles, community membership, and separately permissioned linked discussion groups; no automatic subgroup-content access for community admins (§30). |
+| FR-MSG-02 | P0 | Shared message pins, explicit forwarding with destination review, safe basic formatting, message requests/blocking, media galleries, and private saved-message organization (§30.4). |
 | FR-CAL-01 | P0 | Android/web 1:1 audio/video with TURN fallback; microphone/camera denial, ringing on multiple devices, and network changes have explicit outcomes. |
 | FR-CAL-05 | P1 | Group video, screen sharing, and P2P-to-SFU escalation, gated on E2EE compatibility and membership rotation evidence. Initial target: 50 participants. |
 | FR-SEC-06 | P0 | Revoke server access immediately on commit, reject subsequent requests, close existing connections within 60 s, attempt local wipe on next contact; explain that offline erasure cannot be guaranteed. |
@@ -38,7 +40,7 @@ Enclave is a customer-operated, secure messaging platform with a friendly Androi
 | FR-ADM-01 | P0 | Separate administration for users, guests, devices, policies, health, and auditable actions; no conversation reading interface. |
 | FR-OPS-01 | P0 | Install, upgrade, back up, and restore without SaaS; signed offline bundles and tested private-CA rotation. |
 | FR-IOS-01 | P1 | iOS native lifecycle, notifications, calling, storage, and accessibility reuse the established protocols; no dependency from Android/web milestones. |
-| FR-EXT-01 | P1 | Polls, stickers, encrypted history transfer, guest invitations, user-initiated abuse reports, and local scheduled messages. |
+| FR-EXT-01 | P1 | Polls, community events/RSVP, topics/threads, stickers, view-once media, quiet/scheduled sends, chat folders, history transfer, guest invitations, abuse reports, and advanced member restrictions (§30.4). |
 | FR-EXT-02 | P2 | Encrypted recovery backup, independent key transparency, federation, explicitly visible archive/bot participants, and optional on-device assistance. |
 
 ### 0.2 Nonfunctional targets
@@ -95,6 +97,7 @@ Federation, public phone-number discovery, SMS fallback, server-side content sea
 27. Identity, group authorization, and recovery hardening
 28. Browser security and capability contract
 29. Operations, privacy, and release gates
+30. Direct chats, groups, communities, and feature roadmap
 
 ---
 
@@ -456,10 +459,11 @@ Application messages are tagged with their epoch. Process commits and applicatio
 |---|---|---|---|
 | Create group | Any account | Creator builds group, adds members' devices using claimed KeyPackages (`POST /v1/keypackages/claim`) | Server creates roster, ACL (creator = owner) |
 | Add member | Admin/owner | Commit with Add proposals for every device of the new account | Server checks committer role |
-| Remove member | Admin/owner | Commit with Remove for every leaf of the account | Removed devices receive the commit and mark the group inactive |
+| Remove member | Owner; admin for ordinary members | Commit with Remove for every leaf of the account | Admin peers/owner are protected by §30.2; removal may be paired with a ban/revoked invite. |
 | Leave | Member | Standalone Remove proposal for own leaves; server marks `pending_commit`; next online member/admin commits it (auto-commit) | Clients auto-commit pending proposals they receive when they are the designated committer (lowest active `account_id.device_id` among online admins, falling back to any member after 30 s) |
 | Key update | Any member | Empty commit with UpdatePath | Every device MUST self-update at least every 7 days and after app restore |
-| Role change | Owner/admin under current authenticated role state | MLS commit carrying a versioned role-state extension, atomically mirrored to REST ACL | Clients independently verify authorization; REST cannot unilaterally change cryptographic roles (§27). |
+| Promote member to admin | Owner/admin under authenticated permissions | MLS commit updates role state, mirrored atomically | Cannot create an owner or grant permissions the actor lacks (§30.2). |
+| Demote admin / transfer ownership | Owner | MLS commit updates role/owner state | Final-owner protection and explicit owner acceptance apply (§30.2). |
 | Delete group | Owner | REST delete; server sends `GroupDeleted` system envelope to all | Clients archive locally |
 
 ### 6.6 Multi-device join and bounded state recovery
@@ -483,7 +487,7 @@ The server cannot commit (it is not a member). On revocation:
 
 ### 6.8 Large announcement groups
 
-For P1 large announcement groups (>1,000 accounts): clients enforce admin-only posting against authenticated role state, and the server rejects non-admin submissions against its mirror; and clients defer self-updates (randomized within 7 days) to limit commit storms. Commit fan-out cost is O(N) envelopes but each envelope is small; typical single-leaf tree updates scale logarithmically, while batched changes and sparse trees require measurement.
+Standalone groups can use admin-only posting in P0, and every community announcement feed does so by default (§30). For P1 large announcement spaces (>1,000 accounts): clients enforce posting against authenticated role state, the server applies mirrored admission checks, and clients defer self-updates (randomized within 7 days) to limit commit storms. Commit fan-out cost is O(N) envelopes but each envelope is small; typical single-leaf tree updates scale logarithmically, while batched changes and sparse trees require measurement.
 
 ### 6.9 KeyPackages
 
@@ -818,9 +822,25 @@ Messages are sent over WebSocket. REST fallback for constrained environments and
 | POST | `/groups/{gid}/commits` | D | Submit commit (§6.4); `external=true` for external joins. |
 | POST | `/groups/{gid}/proposals` | D | Submit standalone proposal (leave). |
 | GET | `/groups/{gid}/acl` | D (member) | Read mirrored authenticated roles/version. |
+| POST | `/groups/{gid}/invites` | D (authorized role) | Create an opaque scoped, expiring/revocable link; no identity bypass. |
+| POST | `/groups/{gid}/join-requests` | D | Request membership; admission completes only after an authorized MLS Add. |
+| DELETE | `/groups/{gid}/invites/{inviteId}` | D (authorized role) | Revoke future redemption, preserving authenticated invite-policy state. |
 | GET | `/groups/{gid}/events?after_seq=` | D (member) | Bounded ordered catch-up with profile authorization. |
 | GET | `/groups/{gid}/commits/{submissionId}` | D (authorized submitter/member) | Resolve uncertain commit acceptance by ID/digest. |
 | DELETE | `/groups/{gid}` | D (owner) | Delete group. |
+
+### 12.4a Communities
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/communities` | D | Create root announcement MLS group and versioned community descriptor (§30.3). |
+| GET | `/communities/mine` | D | Authorized community references, mirrored membership/version, encrypted descriptor pointers. |
+| GET | `/communities/{cid}/groups` | D (community member) | Only authorized/discoverable linked-group references; membership remains separate. |
+| POST | `/communities/{cid}/links` | D (authorized community role) | Stage a subgroup link; requires subgroup-owner acceptance and both authenticated descriptors. |
+| DELETE | `/communities/{cid}/links/{gid}` | D (authorized role) | Stage explicit unlink/detach, with subgroup-owner consent and recorded membership disposition. |
+| POST | `/communities/{cid}/membership-operations` | D (authorized role) | Idempotent root/subgroup membership change with visible pending/rekey status. |
+
+Community role changes and announcement posts use the root MLS group's normal commit/message endpoints. A membership operation is a tracked orchestration request, not unilateral server authority. All new mutating routes need submission IDs/version checks; exact request/response schemas are FND-01/COM-01 artifacts.
 
 ### 12.5 Attachments
 
@@ -1209,8 +1229,8 @@ Android restricted mode uses a separately installed/certified UnifiedPush distri
 ## 17. Disappearing messages, edits, deletes, receipts
 
 - **Disappearing**: timer changes are authenticated conversation events. Received timers start at earliest known own-device read; sender timers start on send, with optional absolute maximum lifetime and cleanup rules in §25.3. Enforce customer maximum retention independently of timer choices.
-- **Edits**: `Edit` referencing `message_id`, allowed by the original sender within the policy window; clients keep edit history locally (shown as "edited").
-- **Delete for everyone**: `Delete` referencing `message_id`; recipients replace content with "This message was deleted". Best-effort: a modified client could ignore it (documented limitation).
+- **Edits**: `Edit` referencing `message_id`, original sender only within policy; retain local edit history only under the configured content-retention policy. Group administrators cannot rewrite someone else's message.
+- **Delete for everyone**: author `Delete` and separately typed `ModerationDelete` (§30.2) reference `message_id`; recipients show the correct author/moderator tombstone. Best effort: modified clients or previously saved copies can retain content.
 - **Receipts**: `ReceiptMessage{type: DELIVERY | READ | VIEWED, message_ids[]}` sent 1:1 (also in groups: sent as an MLS application message only if group size ≤ 100; above that, delivery receipts are suppressed to limit traffic).
 
 ---
@@ -1422,7 +1442,7 @@ Enqueue the intent in the message transaction. A post-commit hint may wake a wor
 | Direct chats / Note to self | Encrypted text and typed content events; Note to self fans out only to own devices | No server conversation index; conversations appear from local history and encrypted own-device sync. |
 | Replies and mentions | Reference original message ID; mentions reference stable account IDs and display from local profiles | Deleted/unavailable originals render an accessible placeholder; do not upload quoted plaintext separately. |
 | Reactions | One active value per `(message, reacting account, emoji)` with an encrypted mutation ID | Idempotent add/remove; only the reacting account can retract its reaction. |
-| Edits / deletes | Authenticated original author only, within conversation policy; encrypted target ID and mutation version | Queue bounded mutations arriving before their target; deletion tombstone prevents a late original from resurrecting content. Invalid edits never replace content. |
+| Edits / deletes | Only the authenticated original author may edit or author-delete; a distinct group/community moderation-delete event is allowed for authorized roles (§30.2) | Queue bounded early mutations; tombstones prevent resurrection. Moderators cannot edit another author or silently impersonate them. |
 | Files / media / voice notes | Same encrypted attachment protocol; optional waveform/thumbnail inside ciphertext | No server transcoding. Warn before opening executable/untrusted files; no auto-execution, bounded decoder resources, strip location EXIF by default. |
 | Read / typing / presence | Read receipts off and typing indicators off by default; delivery status enabled | Presence is not a public employee-activity feed. Group receipts capped at 100 accounts; typing expires in 10 s and never wakes devices. |
 | Mute / archive / pin / unread | Private account preferences, synced E2EE among own devices | An explicit user action wins over arrival of an old sync event; archive does not delete and is distinct from unread state. |
@@ -1498,7 +1518,7 @@ Keycloak disable events need durable producer retry or an equivalent persisted e
 
 A public MLS commit and a server ACL are insufficient to protect an untrusted-server design from unauthorized additions/role changes. The application profile MUST authenticate account roles inside a versioned MLS group-context extension. Define its canonical encoding and require support in every KeyPackage capability. Every member evaluates a proposed membership/role change against the **previous** authenticated role state before accepting the commit. REST ACLs are transactional mirrors and admission optimizations, not independent authority.
 
-Rules: owner/admin may add/remove accounts within policy; ordinary members may update self and leave; linked devices may self-join only for their already-member account with a valid binding; only the current owner transfers ownership; no operation removes the final owner without a transfer. The server cannot mint new role authority. Admin-requested device removals are signed policy requests, but an authorized peer must endorse the MLS change under the group profile. Any-member removal of a server-flagged leaf is permitted only if the group's authenticated policy explicitly delegated that revocation authority; a flag alone is not enough.
+Rules follow the explicit role matrix in §30.2: owner/admin may add members and promote eligible members, admins remove ordinary members, and owners protect/demote/remove peer admins and transfer ownership; ordinary members may update self and leave; linked devices may self-join only for their already-member account with a valid binding; only the current owner transfers ownership; no operation removes the final owner without a transfer. The server cannot mint new role authority. Admin-requested device removals are signed policy requests, but an authorized peer must endorse the MLS change under the group profile. Any-member removal of a server-flagged leaf is permitted only if the group's authenticated policy explicitly delegated that revocation authority; a flag alone is not enough.
 
 Current members validate leaf credentials, bindings, role-state transitions, proposal references, tree/commit semantics, membership and confirmation tags using OpenMLS. The server verifies public signatures and structural admission checks only. A small reviewed public-message parser may be implemented in a sandboxed native adapter; do not invent an incomplete Java MLS stack. Availability gating by a malicious delivery service is unavoidable, while role changes cannot become silent content access.
 
@@ -1558,3 +1578,97 @@ SSRF-sensitive inputs include UnifiedPush URLs, object-store endpoints, identity
 ### 29.3 Production exit evidence
 
 Android/web GA requires passing protocol vectors and parser fuzzing; real multi-device/offline/revoke/expiry scenarios; account/device/role authorization tests; Android process-death and notification tests; browser worker/tab/storage tests; keyboard/TalkBack/screen-reader journeys; load and single-node failure tests under published sizing; signed build/SBOM/offline-install verification; a safe restore drill; and an independent cryptographic/application security review with critical/high findings resolved. Record results and remaining risks in release evidence. Group calls and iOS have separate P1 gates and cannot delay Android/web P0.
+
+---
+
+## 30. Direct chats, groups, communities, and feature roadmap
+
+### 30.1 Three first-class conversation experiences
+
+| Experience | Purpose | Membership and posting | Encryption / P0 scope |
+|---|---|---|---|
+| Direct chat (1v1) | Private conversation between two accounts | Each account may have linked devices; message requests and blocking protect unsolicited contact | Signal sessions per recipient device, own-device sync, text/files/voice/replies/reactions/direct calls |
+| Group | Collaborative discussion among selected accounts | Owner/admin/member roles; everyone posts by default, with admin-only mode available | Independent MLS group, client-enforced roles, add/remove/promote/demote, invites/approval, shared pins, moderation |
+| Community | Organize a team, department, project, or interest space | An admin-only announcement feed plus optional linked discussion groups; community roles and subgroup roles are distinct | Root MLS announcement group and independent MLS groups for subgroups; P0 on Android and web |
+
+For a first-contact direct message, show a message request with Accept, Block, and Delete locally actions. Until accepted, do not share profile keys/read/typing state or auto-download media; transport delivery acknowledgements do not imply user consent. Subsequent blocking suppresses notifications/receipts and future application delivery under the minimized block policy; unblocking does not silently replay blocked history.
+
+A community is a product/domain entity, not just a renamed group. A standalone group may use admin-only posting without becoming a community. An organization administrator is not automatically a conversation/community member or content recipient. P0 communities target 1,000 accounts / 5,000 devices and 20 linked groups per community; each subgroup obeys the ordinary group limits. These are admission/benchmark targets, not measured capacity. P1 may raise announcement membership to 5,000 accounts / 25,000 devices only after scale evidence.
+
+### 30.2 Roles, permissions, and moderation
+
+Roles apply per space: group owner/admin/member, or community owner/admin/member. Default permissions are shown below. An owner is the ultimate conversation owner; “admin” does not confer deployment-administration privileges. Later custom permission sets must be subsets of the actor's grantable authority and become authenticated role-policy state before taking effect.
+
+| Action in the current space | Owner | Admin | Member |
+|---|---|---|---|
+| Read content already delivered to own devices | Yes | Yes | Yes while authorized; removal cannot erase past copies |
+| Post text/files/voice, reply, start an allowed call in a discussion group | Yes | Yes | Yes unless authenticated posting policy restricts it |
+| Publish community announcements / post in admin-only groups | Yes | Yes | No; a reaction or permitted RSVP is not a content-post privilege |
+| Add/invite members, approve/reject join requests | Yes | Yes under invite policy | Request membership or share an already permitted link; cannot approve self |
+| Remove/ban an ordinary member | Yes | Yes | Leave self only |
+| Promote an ordinary member to admin | Yes | Yes under default policy | No |
+| Demote/remove another admin | Yes | No by default | No |
+| Remove/replace the owner, transfer ownership, delete the space | Transfer/delete only; must preserve ownership invariant | No | No |
+| Change posting mode, invite policy, metadata/timer policy, shared pins | Yes | Yes within authenticated grant | No by default; ordinary members may keep private bookmarks |
+| Edit another person's message | No | No | No |
+| Issue a moderation-delete request for any post in this space | Yes | Yes within policy | No; author-delete of own messages is separate |
+
+This matrix governs actions initiated within the current space. A linked subgroup may also accept the narrowly delegated parent-removal operation in §30.3 for a now-ineligible subgroup member, including a subgroup admin, while preserving final-owner constraints. That exception grants neither arbitrary demotion of a retained member nor subgroup read/admin access.
+
+Admin promotion/demotion, removal, bans, invite policy, posting mode, and shared-pin permissions are versioned authenticated group-policy events. Clients validate the actor's authority at the operation's accepted sequence; caller timestamps or a changed server ACL cannot grant privileges. Demotion removes future administrative/posting powers but does not remove an otherwise retained member or erase their existing history. Re-evaluate queued posts/moderation actions after role changes; a demoted admin's delayed announcement is rejected.
+
+Ownership transfer requires an existing eligible member's explicit acceptance, a fresh authenticated state version, and a single accepted role transition; the previous owner becomes admin unless explicitly choosing member status. The final owner cannot leave/be removed until transfer or deletion. Account disablement can still make a space unavailable: do not assign ownership silently through the server; use explicit trusted recovery/recreation.
+
+`ModerationDelete` is distinct from an author's deletion: include target ID, authenticated actor, accepted role/policy version, mutation ID, and an optional encrypted reason. Honest clients hide content and show “Removed by a group admin”; they never rewrite authorship or claim that screenshots/exports disappeared. A user may remove a message locally without changing anyone else's copy. Role/member/moderation changes have an encrypted system timeline for participants; deployment audit records never include plaintext announcement or moderated-message content. A ban prevents ordinary invite redemption until an authorized unban; it is not merely a local block.
+
+Posting restrictions apply to user content, not necessary MLS updates, removal acknowledgements, own-device sync, or other protocol maintenance. Recipients enforce encrypted event types against authenticated permissions. Public type hints are untrusted admission aids: a member cannot label a new post “reaction” to bypass an admin-only feed. P0 community reactions are optional under authenticated policy (off by default); member comments/new posts are disabled. P1 replies or discussions use an explicitly linked discussion group with its own membership, not an unnoticed exception to admin-only posting.
+
+### 30.3 Community structure, membership, and security
+
+Each `community_id` is an opaque random ID bound in a versioned community descriptor to one root `announcement_group_id`. The root MLS group contains community members' active devices and authenticates community roles, encrypted name/avatar/description/rules, posting policy, and the authority used to approve scoped subgroup links. Each subgroup has an independent MLS context, roles, membership, history, and keys. A P0 subgroup has at most one active parent community; community roots cannot be linked as subgroups, and nested communities are not supported. Never reuse the root exporter or a single community-wide content key to encrypt every subgroup.
+
+Community owners/admins can create the community, publish announcements, manage community membership, and propose adding/removing linked groups. Linking an existing group requires both a community-admin proposal and explicit subgroup-owner acceptance, authenticated in their respective group states with an operation ID/version. Community admins do not automatically gain subgroup membership, subgroup admin rights, or old content; those require a normal authorized membership/role change in that subgroup.
+
+P0 linked subgroup members are a subset of community membership. Existing standalone groups can link only after their members explicitly accept community enrollment; linkage cannot silently add people to the root announcements or expose subgroup history. Joining a community enrolls the approved account in the root announcement group, not every subgroup. Only eligible joined users see approved discoverable subgroup listings; private subgroup listings/descriptors are restricted to authorized members/invitees and explicitly authorized linkage managers. Private link descriptors are not broadcast to the whole root feed; distribute them through existing E2EE recipient/group channels with authenticated authority/version proofs. Any group label shared with a linkage manager needs subgroup-owner approval and conveys no message or roster access. Do not fetch subgroup titles, rosters, or content for an unauthorized account merely because it belongs to the parent.
+
+A subgroup may authenticate a **narrow parent-revocation delegation** at link time: validated community removal can remove the account's subgroup leaves, but cannot add readers, promote subgroup admins, or change subgroup content policy. Peers must verify the community-role/membership transition and link delegation from authenticated root state; a server-maintained parent ID alone is insufficient. Define and review these cross-group proofs in COM-01 before linked communities ship. If a group does not accept the delegation, it remains standalone rather than advertising parent-removal guarantees it cannot enforce.
+
+Community removal/leave is an idempotent multi-step operation: validate authority and owner-transfer constraints; mark affected root/subgroups pending on the primary; remove all account devices from the root; obtain valid removal commits for every linked subgroup; cancel access/tickets/routes; then finalize. Block affected space sends while required removals are pending. An unavailable authorized committer yields visible “Removal pending—updating secure groups”, not false atomic success. No new root/subgroup epoch content is delivered to the removed account once each removal is accepted. Already encrypted old-epoch content stays subject to the limitations in §6.7.
+
+Refuse voluntary community removal/leave that would strand a final subgroup owner until ownership transfers or that subgroup is deliberately deleted/detached under policy. Organization disablement takes precedence over availability and can quarantine affected groups. Unlink/detach requires explicit community/subgroup authority and a stated membership disposition; it cannot silently keep a removed person eligible through a stale link.
+
+Server mirrors: `communities` (opaque IDs/root reference/version/status), `community_members` (account-level role/version), `community_group_links` (group IDs, visibility, accepted link/delegation versions), `join_requests`/`invite_links` (bounded lifecycle), and `membership_operations` (idempotent pending/completed steps). This adds observable relationship metadata; document it in the ARF. Names/descriptions/rules and announcement bodies stay encrypted. Routing cannot claim private group/relationship metadata equivalent to Signal's private-group implementation.
+
+Group/community invitation links are high-entropy, scoped, expiring, revocable, and hashed at rest; redact redemption secrets from access logs and browser history where feasible; they do not bypass SSO, organization/guest eligibility, bans, or approval. Default requires admin approval. A join request grants no keys, feed, roster, or old history until an authorized Add/Welcome is committed. Ordinary group/community user consent is explicit unless customer policy permits managed group enrollment; parent linkage never silently creates consent to a new root audience. Newcomers receive future content plus explicit permitted current metadata and pin references; old-history transfer remains P1 and must never restore live protocol state. Pinning an old message cannot silently disclose its body/attachment key to a new member—require a separate deliberate re-share.
+
+### 30.4 Useful feature matrix
+
+The references in [sources.md](sources.md#product-feature-inspiration) are inspiration for product behavior, not a claim that all three apps offer each feature or use the same security model. P0 items are requirements for both Android and web; P1 items follow after the initial secure release. iOS remains later scope.
+
+| Feature family | P0 Android/web | P1 expansion | Required security/usability behavior |
+|---|---|---|---|
+| Everyday messaging | 1v1, Note to self, discussion groups, communities, replies/reactions/mentions, edits/delete requests | Topics/threads within a group | Topics share their parent membership by default; private audiences require separate groups/keys. |
+| Group/community controls | Add/remove, promote/demote under role matrix, ownership transfer, admin-only posting, join approvals, revoke links, member bans | Custom admin grants, per-member send restrictions, slow mode | Authenticated policies and client validation; demotion/removal stops queued unauthorized actions. |
+| Organization | Private conversation pins/bookmarks, shared message pins, archive/mute/unread, local search and media gallery | Private chat folders/custom filters, quiet/silent send, local scheduled send/reminders | Shared pins are events visible to the space; private bookmarks/folders are E2EE own-device preferences. |
+| Files and expression | Encrypted photos/files/voice notes, captions, voice playback speed, safe bold/italic/code/quote formatting | Stickers, approved bundled GIFs, view-once photo/video, optional local transcription | No third-party media search or cloud transcription by default; view-once is best effort, not screenshot-proof. |
+| Sharing | Explicit forwarding/copy/share with destination review and a “Forwarded” marker | Batch forwarding with policy limits | Forwarding intentionally discloses selected plaintext to new recipients; omit source space identity unless explicitly shared and allowed. |
+| Collaboration | Shared pins/rules, community announcements, optional policy-controlled reactions | Polls/quizzes, events/RSVP, linked discussion replies | No anonymous-vote claim; response permissions do not grant free posting. Event time zone, cancellation, and reminders sync E2EE. |
+| Privacy | Default E2EE in all conversation types, identity checks, app lock, disappearing messages, message requests/blocking, generic notifications | Sealed sender, view-once controls, stronger recovery/verification options under their own gates | No cloud-chat mode with weaker content protection to mimic another product; no claim of forced remote erasure. |
+| Calls | Direct audio/video, multi-device answer arbitration, relay option | Group audio/video, screen sharing, call links for authenticated invited members | No public anonymous room entry, media downgrade, or hidden recording recipient. |
+| Recovery/sync | Current preferences and future messages on linked devices | Explicit bounded history transfer | No default plaintext cloud history and no silent old-key/state restoration. |
+
+Forwarding, shared pinning, and moderation add typed encrypted events to FND-01's schema. A forward is a new message with a new ID and target-appropriate encryption; it cannot circumvent target posting restrictions. Retention/export policy still applies to honest clients. Shared pins expire or disappear with their target, cannot resurrect deleted content, and show unavailable references on devices without the original history.
+
+Events/RSVP and polls are bounded encrypted collaboration objects with authorized creator/admin actions, stable IDs, mutation counters, cancellation/close states, and local notification cleanup. Visible ballots are the initial poll model; cryptographic anonymity or verifiable voting needs a separate reviewed design. View-once media is P1: suppress normal history/export/cache retention and clear keys/previews after view/expiry; a recipient can still copy or record content outside the honest app. Sync a consumed marker among own devices, but do not promise a globally single view across devices that are simultaneously offline.
+
+### 30.5 Acceptance scenarios and task mapping
+
+- A group owner adds two users, an admin removes an ordinary member, promotes another member to admin, and the owner demotes that admin. Permission changes appear consistently on Android and web; a member cannot promote self or remove the owner.
+- An owner transfers ownership with acceptance and can then leave. A last-owner leave/removal is blocked with an actionable transfer flow.
+- A community admin publishes an announcement; an ordinary member cannot publish, edit an announcement, or spoof a reaction as a post. Allowed protocol maintenance continues in read-only feeds.
+- An existing group links only after both authorities and prospective root members consent; a community admin outside the subgroup cannot read its content.
+- Join links expire/revoke and require SSO/approval; banned members cannot rejoin through an old link. Pending requests expose no encrypted feed or subgroup metadata.
+- Community removal is tested during subgroup-admin outage and partial commit success. Affected sends stay gated; retries resume the same operation; no new-epoch content reaches removed devices.
+- A moderator removes a post with the correct tombstone, cannot edit its author, and cannot resurrect it with a later pin/forward event. A new member sees an unavailable old pin unless someone explicitly re-shares content.
+
+Implementation mapping: FND-01/02 define and prove the profile; GRP-01/02/03 implement group roles/events/UX; COM-01/02 add communities and cross-group operation evidence; FEAT-02 adds pins/forwarding/moderation state; EXT-01/03 cover P1 collaboration/organization features. All enter REL-01 requirement coverage and independent security review. Community scope extends M2/P0; no iOS or SFU prerequisite is introduced.

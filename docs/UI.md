@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.1, 2026-10-16 |
+| Status | Draft v1.2, 2026-10-16 |
 | First delivery | Android and web, equal product priority |
 | Later | iOS after Android/web stabilization; desktop packaging optional |
 | Related | [Specs](specs.md), [ARF](arf.md), [Mobile](mobile.md), [Tasks](tasks.md) |
@@ -26,7 +26,8 @@ Android and web implement the same message, identity, group-role, and sync seman
 
 | Area | Android | Web | Contents |
 |---|---|---|---|
-| Chats | Primary bottom-navigation destination | Primary side-navigation destination | Conversations, pinned section, unread filter, archive, Note to self, new chat/group |
+| Chats | Primary bottom-navigation destination | Primary side-navigation destination | Conversations, pinned section, unread filter, archive, Note to self, new 1v1 chat/group/community and type filters |
+| Communities | Bottom-navigation destination | Dedicated sidebar destination | Joined spaces, admin-only announcements, linked discussion groups, membership/manage actions |
 | Calls | Bottom-navigation destination | Sidebar destination | Local recent direct calls; start audio/video; group call entry in P1 |
 | People | Search/new-chat entry; optional destination on wide layouts | Directory panel/new-chat flow | Org handles, local contacts, guests, blocked accounts; no phonebook import |
 | Settings | Avatar/menu entry | Sidebar/footer entry | Profile, appearance, notifications, privacy, devices, storage, connectivity/help |
@@ -143,6 +144,20 @@ Drag/drop and paste work in web with type/size validation and a preview. Confirm
 Create group: choose people, set encrypted name/avatar, review participants/devices, create. The creator is owner. Details show member accounts, roles, devices where security-relevant, guest expiry, disappearing timer, and verification context. Adding/removing members shows progress until the secure membership change is accepted; a server ACL update alone never marks it complete.
 
 If a revoked device requires removal, show “Updating this group's security” and preserve unsent text. If catch-up/rejoin fails, explain “This device needs to rejoin the secure group”; do not ask users to bypass security checks. Ownership transfer is explicit; leaving as final owner requires transfer or group deletion. Announcement mode shows nonposting members a clear read-only composer state.
+
+### 5.4a Group roles and community management
+
+Group details provide named “Add members”, “Remove from group”, “Make group admin”, “Remove admin role”, “Transfer ownership”, “Invite link”, “Join requests”, “Posting permissions”, and “Pinned messages” actions. Hide or explain unauthorized actions according to specs §30.2. Admins can promote ordinary members under default policy; only the owner demotes/removes peer admins. A promotion confirmation summarizes granted powers; ownership transfer requires acceptance by the new owner. Never use an unlabeled generic role toggle for destructive privilege changes.
+
+Communities is a first-class Android/web destination. A community page has **Announcements**, **Groups**, **About/rules**, and role-appropriate **Manage** views. Ordinary members see the announcement feed with “Only community admins can post”; there is no enabled composer for new posts/comments. Allowed reactions appear only when community policy enables them. Admins see a Publish action and the same protected role/ownership operations. Optional P1 replies link to a discussion group with explicit membership.
+
+Groups within a community show joined, available-to-request, pending approval, and restricted states; unauthorized private groups are not listed. Any limited private-link label shown to a linkage manager is explicitly shared by the subgroup owner and does not grant message/roster access. Community admin status does not imply subgroup membership or access. Linking an existing group requires community/admin and subgroup-owner approvals plus affected users' community-enrollment consent; show whose membership/visibility changes before applying it.
+
+Removal dialogs explain whether the operation affects the root announcements, selected subgroup, or all linked subgroups. Display per-space pending secure-removal progress and retry/recovery without claiming completion while a subgroup lacks a valid removal commit. Block final-owner leave with a transfer/delete action. Revoking an invite/ban is distinct from deleting history or muting.
+
+Shared pinned messages appear in the thread/header and are governed by group permissions. Private bookmarks and conversation pins stay in the user's own organization controls. “Removed by a group admin” identifies a moderation action; administrators cannot edit another author's words. A pin unavailable on this device shows a placeholder; joining a space does not automatically copy old pinned content.
+
+Forwarding opens a destination picker, identifies the selected content/new audience, and respects the target's posting rights. Preserve a Forwarded label without leaking the source group/community identity by default. Offer View once, Schedule, Topics, Events, and Polls only in releases where those P1 features are implemented; no placeholder controls imply shipped functionality.
 
 ### 5.5 Search and organization
 
