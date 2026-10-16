@@ -188,7 +188,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Artifacts:** `packages/design-tokens/`, Android/web scenario fixtures, `docs/evidence/ui-acceptance.md`.
 
-- [ ] Build compact/wide, light/dark prototypes for onboarding, linking, thread/composer, groups, call, settings, and security/recovery states from UI.md.
+- [ ] Build compact/wide, light/dark prototypes for account/community onboarding, announcement acknowledgement, linking, thread/composer, groups, call, settings, and security/recovery states from UI.md.
 - [ ] Implement semantic labels/focus, contrast, target sizing, dynamic text, reduced motion, English/Romanian catalogs, and safe IME behavior.
 - [ ] Test keyboard-only, TalkBack, web screen readers, 200% zoom, slow/offline first use, and friendly error comprehension.
 
@@ -236,11 +236,12 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Artifacts:** community application module, root/subgroup profile extensions and vectors, community/link/operation migrations and OpenAPI contracts, `docs/evidence/community-profile.md`.
 
-- [ ] Implement community/root IDs, owner/admin/member roles, admin-only announcement events, separately encrypted subgroups, link visibility, and approved join/invite lifecycles from specs §30.
+- [ ] Implement community/root IDs, owner/admin/member roles, admin-only announcement events, revision-bound explicit announcement/rules responses, versioned onboarding packages, separately encrypted subgroups, link visibility, and approved join/invite lifecycles from specs §30.
 - [ ] Require two-sided group-link authority and explicit root enrollment; implement narrow authenticated parent-removal delegation without granting subgroup read/admin powers.
 - [ ] Define replay-safe cross-group proof/version checks, owner-transfer prerequisites, idempotent pending operation state, and affected-space send gates.
 - [ ] Review audience-scoped E2EE private-link descriptor distribution and authority proofs; a full link descriptor in root-shared state or UI-only filtering does not meet privacy requirements. Record unavoidable backend relationship metadata and any intentionally shared management labels.
-- [ ] Extend independent protocol review to subgroup isolation, malicious parent/server role claims, and partial membership transitions.
+- [ ] Define reviewer-scoped pairwise response routing (maximum 10 reviewers), eligibility/revision checks, account dedupe, retained response expiry, and private own-device checklist state; no plaintext server reports or response broadcast to the root feed.
+- [ ] Extend independent protocol review to subgroup isolation, malicious parent/server role claims, partial membership transitions, acknowledgement confidentiality, and private subgroup recommendations.
 
 **Done when:** members cannot post in the announcement feed or gain content through forged links; community admins outside a subgroup cannot read it; a valid parent removal authorizes only the delegated removal, never new readers or promotion.
 
@@ -251,11 +252,13 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 **Artifacts:** Communities navigation/detail/feed/manage flows in both clients, community simulator/failure scenarios, `tests/scenarios/communities/`.
 
 - [ ] Deliver create/join/approve, admin announcements, linked-group discovery/join, admin promotion/owner demotion, shared pins/rules, mute, and explicit leave/removal progress.
-- [ ] Enforce permitted reaction/control events without allowing a member to disguise a post; preserve protocol maintenance in read-only feeds.
+- [ ] Deliver optional announcement acknowledgement with named-reviewer reports and private welcome/rules/recommended-group/checklist flows from specs §30.6–30.7. Keep read receipts, personal checklist progress, and explicit shared responses distinct.
+- [ ] Test disabled read receipts, offline/two-device duplicate responses, edited/deleted announcements, rules/reviewer revisions, reviewer demotion, expired/removed members, changed checklist items, and hidden/ineligible recommendations.
+- [ ] Enforce permitted reaction/control/acknowledgement events without allowing a member to disguise a post; preserve protocol maintenance in read-only feeds.
 - [ ] Race link/unlink/removal/role change and disconnect an authorized subgroup committer; resume idempotently after restart/restore with no false “removed everywhere” state.
 - [ ] Benchmark 1,000 community accounts / 5,000 root devices / 20 linked groups with realistic subgroup fan-out and churn; record lower certified limits if necessary.
 
-**Done when:** every specs §30.5 scenario passes across Android/web, including private-subgroup discovery isolation, rejected multiple-parent/nested-root links, scoped private-link descriptors, no automatic old-history exposure, and no new-epoch content after accepted removal. iOS and SFU are not prerequisites.
+**Done when:** every specs §30.5–30.7 scenario passes across Android/web, including private-subgroup discovery isolation, rejected multiple-parent/nested-root links, scoped private-link descriptors, no automatic old-history exposure, and no new-epoch content after accepted removal. iOS and SFU are not prerequisites.
 
 ### FEAT-01 — Attachments, photos, and voice notes
 

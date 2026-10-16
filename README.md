@@ -25,7 +25,7 @@ A secure everyday messenger that feels approachable to employees and manageable 
 | Accessible UI, light/dark themes, English/Romanian | Additional locales and certified deployment integrations |
 | SSO, admin policies, audit, signed on-prem delivery | Separately reviewed optional extensions |
 
-Communities organize an encrypted announcement feed and separately permissioned discussion groups. Community admins can publish/manage the community; they do not automatically gain subgroup content access. The [conversation and feature matrix](docs/specs.md#30-direct-chats-groups-communities-and-feature-roadmap) defines the Signal/Telegram/WhatsApp-inspired roadmap.
+Communities organize an encrypted announcement feed and separately permissioned discussion groups, with optional explicit announcement acknowledgements and a welcome/rules/recommended-groups/checklist flow. Community admins can publish/manage the community; they do not automatically gain subgroup content access. The [conversation and feature matrix](docs/specs.md#30-direct-chats-groups-communities-and-feature-roadmap) defines the Signal/Telegram/WhatsApp-inspired roadmap.
 
 This is the intended scope, not a list of shipped features. Acceptance criteria and dependencies live in [tasks.md](docs/tasks.md).
 

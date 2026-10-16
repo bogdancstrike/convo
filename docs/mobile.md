@@ -9,7 +9,7 @@
 
 ## 1. Release scope
 
-P0 Android includes organization bootstrap, SSO, first-device registration, browser/device linking, 1v1/group/community messaging, add/remove/promote/demote and join approval, admin-only announcements, shared pins and forwarding, encrypted files/photos/voice notes, local search, own-device sync, identity verification, disappearing messages, direct audio/video calls, privacy settings, app lock, and reliable recovery from process death. It works against on-prem services in connected and restricted profiles, with explicitly certified notification behavior.
+P0 Android includes organization bootstrap, SSO, first-device registration, browser/device linking, 1v1/group/community messaging, add/remove/promote/demote and join approval, admin-only announcements with explicit acknowledgements, community welcome/rules/checklists and eligible group recommendations, shared pins and forwarding, encrypted files/photos/voice notes, local search, own-device sync, identity verification, disappearing messages, direct audio/video calls, privacy settings, app lock, and reliable recovery from process death. It works against on-prem services in connected and restricted profiles, with explicitly certified notification behavior.
 
 The web client is a peer P0 product, with its own UI and browser platform adapters. Android must link and exchange messages/calls with web throughout development; a mobile-only prototype is insufficient for P0 acceptance. P1 adds iOS, encrypted history transfer, and group media in independently gated workstreams. ReplayKit/special extensions do not block Android/web.
 

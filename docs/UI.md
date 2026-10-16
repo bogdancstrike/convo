@@ -159,6 +159,14 @@ Shared pinned messages appear in the thread/header and are governed by group per
 
 Forwarding opens a destination picker, identifies the selected content/new audience, and respects the target's posting rights. Preserve a Forwarded label without leaking the source group/community identity by default. Offer View once, Schedule, Topics, Events, and Polls only in releases where those P1 features are implemented; no placeholder controls imply shipped functionality.
 
+### 5.4b Announcement acknowledgements and welcome flow
+
+Community admins have an optional “Request acknowledgement” switch when composing an announcement. Before publishing, show the eligible audience, optional due time, expiry, and named reviewers (default publishing admin + owner, maximum 10). Members see an “I acknowledge this announcement” action and who receives the response; the feed remains read-only for member posts. Use “Pending sync”, “Acknowledgement sent”, “Late”, “Withdrawn”, and “Updated—please acknowledge again” states. Never label automatic read/delivery as an acknowledgement. Reviewer-only details/counts are private to the authorized recipients, with export off by default.
+
+After approved community enrollment, open a welcome overview with purpose/description, current rules, recommended eligible groups, help, and a newcomer checklist. Provide “Continue later” and an easy way to return from About/rules. Label optional versus required guidance; rules acknowledgement explicitly names the version and reviewers. Checklist completion stays private to the member's devices; the UI must not imply the admin sees it. Updated rules have a visible review banner; an acknowledged prior version cannot silently count as the new one.
+
+Recommendations show Joined, Request to join, or Pending approval only when the user may discover that subgroup. Selecting a recommendation follows normal membership approval; it never auto-joins or grants historical content. Completed onboarding is not proof of authorization or a legal agreement. Test keyboard/TalkBack/screen-reader access, offline continuation, two-device progress, deleted/expired acknowledgement requests, and changed rules/checklist items on Android and web. See specs §30.6–30.7.
+
 ### 5.5 Search and organization
 
 Search scopes: current conversation, all local chats, people, files. Separate “People in your organization” (directory request) from “Messages on this device” (local search). Filters include sender, date, file type, and conversation. Search keeps Romanian diacritics usable and highlights locally. An empty result explains that history from before this device was linked may be absent.

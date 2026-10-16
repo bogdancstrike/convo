@@ -165,6 +165,7 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 | IP addresses | Short-lived rate limits and explicitly enabled infra logs | ≤ 24 h default | Sanitized application logs may live 14 days; IP retention is separately bounded. |
 | Contact lists / conversation lists | **No** | — | |
 | Admin actions | Yes | 365 days default; customer policy may extend | Serialized hash chain + signed independent checkpoints. |
+| Announcement/rules responses and personal onboarding progress | Encrypted transport/store only; no plaintext service report | Parent request/content lifetime; obsolete rules responses ≤ 30 days default | Named reviewers receive explicit E2EE responses; checklist progress goes only to own devices. |
 
 ---
 
@@ -718,3 +719,8 @@ No accepted draft ADR overrides a failed feasibility gate. Update this document,
 **Alternatives:** One community-wide key was rejected because it makes every member a recipient of all discussions. A server-only parent ACL was rejected because it cannot provide client-validated authority under a malicious operator. Standalone admin-only groups remain supported but do not replace the community entity/navigation.
 
 **Verification and implementation:** Specs §30, COM-01/02 and GRP-01/02/03 define role matrices, link consent/proofs, pending removals, old-pin/history behavior and benchmark targets. Test a forged parent role, admin demotion with queued posts, subgroup-admin outage, revoked links, final-owner removal, and recovery of partial operations. Independent profile review is required before shipping. See [conversation-spaces.mmd](diagrams/conversation-spaces.mmd).
+
+
+### 18.1 Explicit responses and private onboarding state
+
+FR-COM-02/03 add announcement acknowledgements and community welcome/rules/recommendations/checklists to Android/web P0. The root feed carries versioned requests/current metadata; explicit account responses travel through existing pairwise Signal sessions to named authorized reviewers, not root-wide broadcast or plaintext server reports. Default reviewers are publishing admin + community owner, bounded at 10 accounts. Group posting restrictions still prohibit member posts while permitting typed scoped responses and protocol maintenance. Personal checklist progress is E2EE own-device state; subgroup recommendations obey normal private-link visibility/admission. Reviewers receive no passive read state, and onboarding completion cannot grant keys or membership. Specs §30.6–30.7 and COM-01/02 define revision, retention, retry, and role-change behavior.
