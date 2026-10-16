@@ -12,22 +12,151 @@ Convo is a planned on-prem messaging platform for organizations that want a frie
 
 ## What we're building
 
-A secure everyday messenger that feels approachable to employees and manageable for IT. Sign in with your organization, find a colleague, chat, share a file or voice note, and make a call—without requiring a phone number or uploading a personal address book.
+A secure everyday messenger that feels approachable to employees and manageable for IT. Sign in with your organization, find a colleague, chat, share photos or voice notes, join a community, and make a call—without requiring a phone number or uploading a personal address book.
 
-| First release: Android + web | Later releases |
-|---|---|
-| Encrypted 1v1 chats, managed groups, and communities | iOS app and its native notification/call integrations |
-| Add/remove members, promote/demote admins, admin-only announcements | Group video, screen sharing, and call escalation |
-| Encrypted photos, files, and voice notes | Polls, events/RSVP, topics, stickers, guest invitations, and history transfer |
-| Replies/reactions, edits/moderation, shared pins, forwarding, local search | Sealed-sender transport and optional Web Push |
-| Linked devices, identity verification, disappearing messages | Independent key transparency and encrypted recovery backup |
-| Direct audio/video calls with TURN fallback | Federation, desktop packaging, and visible archive/bot participants |
-| Accessible UI, light/dark themes, English/Romanian | Additional locales and certified deployment integrations |
-| SSO, admin policies, audit, signed on-prem delivery | Separately reviewed optional extensions |
+## Planned feature inventory
 
-Communities organize an encrypted announcement feed and separately permissioned discussion groups, with optional explicit announcement acknowledgements and a welcome/rules/recommended-groups/checklist flow. Community admins can publish/manage the community; they do not automatically gain subgroup content access. The [conversation and feature matrix](docs/specs.md#30-direct-chats-groups-communities-and-feature-roadmap) defines the Signal/Telegram/WhatsApp-inspired roadmap.
+**Launch** means Android/web P0 requirements. **Later** means P1 after the initial release. **Research/optional** means P2 features with separate design and security gates. Every feature below is planned; this repository does not yet contain a runnable platform.
 
-This is the intended scope, not a list of shipped features. Acceptance criteria and dependencies live in [tasks.md](docs/tasks.md).
+### Chats and everyday messaging
+
+**Launch**
+
+- Private 1v1 conversations and Note to self, with linked-device synchronization.
+- Message requests with accept/block/delete-local actions; contact blocking and unblocking.
+- Text, emoji, safe bold/italic/code/quote formatting, replies, quoted-message navigation, mentions, and reactions.
+- Optional client-generated link previews, off by default and controlled by policy; external fetches are disabled in restricted profiles.
+- Author-only edits, edit indicators/history under retention policy, delete-for-everyone requests, and local deletion.
+- Delivery status; optional read receipts and typing indicators, both off by default.
+- Explicit forwarding/copy/sharing with destination review and a Forwarded marker.
+- Selection of up to 100 messages for copy, one-destination forwarding, save/bookmark, or eligible deletion, with per-item outcomes.
+- Durable offline composition, drafts, queued sends, retry/reconnect recovery, and clear sending/delivery/error states.
+
+**Later:** topics/threads, private chat folders/custom filters, quiet/silent sending, device-local scheduled messages, and reminders. Scheduling explains when an online device is required.
+
+### Groups and member controls
+
+**Launch**
+
+- E2EE discussion groups, with everyone-posts and admin-only modes.
+- Add/remove members, promote members to admin, owner-controlled admin demotion/removal, accepted ownership transfer, and final-owner protection.
+- Invite links/QR, join requests, admin approval, expiring/revocable links, bans/unbans, and explicit leave/delete flows.
+- Rich encrypted descriptions with purpose, formatted text, safe links, rules references, and contact people; group names/avatars remain encrypted.
+- Searchable account-level member lists, All/Admins filters, owner/admin labels, and authorized Groups in common.
+- Shared pinned messages, disappearing timers, encrypted group metadata, and clear rekey/rejoin/removal states.
+- Role-authorized moderation deletion with a visible tombstone; admins cannot rewrite another author's words.
+
+**Later:** custom admin grants, per-member sending restrictions, slow mode, larger certified announcement groups, and advanced topic controls. Group capacity figures remain targets until benchmarked.
+
+### Communities and announcements
+
+**Launch**
+
+- First-class communities with owner/admin/member roles, an admin-only announcement feed, and separately permissioned linked discussion groups.
+- Community creation, membership/invites/approval, authorized group linking/unlinking, discovery/join requests, and community-wide removal progress.
+- Independent subgroup access: community administration does not automatically grant subgroup readership or admin rights.
+- Announcement posts, shared rules/pins, and optional policy-controlled member reactions.
+- Optional explicit announcement acknowledgements, due times, revision-bound responses, offline retry, and named-reviewer reports; ordinary read receipts never count as acknowledgement.
+- Community welcome/about pages, versioned rules acknowledgement, recommended eligible groups, help/contact entry, and a private newcomer checklist synced to own devices.
+- Visible updated-rules/announcement states, pending membership operations, and recovery without false completion claims.
+
+**Later:** polls/quizzes, community events/RSVP with local reminders, organized announcement replies through permitted discussion groups, and customized/localized onboarding templates.
+
+### Photos, files, voice notes, and expression
+
+**Launch**
+
+- Encrypted photos and files, captions, thumbnails, downloads, and attachment galleries.
+- Ordered albums of 2–10 photos, album/per-photo captions, grid/full-screen browsing, upload recovery, and clear unavailable/expired-photo slots.
+- Voice-note recording, pause/cancel/send, local waveform display, playback speed, and interruption handling.
+- Android file/photo selection and web paste/drag-and-drop, with progress/cancel/retry and storage/size-limit feedback.
+- Location EXIF removal by default, verified download/open behavior, explicit external sharing, and expiry-driven media/cache cleanup.
+
+**Later:** stickers/approved locally hosted GIFs, optional on-device transcription, view-once photos/video, and multipart attachment uploads. View-once cannot prevent a recipient from recording content.
+
+### Search, navigation, and conversation organization
+
+**Launch**
+
+- Local message/file search, including Romanian diacritics, with conversation/sender/date/type filters and media browsing.
+- Private conversation pins/bookmarks, shared message pins, archive, unread state, and mute controls.
+- First-unread catch-up, Jump to latest, Return to previous position, and stable reading position while new messages arrive.
+- Android swipe-to-reply/long-press actions; web hover/focus actions, context menus, and documented keyboard shortcuts.
+- Accessible equivalents for gestures, selection counts, destructive confirmations, and partial-failure feedback.
+
+**Later:** additional private folders/filters and richer topic navigation. Bookmarks and pins do not extend expired content's lifetime.
+
+### Profiles, appearance, and accessibility
+
+**Launch**
+
+- Organization handles/directory search, encrypted profiles/display names/photos, and useful fallbacks where profile keys are unavailable.
+- Light/dark themes and private per-chat colors/wallpapers, bundled offline assets, optional user-selected images, preview, and Reset.
+- Appearance preferences synced only to own devices, with readable contrast and no third-party wallpaper requests.
+- Responsive compact/wide web layouts and Android layout adaptation, font scaling, reduced motion, and visible focus.
+- Keyboard/screen-reader accessible web journeys and TalkBack-accessible Android journeys.
+- English/Romanian catalogs, localized dates/numbers, 12/24-hour preferences, and layouts prepared for longer/RTL text.
+- Friendly empty, offline, permission-denied, update-required, storage-full, and recovery states.
+
+**Later:** more certified locales/browser targets and iOS accessibility/native integration.
+
+### Notifications and attention controls
+
+**Launch**
+
+- Generic notification previews by default, configurable within organization/privacy/lock policy.
+- Per-conversation All messages, Mentions only, and Muted modes; mention alerts require local decrypted verification.
+- Timed snoozing until this evening, tomorrow morning, a duration, or a custom time; automatic restoration of the underlying mode and End snooze now.
+- E2EE preference synchronization, separate call/security controls, and no notification backlog flood after snooze expiry.
+- Android UnifiedPush or approved foreground-connection delivery, optional connected-profile FCM, and active-session web delivery.
+- Clear notification permission/locked-device/LAN/VPN/platform limitations and sanitized connectivity diagnostics.
+
+**Later:** optional connected-profile browser Web Push, iOS APNs/CallKit delivery, and entitlement-gated iOS Local Push Connectivity on certified local networks. Closed browsers and suspended devices have documented delivery limits.
+
+### Audio/video calling
+
+**Launch**
+
+- Direct audio/video calls across Android and web, encrypted signaling, and self-hosted TURN fallback.
+- Multi-device ringing/first-answer arbitration, answered-elsewhere/missed/busy/cancelled states, and stale-offer protection.
+- Explicit microphone/camera permission and activation, mute/camera/audio-route controls, and network-change recovery.
+- Always-relay option, enabled by default for guest/external calls, and useful secure-call failure states.
+
+**Later:** self-hosted group audio/video, participant/active-speaker views, raise hand, screen sharing, P2P-to-group escalation, and authenticated invited-member call links. iOS screen broadcast has its own later extension gate.
+
+### Privacy, identity, and device management
+
+**Launch**
+
+- Default E2EE for direct chats, groups, community announcements, media, and authorized content recipients.
+- Safety-number/QR identity verification, verified-key-change sending blocks, and visible device-list changes.
+- Explicit trusted-device linking, device naming/listing/unlinking, app/browser lock, encrypted local storage, and private-CA deployment support.
+- Disappearing content and expiry cleanup covering search entries, media keys/caches, previews, and reminders.
+- Generic locked previews, Android screenshot/app-switcher protections where supported, and excluded native OS backups.
+- Revocation of future server access and best-effort local cleanup on next contact; no promise of erasing an offline recipient's copies.
+- Telemetry off by default; optional sanitized on-prem diagnostics with explicit consent.
+- Current preferences/future traffic on linked devices, with explicit browser trust and local-storage-loss behavior.
+
+**Later:** separate sealed-sender transport, explicit bounded encrypted history transfer, guest invitations/expiry, and user-selected abuse-report evidence.
+
+**Research/optional:** independently witnessed key transparency, recovery-key encrypted backup, reviewed PQ MLS upgrades, visible archive/bot recipients, and on-device assistance. Any plaintext-receiving extension is an explicit trust decision.
+
+### Organization administration and on-prem operations
+
+**Launch**
+
+- Organization SSO/MFA/passkeys through Keycloak and existing identity-provider integration.
+- Separate admin web app with helpdesk/admin/security/auditor/platform roles, step-up actions, device/account support, and policy version/conflict handling.
+- Managed user/guest status, device limits/inactivity expiry, account disablement/reconciliation, and revocation workflows.
+- Signed client policies, accountable admin actions/exports, independently checkpointed audit, and aggregate health dashboards.
+- Customer-hosted backend, identity, encrypted object storage, database, TURN, push alternatives, assets, and optional diagnostics.
+- Small/medium deployment profiles, connected/restricted/air-gapped operation, signed offline bundles and release inventory.
+- HA failure recovery, durable delivery/wake intent, bounded overload, capacity evidence, and privacy-aware monitoring.
+- Signed builds/SBOM/provenance, compatible upgrades/migrations, trust rotation, backups, safe restore, incident runbooks, and independent security review.
+
+**Research/optional:** cross-deployment federation, signed native desktop packaging, larger certified capacity tiers, and visible compliance archive integrations. iOS follows Android/web stabilization.
+
+The [specification](docs/specs.md), [conversation/feature matrix](docs/specs.md#30-direct-chats-groups-communities-and-feature-roadmap), [selected chat refinements](docs/specs.md#308-everyday-chat-refinements-androidweb-p0), and [delivery tasks](docs/tasks.md) define exact permissions, limits, retention, and acceptance evidence.
 
 ## Security by design
 

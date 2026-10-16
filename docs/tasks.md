@@ -15,7 +15,7 @@ This is a product delivery backlog, not a claim that the named files or build co
 |---|---|---|
 | M0 — prove the design | Android/browser crypto, storage, roles, dependency/license feasibility | FND-01/02/03; stop and revise ADRs if browser E2EE or group profile cannot be implemented safely |
 | M1 — secure walking slice | Organization login, Android primary, web link, direct encrypted offline-capable exchange | ID-01/02, CORE-01/02, MSG-01/02, AND-01, WEB-01 |
-| M2 — everyday messenger | 1v1 chats, managed groups, admin-posting communities, files/voice notes, shared pins, search, sync, direct calls | GRP-01/02/03, COM-01/02, FEAT-01/02, CALL-01, UI-01, AND-02, WEB-02 |
+| M2 — everyday messenger | 1v1 chats, managed groups, admin-posting communities, files/voice notes, shared pins, search, sync, direct calls | GRP-01/02/03, COM-01/02, FEAT-01/02/03, CALL-01, UI-01, AND-02, WEB-02 |
 | M3 — Android/web production | Admin, privacy, load/failover, signed offline install/upgrade/restore, independent security review | ADM-01, OPS-01/02/03/04, SEC-01/02, REL-01 |
 | M4 — later releases | iOS, group video/screen share, history transfer and richer features | Separate IOS-01/02, CALL-02, EXT-01/02/03 acceptance; no back-edge to M0–M3 |
 
@@ -45,7 +45,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 **Artifacts:** `proto/enclave/{content,transport}/v1/`, `contracts/openapi/enclave-v1.yaml`, `docs/evidence/requirements-map.md`, updates to specs/ARF.
 
 - [ ] Map every P0 requirement in specs §0 to task, API/event, UI journey, and verification scenario.
-- [ ] Define canonical ID/encoding/domain-separation rules, reserved protobuf tags, unknown critical/noncritical feature behavior, error codes, and N/N−1 compatibility policy.
+- [ ] Define canonical ID/encoding/domain-separation rules, typed safe rich descriptions and ordered photo-album metadata/captions, reserved protobuf tags, unknown critical/noncritical feature behavior, error codes, and N/N−1 compatibility policy.
 - [ ] Walk adversaries through first use, compromised IdP/server, linked-device compromise, browser malicious update, group/community-role misuse, parent-removal delegation, metadata correlation, and restore.
 - [ ] Record accepted metadata, unavailable guarantees, independent review boundaries, and the provisional framework/protocol decisions.
 
@@ -224,7 +224,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Artifacts:** group UI in both clients, `core/enclave-sim/`, `tests/load/groups/`.
 
-- [ ] Implement create/add/remove/promote-to-admin/demote/leave/accepted-owner-transfer, encrypted metadata, posting mode, scoped invite links/join approval/bans, shared pins, timer, guest indicator, and rekey/rejoin states.
+- [ ] Implement create/add/remove/promote-to-admin/demote/leave/accepted-owner-transfer, rich encrypted descriptions and searchable account-level member lists/admin filters, posting mode, scoped invite links/join approval/bans, shared pins, timer, guest indicator, and rekey/rejoin states.
 - [ ] Exercise 1,000-account / 5,000-leaf interactive target with roster churn, offline catch-up, and bounded commit/parser memory.
 - [ ] Record measured limits and lower advertised capacity if the target fails; test unavailable key packages and no-final-owner-removal, admin-peer protection, role demotion during queued sends, and banned-member rejoin denial.
 
@@ -268,6 +268,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 - [ ] Implement fresh stream keys, authenticated finality/order/length, resumable local ciphertext retries, encrypted pointers/thumbnails/waveforms, digest/tag verification, and bounded caches.
 - [ ] Implement file/photo pickers, paste/drop, cancellation, permission denial, EXIF default stripping, playback, and explicit external open/share.
+- [ ] Implement ordered 2–10-photo albums with stable item IDs, album/per-photo captions, grid/viewer, atomic logical publication after retained uploads succeed, resumable stored ciphertext and expiry/unavailable-slot handling.
 - [ ] Reject truncation/reordering/tag failure/counter overflow/MIME mismatch/oversized decoders; test missing/expired objects and quota failure.
 
 **Done when:** Android/web can exchange valid files/voice notes without server plaintext and neither opens unverified content. P1 multipart upload is optional.
@@ -280,9 +281,24 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 - [ ] Implement replies, mentions, author edits/deletes and role-authorized moderation deletes, reactions, Note to self, safe basic formatting, shared message pins versus private chat pins/bookmarks, explicit forwarding, message requests/blocking, drafts, mute/archive/unread, read/delivery preferences, and bounded typing.
 - [ ] Sync own-device settings/read cursors with deterministic counters; validate authors/roles and mutations arriving before targets.
+- [ ] Implement mentions-only alert filtering after local verification and timed snooze as a deadline overlay restoring All/Mentions only/Muted; test locked processing, stale sync, restart, DST/time-zone changes and no backlog alert flood.
+- [ ] Implement up-to-100-message batch copy/one-destination forward/save/delete with per-item authorization/expiry, confirmation, rate limits, idempotent retries and explicit partial outcomes.
 - [ ] Expire content/index/keys/previews/notifications and prevent late resurrection via tombstones; implement local message/file search with Romanian diacritic handling.
 
 **Done when:** concurrent Android/browser actions converge; invalid-author edits and unauthorized moderation cannot mutate other content; pins/forwards cannot resurrect deleted content or silently expose old content to new members; expiry leaves no app-accessible plaintext/search/preview material outside documented OS limitations.
+
+### FEAT-03 — Everyday chat presentation, discovery, and navigation
+
+**Priority/owner:** P0, core + Android/web + design/QA leads. **Dependencies:** CORE-02, GRP-03, COM-02, FEAT-01/02, UI-01.
+
+**Artifacts:** conversation/About/member-list/appearance/media/selection components in both clients; encrypted preference and local navigation adapters; `tests/scenarios/chat-refinements/`.
+
+- [ ] Deliver safe rich descriptions, private per-chat theme/wallpaper preview/reset, account-level member search/admin filters and local authorized Groups in common.
+- [ ] Deliver album grids/viewers, stable first-unread/latest/return-position navigation, bounded batch-selection feedback and accessible Android/web fast actions from specs §30.8.
+- [ ] Test forbidden/private/stale membership discovery, hostile descriptions/images, contrast, interrupted album state, expired navigation anchors, new arrivals while reading history, mixed-author selections and role changes.
+- [ ] Complete keyboard/TalkBack/screen-reader/IME/text-selection/gesture tests; preferences stay E2EE own-device state and no directory/social-graph or third-party wallpaper endpoint is introduced.
+
+**Done when:** all ten selected-idea contracts in specs §30.8 pass on Android/web, including mentions/snooze integration from FEAT-02. No content/role/expiry bypass or iOS prerequisite exists.
 
 ### CALL-01 — Android/web direct audio and video
 
@@ -298,11 +314,11 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 ### AND-02 / WEB-02 — Complete platform integration and parity
 
-**Priority/owner:** P0, respective client leads. **Dependencies:** AND-01/WEB-01, GRP-03, COM-02, FEAT-01/02, CALL-01, UI-01.
+**Priority/owner:** P0, respective client leads. **Dependencies:** AND-01/WEB-01, GRP-03, COM-02, FEAT-01/02/03, CALL-01, UI-01.
 
 **Artifacts:** complete Android/web flows, platform-specific diagnostics, `tests/scenarios/parity/`.
 
-- [ ] Complete storage/preferences/devices/verification/search/call UI, errors, policy-managed controls, and local-data clearing.
+- [ ] Complete storage/preferences/devices/verification/search/call UI, rich descriptions/themes/member discovery, albums, mention/snooze modes, unread navigation and multi-select/fast actions, errors, policy-managed controls, and local-data clearing.
 - [ ] Execute the Android↔web matrix in mobile §8 and UI degraded-state matrix on physical Android and supported browsers.
 - [ ] Record startup/memory/list-scroll/attachment resource results and fix accessibility/localization failures, including admin-only feed and role-change accessibility.
 
@@ -390,7 +406,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 **Artifacts:** `docs/evidence/ga-readiness.md`, signed Android/web/backend release, release notes, support/runbook links.
 
 - [ ] Assemble requirement coverage, device/browser/profile matrix, accessibility/usability evidence, load/chaos/restore results, audit remediation, license/support findings, and rollback instructions.
-- [ ] Run clean-install → Android registration → web link (also browser-primary → Android link) → offline direct/group/community exchange → add/remove/promote/demote/join approval → community removal recovery → file/voice → search → identity change → revoke → direct call → signed upgrade acceptance.
+- [ ] Run clean-install → Android registration → web link (also browser-primary → Android link) → offline direct/group/community exchange → add/remove/promote/demote/join approval → community removal recovery → album/file/voice → member/common-group search → catch-up/selection → mentions-only/snooze recovery → identity change → revoke → direct call → signed upgrade acceptance.
 - [ ] Publish exact supported platforms/versions, capacity, metadata/notification limits, and deferred P1/P2 features without claiming implementation of the roadmap.
 
 **Done when:** named release owners approve documented evidence and there are no open P0 tasks or undisclosed critical/high defects. iOS and group video remain separately scheduled.

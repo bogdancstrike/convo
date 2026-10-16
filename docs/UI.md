@@ -133,7 +133,7 @@ Reply shows an accessible source link/placeholder. Edited messages expose edit h
 
 ### 5.3 Composer and attachment flow
 
-Plain text is P0; safe lightweight formatting may be added without raw HTML. Web Enter sends, Shift+Enter inserts a newline; users can choose Enter-for-newline. IME composition Enter never accidentally sends. Android follows native keyboard behavior with a distinct Send action.
+Safe basic text formatting (bold/italic/code/quotes) is P0, using typed content without raw HTML. Web Enter sends, Shift+Enter inserts a newline; users can choose Enter-for-newline. IME composition Enter never accidentally sends. Android follows native keyboard behavior with a distinct Send action.
 
 Attach opens local file/photo selection; the upload sheet shows selected files, sizes, progress, cancel/retry, and policy limits before send. Images strip location EXIF by default, with a clear permitted opt-out if policy allows. Voice-note recording has start/pause/cancel/send and accessible elapsed time; microphone permission is requested on first recording action. Leaving a draft never starts an upload or microphone recording silently.
 
@@ -167,6 +167,16 @@ After approved community enrollment, open a welcome overview with purpose/descri
 
 Recommendations show Joined, Request to join, or Pending approval only when the user may discover that subgroup. Selecting a recommendation follows normal membership approval; it never auto-joins or grants historical content. Completed onboarding is not proof of authorization or a legal agreement. Test keyboard/TalkBack/screen-reader access, offline continuation, two-device progress, deleted/expired acknowledgement requests, and changed rules/checklist items on Android and web. See specs §30.6–30.7.
 
+### 5.4c Conversation appearance, discovery, and quick actions
+
+About pages present rich group/community descriptions (purpose, safe links, contact people and rules references) with an authorized Edit action and readable plain-text fallback. Member search provides All/Admins filters and account-level counts. Contact details show Groups in common from authorized active local memberships; stale offline results are labeled and inaccessible private/left/deleted/inactive groups are excluded. An authorized mutual private group remains eligible; private conversation archiving alone does not change membership. Personal Chat appearance offers colors, bundled/custom wallpapers, preview and Reset; changes affect only the user's devices and preserve accessible contrast.
+
+Photo albums appear as an ordered grid with album/per-photo captions, count, upload progress and a full-screen next/previous viewer. Partial upload failure stays in the composer until retry or explicit removal of failed photos; an expired downloaded photo keeps an unavailable slot. An album is one logical selectable message.
+
+Conversation navigation includes First unread, Latest, and Return to previous position. Keep the viewport steady as new messages arrive above/below the reader; preserve an available anchor across restart and explain missing/expired anchors. Android swipe-to-reply and long-press actions have labeled alternatives. Web hover controls also appear on focus, with keyboard/context-menu access; IME/text selection/dialogs cannot accidentally trigger Send or Delete.
+
+Multi-select has an action bar with selected count, Copy, Forward, Save and eligible Delete actions. Show unavailable-item counts, explicit destinations, destructive confirmation and per-item pending/failure outcomes; never imply all selected messages share the same author/permissions or an atomic result. Read-only community feeds still permit eligible personal actions while preserving posting restrictions. See specs §30.8.
+
 ### 5.5 Search and organization
 
 Search scopes: current conversation, all local chats, people, files. Separate “People in your organization” (directory request) from “Messages on this device” (local search). Filters include sender, date, file type, and conversation. Search keeps Romanian diacritics usable and highlights locally. An empty result explains that history from before this device was linked may be absent.
@@ -196,6 +206,10 @@ P1 adds group grid/active speaker, participant list, raise hand, screen sharing,
 Settings display organization-managed controls with a short reason and help link. Never render a disabled control without explanation. Device storage shows encrypted local size, attachment cache cleanup, expiry rules, and export availability. Export is an explicit plaintext-sharing action if enabled; destinations and policy restrictions are visible.
 
 Connectivity diagnostics show the organization host, LAN/VPN availability, notification capability, and last successful contact. They do not show raw tokens, keys, message bodies, or a live employee-activity log. Diagnostic export previews a sanitized report before saving/sharing.
+
+### 7.1 Mentions-only mode and timed snoozing
+
+Per-conversation notifications offer All messages, Mentions only, and Muted, plus a separate Snooze action. Explain that mention verification happens locally after permitted decryption; a locked client may defer alerts. Generic push delivery is not proof of a mention. Show Snooze until this evening/tomorrow/duration/custom time with the exact date/time/zone and an End snooze now action. State the underlying mode that will resume, including an already Muted conversation. Snoozing does not hide incoming content/unread counts or change separate call/security settings. Resume quietly without replaying every suppressed alert; show expired snooze correctly after app/browser restart or a time-zone change.
 
 ## 8. Web-specific interaction and trust
 
