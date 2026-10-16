@@ -233,7 +233,7 @@ Module boundaries are enforced with ArchUnit tests (domain must not depend on Sp
 | `enclave` | enclave-admin | Deployment | 2 | Separate ingress host, IP allowlist |
 | `enclave-data` | PostgreSQL | CloudNativePG Cluster | 3 (1 primary, 2 sync/async replicas) | Configure a required synchronous standby; `remote_apply` alone is insufficient. Local single-failure RPO 0 only within this quorum policy |
 | `enclave-data` | PgBouncer | CNPG Pooler | 3 `rw` + 2 `ro` | Transaction mode; flyway bypasses it |
-| `enclave-data` | Valkey | StatefulSet (Sentinel) | 3 | Presence, pub/sub, optional outbox hints, rate limits; separate credentials/keyspace or instance for P1 LiveKit |
+| `enclave-data` | Valkey | StatefulSet + independent Sentinel voters | 3 data + 3 voters | Presence, pub/sub, optional outbox hints, rate limits; separate credentials/keyspace or instance for P1 LiveKit |
 | `enclave-data` | Object store | SeaweedFS / Garage / Ceph RGW | 3+ | Erasure coding or 3x replication |
 | `iam` | Keycloak | Keycloak Operator | 3 | Infinispan clustering; own PostgreSQL |
 | `media` | coturn | DaemonSet on `media` node pool | 1 per media node | `hostNetwork: true`; UDP relay range 49152–65535 |
@@ -306,35 +306,36 @@ ArgoCD phases precede waves: a `PreSync` migration does not wait for ordinary Sy
 
 ```mermaid
 sequenceDiagram
-    participant A as Device A1
-    participant GW1 as gateway pod 1
-    participant PG as PostgreSQL
-    participant VK as Valkey
-    participant GW2 as gateway pod 2
-    participant PU as enclave-push
-    participant B as Device B1
-    A->>GW1: SendRequest (per-device ciphertexts)
-    GW1->>PG: validate primary state, INSERT envelopes + intents + submission result (one tx)
-    GW1-->>A: SendResult ok
-    GW1->>VK: after commit: EXISTS presence:B.1
-    alt B1 connected to pod 2
-        GW1->>VK: PUBLISH mail:B.1
-        VK-->>GW2: mail:B.1
-        GW2->>PG: SELECT pending for B.1
-        GW2-->>B: Envelope
-        B->>B: decrypt + persist (tx)
-        B-->>GW2: Ack
-        GW2->>PG: DELETE envelope
-    else B1 offline
-        GW1->>VK: Optional hint with durable intent ID
-        PU->>PG: Poll and lease durable intent (primary)
-        PU->>PG: Read fresh token generation/status
-        PU-->>B: content-free push (APNs / UnifiedPush / Local Push)
-        PU->>PG: Persist provider outcome / retry state
+    participant A as Sender Android or web
+    participant G as Gateway/API
+    participant D as PostgreSQL primary
+    participant H as Valkey optional hints
+    participant P as Push worker
+    participant B as Recipient
+    A->>A: Persist protocol advancement + ciphertext
+    A->>G: Send submission ID + stored ciphertext
+    G->>D: TX validate + dedupe + envelopes + intents
+    D-->>G: Durable commit
+    G-->>A: Original accepted result
+    G-->>H: Best-effort online/intent hint
+    par Connected delivery
+        G->>D: Drain recipient mailbox
+        G-->>B: Encrypted envelope
+        B->>B: TX decrypt + state + message + dedupe marker
+        B-->>G: Ack after local commit
+        G->>D: Delete acknowledged envelope
+    and Background wake-up
+        P->>D: Poll + lease eligible intent
+        P-->>B: Content-free provider attempt
+        P->>D: Persist accepted/retry/expired outcome
     end
+    Note over D,P: Lost hints and worker crashes recover from durable intent
+    Note over P,B: Provider acceptance is not guaranteed device delivery; duplicate wakes are safe
 ```
 
-Presence: gateway pods register `presence:{account}.{device} → pod_id` in Valkey with a 90 s TTL refreshed by keepalives. Writers check it after commit to choose between a mail signal (online) and a push job (offline).
+Editable source: [durable-delivery.mmd](diagrams/durable-delivery.mmd).
+
+Presence is an expiring routing hint. Writers signal likely-online devices after commit; required wake intents already exist in the same database transaction and are cancelled/suppressed only by authoritative receipt/relevance checks, not stale presence alone.
 
 ### 7.2 Service interaction rules
 
@@ -405,7 +406,7 @@ enclave/
 ├── core/                       # Rust workspace
 │   ├── enclave-core/           # public API for clients (frb annotations)
 │   ├── enclave-proto/          # prost-generated protobufs
-│   ├── enclave-store/          # SQLCipher / SQLite-WASM storage, migrations
+│   ├── enclave-store/          # native SQLCipher / browser encrypted-record adapters, migrations
 │   ├── enclave-direct/         # libsignal integration
 │   ├── enclave-group/          # OpenMLS integration
 │   ├── enclave-sim/            # multi-device protocol simulator
@@ -435,7 +436,7 @@ enclave/
 **Status:** Accepted
 **Context:** Customers deploy on-prem, which makes the operator a realistic adversary (insider, coercion, breach).
 **Decision:** Infrastructure never holds user content private keys or plaintext profiles/group titles; it does hold server TLS/signing secrets and routing metadata. A P2 archive endpoint is an explicit separate recipient trust boundary. All features are designed client-side first; a feature requiring plaintext on the server is rejected or redesigned.
-**Consequences:** (+) Server compromise does not expose content. (−) No server-side search, previews, moderation, or AI features; more client complexity; compliance needs client-visible mechanisms (archive agent).
+**Consequences:** (+) Stored ciphertext alone does not expose content; malicious served web code can expose browser-session content (TB3/R4). (−) No server-side content search, previews, moderation, or AI features; more client complexity; compliance needs client-visible mechanisms (archive agent).
 
 ### ADR-002: Spring Boot on Java 21+ with virtual threads for the backend
 **Status:** Accepted
@@ -463,15 +464,15 @@ enclave/
 **Consequences:** (+) Best protocol for each case. (−) Two protocol stacks to integrate, test, and audit; two sets of key material per device. Alternative (B) remains the fallback if ADR-004 licensing blocks libsignal.
 
 ### ADR-006: OpenMLS with server as ordering Delivery Service; commits as PublicMessage
-**Status:** Accepted
+**Status:** Superseded for roles and recovery by ADR-020/022; public-commit delivery remains the baseline
 **Context:** MLS needs consistent ordering of commits; the server must know rosters for fan-out regardless.
 **Decision:** OpenMLS in `enclave-core`; server enforces epoch compare-and-set (`specs.md` §6.4); commits and proposals framed as `PublicMessage` so the server can validate ACLs and maintain rosters; application messages as `PrivateMessage`; group metadata only in encrypted app messages.
-**Consequences:** (+) Deterministic ordering, server-enforced roles, simple fork handling via external commits. (−) Server learns membership changes (already known via rosters); a malicious server could withhold commits (detectable via epoch checks).
+**Consequences (historical, superseded):** Delivery ordering and roster inspection remain useful; role authority and branch recovery require the client validation and safe recovery in ADR-020/022. (−) Server learns membership changes (already known via rosters); a malicious server could withhold commits (detectable via epoch checks).
 
 ### ADR-007: Post-quantum posture
 **Status:** Accepted
 **Decision:** PQXDH using the exact pinned upstream KEM/profile mandatory for 1:1 session setup at GA; enable libsignal's post-quantum ratchet when available in the pinned version and interoperable across all client platforms; adopt a hybrid PQ MLS ciphersuite post-GA. Track via crypto-agility fields (protocol versions in device capabilities).
-**Consequences:** (+) 1:1 traffic protected against harvest-now-decrypt-later at GA. (−) Larger key bundles and messages; group traffic classical until PQ MLS (R5).
+**Consequences:** (+) Direct-message session setup has the certified hybrid PQ protection at GA; ordinary DTLS-SRTP call key agreement remains classical. (−) Larger key bundles and messages; group traffic classical until PQ MLS (R5).
 
 ### ADR-008: PostgreSQL for the mailbox, not Kafka
 **Status:** Accepted
@@ -508,10 +509,10 @@ enclave/
 ### ADR-012: Key transparency post-GA
 **Status:** Proposed
 **Decision:** Implement an auditable key directory (Merkle prefix tree, AKD-style) with client inclusion/consistency checks and a customer-run auditor.
-**Consequences:** Strongest mitigation for A3 key substitution; adds a service, proof sizes, and client verification logic.
+**Consequences:** Verifiable detection of directory inconsistency when clients and independent witnesses enforce proofs; adds a service, proof sizes, and client verification logic.
 
 ### ADR-013: Calls: P2P for 1:1, LiveKit SFU with MLS-derived frame keys for groups
-**Status:** Accepted
+**Status:** Retained technical direction; release scope and removal rotation refined by ADR-023/specs §15 (SFU P1)
 **Options for SFU:** LiveKit (Apache-2.0, Go, SDKs for all client targets, E2EE support), mediasoup (library, more custom work), Jitsi Videobridge (Java, Jitsi-centric clients), Janus (GPLv3).
 **Decision:** 1:1 calls P2P WebRTC with E2EE signaling and TURN fallback (lowest latency, no SFU metadata). Group calls via LiveKit with frame encryption keys derived from the MLS exporter; ad-hoc calls with keys distributed over 1:1 sessions.
 **Consequences:** (+) Media never decryptable by infrastructure; membership-bound call keys. (−) Two call paths (P2P and SFU); escalation transition; SFU sees IPs and speaking activity.
@@ -523,9 +524,9 @@ enclave/
 **Consequences:** (+) Meets "web app" requirement for low-sensitivity use or kiosks. (−) Cannot match native trust guarantees; documented to customers.
 
 ### ADR-015: Content-free push with self-hosted alternatives
-**Status:** Accepted
+**Status:** Retained direction; durable dispatch refined by ADR-019, iOS/local bridge deferred to P1
 **Decision:** Pushes carry no content or sender; Android uses UnifiedPush (ntfy) or foreground service; iOS uses APNs in connected profile and Local Push Connectivity in restricted/air-gapped profiles.
-**Consequences:** (+) Push providers learn nothing beyond timing. (−) iOS background delivery outside configured networks impossible in air-gapped profile; requires Apple entitlement and MDM.
+**Consequences:** (+) Push providers receive no message content, but observe tokens/network/timing metadata. (−) iOS background delivery outside configured networks impossible in air-gapped profile; requires Apple entitlement and MDM.
 
 ### ADR-016: S3-compatible object storage, vendor-neutral
 **Status:** Accepted

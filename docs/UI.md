@@ -88,7 +88,7 @@ Motion normally lasts 120–200 ms and respects reduced-motion/system animation 
 1. Welcome screen: “Private messaging for your organization.” Primary action: “Connect to your organization.” Support manual HTTPS URL and authenticated managed configuration; Android may scan an organization QR.
 2. Confirm organization name/domain and connectivity profile. A QR may identify an endpoint but cannot silently replace a trusted CA/root. Certificate failures explain how to contact IT; there is no bypass button.
 3. “Sign in with your organization” opens the system browser on Android and the approved OIDC flow on web. Do not embed an IdP password form in the chat app.
-4. If this is the first trusted device, register locally generated identity material after SSO. Show progress with safe cancellation/retry; no blank spinner after network failure.
+4. If this is the first device, Android or web can register locally generated identity material after SSO. Web first registration requires browser-trust acknowledgement and certified encrypted persistence; no Android phone is required. Show progress with safe cancellation/retry; no blank spinner after network failure.
 5. Name the device, explain generic notifications, and offer app/browser lock setup. Notification permission is requested after the user understands its purpose.
 6. Land in a useful empty state: “Start a private conversation” with People and Note to self actions.
 
@@ -96,9 +96,9 @@ A failed/expired SSO flow keeps the organization choice and resumes safely. Repe
 
 ### 4.2 Browser linking and additional Android devices
 
-An existing-account sign-in offers “Link from a trusted device” and, behind a deliberate secondary path, “I no longer have a trusted device”. Web shows a single-use QR, organization domain, browser/device name, and expiry. Android scanner confirms the browser/session details before sending account keys over the authenticated provisioning channel.
+An existing-account sign-in offers “Link from a trusted device” and, behind a deliberate secondary path, “I no longer have a trusted device”. Web shows a single-use QR, organization domain, browser/device name, and expiry. Android scanner confirms the browser/session details before sending account keys over the authenticated provisioning channel. An existing browser can approve another device by scan or a manual challenge with a transcript fingerprint comparison on both devices; it must not trust an unverified link pasted into navigation.
 
-Use explicit approval copy: “Link Firefox on Linux to your account? It can receive future messages.” History transfer is absent in P0; do not promise old chat recovery. Expired/cancelled QR sessions show a fresh-code action. QR and connection details must not appear in analytics, logs, or screenshots created for diagnostics.
+Use explicit approval copy: “Link Firefox on Linux to your account? It can receive future messages.” History transfer is absent in P0. Say explicitly: “Earlier messages will not be copied to this device in this release.” Expired/cancelled QR sessions show a fresh-code action. QR and connection details must not appear in analytics, logs, or screenshots created for diagnostics.
 
 The Devices page lists current device first, platform, decrypted user label, linked date, and coarse activity. “Unlink” states that future access stops and local deletion is attempted when the device contacts the service. The user can review a persistent own-device security notice after an unexpected link. Organization reset is distinct from ordinary sign-out.
 

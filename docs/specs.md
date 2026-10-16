@@ -104,12 +104,12 @@ Federation, public phone-number discovery, SMS fallback, server-side content sea
 |---|---|---|---|
 | `enclave-gateway` | Spring Boot (Java 21+, virtual threads), WebSocket | Persistent device connections, frame routing, mailbox drain | No |
 | `enclave-api` | Spring Boot, REST | Accounts, devices, prekeys, KeyPackages, groups roster/ACL, attachments, calls tokens, policies | No |
-| `enclave-push` | Spring Boot (worker, no ingress) | Consumes wake-up jobs from the `push:jobs` Valkey stream (one consumer group), coalesces per device, sends content-free pushes (APNs, UnifiedPush/ntfy, Local Push, optional FCM). Only workload with egress to push providers. Leases durable push intents on the primary; replica token reads require a freshness check. | No |
+| `enclave-push` | Spring Boot (worker, no ingress) | Leases/retries durable PostgreSQL wake-up intents; optionally consumes `push:jobs` hints. Sends content-free UnifiedPush/optional FCM wakes; APNs and the separate local bridge follow in P1. Only worker with allowlisted vendor-push egress. | No |
 | `enclave-admin` | Spring Boot + admin web UI | Admin console backend; aggregate metrics, policy, audit | No |
 | Keycloak | Supported version pinned in release BOM | Account authentication, MFA, passkeys, federation, admin roles | No |
 | PostgreSQL | Supported version pinned in release BOM (CloudNativePG) | Accounts, devices, keys, rosters, mailbox, audit | No (ciphertext only) |
-| PgBouncer | CNPG Pooler | `rw` pooler (transaction mode) in front of the primary for all writers; `ro` pooler in front of replicas for `enclave-push` and admin dashboards. Migrations bypass both. | No |
-| Valkey (Redis-compatible) | Supported version pinned in release BOM | Presence keys, pub/sub signals (`mail:*`, `ctl:*`), the `push:jobs` stream, rate limit counters, call room registry | No |
+| PgBouncer | CNPG Pooler | `rw` pooler (transaction mode) in front of the primary for all writers; `ro` pooler for freshness-tolerant aggregates/reads; push leases, authoritative checks, and outcomes use `rw`. Migrations bypass both. | No |
+| Valkey (Redis-compatible) | Supported version pinned in release BOM | Presence keys, pub/sub signals (`mail:*`, `ctl:*`), optional `push:jobs` acceleration hints, rate limits, later call room registry | No |
 | Object storage | SeaweedFS / Garage / Ceph RGW (S3 API) | Encrypted attachment blobs | No |
 | coturn | 4.6+ | TURN/STUN relay for 1:1 calls (and SFU fallback) | No (SRTP only) |
 | LiveKit | Pinned server/SDK compatibility set (P1) | SFU for group calls | No (frame-encrypted media) |
@@ -127,7 +127,7 @@ The backend is split into deployable modules but MAY run as a single Spring Boot
 | Channel | Mechanism | Carries | Guarantee |
 |---|---|---|---|
 | State | PostgreSQL via PgBouncer (`rw` for writers, `ro` for read-only consumers) | Envelopes, devices, keys, rosters, policies, revocations, audit | Durable, transactional |
-| Signals | Valkey pub/sub | "Device has new mail", "close this device's socket", "policy changed" | Fire-and-forget. A lost signal is harmless because the data is already committed and a safety net catches it. |
+| Signals | Valkey pub/sub | "Device has new mail", "close this device's socket", "policy changed" | Best effort. Lost signals recover through durable controls, authoritative request checks, mailbox polls, and periodic revalidation. |
 | Jobs | PostgreSQL transactional outbox; Valkey stream as optional acceleration | Content-free wake-up and control intents | Durable intent with leased retries; provider delivery is best effort, duplicates are possible (§26). |
 
 Keycloak sends lifecycle events to `POST /internal/keycloak-events` on `enclave-api` over mTLS. Authenticate the event producer, deduplicate event IDs, reject replay, and reconcile disabled/expired accounts periodically (§27). Later LiveKit webhooks are separately authenticated adapter inputs.
@@ -138,7 +138,7 @@ Keycloak sends lifecycle events to `POST /internal/keycloak-events` on `enclave-
 |---|---|---|---|---|
 | `presence:{account}.{device}` | String, TTL 90 s | gateway (on connect, refreshed by pings) | gateway, api, admin before signalling | gateway pod id |
 | `mail:{account}.{device}` | Pub/sub channel | gateway, api | the one gateway pod holding that device's socket | `1` (no content) |
-| `ctl:{account}.{device}` | Pub/sub channel | api, admin | the gateway pod holding that device's socket | `REVOKED`, `KEYS_LOW`, `KEYPACKAGES_LOW`, `WIPE` |
+| `ctl:{account}.{device}` | Pub/sub channel | api, admin | the gateway pod holding that device's socket | `REVOKED`, `KEYS_LOW`, `KEYPACKAGES_LOW`; hints never authorize an unsigned wipe |
 | `ctl:broadcast` | Pub/sub channel | admin | every gateway pod | `POLICY_UPDATED` |
 | `push:jobs` | Bounded stream, safe trim policy | outbox dispatch loop | consumer group `push-workers` | Opaque durable intent ID only; source of truth is PostgreSQL |
 | `push:coalesce:{account}.{device}` | Expiring successful-attempt hint | push | push | Performance hint only; never proof that provider accepted a notification |
@@ -205,13 +205,15 @@ Protocol cryptography and transactional protocol state belong in the shared Rust
 | 1:1 message encryption | Double Ratchet; AES-256-CBC + HMAC-SHA256 (libsignal message format), HKDF-SHA256 |
 | Post-quantum ratchet (1:1) | Sparse PQ / Triple Ratchet profile selected and interoperability-tested at M0; capability/version pinned, never silently downgraded (ADR-007) |
 | MLS ciphersuite (GA) | `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519` (0x0001) |
-| MLS ciphersuite (post-GA) | Hybrid PQ ciphersuite (X-Wing KEM based) once supported by OpenMLS and stable |
+| MLS ciphersuite (post-GA) | Reviewed supported hybrid PQ profile, selected by a separate ADR and interoperability gate |
 | MLS signature keys | Ed25519, per device |
 | Attachments | Versioned audited STREAM construction with 64 KiB chunks, unique nonces, authenticated final-chunk/length; SHA-256 of ciphertext |
 | Local DB | SQLCipher (AES-256-CBC + HMAC-SHA512 page encryption) on native; app-layer AES-256-GCM on web |
 | Device provisioning channel | X25519 ephemeral ECDH + HKDF-SHA256 + AES-256-GCM |
 | Call media (1:1) | DTLS-SRTP (AES-GCM / AES_CM_128_HMAC_SHA1_80), fingerprints authenticated through E2EE signaling |
 | Call media (group) | DTLS-SRTP hop-by-hop + AES-GCM frame encryption end-to-end with MLS-exported keys |
+
+Post-quantum claims apply only to the certified direct-message protocol profile. MLS baseline groups and ordinary DTLS-SRTP direct-call key agreement remain classical; encrypted signaling alone does not make media key agreement post-quantum.
 
 ### 3.3 Key hierarchy (per account)
 
@@ -223,14 +225,14 @@ Account Identity Key (IK, Curve25519)       shared by all devices of the account
 │   ├── Signed PreKey (SPK, rotated every 7 days, signed by IK)
 │   ├── One-time PreKeys (OPK x100, consumed once)
 │   ├── Kyber PreKeys (one-time x100 + 1 last-resort, signed by IK)
-│   ├── MLS signature key (Ed25519)  + DeviceBinding = XEdDSA_IK(account_id ‖ device_id ‖ mls_sig_pub)
+│   ├── MLS signature key (Ed25519)  + DeviceBinding = signature_IK(canonical deployment/address/key-purpose/version transcript)
 │   ├── MLS KeyPackages (x100, single-use baseline)
 │   └── Local storage master key (hardware-protected)
 ├── Device d2 ... (same structure)
 └── Profile Key (32 bytes AES-256-GCM key, shared with contacts/groups to decrypt profile)
 ```
 
-The shared account identity key matches Signal's multi-device model: contacts see one safety number per account, not per device. Device-level authenticity comes from (a) IK signatures over device prekeys and MLS device bindings and (b) device-list change notifications (§4.6).
+The shared account identity key is the selected Enclave multi-device design: contacts see one safety number per account, not per device. Device-level authenticity comes from (a) IK signatures over device prekeys and MLS device bindings and (b) device-list change notifications (§4.6).
 
 ---
 
@@ -251,7 +253,7 @@ After registration, each device receives a **device credential** used for all su
 
 - `device_secret`: 32 random bytes generated by the client, sent once at registration over TLS; the server stores `HMAC-SHA256(pepper, device_secret)` (pepper from a KMS/Vault secret, not in the DB).
 - Authentication: `Authorization: Basic base64(account_id.device_id:base64url(device_secret))` over TLS 1.3 with pinned CA.
-- Post-GA hardening (ADR-011): replace the static secret with **DPoP-style proof-of-possession**, where the device signs a server nonce with a non-exportable hardware key (Android Keystore / Secure Enclave / WebAuthn on web).
+- Post-GA hardening (ADR-011): replace the static secret with **DPoP-style proof-of-possession**, where the device signs a server nonce with a device-bound key with platform-specific assurance (Android Keystore / Secure Enclave later; reviewed browser proof-of-possession, without claiming a generic WebAuthn key signs arbitrary requests).
 
 Rationale: OIDC access tokens (5-minute lifetimes) are a poor fit for long-lived WebSocket connections on intermittently connected mobile devices, and refresh tokens on device are a larger blast radius than a per-device revocable secret.
 
@@ -265,23 +267,25 @@ sequenceDiagram
     participant K as Keycloak
     participant A as enclave-api
     U->>C: Open app, "Sign in with SSO"
-    C->>K: OIDC Auth Code + PKCE (system browser / ASWebAuthenticationSession)
+    C->>K: OIDC Auth Code + PKCE (Android system browser / web redirect; iOS session later)
     K-->>C: id_token, access_token (MFA enforced)
     C->>C: Generate IK, registration_id, SPK, 100 OPK, 100 Kyber + last-resort,<br/>MLS sig key, 100 KeyPackages, profile key, device_secret
     C->>A: POST /v1/devices/reservations (Bearer access_token)
-    A-->>C: Reserved device_id + single-use reservation
-    C->>C: Sign DeviceBinding for reserved address
+    A-->>C: App account_id + reserved device_id + single-use reservation
+    C->>C: Sign binding; persist pending enrollment + private keys before submit
     C->>A: POST /v1/devices/primary (Bearer access_token)<br/>{identity_key, registration_id, spk, opks, kyber_pks, mls_binding, key_packages, device_secret, device_name_enc}
     A->>A: Verify token, verify IK signatures on SPK/Kyber/binding,<br/>ensure no existing devices (else 409 -> link flow)
-    A-->>C: 201 {device_id: 1}
-    C->>C: Persist keys in encrypted local DB, open WebSocket
+    A-->>C: 201 {device_id: reserved_id, device_list_version}
+    C->>C: Mark pending enrollment accepted; open WebSocket
 ```
+
+Android or web may be the first device. Web first-device creation requires explicit browser-trust acknowledgement and certified persistent encrypted storage; it cannot claim the native trust tier. There is no Android-phone prerequisite for web sign-in.
 
 If the account already has devices, `POST /v1/devices/primary` returns `409 ACCOUNT_HAS_DEVICES` and the client offers (a) link via existing device or (b) **re-register** (new IK; all contacts will see a safety number change). Re-registration requires a Keycloak step-up (re-authentication + MFA) and is audit-logged.
 
 ### 4.4 Linking an additional device (QR provisioning)
 
-The new device must obtain the account IK and profile key without the server learning them.
+The new device must obtain the account IK and profile key without the server learning them. An existing Android device scans the QR; an existing browser can scan or approve an equivalent session challenge only after comparing the transcript fingerprint on both devices. Manual pairing must preserve the same key/session binding and consent, not bypass it.
 
 ```mermaid
 sequenceDiagram
@@ -292,27 +296,26 @@ sequenceDiagram
     participant P as Primary/existing device
     participant U as User
     N->>N: Keycloak login (step-up MFA)
-    N->>A: POST /v1/provisioning/sessions (Bearer token)
-    A-->>N: {provisioning_id, ws_url}
-    N->>G: Open provisioning WebSocket (provisioning_id)
     N->>N: Generate ephemeral X25519 (eN)
-    N->>U: Show QR: enclave://link?pid=..&pub=eN_pub&v=1
+    N->>A: POST /v1/provisioning/sessions (Bearer token, eN_pub)
+    A-->>N: {provisioning_id, reserved_device_id, challenge, ws_url}
+    N->>G: Open single-use authenticated provisioning WebSocket
+    N->>U: Show QR/manual pairing challenge bound to deployment + session + eN + reserved address
     P->>P: User scans QR, confirms "Link Chrome on Linux?"
-    P->>P: Generate ephemeral eP, then K = HKDF(ECDH(eP,eN), "enclave/provision/v1")
+    P->>P: Generate eP; approve canonical bound transcript (§27.1)
+    P->>P: K = HKDF(ECDH(eP,eN), transcript-bound context)
     P->>A: POST /v1/provisioning/sessions/{pid}/message<br/>{eP_pub, AES-GCM_K(ProvisionMessage)}
     A->>A: Store expiring ciphertext relay item + durable intent
     Note over A,G: Gateway reads shared relay state; no direct API-to-gateway call
     G-->>N: ProvisionMessage ciphertext
     N->>N: Decrypt: {IK pair, account_id, profile_key, provisioning_code, history_transfer_offer?}
-    N->>A: Reserve device_id for linked enrollment
-    A-->>N: Reserved address
-    N->>N: Generate keys; sign binding for reserved address
+    N->>N: Generate keys; sign bound address; persist pending enrollment before submit
     N->>A: POST /v1/devices/link {provisioning_code, keys...} (Bearer token)
     A->>A: Verify provisioning_code (single use, 10-min TTL, bound to account), verify signatures
     A-->>N: 201 {device_id: k}
     A->>A: Commit device-list version + own-device notices
     Note over A,G: Contacts compare signed lists on next send; no contact graph stored
-    N->>N: External-commit join of all account groups (§6.6)
+    N->>N: Verified external join or authorized Add/Welcome (§6.6)
 ```
 
 `ProvisionMessage` (protobuf, encrypted):
@@ -329,7 +332,7 @@ message ProvisionMessage {
 }
 ```
 
-The `provisioning_code` is requested by the primary from `POST /v1/devices/provisioning-code` (authenticated with its device credential), proving an existing device consented. The server requires both a valid Keycloak token for the account **and** a code issued to an existing device of the same account.
+The `provisioning_code` is requested by the primary from `POST /v1/devices/provisioning-code` with the bound session/transcript (authenticated with its device credential), proving consent to exactly that destination and reserved address. The server requires both a valid Keycloak token for the account **and** a code issued to an existing device of the same account.
 
 ### 4.5 History transfer (optional, P1)
 
@@ -338,7 +341,7 @@ Device-to-device only. The primary exports the last N days (policy, default 30) 
 ### 4.6 Device list integrity
 
 - Every change increments a monotonic device-list version and produces durable notices for the account’s own devices. Contacts compare fetched signed snapshots with their local snapshot before sending; the server does not keep a direct-conversation/contact graph to distribute notices. A server signature alone does not prevent a malicious operator from presenting inconsistent lists.
-- Clients render a system message: "Ana linked a new device" (contacts) and "A new device was linked to your account: <name>, <time>" (owner, high-priority notification).
+- Clients render “Ana linked a new device” after comparing contact lists, and a high-priority own-account notice with the locally decrypted device label where available; do not disclose an owner-private encrypted device name to contacts.
 - Clients refuse to encrypt to a device whose SPK/Kyber/MLS binding signature does not verify under the contact's known IK.
 - Post-GA: key transparency log (§19.4, ADR-012).
 
@@ -360,9 +363,9 @@ Triggers: user unlinks, admin revokes, Keycloak user disabled (event listener SP
 
 To send to account B for the first time, client A:
 
-1. `GET /v1/keys/{B}/*` returns a **pre-key bundle per device** of B:
+1. `POST /v1/keys/{B}/claim` with the desired active device selector returns a **pre-key bundle per device** of B:
    `{device_id, registration_id, identity_key, signed_prekey{id,pub,sig}, one_time_prekey{id,pub}?, kyber_prekey{id,pub,sig}}`.
-   The server atomically consumes one OPK and one one-time Kyber key per device (falling back to the last-resort Kyber key when exhausted).
+   A replay-safe claim ID returns the original bundle on retry within its short TTL; a new claim atomically consumes one OPK and one one-time Kyber key per device (falling back to the last-resort Kyber key when exhausted).
 2. A verifies SPK and Kyber signatures under B's IK. If B's IK differs from a previously stored IK, A MUST surface an identity-change notice; if B was **verified**, sending is blocked until the user re-confirms.
 3. A runs PQXDH per device via `SessionBuilder::process_prekey_bundle` and stores a session per `(B, device_id)`.
 4. The first message to each device is a `PreKeySignalMessage` carrying A's IK, ephemeral key, Kyber ciphertext, and used prekey IDs.
@@ -392,7 +395,7 @@ The `SendRequest` lists each device and its `registration_id`. The server valida
 
 ### 5.5 Padding
 
-Plaintext `Content` protobufs are padded to a multiple of 160 bytes (Signal's scheme: append `0x80` then zeros) before encryption, so ciphertext length reveals only coarse size buckets. Attachments are padded to the next size bucket (`max(541, 1.05^ceil(log_1.05(size)))`).
+Plaintext `Content` protobufs use a reviewed reversible pad-to-bucket profile (baseline 160-byte buckets, with unambiguous terminator and boundary vectors) before encryption, so ciphertext length reveals only coarse size buckets. Attachments are padded to the next size bucket (`max(541, 1.05^ceil(log_1.05(size)))`).
 
 ### 5.6 Safety numbers
 
@@ -409,7 +412,7 @@ Signal's Sender Keys require O(N) pairwise messages to rekey after a removal and
 ### 6.2 Model
 
 - Every **device** of every member account is an MLS leaf (client).
-- Leaf credential: `BasicCredential(identity = "account_id.device_id")` plus the `DeviceBinding` (IK signature over the leaf signature key) carried in a custom leaf node extension `enclave_device_binding (0xF0A1)`.
+- Leaf credential: `BasicCredential(identity = "account_id.device_id")` plus the `DeviceBinding` (IK signature over the canonical deployment/address/key-purpose/version transcript including the leaf signature key) carried in a custom leaf node extension `enclave_device_binding (0xF0A1, provisional private-use value subject to registry/capability validation)`.
 - On processing any Add or external join, clients MUST verify the DeviceBinding against the account's known IK; failure means reject the commit and alert.
 - `group_id` is random 32 bytes, generated by the creator.
 
@@ -435,12 +438,14 @@ Client C (member, local epoch e) wants to commit:
   2. POST /v1/groups/{gid}/commits {epoch: e, commit, welcome?, group_info}
   3. Server, in a single transaction:
        UPDATE mls_groups SET epoch = epoch + 1, group_info = :gi
-        WHERE group_id = :gid AND epoch = :e AND pending_fork = false
+        WHERE group_id = :gid AND epoch = :e AND status = 'active'
        -> 0 rows: 409 EPOCH_CONFLICT {current_epoch}
        -> 1 row: validate ACL, apply roster delta, enqueue commit to all
                  devices in OLD roster (including C), enqueue Welcome to new devices
-  4. C applies its own commit ONLY after receiving 200 (merge_pending_commit).
-     On 409: C discards the pending commit, processes queued commits, retries if still needed.
+  4. C merges its pending commit only after matching acceptance is known.
+     A lost response requires commit-ID/digest lookup (§27.3), not a new commit.
+     On a confirmed competing 409: discard pending commit, process accepted events,
+     then rebuild if still needed. Sequence and role-state rules in §27 apply.
 ```
 
 Application messages are tagged with their epoch. Process commits and applications through the durable group sequence (§27). Keep only bounded past-epoch **receive** state for reordering: default 2 epochs / 5 minutes. Expire it promptly; long-offline devices need retained commits or explicit resynchronization, not indefinite historical secrets. Revocation cannot stop a sender that is offline or using a stale epoch from encrypting; the server rejects such submissions until refreshed.
@@ -457,28 +462,28 @@ Application messages are tagged with their epoch. Process commits and applicatio
 | Role change | Owner/admin under current authenticated role state | MLS commit carrying a versioned role-state extension, atomically mirrored to REST ACL | Clients independently verify authorization; REST cannot unilaterally change cryptographic roles (§27). |
 | Delete group | Owner | REST delete; server sends `GroupDeleted` system envelope to all | Clients archive locally |
 
-### 6.6 Multi-device and recovery: external commits
+### 6.6 Multi-device join and bounded state recovery
 
-When an account gains a device (§4.4), the new device joins every group the account belongs to via **external commit**:
+A newly approved device joins its account's existing groups with verified external commits only if the reviewed group profile supports credential binding, authenticated roles, and stale-leaf replacement. Otherwise an authorized member adds the device with a fresh KeyPackage/Welcome.
 
-1. `GET /v1/groups/mine` → list of `group_id` with latest `GroupInfo` (including ratchet tree).
-2. For each group: build external commit (`ExternalInit` + self-add, leaf with DeviceBinding), `POST /v1/groups/{gid}/commits` with `external=true`.
-3. Server authorizes: the committing device's account is in the roster and the device is active.
-4. Other members verify the DeviceBinding and accept.
+1. Fetch authorized group references and GroupInfo, corroborating the membership/role context with a trusted existing device where possible.
+2. Verify credentials and supported extensions; construct a profile-valid join using the reserved active device address.
+3. Submit with idempotent commit ID and expected epoch/sequence; server admission checks use authoritative device status and the mirrored role state.
+4. Existing members independently validate the join under the previous authenticated group policy before accepting it.
 
-External commits are also the **fork recovery** mechanism: if a client detects it cannot decrypt (desynced state, restored backup, corrupted DB), it rejoins by external commit, removing its own stale leaf in the same commit (`resync`). History before rejoin is not recoverable by design.
+Missing local state is not proof of a fork. First replay retained ordered events; after the catch-up window expires, use explicit verified rejoin. External commits alone cannot establish which divergent branch is correct. Quarantine genuine split views for peer corroboration or deliberate group recreation (§27.3). No server-held group secrets or automatic historical plaintext recovery are available.
 
 ### 6.7 Device revocation in groups
 
 The server cannot commit (it is not a member). On revocation:
 
 1. Server durably marks every affected group `pending_removal = {leaf refs}`, stops delivery to the device, and blocks application sends for affected groups until removal. Server availability gating is defense in depth, not a source of cryptographic authorization.
-2. The next member device to send in that group receives `409 PENDING_REMOVAL {leaves}` and MUST first commit the Remove (any member is authorized to commit removals of server-revoked leaves; the server validates the leaves match).
+2. The next sender receives `409 PENDING_REMOVAL {leaves}`. An owner/admin must endorse/commit removal, unless the authenticated group policy explicitly delegated device-revocation removal authority to other members (§27.2). Sending remains blocked while no authorized committer is available; the server flag alone grants no role.
 3. Honest clients encrypt new content under the accepted removal epoch; removed devices cannot derive its secrets. Ciphertext already encrypted under the old epoch remains exposed to members of that epoch, so stale submissions are rejected and re-encrypted after catch-up. Peers validate any removal authority as described in §27.
 
 ### 6.8 Large announcement groups
 
-For groups > 1,000 members: admin-only posting is enforced by the server ACL (non-admin application messages rejected), and clients defer self-updates (randomized within 7 days) to limit commit storms. Commit fan-out cost is O(N) envelopes but each envelope is small; the ratchet tree keeps commit computation O(log N).
+For P1 large announcement groups (>1,000 accounts): clients enforce admin-only posting against authenticated role state, and the server rejects non-admin submissions against its mirror; and clients defer self-updates (randomized within 7 days) to limit commit storms. Commit fan-out cost is O(N) envelopes but each envelope is small; typical single-leaf tree updates scale logarithmically, while batched changes and sparse trees require measurement.
 
 ### 6.9 KeyPackages
 
@@ -500,7 +505,7 @@ For groups > 1,000 members: admin-only posting is enforced by the server ACL (no
 4. digest = SHA-256(ciphertext)
 5. POST /v1/attachments/upload-form {size} -> {attachment_id, upload_url (presigned PUT, 15 min), resumable: optional multipart upload session (P1)}
 6. PUT ciphertext to object storage.
-7. Message carries AttachmentPointer{attachment_id, key K, nonce prefix, digest, size, content_type, file_name?, thumbnail(encrypted inline), blurhash, width, height, duration}.
+7. Message carries AttachmentPointer{attachment_id, key K, versioned encryption header, digest, original size, content_type, file_name?, thumbnail(encrypted inline), blurhash, width, height, duration}.
 ```
 
 ### 7.2 Download
@@ -537,8 +542,8 @@ Core local tables (simplified): `identity`, `sessions`, `prekeys`, `signed_preke
 | Channel | URL | Auth |
 |---|---|---|
 | REST | `https://chat.<org>/v1/...` | Device credential (Basic) or Keycloak bearer (registration/linking/admin) |
-| WebSocket | `wss://chat.<org>/v1/ws` | Device credential in `Authorization` header (native) or `Sec-WebSocket-Protocol` ticket (web) |
-| Provisioning WS | `wss://chat.<org>/v1/provisioning/ws?pid=` | Provisioning session id |
+| WebSocket | `wss://chat.<org>/v1/ws` | Device credential in `Authorization` header (native) or single-use ≤ 30 s exact-origin/device-bound `Sec-WebSocket-Protocol` ticket (web) |
+| Provisioning WS | `wss://chat.<org>/v1/provisioning/ws` | Short-lived single-use ticket bound to the authenticated provisioning session; no long-lived URL secrets |
 | TURN | `turns:turn.<org>:443?transport=tcp`, `turn:turn.<org>:3478?transport=udp` | Ephemeral HMAC credentials |
 | SFU | `wss://sfu.<org>` | LiveKit JWT issued by `enclave-api` |
 
@@ -546,7 +551,7 @@ TLS 1.3 for client-facing HTTPS/WSS. Native clients pin approved SPKI keys via a
 
 ### 9.2 WebSocket framing
 
-Binary frames carrying protobuf. Request/response multiplexed by `request_id`.
+Binary frames carrying protobuf. Request/response multiplexed by `request_id`. The following excerpts define field intent; FND-01 supplies the complete schema/types and generated compatibility fixtures.
 
 ```protobuf
 syntax = "proto3";
@@ -554,13 +559,13 @@ package enclave.ws.v1;
 
 message ClientFrame {
   uint64 request_id = 1;
+  reserved 3, 7;                   // sealed WS and old typing relay are not P0 operations
   oneof body {
     SendRequest send           = 2;
-    SendSealedRequest send_sealed = 3;
     Ack ack                    = 4;
     GroupSendRequest group_send = 5;
     Ping ping                  = 6;
-    TypingRelay typing         = 7;  // ephemeral, never stored
+    // Encrypted typing uses send with transient_ttl_seconds.
   }
 }
 
@@ -596,7 +601,9 @@ message Envelope {
   uint64 epoch = 6;                 // MLS types only
   bytes content = 7;
   uint64 server_timestamp = 8;
-  bool urgent = 9;                  // controls push priority
+  bool urgent = 9;                  // priority hint, not notification kind
+  uint64 group_seq = 10;            // required MLS processing sequence
+  uint64 expires_at = 11;           // admission deadline / TTL in milliseconds
 }
 
 message SendRequest {
@@ -604,7 +611,11 @@ message SendRequest {
   repeated DeviceMessage messages = 2;
   uint64 client_timestamp = 3;
   bool urgent = 4;
-  bool online_only = 5;             // e.g. typing-like payloads not to be queued
+  reserved 5;                       // former online_only flag: not a P0 ephemeral path
+  bytes submission_id = 6;           // 128 random bits; idempotent within origin
+  uint64 device_list_version = 7;
+  NotificationKind notification_kind = 8;
+  uint32 transient_ttl_seconds = 10; // bounded encrypted typing/ICE; no push
 }
 
 message DeviceMessage {
@@ -619,7 +630,11 @@ message GroupSendRequest {
   uint64 epoch = 2;
   bytes mls_private_message = 3;    // one ciphertext for all members
   bool urgent = 4;
+  bytes submission_id = 5;
+  NotificationKind notification_kind = 6;
 }
+
+enum NotificationKind { NONE = 0; MESSAGE = 1; CALL = 2; SECURITY = 3; }
 
 message SendResult {
   bool ok = 1;
@@ -655,11 +670,13 @@ Group application messages are a single MLS ciphertext; the server fans out the 
 | Store-then-notify | The gateway (or api) persists, then, after commit, publishes `mail:{account}.{device}` for online devices; the pod holding the socket drains. No content transits Valkey. |
 | Offline wake-up | A durable intent is committed with the envelope; workers lease/retry content-free provider attempts (§16.4, §26). Duplicate wake-ups are possible. |
 | Missed signal | Each client keepalive triggers a mailbox `EXISTS` check, bounding delivery delay to 30 s if a signal was lost (§1.1). |
-| Online-only | P0 transient ciphertext uses short-lived durable envelopes (typing ≤ 10 s, ICE ≤ 30 s), no push. A later ciphertext pub/sub path needs an ADR; content never enters ordinary Valkey hints. |
+| Transient | P0 `transient_ttl_seconds` queues short-lived ciphertext (typing ≤ 10 s, ICE ≤ 30 s), no push. A later ciphertext pub/sub path needs an ADR; content never enters ordinary Valkey hints. |
 
 ---
 
 ## 11. Message content types (inside encryption)
+
+These are schema excerpts, not standalone compilable files. FND-01 defines the complete types, criticality/version rules, and generated bindings before code; feature additions in §25 must be represented in that schema.
 
 ```protobuf
 syntax = "proto3";
@@ -752,6 +769,8 @@ All endpoints under `/v1`, JSON (keys as base64url) except where noted. Auth: `D
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
+| GET | `/deployment-info` | Public | Non-user deployment metadata and supported versions; native trust comes from signed managed config. |
+| POST | `/ws/tickets` | D | One-use browser socket ticket, exact origin/device, ≤ 30 s TTL. |
 | POST | `/devices/reservations` | K | Reserve an address and single-use enrollment challenge; expire after 10 minutes. |
 | POST | `/devices/primary` | K | Register first device (§4.3). |
 | POST | `/devices/provisioning-code` | D | Existing device requests a single-use linking code. |
@@ -774,19 +793,20 @@ All endpoints under `/v1`, JSON (keys as base64url) except where noted. Auth: `D
 |---|---|---|---|
 | PUT | `/keys` | D | Upload SPK, OPKs, Kyber prekeys. |
 | GET | `/keys/status` | D | Counts of remaining OPK/Kyber. |
-| GET | `/keys/{accountId}/{deviceId or *}` | D or UAK | Fetch pre-key bundle(s), consuming one-time keys. |
+| POST | `/keys/{accountId}/claim` | D; isolated UAK route P1 | Claim bundles for selected active devices once; replay-safe claim ID, no caching/prefetch. |
 | PUT | `/keypackages` | D | Upload MLS KeyPackages. |
 | POST | `/keypackages/claim` | D | Claim KeyPackages for accounts' devices. |
 
 ### 12.3 Messages
 
-Messages are sent over WebSocket. REST fallback for constrained environments and background sends:
+Messages are sent over WebSocket. REST fallback for constrained environments and background sends (including later iOS NSE):
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| PUT | `/messages/{accountId}` | D or UAK | Send 1:1 (body = `SendRequest` protobuf). |
+| PUT | `/messages/{accountId}` | D | P0 authenticated direct E2EE submission (body = `SendRequest` protobuf). |
+| PUT | `/sealed/messages/{accountId}` | UAK only, P1 | Isolated credential/cookie-free sealed submission; separate rate limits and dedupe scope. |
 | PUT | `/groups/{groupId}/messages` | D | Send group application message. |
-| GET | `/messages?limit=100` | D | Drain mailbox (used by iOS NSE). |
+| GET | `/messages?limit=100` | D | Bounded mailbox drain; account/device scope from auth, no cache. |
 | DELETE | `/messages/{guid}` | D | Ack. |
 
 ### 12.4 Groups
@@ -797,8 +817,9 @@ Messages are sent over WebSocket. REST fallback for constrained environments and
 | GET | `/groups/mine` | D | Groups of this account with latest `GroupInfo`. |
 | POST | `/groups/{gid}/commits` | D | Submit commit (§6.4); `external=true` for external joins. |
 | POST | `/groups/{gid}/proposals` | D | Submit standalone proposal (leave). |
-| GET | `/groups/{gid}/acl` | D (member) | Roles. |
-| PUT | `/groups/{gid}/acl` | D (admin) | Update roles. |
+| GET | `/groups/{gid}/acl` | D (member) | Read mirrored authenticated roles/version. |
+| GET | `/groups/{gid}/events?after_seq=` | D (member) | Bounded ordered catch-up with profile authorization. |
+| GET | `/groups/{gid}/commits/{submissionId}` | D (authorized submitter/member) | Resolve uncertain commit acceptance by ID/digest. |
 | DELETE | `/groups/{gid}` | D (owner) | Delete group. |
 
 ### 12.5 Attachments
@@ -909,6 +930,10 @@ CREATE TABLE mls_key_packages (
 CREATE TABLE mls_groups (
     group_id        bytea PRIMARY KEY,
     epoch           bigint NOT NULL DEFAULT 0,
+    next_group_seq  bigint NOT NULL DEFAULT 1,
+    role_version    bigint NOT NULL DEFAULT 0,
+    role_state_hash bytea NOT NULL,
+    status          text NOT NULL DEFAULT 'active' CHECK (status IN ('active','quarantined','deleted')),
     group_info      bytea NOT NULL,                    -- latest signed GroupInfo incl. ratchet tree
     announcement    boolean NOT NULL DEFAULT false,
     archived        boolean NOT NULL DEFAULT false,
@@ -1023,7 +1048,7 @@ sequenceDiagram
     S-->>B2: envelope (+ push)
     B1->>B1: Report incoming call to CallKit / ConnectionService, ring
     B2->>B2: Ring
-    A-->>B1: ICE candidates (online_only E2EE messages, trickle)
+    A-->>B1: ICE candidates (short-TTL E2EE messages, trickle)
     A-->>B2: ICE candidates
     B1->>B1: User answers
     B1->>S: CallMessage{Answer} to a1
@@ -1083,8 +1108,8 @@ frame_key(epoch, participant) = HKDF-SHA256(call_base_key(epoch), salt="enclave/
 key_index = epoch mod 16    (LiveKit key ring slot)
 ```
 
-- When a member is added or removed (new epoch), all in-call clients derive the new key and install it in the next key-ring slot. Senders switch to the new key after a 2-second grace period, giving receivers time to install it; receivers try current and previous slots.
-- A removed member's devices cannot compute the new epoch's exporter secret, so they lose the ability to decrypt media within the grace period, and the SFU is instructed to disconnect them (§15.4).
+- On additions/ordinary updates, install the new epoch generation before switching; a bounded 2 s overlap is permitted for receivers. On removal, pause publication immediately, install the new key, then resume with no deliberate old-key publication grace.
+- Removed members cannot compute the new epoch exporter; old-key media remains exposed. Disconnect them at the SFU as defense in depth (§15.4).
 - Every current group member can derive the exporter and the public participant inputs; per-participant HKDF keys provide domain separation, **not** sender authenticity against malicious members. Bind participant announcements to MLS sender credentials; stronger media-origin authentication needs separate signatures or a reviewed protocol. Never claim HKDF alone prevents impersonation.
 - Graceful rotation is permitted for additions/ordinary updates. On removal, pause publication immediately until the new epoch key is installed; do not intentionally continue sending old-key media for two seconds. Reject retired generations and test slot wrap/reconnect so `epoch mod 16` cannot select stale keys.
 
@@ -1112,7 +1137,7 @@ sequenceDiagram
 
 ### 15.4 SFU authorization and membership changes
 
-- LiveKit JWT identity is an **opaque participant ID** (random per call), not the account ID. The mapping from participant ID to account lives only inside E2EE `GroupCallUpdate` messages (clients announce their participant ID to the group), so the SFU cannot name participants.
+- LiveKit JWT uses an **opaque participant ID** (random per call), not an account ID or display name. Clients authenticate that ID through E2EE announcements. The API also keeps short-lived token/device mappings for authorization/removal; a deployment operator can correlate those mappings and network metadata, so opacity is not anonymity.
 - On MLS removal of a member, `enclave-api` calls LiveKit's server API `RemoveParticipant` for any participant tokens it issued to that account's devices in active rooms (token-to-device mapping kept in Valkey only for the call's lifetime).
 - Room deleted automatically when empty for 60 s.
 
@@ -1155,7 +1180,7 @@ Pushes carry **no message content, decryption keys, sender identity, or group id
 | Platform / profile | Mechanism |
 |---|---|
 | iOS connected (P1) | APNs alert push with `mutable-content: 1` → Notification Service Extension (NSE) fetches `GET /v1/messages`, decrypts, rewrites notification. Calls: PushKit VoIP push → app MUST report to CallKit immediately (iOS requirement), then fetches and decrypts the Offer; if the offer is stale/invalid it ends the CallKit call. |
-| iOS restricted/air-gapped (P1, entitlement gated) | **Local Push Connectivity** (`NEAppPushProvider`) on admin-configured SSIDs: a provider extension keeps a connection to `enclave-push` on the local network and triggers local notifications/calls. Requires the Apple entitlement and a certified SSID configuration/distribution path; MDM is the managed deployment option. Outside configured SSIDs, delivery happens on app foreground only. |
+| iOS restricted/air-gapped (P1, entitlement gated) | **Local Push Connectivity** (`NEAppPushProvider`) on admin-configured SSIDs: a provider extension keeps a connection to the dedicated **local-push bridge** on the local network and triggers local notifications/calls. Requires the Apple entitlement and a certified SSID configuration/distribution path; MDM is the managed deployment option. Outside configured SSIDs, delivery happens on app foreground only. |
 | Android connected | FCM (optional) high-priority data message, or UnifiedPush. |
 | Android restricted/air-gapped | UnifiedPush via self-hosted **ntfy** distributor (app or embedded distributor), or Enclave foreground service maintaining the WebSocket (persistent notification). Admin policy selects the mode. |
 | Desktop | Persistent WebSocket; OS notifications. |
@@ -1183,7 +1208,7 @@ Android restricted mode uses a separately installed/certified UnifiedPush distri
 
 ## 17. Disappearing messages, edits, deletes, receipts
 
-- **Disappearing**: the timer is part of conversation state (1:1: `DataMessage.expire_timer_seconds` change event; groups: `GroupMetadataUpdate`). Expiry countdown starts when the message is **read** on that device (for received) or **sent** (for sender). Each device deletes locally, including attachments and FTS index entries. Policy may enforce a default or minimum.
+- **Disappearing**: timer changes are authenticated conversation events. Received timers start at earliest known own-device read; sender timers start on send, with optional absolute maximum lifetime and cleanup rules in §25.3. Enforce customer maximum retention independently of timer choices.
 - **Edits**: `Edit` referencing `message_id`, allowed by the original sender within the policy window; clients keep edit history locally (shown as "edited").
 - **Delete for everyone**: `Delete` referencing `message_id`; recipients replace content with "This message was deleted". Best-effort: a modified client could ignore it (documented limitation).
 - **Receipts**: `ReceiptMessage{type: DELIVERY | READ | VIEWED, message_ids[]}` sent 1:1 (also in groups: sent as an MLS application message only if group size ≤ 100; above that, delivery receipts are suppressed to limit traffic).
@@ -1213,14 +1238,17 @@ Signed by the server's policy key and delivered to clients via `Directive{POLICY
     "link_previews": false
   },
   "devices": { "max_per_account": 5, "inactive_unlink_days": 60, "allowed_platforms": ["android", "web"] },
-  "security": { "screenshot_block": true, "app_lock_required": true, "app_lock_timeout_seconds": 300, "web_client_enabled": false },
+  "security": { "screenshot_block": true, "app_lock_required": true, "app_lock_timeout_seconds": 300, "web_client_enabled": true },
   "calls": { "max_group_video": 50, "always_relay_external": true },
   "notifications": { "max_preview_level": "generic" },
-  "history_transfer_days": 30
+  "read_receipts_default": false,
+  "typing_default": false,
+  "group_calls_enabled": false,
+  "history_transfer_days": 0
 }
 ```
 
-Policy is enforced by honest clients; it is a governance tool, not a cryptographic guarantee (a modified client can ignore screenshot blocking). This is documented to customers.
+This example is the Android/web pilot profile. Hardened deployments may set `web_client_enabled=false`; P1 enables group calls/history transfer only after their release gates. Policy is enforced by honest clients; it is a governance tool, not a cryptographic guarantee (a modified client can ignore screenshot blocking). This is documented to customers.
 
 ### 19.2 Audit log
 
@@ -1266,7 +1294,7 @@ Pre-key exhaustion attacks (draining a victim's OPKs) are mitigated by per-targe
 - **Logs** (structured JSON → Loki): same identifier rules; no payload bytes ever logged; log retention ≤ 14 days by default.
 - **Client telemetry**: none by default. Optional, opt-in, aggregate crash reports to an on-prem Sentry-compatible endpoint with PII scrubbing.
 
-SLO alerts: delivery latency p99 > 1 s for 10 min; mailbox oldest undelivered (for connected devices) > 60 s; decryption error reports (clients send `DecryptionErrorMessage` to peers, and a privacy-preserving counter to `/v1/metrics/decrypt-errors`) above baseline.
+SLO alerts: delivery latency p99 > 1 s for 10 min; mailbox oldest undelivered (for connected devices) > 60 s; decryption error reports (clients send `DecryptionErrorMessage` to peers, and, only with explicit opt-in telemetry, a minimized counter to `/v1/metrics/decrypt-errors`) above baseline.
 
 ---
 
@@ -1282,6 +1310,8 @@ REST errors use RFC 9457 Problem Details:
 
 | Code | HTTP | Meaning | Client action |
 |---|---|---|---|
+| `IDEMPOTENCY_CONFLICT` | 409 | Submission ID reused with different bytes | Preserve prior result; create a new attempt only for deliberately changed ciphertext |
+| `GROUP_QUARANTINED` | 409 | Unverified recovery/split view | Stop sending; explicit verified group recovery |
 | `DEVICE_MISMATCH` | 409 | Recipient device list changed | Fetch bundles / drop sessions, retry |
 | `STALE_DEVICES` | 410 | Registration IDs changed (reinstall) | Re-establish sessions, retry |
 | `EPOCH_CONFLICT` | 409 | MLS commit for old epoch | Process pending commits, retry |
@@ -1458,7 +1488,7 @@ Critical authorization reads (device revoke, account disable, membership, enroll
 
 ### 27.1 Enrollment and reset
 
-Bind a provisioning challenge to deployment ID, account ID, session ID, both ephemeral public keys, reserved device address, protocol version, expiry, and a fresh nonce. Use canonical length-delimited signed/transcript bytes and domain-separated HKDF context. An existing trusted device approves exactly that transcript; the server cannot swap the destination key/session. Codes are single-use, rate-limited, and consumed atomically with enrollment. New devices cannot choose arbitrary device IDs. Reject untrusted deep-link hosts and never sign a generic key blob prompted by a remote web page.
+Bind a provisioning challenge to deployment ID, account ID, session ID, both ephemeral public keys, reserved device address, protocol version, expiry, and a fresh nonce. Use canonical length-delimited signed/transcript bytes and domain-separated HKDF context. An existing trusted device approves exactly that transcript; the server cannot swap the destination key/session. Codes are single-use, rate-limited, and consumed atomically with enrollment. Persist new private keys and a pending enrollment ID before submission; registration/link endpoints resolve idempotent retries or an uncertain acceptance without generating a second identity/device. New devices cannot choose arbitrary device IDs. Reject untrusted deep-link hosts and never sign a generic key blob prompted by a remote web page.
 
 Account recovery without any existing trusted device creates a new IK and resets the device list after SSO step-up. All previously verified peers block sending until re-verification. An administrator can reset account access but cannot recover old plaintext. The shared account IK allows a compromised linked device to forge account-authorized bindings until identity rotation; record this risk and provide “secure my account” rotation/revocation guidance.
 

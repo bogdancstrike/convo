@@ -103,7 +103,7 @@ Voice notes support local playback speed, waveform from decrypted local data, in
 
 | Scenario | Required parity |
 |---|---|
-| Android creates account, web links | Explicit QR consent; shared identity, separate sessions and MLS leaves; no old history promise. |
+| Android creates account, web links (or browser primary, Android links) | Explicit QR consent; shared identity, separate sessions and MLS leaves; no old history promise. |
 | Web sends while Android sleeps | Durable backend intent; certified wake path; receipt only after core persistence. |
 | Both send/react/edit concurrently | Idempotent message mutations and deterministic own-device preference convergence. |
 | Android revokes web | Subsequent server calls denied, socket closed within bound, group removal initiated; web local erasure attempted. |

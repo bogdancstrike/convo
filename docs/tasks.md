@@ -59,6 +59,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 - [ ] Build the selected libsignal/OpenMLS profiles on physical Android and supported Chromium/Firefox worker environments; record exact revisions, license inventory, patch ownership, and upstream support limits.
 - [ ] Exchange direct and group ciphertext Android↔browser, persist sessions, restart both, then decrypt the next message; exercise random generation and malformed-input rejection.
+- [ ] Prove application-profile feasibility with an authorized/forbidden role-transition vector and external-join-or-Add/Welcome prototype; obtain an early independent composition review before M0 exit. GRP-01 supplies the complete production implementation/review later.
 - [ ] Measure bridge payload/copy costs, worker startup, browser memory, persistent encrypted-store behavior, Android keystore wrapping, and browser passphrase unlock.
 - [ ] Prototype direct WebRTC with encrypted signaling and TURN fallback on Android/web; validate required browser/media capabilities.
 - [ ] Evaluate Flutter Android vs KMP mobile integration against the criteria in mobile §2; choose one, retain the same protocol contracts, and record the decision.
@@ -173,11 +174,11 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Artifacts:** `apps/web/`, worker/storage integration, static-host/CSP config, `tests/scenarios/browser/`.
 
-- [ ] Deliver organization/SSO/link, responsive chat UI, passphrase lock, local encrypted store, bounded cross-tab coordination, and one-use WebSocket tickets.
+- [ ] Deliver organization/SSO/browser-primary enrollment and linking, responsive chat UI, passphrase lock, local encrypted store, bounded cross-tab coordination, and one-use WebSocket tickets.
 - [ ] Implement strict CSP/Origins/CORS, bundled assets, safe message rendering, redacted headers, update compatibility, and accurate browser trust text.
 - [ ] Test private browsing, quota/eviction/cleared storage, worker restart, two-tab races, offline reopen, and supported Chromium/Firefox versions.
 
-**Done when:** browser↔Android exchange survives storage/worker restarts where persistence is supported; lost storage prompts re-link; no backend plaintext fallback or long-lived URL credential exists.
+**Done when:** browser-primary registration works without an Android prerequisite, browser↔Android exchange survives storage/worker restarts where persistence is supported; lost storage prompts re-link; no backend plaintext fallback or long-lived URL credential exists.
 
 ## 4. M2 — groups and everyday features
 
@@ -247,7 +248,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 **Artifacts:** versioned encrypted events, local index/mutation store, conversation/settings UI, state-convergence scenarios.
 
-- [ ] Implement replies, mentions, authorized edits/delete requests, reactions, Note to self, drafts, mute/archive/pin/bookmark, read/delivery preferences, and bounded typing.
+- [ ] Implement replies, mentions, authorized edits/delete requests, reactions, Note to self, drafts, mute/archive/pin/bookmark/block, read/delivery preferences, and bounded typing.
 - [ ] Sync own-device settings/read cursors with deterministic counters; validate authors/roles and mutations arriving before targets.
 - [ ] Expire content/index/keys/previews/notifications and prevent late resurrection via tombstones; implement local message/file search with Romanian diacritic handling.
 
@@ -293,7 +294,7 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 ### OPS-01 — Certified deployment, networking, and offline install
 
-**Priority/owner:** P0, platform lead. **Dependencies:** FND-03, MSG-02, CALL-01.
+**Priority/owner:** P0, platform lead. **Dependencies:** FND-03, MSG-02, CALL-01, GRP-02/03.
 
 **Artifacts:** `deploy/charts/enclave/`, `deploy/airgap/`, network/port matrix, `docs/runbooks/install.md`.
 
@@ -354,12 +355,12 @@ Critical path: FND-02 → CORE-01/02 → ID-01/02 → MSG-01/02 → Android/web 
 
 ### REL-01 — Android/web GA readiness
 
-**Priority/owner:** P0, product + QA + operations + security. **Dependencies:** all P0 tasks.
+**Priority/owner:** P0, product + QA + operations + security. **Dependencies:** all preceding P0 tasks, including SEC-01/02.
 
 **Artifacts:** `docs/evidence/ga-readiness.md`, signed Android/web/backend release, release notes, support/runbook links.
 
 - [ ] Assemble requirement coverage, device/browser/profile matrix, accessibility/usability evidence, load/chaos/restore results, audit remediation, license/support findings, and rollback instructions.
-- [ ] Run clean-install → Android registration → web link → offline direct/group exchange → file/voice → search → identity change → revoke → direct call → signed upgrade acceptance.
+- [ ] Run clean-install → Android registration → web link (also browser-primary → Android link) → offline direct/group exchange → file/voice → search → identity change → revoke → direct call → signed upgrade acceptance.
 - [ ] Publish exact supported platforms/versions, capacity, metadata/notification limits, and deferred P1/P2 features without claiming implementation of the roadmap.
 
 **Done when:** named release owners approve documented evidence and there are no open P0 tasks or undisclosed critical/high defects. iOS and group video remain separately scheduled.
