@@ -1,0 +1,219 @@
+# Enclave — UI and interaction specification
+
+| Field | Value |
+|---|---|
+| Status | Draft v1.1, 2026-10-16 |
+| First delivery | Android and web, equal product priority |
+| Later | iOS after Android/web stabilization; desktop packaging optional |
+| Related | [Specs](specs.md), [ARF](arf.md), [Mobile](mobile.md), [Tasks](tasks.md) |
+
+## 1. Product experience
+
+Enclave should feel like a calm, capable everyday messenger. People can find a colleague, send a file, join a call, and understand whether a message arrived without learning cryptographic terminology. Security is visible when it changes a decision: identity replacement, device linking, browser trust, expired content, guest access, and recording/archive participants. Routine encrypted chats do not show repeated modal warnings.
+
+Android and web implement the same message, identity, group-role, and sync semantics. They use platform-appropriate navigation and controls. Flutter is the Android baseline; React/TypeScript is the web baseline. iOS-specific layouts, CallKit, NSE, and entitlement work are later scope. Design tokens and interaction contracts are shared; widget trees are not.
+
+### 1.1 Experience principles
+
+- Preserve work: offline composition, drafts, attachments, and send status survive process/tab restart when local storage is available.
+- Use understandable states: “Waiting for connection”, “Sent”, “Delivered”, and “Read” mean different things.
+- Make safe actions easy: identity verification, linking, notification privacy, local lock, and revocation live in predictable places.
+- Ask for permissions at the feature that needs them, with a useful fallback after denial.
+- Keep conversations central: administration, infrastructure, and protocol internals do not occupy the chat UI.
+- Explain limits accurately: expiration requests cannot erase someone else's screenshot; browser content can be exposed by a compromised origin.
+
+## 2. Information architecture
+
+| Area | Android | Web | Contents |
+|---|---|---|---|
+| Chats | Primary bottom-navigation destination | Primary side-navigation destination | Conversations, pinned section, unread filter, archive, Note to self, new chat/group |
+| Calls | Bottom-navigation destination | Sidebar destination | Local recent direct calls; start audio/video; group call entry in P1 |
+| People | Search/new-chat entry; optional destination on wide layouts | Directory panel/new-chat flow | Org handles, local contacts, guests, blocked accounts; no phonebook import |
+| Settings | Avatar/menu entry | Sidebar/footer entry | Profile, appearance, notifications, privacy, devices, storage, connectivity/help |
+| Administration | Separate authorized web origin | Separate app | Users/guests/devices, policy, health, audit; no chat-content browser |
+
+Directory search matches permitted organization handles. Display name/avatar is decrypted only where the viewer has the profile key; otherwise show the handle and an initial-based fallback. Never imply an encrypted display name is server-searchable.
+
+### 2.1 Responsive layouts
+
+| Width | Layout | Behavior |
+|---|---|---|
+| < 600 CSS px / compact Android | One pane | Chat list → conversation → details; Back preserves scroll/draft and closes transient controls first. |
+| 600–1023 CSS px / medium Android | Two panes when usable | Conversation list ~300 px plus active thread; details use a sheet/dialog. |
+| ≥ 1024 CSS px / expanded Android | Two panes plus optional details | List 320–360 px, thread flexes, details ~320 px; never compress composer below usable width. |
+
+Use CSS pixels for browser and density-independent units on Android; breakpoints describe available layout width, not device names. Composer stays visible above the keyboard; safe insets, split-screen, rotation, zoom, and display scaling must not obscure controls. A narrow web window remains a supported chat UI.
+
+### 2.2 Main web layout
+
+```text
+┌──────────────┬────────────────────┬─────────────────────────────┐
+│ Chats / Calls│ Search chats       │ Ana Popescu        Call  ⋯  │
+│              │ Pinned             ├─────────────────────────────┤
+│              │ Incident response  │ Today                       │
+│              │ Ana Popescu        │  Message bubbles            │
+│              │ Design team        │  Reply/file/voice note      │
+│              │                    │  Waiting for connection     │
+│              │                    ├─────────────────────────────┤
+│ Settings     │ New chat           │ Attach  Write a message Send│
+└──────────────┴────────────────────┴─────────────────────────────┘
+```
+
+Security and connectivity notices belong near the thread/header they affect. Persistent notices must not cover the conversation or steal focus on each reconnect.
+
+## 3. Visual system
+
+Use a warm neutral surface, deep teal primary actions, readable typography, and restrained motion. Avoid visual noise behind message text. These are starting tokens to verify against actual rendered contrast, not a claim that every possible pair meets accessibility requirements.
+
+| Semantic token | Light | Dark | Use |
+|---|---|---|---|
+| `surface.canvas` | `#F6F8F7` | `#101918` | Application background |
+| `surface.panel` | `#FFFFFF` | `#182422` | Lists, composer, dialogs |
+| `text.primary` | `#162622` | `#ECF3F0` | Body and headings |
+| `text.secondary` | `#4F625B` | `#B1C3BB` | Metadata and helper text |
+| `action.primary` | `#086B58` | `#78D9BD` | Primary action; use tested contrasting text |
+| `message.outgoing` | `#DDF3E9` | `#214A3D` | Own message background |
+| `message.incoming` | `#FFFFFF` | `#22302C` | Other message background |
+| `state.danger` | `#B42318` | `#FFB4AB` | Destructive/error state plus label/icon |
+| `focus.ring` | `#185ADB` | `#A6C8FF` | Keyboard focus, independently visible from selection |
+
+System fonts are the baseline; optional Inter/Noto fonts must be bundled and served on-prem. Body text is 16 px on web and scales with Android font settings. Metadata is at least 12 px; never hide delivery meaning in tiny timestamp icons. Use a 4/8 px spacing scale, 12–16 px message radius, 8–12 px control radius, and low-elevation panels. Android touch targets ≥ 48 dp; web actionable targets ≥ 44 CSS px where possible and at least WCAG minimum sizing/spacing.
+
+Motion normally lasts 120–200 ms and respects reduced-motion/system animation settings. Sending progress uses calm inline feedback; errors never shake the whole screen. Avatars have accessible names, stable fallback colors, and status conveyed with text where needed.
+
+## 4. Onboarding, identity, and devices
+
+### 4.1 Organization entry and first registration
+
+1. Welcome screen: “Private messaging for your organization.” Primary action: “Connect to your organization.” Support manual HTTPS URL and authenticated managed configuration; Android may scan an organization QR.
+2. Confirm organization name/domain and connectivity profile. A QR may identify an endpoint but cannot silently replace a trusted CA/root. Certificate failures explain how to contact IT; there is no bypass button.
+3. “Sign in with your organization” opens the system browser on Android and the approved OIDC flow on web. Do not embed an IdP password form in the chat app.
+4. If this is the first trusted device, register locally generated identity material after SSO. Show progress with safe cancellation/retry; no blank spinner after network failure.
+5. Name the device, explain generic notifications, and offer app/browser lock setup. Notification permission is requested after the user understands its purpose.
+6. Land in a useful empty state: “Start a private conversation” with People and Note to self actions.
+
+A failed/expired SSO flow keeps the organization choice and resumes safely. Repeated taps cannot create multiple primary devices.
+
+### 4.2 Browser linking and additional Android devices
+
+An existing-account sign-in offers “Link from a trusted device” and, behind a deliberate secondary path, “I no longer have a trusted device”. Web shows a single-use QR, organization domain, browser/device name, and expiry. Android scanner confirms the browser/session details before sending account keys over the authenticated provisioning channel.
+
+Use explicit approval copy: “Link Firefox on Linux to your account? It can receive future messages.” History transfer is absent in P0; do not promise old chat recovery. Expired/cancelled QR sessions show a fresh-code action. QR and connection details must not appear in analytics, logs, or screenshots created for diagnostics.
+
+The Devices page lists current device first, platform, decrypted user label, linked date, and coarse activity. “Unlink” states that future access stops and local deletion is attempted when the device contacts the service. The user can review a persistent own-device security notice after an unexpected link. Organization reset is distinct from ordinary sign-out.
+
+### 4.3 Verification and identity change
+
+Conversation details expose “Verify identity”: numeric safety number, QR, verified/unverified explanation, and last verification context. Do not equate directory/SSO approval with out-of-band identity verification.
+
+For a verified contact whose IK changes, keep the draft and block sending with “Ana's security identity changed. Verify with Ana before sending.” Actions: “Review identity”, “Keep draft”, and a deliberate re-verification flow. For an unverified contact, show a persistent identity-change notice and require the configured acknowledgement. Never relabel a replaced identity as verified automatically.
+
+## 5. Chat, composer, and groups
+
+### 5.1 Conversation list
+
+Each row has avatar, local name/handle, last allowed preview, timestamp, unread count, mute/pin/guest indicator, and outgoing failure where relevant. Sort by latest local activity with stable tie-breaking; pinned conversations remain in their own section. Hidden/locked previews become “New message”. Swipe actions on Android also exist in a menu for accessibility. Archive, mute, delete locally, and block have distinct consequences.
+
+### 5.2 Message presentation and delivery
+
+| Core state | Visible wording | Accessible meaning |
+|---|---|---|
+| `queued` / offline | “Waiting for connection” | Encrypted/local outbox has not been accepted by the server. |
+| `submitting` | “Sending” | Submission underway; uncertain outcome may require idempotent retry. |
+| `accepted` | “Sent” | Service durably accepted the encrypted envelope. |
+| Recipient receipt | “Delivered” | A recipient device decrypted/persisted and emitted a delivery receipt. |
+| Read receipt | “Read” | Recipient opted to report reading; never inferred from presence. |
+| Identity/membership block | “Action needed” plus reason | Sending pauses with draft/ciphertext safely retained. |
+| Permanent failure | “Could not send” + Retry/Details | User can retry or remove the local item without duplicating a prior success. |
+
+Aggregate multi-device state per recipient account, not as five separate checkmarks. In groups, show bounded receipt details only where enabled. Display a stable date/time order while preserving authoritative protocol event order internally. Long text, emoji, RTL text, mixed scripts, URLs, code blocks, and attachments must not overflow bubbles.
+
+Reply shows an accessible source link/placeholder. Edited messages expose edit history only if policy permits retaining it. Deleted/expired content has a clear tombstone; expiring previews and local notifications are cleaned up too. Unknown content becomes “Update needed to view this item”, never an unhandled exception or raw protobuf.
+
+### 5.3 Composer and attachment flow
+
+Plain text is P0; safe lightweight formatting may be added without raw HTML. Web Enter sends, Shift+Enter inserts a newline; users can choose Enter-for-newline. IME composition Enter never accidentally sends. Android follows native keyboard behavior with a distinct Send action.
+
+Attach opens local file/photo selection; the upload sheet shows selected files, sizes, progress, cancel/retry, and policy limits before send. Images strip location EXIF by default, with a clear permitted opt-out if policy allows. Voice-note recording has start/pause/cancel/send and accessible elapsed time; microphone permission is requested on first recording action. Leaving a draft never starts an upload or microphone recording silently.
+
+Drag/drop and paste work in web with type/size validation and a preview. Confirm before pasting a large file batch. Opening a file or external URL is an explicit action with destination visible. Failed downloads distinguish expired, missing, offline, integrity failure, and insufficient storage.
+
+### 5.4 Group management
+
+Create group: choose people, set encrypted name/avatar, review participants/devices, create. The creator is owner. Details show member accounts, roles, devices where security-relevant, guest expiry, disappearing timer, and verification context. Adding/removing members shows progress until the secure membership change is accepted; a server ACL update alone never marks it complete.
+
+If a revoked device requires removal, show “Updating this group's security” and preserve unsent text. If catch-up/rejoin fails, explain “This device needs to rejoin the secure group”; do not ask users to bypass security checks. Ownership transfer is explicit; leaving as final owner requires transfer or group deletion. Announcement mode shows nonposting members a clear read-only composer state.
+
+### 5.5 Search and organization
+
+Search scopes: current conversation, all local chats, people, files. Separate “People in your organization” (directory request) from “Messages on this device” (local search). Filters include sender, date, file type, and conversation. Search keeps Romanian diacritics usable and highlights locally. An empty result explains that history from before this device was linked may be absent.
+
+Pin/save/archive/mute remain private account preferences. A saved message still follows expiration policy. Clearing local data has a confirmation naming this device and explains recovery limits; it does not imply remote deletion for all recipients.
+
+## 6. Direct calls first; group calls later
+
+P0 direct audio/video entry points appear in the conversation header and Calls page. Pre-call UI shows microphone/camera choice, selected device, and permissions. Incoming call UI has caller identity after authenticated local decryption, Accept, Decline, and “Answered on another device” handling. Android uses native Telecom integration; browser incoming calls depend on an active permitted browser session.
+
+During a call show mute, camera, audio route, connection/reconnecting state, duration, and a clearly labeled End call. Keyboard shortcuts must not fire while typing in another control. Camera is off until explicitly enabled; never auto-answer during simultaneous dialing. “Always relay calls” explains privacy/bandwidth implications; it is on for guests/external contacts by default.
+
+P1 adds group grid/active speaker, participant list, raise hand, screen sharing, and P2P escalation. Do not show enabled group-call buttons in P0 with fake functionality. E2EE failure stops media and shows “Could not establish a secure call”; never offer an insecure retry mode. Future visible recording/archive participants produce a persistent banner before media/content is shared.
+
+## 7. Privacy, notifications, and settings
+
+| Setting | P0 default | Explanation |
+|---|---|---|
+| Notification preview | Generic “New message” | User choice cannot exceed organization policy; locked clients may remain generic. |
+| Read receipts / typing | Off / off | Changes sync privately to own devices; no inferred read state. |
+| App/browser lock | Enabled, 5 min inactivity | Android OS-keystore/biometric support; browser portable passphrase baseline. |
+| Disappearing timer | 7 days in hardened profile | Organization may choose another policy; unopened maximum retention shown separately. |
+| Link previews | Off | Enabling may contact the linked site from this device. |
+| Guest/external calls | Relay on | Reduces peer IP exposure, with possible quality/bandwidth cost. |
+| Telemetry | Off | Optional sanitized on-prem diagnostics with explicit preview/consent. |
+
+Settings display organization-managed controls with a short reason and help link. Never render a disabled control without explanation. Device storage shows encrypted local size, attachment cache cleanup, expiry rules, and export availability. Export is an explicit plaintext-sharing action if enabled; destinations and policy restrictions are visible.
+
+Connectivity diagnostics show the organization host, LAN/VPN availability, notification capability, and last successful contact. They do not show raw tokens, keys, message bodies, or a live employee-activity log. Diagnostic export previews a sanitized report before saving/sharing.
+
+## 8. Web-specific interaction and trust
+
+The web client is a complete P0 UI, not a placeholder for the Android app. It supports responsive chats, files/voice notes, local search, identity verification, groups, device settings, and direct calls wherever the certified browser capability permits.
+
+At first link and in Security settings show: “This browser runs code from your organization's chat server. A compromised server or browser can access messages in this session.” Keep a concise “Browser session” trust indicator with expandable detail; ordinary usage must not repeatedly interrupt users. Native apps can be suggested in the detail without blocking an allowed web session.
+
+Cross-tab behavior is explicit: one worker/storage owner processes protocol state; other tabs subscribe through fenced coordination. If a supported browser cannot coordinate safely, a second tab shows “Chat is open in another tab” with a safe switch action. Do not create a new device for each tab or run concurrent independent ratchets.
+
+Storage eviction/private browsing has a visible reduced-persistence state. Cleared storage requires re-linking and never masquerades as an empty restored history. Offline cached assets must not contain decrypted messages. Sensitive data stays out of URLs, browser history, HTTP caches, and title previews when locked. Signing out clears this browser's keys/storage and revokes the device where reachable, with an offline pending-revocation explanation.
+
+Restricted/air-gapped web shows “Notifications arrive while this browser session is active.” Connected Web Push is a separate organization/user opt-in, never assumed to work through local infrastructure alone. Browser certificate trust is managed through the browser/OS, not an in-app pinning toggle.
+
+## 9. Accessibility and localization acceptance
+
+Web targets WCAG 2.2 AA. Test keyboard-only completion of onboarding, new chat, send/reply/react, attachment, verification, settings, and call acceptance/end. Use semantic landmarks, labeled buttons, visible focus, skip navigation, sensible tab order, and modal focus restore. Incoming messages use a batched polite live region; do not read whole histories or steal focus as messages arrive.
+
+Android tests cover TalkBack, Switch Access, large font/display scaling, landscape, one-handed reach, and external keyboard. Screen readers announce sender, content type, reply context, timestamp, and delivery state in a predictable order. Icon-only controls need action labels, and security/delivery indicators require more than color. Call controls remain reachable at 200% browser zoom and largest supported Android text settings.
+
+Use English and Romanian message catalogs in P0, including plural forms, diacritics, localized dates/numbers, and 12/24-hour preferences. Prepare layout for RTL and longer translations without claiming full locale certification. Never concatenate translatable sentence fragments. Relative-time labels expose exact timestamps accessibly.
+
+## 10. Empty, degraded, and recovery states
+
+| Trigger | User outcome | Recovery action |
+|---|---|---|
+| No conversations | Useful welcome with People / Note to self | Start chat; no dummy personal data. |
+| No network / VPN missing | Persistent connection state, preserved local history/draft | Retry automatically with backoff; actionable VPN/host guidance. |
+| Push blocked | Show actual notification capability | Android settings/distributor guidance; web active-session explanation. |
+| Account disabled / device revoked | Signed-out/revoked state, local key cleanup | Contact organization admin; no endless retry. |
+| Verified identity changes | Draft kept, sending blocked | Review and re-verify. |
+| Key/MLS state unavailable | Conversation remains readable where old local history exists | Secure catch-up/rejoin; never discard all history as first response. |
+| Attachment integrity fails | File never opens; report “File could not be verified” | Retry ciphertext download, then sanitized support detail. |
+| Policy/update requires newer client | Actionable update-required state | On-prem signed update link or managed-distribution instructions. |
+| Local disk/browser storage full | Stop promising durable send/save | Free cache/storage; retain recoverable drafts where possible. |
+
+## 11. Administration UI
+
+The admin app uses a separate host and stronger auth/session policy. Navigation: Overview, People/Guests, Devices, Policies, Audit, Operations. Overview shows aggregate availability/queue/key-health; no private chat previews. User support shows account status, device count, and coarse activity only. Sensitive actions require a reason, affected-device summary, and a deliberate confirmation; step-up auth is requested when required.
+
+Policy editing shows current version, changed fields, client-visible effects, and conflict handling. Audit search/export has bounded ranges and an accountable export record. Health panels explain provider acceptance versus device delivery. No screen implies administrators can restore E2EE history or erase an offline device with certainty.
+
+## 12. UI completion evidence
+
+Produce Android and web flows from shared scenario fixtures, not screenshots alone. Capture compact/wide and light/dark states, keyboard/TalkBack/screen-reader recordings, first-use trials, offline/restart scenarios, and security-change decisions. Use golden/component checks only for durable layout contracts; avoid brittle pixel snapshots of every message variant. [tasks.md](tasks.md) maps this work to UI-01, AND-01/02, WEB-01/02, and REL-01.

@@ -1380,3 +1380,151 @@ SELECT guid, payload
 ### 24.6 Wake-up recovery contract
 
 Enqueue the intent in the message transaction. A post-commit hint may wake a worker, but the worker periodically polls eligible rows even if every hint was lost. Lease expiry permits another worker to retry. Use the primary for authorization, leases, and write-after-read correctness. A stream `XACK` acknowledges only the acceleration hint; it never substitutes for persisting the durable intent outcome.
+
+---
+
+## 25. Feature behavior and state convergence
+
+### 25.1 Conversation and content behavior
+
+| Feature | Contract | Privacy and conflict behavior |
+|---|---|---|
+| Direct chats / Note to self | Encrypted text and typed content events; Note to self fans out only to own devices | No server conversation index; conversations appear from local history and encrypted own-device sync. |
+| Replies and mentions | Reference original message ID; mentions reference stable account IDs and display from local profiles | Deleted/unavailable originals render an accessible placeholder; do not upload quoted plaintext separately. |
+| Reactions | One active value per `(message, reacting account, emoji)` with an encrypted mutation ID | Idempotent add/remove; only the reacting account can retract its reaction. |
+| Edits / deletes | Authenticated original author only, within conversation policy; encrypted target ID and mutation version | Queue bounded mutations arriving before their target; deletion tombstone prevents a late original from resurrecting content. Invalid edits never replace content. |
+| Files / media / voice notes | Same encrypted attachment protocol; optional waveform/thumbnail inside ciphertext | No server transcoding. Warn before opening executable/untrusted files; no auto-execution, bounded decoder resources, strip location EXIF by default. |
+| Read / typing / presence | Read receipts off and typing indicators off by default; delivery status enabled | Presence is not a public employee-activity feed. Group receipts capped at 100 accounts; typing expires in 10 s and never wakes devices. |
+| Mute / archive / pin / unread | Private account preferences, synced E2EE among own devices | An explicit user action wins over arrival of an old sync event; archive does not delete and is distinct from unread state. |
+| Search / saved messages | Local search, local/E2EE bookmarks, local attachment gallery | Files that have expired remain as references with a clear unavailable state. Saving cannot silently override expiry policy. |
+| Polls (P1) | Encrypted poll definition, immutable option IDs, voter-signed vote events and close event | Visible voters by default; no claim of cryptographic anonymous voting. Only the creator/authorized role closes a poll. |
+| Scheduled send (P1) | Encrypted local outbox item with due time | Sending requires a device able to run at due time. UI says “will send when this device is online”; server scheduling stores ciphertext only and needs a separate review. |
+| Link previews (optional, off) | Explicit client fetch with destination disclosure; locally generated preview encrypted in message | Never fetch third-party URLs server-side from user message bodies. Restricted profiles disallow external fetches. |
+| Stickers (P1) | Locally bundled or org-hosted signed packs; custom media encrypted like attachments | No public sticker/CDN requests by default; validate decompression size and animation budgets. |
+
+The encrypted content schema MUST add independently versioned event variants for these features. Reserve removed protobuf tags; never reuse them. Unknown noncritical events render “Update needed to view this item” and stay recoverable. Unknown security-critical semantics (identity, roles, membership, crypto suite) block the affected operation.
+
+### 25.2 Own-device sync and history
+
+Own-device sync contains settings, contacts/profile keys, conversation preferences, verification state, drafts where enabled, sent transcripts, read cursors, and call outcomes. Each mutation carries `(origin_device, mutation_id, monotonic_counter)` inside E2EE. Deduplicate by mutation ID; use counter + device ID as a deterministic tie-breaker for independent preferences. Wall clocks alone are not a conflict-resolution strategy. Security-sensitive identity/verification changes retain provenance and cannot be silently overwritten by an older snapshot.
+
+A newly linked device receives current preferences and future traffic. P0 does **not** restore old messages from the server. P1 history transfer requires explicit source-device approval, a reviewed encrypted archive, a bounded date range, expiry, and a clear “Copying history” state. Never restore live ratchet/MLS state from a history archive. Imported content is historical and cannot trigger old edits, notifications, or calls as fresh events.
+
+### 25.3 Disappearing content and notification cleanup
+
+P0 timers: off, 1 hour, 1 day, 7 days, or 4 weeks, constrained by organization policy. Enforce a maximum content lifetime rather than a minimum lifetime when the goal is shorter retention. A received message's timer starts at first local view; encrypted own-device read sync carries the earliest known start time so devices converge. An optional absolute `not_after` deadline caps unopened retention. Use monotonic elapsed time while running and persisted deadlines across restart; show uncertainty after a major clock jump.
+
+Delete expired message content, local search entries, previews, attachment keys/caches, drafts quoting the content, and scheduled local notifications. Prevent tombstones and idempotency markers from carrying plaintext. Secure deletion on flash/browser storage and another recipient's behavior cannot be guaranteed; key destruction and bounded retention reduce exposure. Screenshot prevention is best effort on Android and unavailable as a reliable browser control.
+
+### 25.4 Calls and multi-device arbitration
+
+Call state is explicit: `outgoing → ringing → connecting → active → ended`; alternative terminal outcomes are `declined`, `busy`, `missed`, `cancelled`, `answered_elsewhere`, and `failed`. Call IDs bind caller address, callee account, offer generation, and deadline inside E2EE content. Answers bind the offer generation and answering device. The caller accepts the first valid answer and sends authenticated cancellation to the remaining devices; late answers close locally without starting media.
+
+A durable call offer has a 60 s ringing TTL; cancellation and accepted-elsewhere events are idempotent. Keep a local ended-call marker beyond maximum retry retention. Foreground and background delivery of the same event cannot ring twice. Camera starts only after explicit user action; audio/video permissions are requested at the action requiring them. On network change, authenticate ICE restart signaling and preserve the call ID. Never downgrade an E2EE call to transport-only media.
+
+## 26. Durable submission, wake-ups, and backpressure
+
+### 26.1 Idempotent send transaction
+
+Add an opaque client-generated `submission_id` (128 random bits) to each send and commit request, distinct from the encrypted content's `message_id`. Scope direct submissions to the authenticated origin device; P1 sealed submissions need an independently reviewed unlinkable dedupe scope. Store a canonical payload digest, accepted recipient snapshot/version, accepted mailbox GUIDs, and result for at least mailbox maximum retention plus retry grace (default 31 days).
+
+Under one transaction: validate active sender and recipient devices on the primary, compare device-list version, validate policy/size limits, insert the dedupe record, envelopes, and notification intents. The same ID and digest returns the original result without duplicate envelopes. The same ID with different bytes returns `409 IDEMPOTENCY_CONFLICT`. A device mismatch rejects the entire requested account fan-out; own-device mirroring is a separately idempotent submission. A retry that changes bytes uses a new submission ID. The encrypted message ID remains stable across re-encryption, so clients also deduplicate semantic content by authenticated sender + message ID.
+
+Client outbox states: `draft → queued → encrypting → ready → submitting → accepted`, or `blocked_identity`, `blocked_membership`, `retry_wait`, `failed`, `cancelled`. Persist protocol advancement and ready ciphertext atomically before network submission. Retry **the same stored ciphertext** after uncertain transport success; never ratchet again merely because a response was lost. When membership/keys really change, explicitly build a new attempt and retire the superseded one.
+
+### 26.2 Durable control and push intents
+
+Minimal logical tables (create actual Flyway migrations before implementation):
+
+| Table | Required columns / constraints | Retention |
+|---|---|---|
+| `submissions` | Origin, submission ID unique within origin, digest, result, created/expiry | 31 days default; no plaintext content |
+| `notification_intents` | UUID, device, kind, opaque event ref, due/expiry, attempts, lease owner/until, state, last sanitized error | Delete success/expired records after bounded diagnostic grace (24 h default) |
+| `control_events` | Device/account scope, control sequence, signed event, expiry, acknowledgement | Until applied/expired; next server request also revalidates authoritative state |
+| `enrollment_reservations` | Account, reserved device ID, challenge digest, bound session/public key, single-use state, expiry | 10 minutes + short replay tombstone |
+| `group_events` | Group ID, sequence unique within group, source epoch, commit/submission ID, digest, opaque MLS bytes, expiry | 30 days default catch-up window; no historical group secrets |
+
+An outbox scanner is a background loop embedded in eligible backend applications, not a mandatory fifth HTTP service. Workers lease rows with `FOR UPDATE SKIP LOCKED`; expired leases are reclaimable. Bound batches and retry budgets; never hold locks during network I/O. Side effects are at-least-once, not exactly-once. Provider success means accepted by provider, and client `Ack` means locally persisted content; keep these metrics distinct.
+
+### 26.3 Limits and overload
+
+P0 defaults: 64 KiB UTF-8 text, 256 KiB encrypted envelope, 100 MiB attachment, 10 attachments/message, 5 devices/account, 100 envelopes/drain page, and 1 MiB total WebSocket frame. MLS commits may require a separately bounded larger frame based on leaf count; default 8 MiB only after M0 parsing/memory tests. Byte limits count decompressed size; reject oversized content before expensive parsing/crypto where possible.
+
+Limit direct fan-out to the active device roster; rate-limit group fan-out by recipients/bytes as well as messages. Bound outstanding sends, gateway write buffers, local deferred mutations, key claims, invites, and per-device mailbox bytes (default 100 MiB). Reject new work with `429` or `503` and retry hints before resource exhaustion; never return accepted for discarded data. Server-side capacity admission cannot inspect encrypted content types, so clients also enforce type-specific limits.
+
+Critical authorization reads (device revoke, account disable, membership, enrollment) use the primary. Dashboard aggregates may use replicas. Presence loss cannot grant access, and a Valkey outage must not disable abuse limits: use conservative local fallback budgets or temporarily reject costly endpoints.
+
+## 27. Identity, group authorization, and recovery hardening
+
+### 27.1 Enrollment and reset
+
+Bind a provisioning challenge to deployment ID, account ID, session ID, both ephemeral public keys, reserved device address, protocol version, expiry, and a fresh nonce. Use canonical length-delimited signed/transcript bytes and domain-separated HKDF context. An existing trusted device approves exactly that transcript; the server cannot swap the destination key/session. Codes are single-use, rate-limited, and consumed atomically with enrollment. New devices cannot choose arbitrary device IDs. Reject untrusted deep-link hosts and never sign a generic key blob prompted by a remote web page.
+
+Account recovery without any existing trusted device creates a new IK and resets the device list after SSO step-up. All previously verified peers block sending until re-verification. An administrator can reset account access but cannot recover old plaintext. The shared account IK allows a compromised linked device to forge account-authorized bindings until identity rotation; record this risk and provide “secure my account” rotation/revocation guidance.
+
+Keycloak disable events need durable producer retry or an equivalent persisted event mechanism, replay-safe intake, and a reconciliation interval ≤ 60 s in the certified profile. Enclave requests use authoritative account/device status; sockets revalidate at least every 30 s. When the identity feed/reconciliation cannot establish freshness, enrollment and privileged account actions fail closed; define the deployment's allowed existing-messaging grace explicitly rather than promising instantaneous offboarding during an IdP outage.
+
+### 27.2 Client-enforced MLS authorization
+
+A public MLS commit and a server ACL are insufficient to protect an untrusted-server design from unauthorized additions/role changes. The application profile MUST authenticate account roles inside a versioned MLS group-context extension. Define its canonical encoding and require support in every KeyPackage capability. Every member evaluates a proposed membership/role change against the **previous** authenticated role state before accepting the commit. REST ACLs are transactional mirrors and admission optimizations, not independent authority.
+
+Rules: owner/admin may add/remove accounts within policy; ordinary members may update self and leave; linked devices may self-join only for their already-member account with a valid binding; only the current owner transfers ownership; no operation removes the final owner without a transfer. The server cannot mint new role authority. Admin-requested device removals are signed policy requests, but an authorized peer must endorse the MLS change under the group profile. Any-member removal of a server-flagged leaf is permitted only if the group's authenticated policy explicitly delegated that revocation authority; a flag alone is not enough.
+
+Current members validate leaf credentials, bindings, role-state transitions, proposal references, tree/commit semantics, membership and confirmation tags using OpenMLS. The server verifies public signatures and structural admission checks only. A small reviewed public-message parser may be implemented in a sandboxed native adapter; do not invent an incomplete Java MLS stack. Availability gating by a malicious delivery service is unavoidable, while role changes cannot become silent content access.
+
+### 27.3 Ordered commits, uncertain responses, and catch-up
+
+Persist a monotonic `group_seq` across **both handshake and application** acceptances. A client buffers application events until all preceding required commits are applied. Retained `group_events` support authenticated, paginated `GET /v1/groups/{gid}/events?after_seq=`. Commit acknowledgement includes accepted sequence, resulting epoch, commit ID, and digest; `GET /v1/groups/{gid}/commits/{submissionId}` resolves a lost response. Merge a locally pending commit once the matching acceptance is known, and deduplicate its later mailbox copy.
+
+On CAS conflict: fetch the accepted competing events before re-planning. Verify fetched GroupInfo against known credentials and transcript continuity where available; epoch numbers alone do not establish trust. A client ahead of a restored server must not simply overwrite the server with its “highest epoch”. A genuine split view requires peer corroboration/authenticator comparison or explicit group recreation; an external commit on a malicious branch is not proof of reconciliation.
+
+A device outside the retained catch-up window shows “Rejoining secure group” and uses a verified external-join or authorized remove/add path. It must not silently reset identities or download group secrets from the server. The group profile must support external commit semantics, credential binding, stale-leaf replacement, and authenticated roles before this path ships; if the pinned OpenMLS profile cannot satisfy them, use authorized member Add/Welcome and update the ADR.
+
+### 27.4 Cryptographic implementation gates
+
+The suite/version/profile are explicit capabilities; unknown profiles block rather than downgrade. The Signal profile is selected from upstream specifications and pinned libsignal behavior, including ratchet capabilities; no “ML-KEM equals Kyber” assumption. Signing contexts bind deployment, account, address, key purpose, version, and expiry. Protocol primitives and canonical encodings use reviewed libraries and vectors.
+
+Attachment streams must authenticate order, finality, original length, and header. Each attachment/re-upload attempt gets a fresh key/nonce domain; a resumed upload reuses already encrypted bytes without changing plaintext at a nonce. Verify digest and tags before opening any file; truncation, reorder, duplicate final chunks, changed lengths, and counter overflow fail closed. Do not define a new streaming AEAD scheme in application code.
+
+## 28. Browser security and capability contract
+
+The web client is a **P0 deliverable** and is enabled in the Android/web pilot profile. Hardened deployments may disable it, but web implementation, UX, and acceptance cannot be postponed behind iOS. Android uses Flutter; web uses a React/TypeScript shell and browser Rust/WASM adapters, subject to ADR-021 and the M0 proof. No server-decryption fallback is allowed if a dependency cannot run safely in browsers.
+
+Browser delivery is lower trust: a malicious origin, extension, endpoint, or build pipeline can run code with access to decrypted content. CSP, SRI, signed manifests, and a service worker reduce accidental/update risks; same-origin bootstrap code cannot independently authenticate its own malicious replacement. Non-extractable WebCrypto keys stop key export APIs, not same-origin decryption requests. Show accurate wording and retain user choice.
+
+Required browser implementation:
+
+1. Link a browser installation as an explicit device; maintain one protocol writer in a dedicated worker with a cross-tab lease (Web Locks plus durable fencing). Race tabs/worker restart and test stale lease rejection.
+2. Encrypt record values and local search material; do not keep plaintext in localStorage, URL fragments, navigation state, HTTP/service-worker caches, logs, or crash reports. A worker improves state isolation, not protection from hostile origin code.
+3. Bootstrap authenticated REST access with memory-scoped credentials. WebSocket tickets are single-use, ≤ 30 s TTL, exact-origin/device-bound, returned from `POST /v1/ws/tickets`; redact the subprotocol from proxy logs. Never put long-lived credentials in URLs.
+4. Use strict allowlisted CORS and WebSocket `Origin` checks, no third-party scripts/fonts/CDNs, strict CSP/Trusted Types where supported, safe content rendering, and no raw user HTML. Admin and user apps have distinct origins, storage, CSP, and authentication context.
+5. Apply certificate trust via browser/OS settings. Document private CA import through managed browsers; JavaScript cannot bypass TLS validation or implement native certificate pinning.
+6. Explain persistence limits (private browsing, storage eviction, cleared data). Request persistent storage where available; absence means reduced durability, not silent success. Detect loss before sending and require explicit re-linking.
+7. Browser support at P0: current and previous stable Chromium and Firefox on managed Windows/Linux/macOS, conditional on M0 crypto/storage/media certification. Safari certification is P1; unsupported features are capability-gated with a visible reason.
+8. Closed tabs have no guaranteed notifications in restricted/air-gapped profiles. Browser-vendor Web Push is opt-in connected-profile egress and requires separate approval in deployment policy, not application-user consent alone.
+
+A web passphrase lock is the portable baseline. WebAuthn PRF unlock is optional where certified. Set inactivity lock to 5 minutes; locking clears in-memory plaintext/keys and visible notifications where the platform permits. Unlock usability, offline local history, and background fetch behavior must be tested together; locked clients may show generic notifications without decrypting.
+
+## 29. Operations, privacy, and release gates
+
+### 29.1 Bootstrap and upgrade contract
+
+Expose `GET /v1/deployment-info` with no account data: deployment ID, allowed issuer/endpoints, supported protocol versions, capabilities, policy hash, build compatibility range, and connectivity profile. Native managed bundles authenticate these values with an organization trust root; an arbitrary QR code cannot install a new trusted root. Separate client-update, policy, enrollment, and sealed-certificate signing keys. Publish current/next trust material before rotation; expired/unknown trust produces actionable failure with no “ignore certificate error” button.
+
+Pin every component/toolchain in a release bill of materials; no `latest` tags. Self-host fonts/assets, IdP metadata, TURN/STUN, object URLs, packages, registries, telemetry, and update manifests as required by profile. CSP/static artifact URLs and presigned S3 URLs must be reachable from corporate client networks, not just cluster nodes. Certify one object-store implementation first; other S3 compatibility claims need contract tests.
+
+Use expand/migrate/contract database upgrades and N/N−1 client-server compatibility. Run migrations once with a separate role, readiness-gate new code, bound gateway drain, and document rollback constraints. The release advertises a minimum supported client/protocol version; unsupported crypto causes an update-required state, never plaintext fallback.
+
+### 29.2 Privacy, administration, and abuse
+
+Default retention: unacknowledged envelopes ≤ 30 days, encrypted attachments ≤ 30 days, diagnostic intent outcomes ≤ 24 h, infrastructure IP logs ≤ 24 h when enabled, sanitized application logs ≤ 14 days, security/admin audit 365 days unless customer policy overrides. Expired data must also age out of WAL/backups on the documented schedule; instantaneous deletion from immutable backups is not promised. Describe visibility and retention for every new metadata field.
+
+Separate admin roles: helpdesk (device/status support), organization admin (membership/policy), security operator (incident/revocation), auditor (read/export audit), platform operator (infrastructure), and optional compliance officer (P2 archive settings). Enforce least privilege, step-up for reset/revoke-all/signing changes, reason fields, rate limits, and audited exports. Do not expose per-user conversation graphs or continuous employee presence dashboards. Hashing account IDs is pseudonymization, not anonymization; low-entropy values need keyed HMAC.
+
+User blocking is local plus minimized server delivery controls; no server plaintext moderation. P1 abuse reports require explicit selection/preview of the messages and recipients receiving plaintext evidence. Guest expiry disables access, triggers group removals, and revokes tokens; it cannot erase content previously downloaded. Any bot/archive/assistant endpoint receiving plaintext is a visible participant and a separate trust decision.
+
+SSRF-sensitive inputs include UnifiedPush URLs, object-store endpoints, identity issuers, link-preview destinations, webhook sinks, and discovery URLs. In P0 allow only operator-configured push hosts; validate scheme, port, DNS resolution and redirect target on each attempt, block unintended private/metadata endpoints, and apply an egress firewall. Never issue an arbitrary authenticated HTTP request to a client-supplied endpoint.
+
+### 29.3 Production exit evidence
+
+Android/web GA requires passing protocol vectors and parser fuzzing; real multi-device/offline/revoke/expiry scenarios; account/device/role authorization tests; Android process-death and notification tests; browser worker/tab/storage tests; keyboard/TalkBack/screen-reader journeys; load and single-node failure tests under published sizing; signed build/SBOM/offline-install verification; a safe restore drill; and an independent cryptographic/application security review with critical/high findings resolved. Record results and remaining risks in release evidence. Group calls and iOS have separate P1 gates and cannot delay Android/web P0.

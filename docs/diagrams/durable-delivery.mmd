@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant A as Sender Android or web
+    participant G as Gateway/API
+    participant D as PostgreSQL primary
+    participant H as Valkey optional hints
+    participant P as Push worker
+    participant B as Recipient
+    A->>A: Persist protocol advancement + ciphertext
+    A->>G: Send submission ID + stored ciphertext
+    G->>D: TX validate + dedupe + envelopes + intents
+    D-->>G: Durable commit
+    G-->>A: Original accepted result
+    G-->>H: Best-effort online/intent hint
+    par Connected delivery
+        G->>D: Drain recipient mailbox
+        G-->>B: Encrypted envelope
+        B->>B: TX decrypt + state + message + dedupe marker
+        B-->>G: Ack after local commit
+        G->>D: Delete acknowledged envelope
+    and Background wake-up
+        P->>D: Poll + lease eligible intent
+        P-->>B: Content-free provider attempt
+        P->>D: Persist accepted/retry/expired outcome
+    end
+    Note over D,P: Lost hints and worker crashes recover from durable intent
+    Note over P,B: Provider acceptance is not guaranteed device delivery; duplicate wakes are safe

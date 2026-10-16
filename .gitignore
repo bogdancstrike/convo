@@ -1,0 +1,30 @@
+# Local credentials and endpoint data
+.env
+.env.*
+!.env.example
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# Editor / OS files
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Build output (planned implementation)
+.gradle/
+.dart_tool/
+.flutter-plugins-dependencies
+node_modules/
+build/
+dist/
+target/
+coverage/
