@@ -35,8 +35,13 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Passkeys: Settings → Privacy shows IdP passkey status (read-only `convo-credential-status`
   service account, `GET /v1/account/credentials`) and opens the Keycloak Account Console.
   Verified with a real Chromium WebAuthn passkey on `convo.doncea.ro`.
-- Still open: Android passkey
-  entry and native app/conversation locks, remaining UI parity and legacy-origin migration.
+- Android Privacy: passkey status, Manage passkeys (Custom Tab), BiometricPrompt app lock and
+  per-chat locks, enabled only after the IdP confirms a passkey. Locked chats are hidden from the
+  list, search, global media, forwarding and gallery saving; grants end on background / leaving
+  the chat. Emulator: cancel keeps locks off, PIN unlock, lock screen before content on resume,
+  APK replacement keeps locks.
+- Still open: Android voice recorder UI, full localization, cross-message viewer navigation,
+  web screen lock, Calls, remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)
 
