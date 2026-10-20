@@ -12,7 +12,7 @@ test('turn on passwordless in Settings, then lock and unlock a chat with the pas
   try {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('WebAuthn.enable');
-    await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+    const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
       protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
     await enroll(page, user);
 
@@ -76,5 +76,24 @@ test('turn on passwordless in Settings, then lock and unlock a chat with the pas
     await page.getByTestId('nav-chats').click();
     await expect(page.getByTestId('filter-locked')).toHaveCount(0);
     await expect(page.locator('.chat-row')).toHaveCount(1);
+
+    // App-wide lock: a reload shows only the lock screen until the passkey is confirmed.
+    await page.getByTestId('nav-settings').click();
+    await page.getByTestId('settings-card-privacy').click();
+    await page.getByTestId('toggle-app-lock').click();
+    await expect(page.getByTestId('toggle-app-lock')).toHaveAttribute('aria-checked', 'true');
+    // Failed user verification keeps it locked; nothing behind the lock screen is rendered.
+    await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
+    await page.reload();
+    await expect(page.getByTestId('app-locked')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('nav-settings')).toHaveCount(0);
+    await expect(page.getByText('locked secret 42')).toHaveCount(0);
+    await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: true });
+    await page.getByTestId('unlock-app').click();
+    await expect(page.getByTestId('nav-settings')).toBeVisible();
+    await page.getByTestId('nav-settings').click();
+    await page.getByTestId('settings-card-privacy').click();
+    await page.getByTestId('toggle-app-lock').click();
+    await expect(page.getByTestId('toggle-app-lock')).toHaveAttribute('aria-checked', 'false');
   } finally { await closeAll(page); }
 });

@@ -60,8 +60,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Android localization: native UI follows the shared EN/RO `settings.locale` live (`I18n.kt`:
   package-level Text/Icon shadows translate UI strings; user content uses RawText). Media
   previews are localized on both clients. Verified on emulator-5554 in Română.
+- Web app lock: Settings → Privacy "Lock Convo with passkey" (needs a passkey), locks on open
+  and after Immediately/1/5/15 min in the background; nothing renders behind the lock.
+  `chat-lock.spec.ts` covers failed and successful user verification.
 - Still open: physical-device/accessibility testing,
-  web screen lock, background call ringing (push), remaining UI parity and legacy-origin migration.
+  background call ringing (push), remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)
 

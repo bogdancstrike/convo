@@ -6,6 +6,7 @@ import type { IncomingLinkRequest } from '../../core/linking';
 import { labelOf, type Settings as SettingsModel } from '../../core/model';
 import { MEDIA_KINDS, type MediaKind } from '../../core/mediaPolicy';
 import { accountSecurityUrl, passkeySetupUrl } from '../../config/deployment';
+import { useChatLocks } from '../chatLocks';
 import type { CredentialStatusDto } from '../../api/types';
 import { Avatar } from '../components/Avatar';
 import { useProfile } from '../components/ProfileContext';
@@ -264,7 +265,28 @@ function PasskeyCard({ client }: { client: EnclaveClient }) {
         </>
       )}
       {url && <a className="btn" href={url} target="_blank" rel="noopener noreferrer" data-testid="manage-passkeys">{t('passkeys.manage')}</a>}
+      <AppLockSettings client={client} />
     </Card>
+  );
+}
+
+/** Web app lock: passkey on open and after being hidden; requires a confirmed passkey to turn on. */
+function AppLockSettings({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  const locks = useChatLocks();
+  const [settings, setSettings] = useState(client.settings);
+  useEffect(() => client.on('settings', setSettings), [client]);
+  return (
+    <>
+      <Switch checked={settings.appLock} disabled={!settings.appLock && locks.passkey !== true} onChange={(on) => void locks.setAppLock(on)}
+        label={t('appLock.setting')} description={settings.appLock || locks.passkey === true ? t('appLock.settingHelp') : t('appLock.needsPasskey')} testId="toggle-app-lock" />
+      {settings.appLock && (
+        <Segmented label={t('appLock.after')} value={String(settings.appLockAfterMinutes)} testId="app-lock-after"
+          onChange={(v) => void client.updateSettings({ appLockAfterMinutes: Number(v) as 0 | 1 | 5 | 15 })}
+          options={[{ value: '0', label: t('appLock.immediately') }, { value: '1', label: t('appLock.minutes', { count: 1 }) }, { value: '5', label: t('appLock.minutes', { count: 5 }) }, { value: '15', label: t('appLock.minutes', { count: 15 }) }]} />
+      )}
+      {locks.error && <p role="alert" className="failed">{locks.error}</p>}
+    </>
   );
 }
 

@@ -2251,3 +2251,6 @@ dialog.all-media-dialog { width: min(1200px, 96vw); max-width: 96vw; height: 90d
 .call-log-row .row-title.missed { color: var(--c-danger-text); }
 .call-log-row .row-preview { display: inline-flex; align-items: center; gap: 4px; color: var(--c-text-secondary); font-size: 0.8125rem; }
 @media (prefers-reduced-motion: no-preference) { .call-tile.speaking { transition: box-shadow 150ms ease; } }
+
+/* Links styled as buttons (Account Console, passkey set-up). */
+a.btn { display: inline-flex; align-items: center; width: fit-content; text-decoration: none; margin-top: var(--space-2); }

@@ -121,6 +121,10 @@ export interface Settings {
   saveToGallery: boolean;
   /** Chats that require passkey user verification to open on this device (ids; device-local). */
   lockedChats: string[];
+  /** Ask for the passkey when Convo opens and after being hidden (device-local). */
+  appLock: boolean;
+  /** Minutes in the background before the app lock engages again (0 = immediately). */
+  appLockAfterMinutes: 0 | 1 | 5 | 15;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -135,6 +139,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoDownload: DEFAULT_AUTO_DOWNLOAD,
   saveToGallery: false,
   lockedChats: [],
+  appLock: false,
+  appLockAfterMinutes: 1,
 };
 
 /** Persistent identity of this enrolled device. */

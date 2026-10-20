@@ -724,6 +724,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       patch = { ...patch, autoDownload };
     }
     if ('saveToGallery' in patch && typeof patch.saveToGallery !== 'boolean') throw new Error('invalid gallery setting');
+    if ('appLock' in patch && (typeof patch.appLock !== 'boolean' || (patch.appLock && this.passkeyEnrolled !== true && !this.currentSettings.appLock))) throw new Error('passkey required');
+    if ('appLockAfterMinutes' in patch && ![0, 1, 5, 15].includes(patch.appLockAfterMinutes as number)) throw new Error('invalid app lock delay');
     if ('lockedChats' in patch && (!Array.isArray(patch.lockedChats) || patch.lockedChats.length > 1000 || !patch.lockedChats.every((id) => typeof id === 'string' && id.length <= 200))) throw new Error('invalid locked chats');
     this.currentSettings = { ...this.currentSettings, ...patch };
     await this.repos.store.commit([this.repos.putSettings(this.currentSettings)]);
