@@ -5,6 +5,7 @@ import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import type { ChatMessage, Conversation } from './model';
 import { STATUS_RANK } from './model';
 import { RecordNs, Repositories } from './repositories';
+import { expired } from './disappearing';
 
 export type HistoryStatus = 'syncing' | 'synced' | 'pending' | 'error';
 interface ArchiveRecord { v: 1; kind: 'message' | 'conversation' | 'profile' | 'group'; at: number; value: unknown; }
@@ -114,13 +115,15 @@ export class AccountHistory {
             const message = record.value as ChatMessage;
             if (typeof message.conversationId !== 'string' || typeof message.authorId !== 'string' || typeof message.id !== 'string' || !Number.isFinite(message.sort)) throw new Error('invalid archived message');
             const existing = await repos.message(message.conversationId, message.authorId, message.id);
-            if (!await repos.isLocallyDeleted(message)) ops.push(repos.putMessage(mergeArchivedMessage(existing, message)));
+            // Disappearing messages past their deadline are never restored.
+            if (!expired(message, Date.now()) && !await repos.isLocallyDeleted(message)) ops.push(repos.putMessage(mergeArchivedMessage(existing, message)));
           } else if (record.kind === 'conversation') {
             const conversation = record.value as Conversation;
             if (typeof conversation.id !== 'string' || !['direct', 'note', 'group'].includes(conversation.kind)) throw new Error('invalid archived conversation');
             const existing = await repos.conversation(conversation.id);
             const newer = !existing || existing.lastActivity <= conversation.lastActivity;
-            if (!await this.store.get(RecordNs.localHiddenConversation, conversation.id)) ops.push(repos.putConversation(existing ? { ...existing, ...(newer ? { title: conversation.title, preview: conversation.preview, lastActivity: conversation.lastActivity, adminOnly: conversation.adminOnly } : {}) } : { ...conversation, unread: 0, draft: undefined }));
+            const timer = existing && (existing.expireUpdatedAt ?? 0) >= (conversation.expireUpdatedAt ?? 0) ? {} : { expireSeconds: conversation.expireSeconds, expireUpdatedAt: conversation.expireUpdatedAt };
+            if (!await this.store.get(RecordNs.localHiddenConversation, conversation.id)) ops.push(repos.putConversation(existing ? { ...existing, ...(newer ? { title: conversation.title, preview: conversation.preview, lastActivity: conversation.lastActivity, adminOnly: conversation.adminOnly } : {}), ...timer } : { ...conversation, unread: 0, draft: undefined }));
           } else if (record.kind === 'profile' || record.kind === 'group') {
             const value = record.value as { accountId?: string; groupId?: string };
             const id = record.kind === 'profile' ? value.accountId : value.groupId;

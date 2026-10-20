@@ -152,6 +152,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
       if (args.removePhoto) patch.photo = undefined; return client.updateProfile(patch);
     }
     case 'credentials': return client.credentialStatus();
+    case 'setDisappearing': return client.setDisappearing(String(args.id), Number(args.seconds));
     case 'startCall': return client.startCall(String(args.conversationId), Boolean(args.video));
     case 'answerCall': {
       const invite = client.pendingInvite(String(args.callId)); if (!invite) throw new Error('call unavailable');

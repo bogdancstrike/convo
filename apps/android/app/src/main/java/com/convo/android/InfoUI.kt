@@ -34,6 +34,20 @@ import org.json.JSONObject
         item { ActionRow("Media, links and docs", icon = Icons.Outlined.PermMedia) { app.route = "media" } }
         item { ActionRow("Starred messages", icon = Icons.Outlined.StarOutline) { app.route = "starred" } }
         item { ActionRow("Chat background", icon = Icons.Outlined.Palette) { app.route = "appearance" } }
+        // Disappearing messages: any chat; groups and channels need owner/admin.
+        item {
+            val canChange = !c.optBoolean("left") && (!isGroup || myRole in listOf("owner", "admin"))
+            Column {
+                Text("Disappearing messages", style = MaterialTheme.typography.titleMedium)
+                Text("New messages disappear from everyone’s devices after the selected time. Sent messages count from sending; received ones from being read.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DisappearingTimers.forEach { (seconds, label) ->
+                        FilterChip(c.optLong("expireSeconds") == seconds, { if (canChange) app.call("setDisappearing", obj("id" to id, "seconds" to seconds)) }, label = { Text(label) }, enabled = canChange)
+                    }
+                }
+                if (!canChange) Text("Only group admins can change this.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
         // Per-chat "require authentication", same control as the chat ⋮ menu (all chat types).
         if (app.locks.locked(id) || app.locks.passkey == true) item {
             PrivacySwitch("Require authentication to open", "Fingerprint, face or screen lock. The chat is hidden from the chat list, search, media and gallery saving until you confirm.",

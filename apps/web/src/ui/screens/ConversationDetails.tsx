@@ -11,7 +11,11 @@ import { useMessages, useSettings } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { conversationMenu } from './conversationMenu';
 import { useChatLocks } from '../chatLocks';
-import { Switch } from '../components/Controls';
+import { Segmented, Switch } from '../components/Controls';
+import { DISAPPEARING_TIMERS } from '../../core/disappearing';
+import { groupIdOf } from '../../core/model';
+import { timerLabel } from './TimerNotice';
+import { useEffect } from 'react';
 
 export function SharedPreview({ client, conversation, onOpen }: { client: EnclaveClient; conversation: Conversation; onOpen: () => void }) {
   const { t } = useI18n(); const messages = useMessages(client, conversation.id, Number.MAX_SAFE_INTEGER).filter((m) => !m.deleted && !m.unsupported && !m.undecryptable);
@@ -41,6 +45,7 @@ export function ConversationActions({ client, conversation, onClose, onPage }: {
     <button className="settings-row" onClick={() => onPage('appearance')} data-testid="open-chat-appearance"><Icon name="palette" /><span className="settings-row-text">{t('info.appearance')}</span><Icon name="next" size={18} /></button>
     {actions.map((item) => item.children ? <Menu key={item.label} label={item.label} items={item.children} trigger={({ open, toggle }) => <button className="settings-row" onClick={toggle} aria-expanded={open}><Icon name={item.icon!} /><span className="settings-row-text">{item.label}</span><Icon name="chevronDown" size={18} /></button>} /> :
       <button key={item.label} className={`settings-row${item.danger ? ' danger' : ''}`} onClick={item.onSelect}>{item.icon && <Icon name={item.icon} />}<span className="settings-row-text">{item.label}</span></button>)}
+    <DisappearingSetting client={client} conversation={conversation} />
     {(locked || locks.passkey === true) && <div className="settings-row-switch"><Switch checked={locked} onChange={() => void locks.toggle(conversation.id)}
       label={t('lock.title')} description={t('lock.help')} testId="info-lock" /></div>}
     {locks.error && <p role="alert" className="failed">{locks.error}</p>}
@@ -58,4 +63,30 @@ export function ConversationSubpage({ client, conversation, page, onBack }: { cl
       {messages.filter((m) => m.starred && !m.deleted).map((m) => <article className="starred-item" key={`${m.authorId}/${m.id}`}><span className="muted-text">{date(m.sentAt)} · {time(m.sentAt)}</span><div>{m.body && <FormattedText text={m.body} />}{m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}</div><button className="btn btn-ghost" onClick={() => void client.setStarred(m, false)}>{t('msg.unstar')}</button></article>)}
     </> : <><p className="muted-text">{t('info.appearanceBody')}</p><div className="wallpaper-options">{(['dots', 'plain', 'ocean', 'botanical'] as Settings['wallpaper'][]).map((wallpaper) => <button className="wallpaper-choice" key={wallpaper} aria-pressed={selected === wallpaper} onClick={() => void client.updateConversation(conversation.id, { wallpaper })}><span className="wallpaper-preview" data-wallpaper={wallpaper}><span className="preview-bubble">{t('settings.wallpaperPreview')}</span></span><span>{t(`wallpaper.${wallpaper}`)}</span></button>)}</div><button className="btn" onClick={() => void client.updateConversation(conversation.id, { wallpaper: undefined })}>{t('info.resetAppearance')}</button></>}</div>
   </aside>;
+}
+
+/** Disappearing-message timer for every kind of chat; group/channel changes need an admin role. */
+function DisappearingSetting({ client, conversation }: { client: EnclaveClient; conversation: Conversation }) {
+  const { t } = useI18n();
+  const [canChange, setCanChange] = useState(!groupIdOf(conversation.id));
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const groupId = groupIdOf(conversation.id);
+    if (!groupId) { setCanChange(!conversation.left); return; }
+    void client.groupRecord(conversation.id).then((record) => {
+      const role = record?.members.find((m) => m.accountId === client.accountId)?.role;
+      setCanChange(!conversation.left && (role === 'owner' || role === 'admin'));
+    });
+  }, [client, conversation.id, conversation.left]);
+  return (
+    <div className="settings-row-switch disappearing" data-testid="disappearing-setting">
+      <strong><Icon name="clock" size={16} /> {t('timer.title')}</strong>
+      <p className="muted-text">{t('timer.help')}</p>
+      <Segmented label={t('timer.title')} value={String(conversation.expireSeconds ?? 0)} testId="disappearing-timer"
+        onChange={(v) => { if (!canChange) return; setFailed(false); void client.setDisappearing(conversation.id, Number(v)).catch(() => setFailed(true)); }}
+        options={DISAPPEARING_TIMERS.map((s) => ({ value: String(s), label: timerLabel(s, t) }))} />
+      {!canChange && <p className="muted-text">{t('timer.adminsOnly')}</p>}
+      {failed && <p role="alert" className="failed">{t('timer.adminsOnly')}</p>}
+    </div>
+  );
 }

@@ -2254,3 +2254,8 @@ dialog.all-media-dialog { width: min(1200px, 96vw); max-width: 96vw; height: 90d
 
 /* Links styled as buttons (Account Console, passkey set-up). */
 a.btn { display: inline-flex; align-items: center; width: fit-content; text-decoration: none; margin-top: var(--space-2); }
+
+/* System notices in the thread (disappearing timer changes). */
+.system-notice { align-self: center; display: inline-flex; align-items: center; gap: 6px; margin: var(--space-2) auto; padding: 4px 12px;
+  border-radius: 8px; background: var(--c-panel); color: var(--c-text-secondary); font-size: 0.8125rem; text-align: center; max-width: 80%; }
+.settings-row-switch.disappearing strong { display: inline-flex; align-items: center; gap: 6px; }

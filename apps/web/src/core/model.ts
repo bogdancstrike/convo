@@ -44,6 +44,12 @@ export interface ChatMessage {
   /** emoji → reacting account IDs. */
   reactions: Record<string, string[]>;
   editedAt?: number;
+  /** Disappearing-message timer (seconds) the sender applied. */
+  expireTimer?: number;
+  /** Deadline after which this device deletes the message. */
+  expiresAt?: number;
+  /** System notice instead of content (e.g. disappearing timer changed). */
+  notice?: { kind: 'timer'; seconds: number };
   /** Content revision: 0/undefined for the original text, incremented by each accepted edit. */
   revision?: number;
   /** Server time of the envelope that delivered the original (anchors the edit window). */
@@ -72,6 +78,10 @@ export interface Conversation {
   lastActivity: number;
   preview?: string;
   unread: number;
+  /** Disappearing-message timer in seconds (0/absent = off). */
+  expireSeconds?: number;
+  /** Sender timestamp of the timer change in effect (last writer wins). */
+  expireUpdatedAt?: number;
   /** Incoming messages edited while not on screen; their new revision still needs a read receipt. */
   revisedUnread?: { authorId: string; id: string }[];
   pinned: boolean;

@@ -1,4 +1,5 @@
 import { useCalls } from '../calls/CallProvider';
+import { TimerNotice } from './TimerNotice';
 import { conversationMenu } from './conversationMenu';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
@@ -221,6 +222,7 @@ export function Thread({
           const prev = shown[i - 1];
           const newDay = !prev || new Date(prev.sort).toDateString() !== new Date(m.sort).toDateString();
           const first = newDay || !prev || prev.authorId !== m.authorId || m.sort - prev.sort > 10 * 60_000;
+          if (m.notice) return <TimerNotice key={`${m.authorId}/${m.id}`} client={client} message={m} showDay={newDay} />;
           return (
             <MessageBubble
               key={`${m.authorId}/${m.id}`}

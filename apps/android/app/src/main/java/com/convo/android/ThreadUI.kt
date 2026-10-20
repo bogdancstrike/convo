@@ -96,6 +96,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     }
 }
 @Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit) {
+    message.optJSONObject("notice")?.let { TimerNotice(app, message, it.optLong("seconds")); return }
     val outgoing = message.optString("direction") == "out"
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
@@ -114,6 +115,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 }
                 message.optJSONObject("reactions")?.let { reactions -> if (reactions.length() > 0) Text(reactions.keys().asSequence().joinToString("  ") { "${it} ${reactions.optJSONArray(it)?.length() ?: 0}" }) }
                 Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                    if (message.optLong("expireTimer") > 0 && !message.optBoolean("deleted")) Icon(Icons.Outlined.Timer, "Disappearing message", Modifier.size(14.dp).padding(end = 3.dp))
                     if (message.has("editedAt") && !message.optBoolean("deleted")) Text("edited ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), style = MaterialTheme.typography.labelSmall)
                     if (message.optBoolean("starred")) Icon(Icons.Outlined.StarOutline, "Starred", Modifier.size(14.dp).padding(start = 3.dp))
@@ -212,5 +214,23 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
             }
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { TextButton({ position-- }, enabled = position > 0) { Text("Previous") }; Text("${position + 1} / ${items.size}"); TextButton({ position++ }, enabled = position < items.lastIndex) { Text("Next") } }
         } }
+    }
+}
+
+/** Disappearing timer labels shared by notices and the info picker. */
+val DisappearingTimers = listOf(0L to "Off", 86_400L to "24 hours", 604_800L to "7 days", 7_776_000L to "90 days")
+fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds }?.second ?: "Off")
+
+@Composable fun TimerNotice(app: MainActivity, message: JSONObject, seconds: Long) {
+    val own = message.optString("authorId") == app.snapshot.optString("accountId")
+    val who = if (own) tr("You") else app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == message.optString("authorId") }?.optString("title") ?: message.optString("authorId").take(8)
+    val text = if (seconds > 0) tr("{who} set disappearing messages to {duration}").replace("{who}", who).replace("{duration}", timerLabel(seconds))
+        else tr("{who} turned off disappearing messages").replace("{who}", who)
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center) {
+        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surface) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Timer, null, Modifier.size(14.dp)); RawText(" $text", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }

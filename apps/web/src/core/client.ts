@@ -30,6 +30,7 @@ import { approveRequest, describeRequest, type IncomingLinkRequest } from './lin
 import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
 import { sanitizeAutoDownload } from './mediaPolicy';
+import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './disappearing';
 import { newMediaKey, nextStatus, RING_TIMEOUT_MS, type CallEvent, type CallInvite, type CallJoin, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
 import { RecordNs, type Repositories } from './repositories';
@@ -144,6 +145,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     for (const c of await this.repos.conversations()) this.conversationCache.set(c.id, c);
     this.emitConversations();
     await this.repos.store.pruneProcessed();
+    // Disappearing messages: sweep now and then periodically while the client runs.
+    void this.sweepExpired().catch(() => undefined);
+    this.expiryTimer = setInterval(() => void this.sweepExpired().catch(() => undefined), 30_000);
     this.socket.on('state', (state) => {
       this.emit('connection', state);
       if (state === 'online') void this.outbox.flush();
@@ -190,6 +194,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Disconnects (tab closing / leadership lost). */
   stop(): void {
+    clearInterval(this.expiryTimer);
     this.historySync?.stop();
     this.socket.stop();
     if (this.retryTimer) clearInterval(this.retryTimer);
@@ -260,10 +265,13 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   async markRead(conversationId: string): Promise<void> {
     const conversation = this.conversationCache.get(conversationId);
     if (!conversation || (conversation.unread === 0 && !conversation.revisedUnread?.length)) return;
-    const unread = conversation.unread ? await this.repos.messages(conversationId, conversation.unread) : [];
+    // System notices (e.g. timer changes) are not counted as unread; skip them when collecting.
+    const unread = conversation.unread ? (await this.repos.messages(conversationId, conversation.unread + 50)).filter((m) => !m.notice).slice(-conversation.unread) : [];
     // Messages edited after they were read need a read receipt for their new revision too.
     const revisedMessages = await Promise.all((conversation.revisedUnread ?? []).map((r) => this.repos.message(conversationId, r.authorId, r.id)));
     await this.saveConversations([{ ...conversation, unread: 0, revisedUnread: undefined }]);
+    const started = unread.filter((m) => m.direction === 'in' && m.expireTimer && !m.expiresAt).map((m) => startExpiry(m, Date.now()));
+    if (started.length) await this.repos.store.commit(started.flatMap((m) => [this.repos.putMessage(m), expiryOp(m)!]));
     if (this.currentSettings.readReceipts && conversation.kind !== 'note') {
       const seen = new Map<string, ChatMessage>();
       for (const m of [...unread, ...revisedMessages]) if (m && m.direction === 'in' && !m.deleted) seen.set(`${m.authorId}/${m.id}`, m);
@@ -413,6 +421,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       attachments: content.attachments,
       forwarded: content.forwarded || undefined,
       profile: this.profileCache.get(this.accountId),
+      expireTimer: this.conversationCache.get(conversationId)?.expireSeconds || undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -428,9 +437,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       sort: data.timestamp,
       status: 'queued',
       reactions: {},
+      expireTimer: data.expireTimer,
+      expiresAt: data.expireTimer ? data.timestamp + data.expireTimer * 1000 : undefined,
     };
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
+    const expiry = expiryOp(message); if (expiry) ops.push(expiry);
     if (conversation) {
       const updated = { ...conversation, lastActivity: data.timestamp, preview: previewOf(data), previewFromMe: true, previewAuthor: this.accountId, draft: undefined, archived: false };
       ops.push(this.repos.putConversation(updated));
@@ -454,7 +466,75 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emit('messages', target.conversationId);
   }
 
+  // --- disappearing messages ---------------------------------------------------------------
+
+  /**
+   * Changes a chat's disappearing-message timer for everyone in it. Groups and channels: owners
+   * and admins only (receivers enforce the same rule).
+   */
+  async setDisappearing(conversationId: string, seconds: number): Promise<void> {
+    if (!isTimer(seconds)) throw new Error('unsupported timer');
+    const conversation = this.conversationCache.get(conversationId);
+    if (!conversation || conversation.left) throw new Error('conversation unavailable');
+    const groupId = groupIdOf(conversationId);
+    if (groupId && !(await this.canChangeTimer(groupId, this.accountId))) throw new Error('only admins can change the timer');
+    const now = Date.now();
+    const data: DataMessage = { messageId: newMessageId(), timestamp: now, timerUpdate: { seconds } };
+    const notice: ChatMessage = { conversationId, id: data.messageId, authorId: this.accountId, direction: 'out', sentAt: now, sort: now, reactions: {}, notice: { kind: 'timer', seconds }, status: 'queued' };
+    const updated = { ...conversation, expireSeconds: seconds || undefined, expireUpdatedAt: now };
+    this.conversationCache.set(conversationId, updated);
+    await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, { conversationId, id: data.messageId },
+      [this.repos.putMessage(notice), this.repos.putConversation(updated)]);
+    this.emit('messages', conversationId);
+    this.emitConversations();
+  }
+
+  private async canChangeTimer(groupId: string, accountId: string): Promise<boolean> {
+    const role = (await this.groups.record(groupId))?.members.find((m) => m.accountId === accountId)?.role;
+    return role === 'owner' || role === 'admin';
+  }
+
+  private async applyTimerUpdate(conversation: Conversation, authorId: string, direction: 'in' | 'out', data: DataMessage, envelope: EnvelopeDto, ops: StoreOp[]): Promise<'mutation' | 'ignored'> {
+    const seconds = data.timerUpdate!.seconds;
+    if (!isTimer(seconds)) return 'ignored';
+    const groupId = groupIdOf(conversation.id);
+    if (groupId && !(await this.canChangeTimer(groupId, authorId))) return 'ignored';
+    if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored';
+    ops.push(this.repos.putMessage({ conversationId: conversation.id, id: data.messageId, authorId, direction, sentAt: data.timestamp,
+      sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp, reactions: {}, notice: { kind: 'timer', seconds }, status: direction === 'out' ? 'sent' : undefined }));
+    // Last writer wins by sender time; ties broken by author ID for convergence.
+    const newer = data.timestamp > (conversation.expireUpdatedAt ?? 0);
+    if (newer) this.stage(ops, { ...conversation, expireSeconds: seconds || undefined, expireUpdatedAt: data.timestamp });
+    return 'mutation';
+  }
+
+  /** Deletes messages whose deadline passed (suppression markers keep them from returning). */
+  async sweepExpired(now = Date.now()): Promise<void> {
+    await this.mutex.run(async () => {
+      const due = (await this.repos.store.list<ExpiryEntry>(EXPIRY_NS)).filter((e) => e.expiresAt <= now);
+      if (!due.length) return;
+      const ops: StoreOp[] = [];
+      const touched = new Set<string>();
+      for (const entry of due) {
+        ops.push(...this.repos.localDeletion(entry as unknown as ChatMessage), { type: 'delete', ns: EXPIRY_NS, id: JSON.stringify([entry.conversationId, entry.authorId, entry.id]) });
+        touched.add(entry.conversationId);
+      }
+      await this.repos.store.commit(ops);
+      // Never leave expired text in the chat list preview.
+      const previews: Conversation[] = [];
+      for (const id of touched) {
+        const c = this.conversationCache.get(id);
+        const [latest] = await this.repos.messages(id, 1);
+        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments }) : '' });
+      }
+      if (previews.length) await this.saveConversations(previews);
+      for (const id of touched) this.emit('messages', id);
+    });
+  }
+
   // --- calls ------------------------------------------------------------------------------
+
+  private expiryTimer: ReturnType<typeof setInterval> | undefined;
 
   /** Pending incoming rings (with their media key) until answered, declined or timed out. */
   private readonly invites = new Map<string, CallInvite>();
@@ -1090,6 +1170,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ops.push(this.repos.putMessage(tombstone(target)));
       return 'mutation';
     }
+    if (data.timerUpdate) return this.applyTimerUpdate(conversation, authorId, direction, data, envelope, ops);
     if (data.body === undefined && !data.attachments?.length) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
     ops.push({ type: 'delete', ns: RecordNs.localHiddenConversation, id: conversationId });
@@ -1109,9 +1190,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp,
       status: direction === 'out' ? 'sent' : undefined,
       reactions: {},
+      expireTimer: data.expireTimer || undefined,
     };
-    ops.push(this.repos.putMessage(message));
     const visible = this.activeConversation === conversation.id && document.visibilityState === 'visible';
+    // Own messages count down from sending; received ones from being read on this device.
+    const timed = direction === 'out' ? (message.expireTimer ? { ...message, expiresAt: data.timestamp + message.expireTimer * 1000 } : message)
+      : visible ? startExpiry(message, Date.now()) : message;
+    ops.push(this.repos.putMessage(timed));
+    const expiry = expiryOp(timed); if (expiry) ops.push(expiry);
     this.stage(ops, {
       ...conversation,
       lastActivity: Math.max(conversation.lastActivity, message.sort),

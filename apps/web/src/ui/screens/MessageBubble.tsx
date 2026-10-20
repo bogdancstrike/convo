@@ -2,6 +2,7 @@ import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { EnclaveClient } from '../../core/client';
+import { timerLabel } from './TimerNotice';
 import type { ChatMessage, MessageStatus } from '../../core/model';
 import { AttachmentView } from '../components/AttachmentView';
 import { Avatar } from '../components/Avatar';
@@ -126,6 +127,7 @@ export function MessageBubble({
           )}
           <span className="meta">
             {m.starred && <Icon name="pin" size={12} label={t('msg.starred')} />}
+            {m.expireTimer && !m.deleted && <span title={t('timer.badge', { duration: timerLabel(m.expireTimer, t) })} aria-label={t('timer.badge', { duration: timerLabel(m.expireTimer, t) })} data-testid="message-timer"><Icon name="clock" size={12} /></span>}
             {m.editedAt && !m.deleted && <span>{t('thread.edited')}</span>}
             <span>{time(m.sentAt)}</span>
             {own && m.status && <StatusTicks status={m.status} />}

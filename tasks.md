@@ -65,6 +65,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Web app lock: Settings → Privacy "Lock Convo with passkey" (needs a passkey), locks on open
   and after Immediately/1/5/15 min in the background; nothing renders behind the lock.
   `chat-lock.spec.ts` covers failed and successful user verification.
+- Disappearing messages (specs §17): per-chat Off/24 h/7 d/90 d timer as an authenticated E2EE
+  event (groups/channels: owners/admins, enforced by receivers; newest change wins), timer
+  notices, bubble badges, sent messages expire from sending and received ones from first read,
+  30 s sweeper with suppression markers, expired archive entries never restored. Web and
+  Android; `disappearing.spec.ts` (Chromium/Firefox, simulated 24 h) and emulator checks.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
