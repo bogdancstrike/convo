@@ -56,6 +56,10 @@ class CredentialStatusServiceTest {
         server.expect(requestTo(TOKEN_URL)).andRespond(withSuccess("{\"access_token\":\"t\",\"expires_in\":300}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(CREDENTIALS_URL)).andRespond(withSuccess("[{\"type\":\"password\"}]", MediaType.APPLICATION_JSON));
         assertThat(service.status(ACCOUNT)).isEqualTo(new CredentialStatusService.CredentialStatus("available", false, false));
+        // Not cached: a passkey registered a moment later is seen on the next request.
+        server.verify(); server.reset();
+        server.expect(requestTo(CREDENTIALS_URL)).andRespond(withSuccess("[{\"type\":\"webauthn-passwordless\"}]", MediaType.APPLICATION_JSON));
+        assertThat(service.status(ACCOUNT).passkey()).isTrue();
     }
 
     @Test void outagesAndMissingConfigurationAreUnavailableNotFalse() {

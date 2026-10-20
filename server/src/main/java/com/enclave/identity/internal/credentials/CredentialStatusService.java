@@ -83,7 +83,8 @@ public class CredentialStatusService {
         Cached cached = cache.get(accountId);
         if (cached != null && cached.until().isAfter(now)) return cached.status();
         CredentialStatus status = lookup(accountId);
-        if (status.state().equals("available")) {
+        // Only a confirmed passkey is cached: "none yet" changes right after set-up from Settings.
+        if (status.state().equals("available") && status.passkey()) {
             if (cache.size() >= MAX_CACHED) cache.clear();
             cache.put(accountId, new Cached(status, now.plus(properties.cacheTtl())));
         }

@@ -43,6 +43,24 @@ let current: DeploymentInfo | null = null;
 export function deploymentInfo(): DeploymentInfo | null { return current; }
 
 /**
+ * Keycloak application-initiated action that registers a passwordless passkey, then returns to a
+ * static "passkey ready" page. A throwaway PKCE challenge satisfies the client policy; the returned
+ * code is never exchanged.
+ */
+export async function passkeySetupUrl(info: DeploymentInfo | null = current, origin = window.location.origin): Promise<string | null> {
+  if (!info) return null;
+  const verifier = crypto.getRandomValues(new Uint8Array(32));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', verifier));
+  const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const params = new URLSearchParams({
+    client_id: info.oidc.clientId, redirect_uri: `${origin}/auth/convo/passkey-done`, response_type: 'code', scope: 'openid',
+    kc_action: 'webauthn-register-passwordless', state: b64(crypto.getRandomValues(new Uint8Array(16))),
+    code_challenge: b64(digest), code_challenge_method: 'S256',
+  });
+  return `${info.oidc.issuer.replace(/\/$/, '')}/protocol/openid-connect/auth?${params}`;
+}
+
+/**
  * Keycloak Account Console page where users add or remove passkeys and authenticator apps.
  * Convo never handles those credentials itself.
  */

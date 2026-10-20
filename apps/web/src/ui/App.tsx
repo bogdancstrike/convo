@@ -1,3 +1,4 @@
+import { ChatLockProvider } from './chatLocks';
 import { CallProvider } from './calls/CallProvider';
 import { RecoveryScreen } from './screens/RecoveryScreen';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -243,7 +244,7 @@ export function App() {
           case 'storageLost':
             return <StorageLostScreen onReset={() => void resetLocalData()} />;
           case 'ready':
-            return <CallProvider client={phase.client}><MainLayout client={phase.client} onSignedOut={restart} /></CallProvider>;
+            return <CallProvider client={phase.client}><ChatLockProvider client={phase.client}><MainLayout client={phase.client} onSignedOut={restart} /></ChatLockProvider></CallProvider>;
         }
       })()}
     </I18nProvider>

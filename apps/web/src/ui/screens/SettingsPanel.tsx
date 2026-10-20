@@ -5,7 +5,7 @@ import type { EnclaveClient } from '../../core/client';
 import type { IncomingLinkRequest } from '../../core/linking';
 import { labelOf, type Settings as SettingsModel } from '../../core/model';
 import { MEDIA_KINDS, type MediaKind } from '../../core/mediaPolicy';
-import { accountSecurityUrl } from '../../config/deployment';
+import { accountSecurityUrl, passkeySetupUrl } from '../../config/deployment';
 import type { CredentialStatusDto } from '../../api/types';
 import { Avatar } from '../components/Avatar';
 import { useProfile } from '../components/ProfileContext';
@@ -247,6 +247,9 @@ function PasskeyCard({ client }: { client: EnclaveClient }) {
     return () => { cancelled = true; document.removeEventListener('visibilitychange', onFocus); };
   }, [client]);
   const url = accountSecurityUrl();
+  // Prepared ahead so the link opens synchronously on click (no popup blocking).
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  useEffect(() => { void passkeySetupUrl().then(setSetupUrl); }, [status]);
   const label = !status ? t('passkeys.checking') : status.state === 'unavailable' ? t('passkeys.unavailable') : status.passkey ? t('passkeys.enrolled') : t('passkeys.none');
   return (
     <Card title={t('passkeys.title')}>
@@ -254,6 +257,12 @@ function PasskeyCard({ client }: { client: EnclaveClient }) {
       <p data-testid="passkey-status" data-state={status ? (status.state === 'unavailable' ? 'unavailable' : String(status.passkey)) : 'loading'}>
         <Icon name={status?.passkey ? 'check' : 'shield'} size={18} /> {label}
       </p>
+      {status?.state === 'available' && !status.passkey && setupUrl && (
+        <>
+          <p className="muted-text">{t('passkeys.setupHelp')}</p>
+          <a className="btn btn-primary" href={setupUrl} target="_blank" rel="noopener noreferrer" data-testid="setup-passkey">{t('passkeys.setup')}</a>
+        </>
+      )}
       {url && <a className="btn" href={url} target="_blank" rel="noopener noreferrer" data-testid="manage-passkeys">{t('passkeys.manage')}</a>}
     </Card>
   );

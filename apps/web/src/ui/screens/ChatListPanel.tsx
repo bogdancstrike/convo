@@ -8,6 +8,7 @@ import { isMuted, type Conversation } from '../../core/model';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { useAccountLabel, useMessageSearch } from '../hooks';
+import { useChatLocks } from '../chatLocks';
 import { useI18n } from '../i18n/i18n';
 
 type Filter = 'all' | 'unread' | 'groups';
@@ -42,21 +43,26 @@ export function ChatListPanel({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [showArchived, setShowArchived] = useState(false);
+  const locks = useChatLocks();
+  const [showLocked, setShowLocked] = useState(false);
+  const lockedCount = conversations.filter((c) => locks.locked(c.id)).length;
 
   const matches = useMessageSearch(client, query);
-  const matched = useMemo(() => new Map([...matches].reverse().map((m) => [m.conversationId, m])), [matches]);
+  // Message search never reveals locked chats.
+  const matched = useMemo(() => new Map([...matches].reverse().filter((m) => !locks.locked(m.conversationId)).map((m) => [m.conversationId, m])), [matches, locks]);
   const archivedCount = conversations.filter((c) => c.archived).length;
   const visible = useMemo(() => {
     const q = fold(query);
     return conversations.filter(
       (c) =>
-        (showArchived ? c.archived : !c.archived) &&
+        locks.locked(c.id) === showLocked &&
+        (showLocked || (showArchived ? c.archived : !c.archived)) &&
         (!channels || c.adminOnly) &&
         (!q || fold(c.kind === 'note' ? t('chats.noteToSelf') : c.title).includes(q) || matched.has(c.id)) &&
         (filter !== 'unread' || c.unread > 0) &&
         (filter !== 'groups' || c.kind === 'group'),
     );
-  }, [conversations, query, filter, showArchived, t, matched, channels]);
+  }, [conversations, query, filter, showArchived, t, matched, channels, locks, showLocked]);
 
   return (
     <>
@@ -86,14 +92,21 @@ export function ChatListPanel({
       {!showArchived && (
         <div className="chips" role="group" aria-label={t('chats.search')}>
           {(['all', 'unread', 'groups'] as const).map((f) => (
-            <button key={f} className="chip" aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`filter-${f}`}>
+            <button key={f} className="chip" aria-pressed={filter === f && !showLocked} onClick={() => { setFilter(f); setShowLocked(false); }} data-testid={`filter-${f}`}>
               {t(`chats.filter.${f}`)}
             </button>
           ))}
+          {lockedCount > 0 && (
+            <button className="chip" aria-pressed={showLocked} data-testid="filter-locked"
+              onClick={() => { if (showLocked) setShowLocked(false); else void locks.verify().then((ok) => ok && setShowLocked(true)); }}>
+              <Icon name="lock" size={14} /> {t('lock.list')}
+            </button>
+          )}
         </div>
       )}
+      {locks.error && <p role="alert" className="failed panel-alert">{locks.error}</p>}
       <div className="panel-body">
-        {!showArchived && archivedCount > 0 && (
+        {!showArchived && !showLocked && archivedCount > 0 && (
           <button className="row action" onClick={() => setShowArchived(true)}>
             <span style={{ width: 48, display: 'grid', placeItems: 'center', color: 'var(--c-accent-text)' }}>
               <Icon name="archive" />
@@ -123,7 +136,7 @@ export function ChatListPanel({
           <ul className="list">
             {visible.map((c) => (
               <li key={c.id}>
-                <ChatRow client={client} conversation={c} active={c.id === activeId} onSelect={() => matched.has(c.id) ? onSearch(c.id, query) : onSelect(c.id)}
+                <ChatRow client={client} conversation={c} active={c.id === activeId} onSelect={() => { if (showLocked) { locks.grant(c.id); setShowLocked(false); } if (matched.has(c.id)) onSearch(c.id, query); else onSelect(c.id); }}
                   excerpt={query ? matched.get(c.id)?.body : undefined}
                   onInfo={() => onInfo(c.id)} onSearch={() => onSearch(c.id, '')} onClose={() => onClose(c.id)} />
               </li>
@@ -139,6 +152,7 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
   client: EnclaveClient; conversation: Conversation; active: boolean; onSelect: () => void;
   excerpt?: string; onInfo: () => void; onSearch: () => void; onClose: () => void;
 }) {
+  const locks = useChatLocks();
   const { t, time, date } = useI18n();
   const author = useAccountLabel(client, c.kind === 'group' && !c.previewFromMe ? c.previewAuthor : undefined);
   const title = c.kind === 'note' ? t('chats.noteToSelf') : c.title;
@@ -176,10 +190,11 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
       </span>
       <span />
     </button>
-    <Menu label={t('header.more')} items={conversationMenu(client, c, t, onInfo, onSearch, onClose)}
+    <Menu label={t('header.more')} items={conversationMenu(client, c, t, onInfo, onSearch, onClose,
+      { locked: locks.locked(c.id), available: locks.passkey === true, toggle: () => void locks.toggle(c.id) })}
       trigger={({ open, toggle }) => <button className="icon-btn chat-row-menu" onClick={toggle}
         aria-label={`${t('header.more')}: ${title}`} aria-expanded={open} aria-haspopup="menu" data-testid={`chat-menu-${c.title}`}>
-        <Icon name="chevronDown" size={18} />
+        <Icon name="more" size={18} />
       </button>} />
     </div>
   );

@@ -10,6 +10,8 @@ import { Menu } from '../components/Popover';
 import { useMessages, useSettings } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { conversationMenu } from './conversationMenu';
+import { useChatLocks } from '../chatLocks';
+import { Switch } from '../components/Controls';
 
 export function SharedPreview({ client, conversation, onOpen }: { client: EnclaveClient; conversation: Conversation; onOpen: () => void }) {
   const { t } = useI18n(); const messages = useMessages(client, conversation.id, Number.MAX_SAFE_INTEGER).filter((m) => !m.deleted && !m.unsupported && !m.undecryptable);
@@ -23,6 +25,7 @@ export function SharedPreview({ client, conversation, onOpen }: { client: Enclav
 export function ConversationActions({ client, conversation, onClose, onPage }: { client: EnclaveClient; conversation: Conversation; onClose: () => void; onPage: (page: string) => void }) {
   const { t } = useI18n(); const [error, setError] = useState(false);
   const actions = conversationMenu(client, conversation, t, () => {}, () => {}, onClose).filter((item) => !['info', 'search', 'close'].includes(item.icon ?? ''));
+  const locks = useChatLocks(); const locked = locks.locked(conversation.id);
   const exportChat = async () => {
     if (!window.confirm(t('info.exportConfirm'))) return;
     setError(false);
@@ -38,6 +41,9 @@ export function ConversationActions({ client, conversation, onClose, onPage }: {
     <button className="settings-row" onClick={() => onPage('appearance')} data-testid="open-chat-appearance"><Icon name="palette" /><span className="settings-row-text">{t('info.appearance')}</span><Icon name="next" size={18} /></button>
     {actions.map((item) => item.children ? <Menu key={item.label} label={item.label} items={item.children} trigger={({ open, toggle }) => <button className="settings-row" onClick={toggle} aria-expanded={open}><Icon name={item.icon!} /><span className="settings-row-text">{item.label}</span><Icon name="chevronDown" size={18} /></button>} /> :
       <button key={item.label} className={`settings-row${item.danger ? ' danger' : ''}`} onClick={item.onSelect}>{item.icon && <Icon name={item.icon} />}<span className="settings-row-text">{item.label}</span></button>)}
+    {(locked || locks.passkey === true) && <div className="settings-row-switch"><Switch checked={locked} onChange={() => void locks.toggle(conversation.id)}
+      label={t('lock.title')} description={t('lock.help')} testId="info-lock" /></div>}
+    {locks.error && <p role="alert" className="failed">{locks.error}</p>}
     <button className="settings-row" onClick={() => void exportChat()} data-testid="export-chat"><Icon name="file" /><span className="settings-row-text">{t('info.export')}</span></button>
     {error && <p role="alert">{t('info.exportFailed')}</p>}
   </section></>;

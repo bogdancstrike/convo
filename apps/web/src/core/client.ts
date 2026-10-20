@@ -70,6 +70,8 @@ export interface ClientEvents extends Record<string, unknown> {
   call: CallEvent;
   /** Local call history changed. */
   callLog: undefined;
+  /** Confirmed passkey registration changed. */
+  credentials: boolean;
 }
 
 const TYPING_TTL_SECONDS = 10;
@@ -722,6 +724,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       patch = { ...patch, autoDownload };
     }
     if ('saveToGallery' in patch && typeof patch.saveToGallery !== 'boolean') throw new Error('invalid gallery setting');
+    if ('lockedChats' in patch && (!Array.isArray(patch.lockedChats) || patch.lockedChats.length > 1000 || !patch.lockedChats.every((id) => typeof id === 'string' && id.length <= 200))) throw new Error('invalid locked chats');
     this.currentSettings = { ...this.currentSettings, ...patch };
     await this.repos.store.commit([this.repos.putSettings(this.currentSettings)]);
     this.emit('settings', this.currentSettings);
@@ -730,7 +733,24 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   lastSeenPrivacy() { return this.api.lastSeenPrivacy(); }
   /** Passkey/OTP registration at the IdP; network or IdP failures surface as `unavailable`. */
   async credentialStatus(): Promise<CredentialStatusDto> {
-    try { return await this.api.accountCredentials(); } catch { return { state: 'unavailable', passkey: false, otp: false }; }
+    let status: CredentialStatusDto;
+    try { status = await this.api.accountCredentials(); } catch { status = { state: 'unavailable', passkey: false, otp: false }; }
+    // An outage keeps the last confirmed answer, so lock options never flicker away.
+    if (status.state === 'available' && status.passkey !== this.passkeyEnrolled) { this.passkeyEnrolled = status.passkey; this.emit('credentials', status.passkey); }
+    return status;
+  }
+
+  /** Last confirmed passkey registration (`null` until the IdP answered once). */
+  passkeyEnrolled: boolean | null = null;
+
+  /** True when this chat requires passkey verification to open on this device. */
+  isLocked(conversationId: string): boolean { return this.currentSettings.lockedChats.includes(conversationId); }
+
+  /** Locks require a confirmed passkey; unlocking is always possible. */
+  async setChatLocked(conversationId: string, locked: boolean): Promise<void> {
+    if (locked && this.passkeyEnrolled !== true) throw new Error('passkey required');
+    const others = this.currentSettings.lockedChats.filter((id) => id !== conversationId);
+    await this.updateSettings({ lockedChats: locked ? [...others, conversationId] : others });
   }
   setLastSeenPrivacy(enabled: boolean) { return this.api.setLastSeenPrivacy(enabled); }
   lastSeenHeartbeat() { return this.api.lastSeenHeartbeat(); }

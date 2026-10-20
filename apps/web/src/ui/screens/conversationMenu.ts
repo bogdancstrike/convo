@@ -7,7 +7,8 @@ const HOUR = 3_600_000;
 
 /** Shared settings/actions for the list arrow and conversation header. */
 export function conversationMenu(client: EnclaveClient, conversation: Conversation, t: I18n['t'],
-  onInfo: () => void, onSearch: () => void, onClose: () => void): MenuItem[] {
+  onInfo: () => void, onSearch: () => void, onClose: () => void,
+  lock?: { locked: boolean; available: boolean; toggle: () => void }): MenuItem[] {
   const group = conversation.kind === 'group';
   const confirmThen = (question: string, run: () => Promise<void>) => () => {
     if (window.confirm(question)) void run();
@@ -38,6 +39,8 @@ export function conversationMenu(client: EnclaveClient, conversation: Conversati
       icon: 'archive',
       onSelect: () => void client.updateConversation(conversation.id, { archived: !conversation.archived }),
     },
+    // "Require passkey to open": offered once a passkey exists; turning it off is always possible.
+    ...(lock && (lock.locked || lock.available) ? [{ label: lock.locked ? t('lock.disable') : t('lock.enable'), icon: 'lock' as const, onSelect: lock.toggle, testId: 'menu-lock' }] : []),
     { label: t('header.close'), icon: 'close', onSelect: onClose },
     { label: t('header.clear'), icon: 'trash', onSelect: confirmThen(t('header.confirmClear'), () => client.clearConversation(conversation.id)) },
     {

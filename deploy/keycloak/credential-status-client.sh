@@ -28,3 +28,9 @@ fi
 # Least privilege: view-users only (no manage-users / realm-admin).
 k add-roles -r "$REALM" --uusername "service-account-$CLIENT_ID" --cclientid realm-management --rolename view-users
 echo "Granted realm-management/view-users"
+# Passkey set-up from Convo Settings (Keycloak application-initiated action) returns to this page.
+web=$(k get clients -r "$REALM" -q clientId=enclave-web --fields id --format csv --noquotes | head -n1)
+if [[ -n "$web" ]]; then
+  k update "clients/$web" -r "$REALM" -s 'redirectUris=["/convo/callback","/convo/passkey-done"]'
+  echo "enclave-web redirect URIs include /convo/passkey-done"
+fi

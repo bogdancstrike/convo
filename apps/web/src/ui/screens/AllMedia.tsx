@@ -1,3 +1,4 @@
+import { useChatLocks } from '../chatLocks';
 import { zipSync } from 'fflate';
 import { useEffect, useMemo, useState } from 'react';
 import type { EnclaveClient } from '../../core/client';
@@ -14,7 +15,9 @@ import { useI18n } from '../i18n/i18n';
 import { ForwardDialog } from './ForwardDialog';
 
 export function AllMedia({ client, onClose }: { client: EnclaveClient; onClose: () => void }) {
-  const { t, locale } = useI18n(); const conversations = useConversations(client);
+  const { t, locale } = useI18n(); const locks = useChatLocks();
+  // Locked chats never appear in the global gallery.
+  const all = useConversations(client); const conversations = useMemo(() => all.filter((c) => !locks.locked(c.id)), [all, locks]);
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<SharedFilter>({ tab: 'media', query: '', sender: 'all', sort: 'newest' });
   const [selecting, setSelecting] = useState(false); const [selected, setSelected] = useState(new Set<string>());

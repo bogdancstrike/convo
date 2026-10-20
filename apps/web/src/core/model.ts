@@ -119,6 +119,8 @@ export interface Settings {
   autoDownload: AutoDownloadSettings;
   /** Android only: export received photos/videos to the shared gallery (plaintext copies). */
   saveToGallery: boolean;
+  /** Chats that require passkey user verification to open on this device (ids; device-local). */
+  lockedChats: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -132,6 +134,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wallpaper: 'dots',
   autoDownload: DEFAULT_AUTO_DOWNLOAD,
   saveToGallery: false,
+  lockedChats: [],
 };
 
 /** Persistent identity of this enrolled device. */

@@ -1,3 +1,4 @@
+import { LockedChatGate, useChatLocks } from '../chatLocks';
 import { CallsPanel } from '../calls/CallsPanel';
 import { AllMedia } from './AllMedia';
 import { MediaViewerProvider } from '../components/MediaViewer';
@@ -6,7 +7,7 @@ import { ConversationSubpage } from './ConversationDetails';
 import { LinkPreferences } from '../components/ExternalLink';
 import { ProfilesProvider } from '../components/ProfileContext';
 import { SharedContent, type SharedTab } from './SharedContent';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EnclaveClient } from '../../core/client';
 import { labelOf } from '../../core/model';
 import { Avatar } from '../components/Avatar';
@@ -38,6 +39,15 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
   const [pendingPicker, setPendingPicker] = useState<'document' | null>(null);
   const active = nav.chat ? (conversations.find((c) => c.id === nav.chat) ?? null) : null;
   const unread = conversations.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+  const locks = useChatLocks();
+  // Leaving an unlocked chat locks it again; its info/media pages keep the grant (same chat id).
+  const previousChat = useRef(nav.chat);
+  useEffect(() => {
+    const left = previousChat.current;
+    previousChat.current = nav.chat;
+    if (left && left !== nav.chat && left === locks.unlockedChat) locks.relock();
+  }, [nav.chat, locks]);
+  const lockedActive = active ? locks.hidden(active.id) : false;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -150,7 +160,9 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
       <section className="sidebar" aria-label={t('nav.chats')}>
         {sidebar}
       </section>
-      {active ? (
+      {active && lockedActive ? (
+        <LockedChatGate conversationId={active.id} onBack={() => navigate({ chat: null, info: false })} />
+      ) : active ? (
         <Thread
           key={active.id}
           client={client}
@@ -179,7 +191,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           }}
         />
       )}
-      {active && nav.info && (() => {
+      {active && !lockedActive && nav.info && (() => {
         const parts = nav.page?.split(':') ?? [];
         const contactId = parts[0] === 'contact' ? parts[1] : undefined;
         const page = contactId ? parts[2] : nav.page;
