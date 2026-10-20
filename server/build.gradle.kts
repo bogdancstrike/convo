@@ -58,3 +58,11 @@ tasks.withType<JavaCompile> {
 tasks.test {
     useJUnitPlatform()
 }
+
+tasks.bootJar {
+    archiveFileName = "enclave-server.jar"
+}
+
+tasks.jar {
+    enabled = false
+}

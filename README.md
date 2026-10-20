@@ -6,7 +6,7 @@ Convo is a planned on-prem messaging platform for organizations that want a frie
 
 **Every feature below is required at launch on Android and web.** iOS remains a subsequent client target under the current platform scope; it is not a reason to defer Android/web features.
 
-> **Project status:** specification and architecture planning. This repository currently contains design documents and diagrams; application code, runnable services, and validated releases are still to be built. The documents use **Enclave** as the working platform name.
+> **Project status:** early implementation. A secure walking slice runs today: organization sign-in, browser-primary enrollment, and end-to-end encrypted 1:1 messaging (with delivery receipts, reactions, edits and deletes) between web clients through the Spring Modulith backend. Progress is tracked in [tasks.md](tasks.md); most of the launch inventory below is still to be built. The documents use **Enclave** as the working platform name.
 
 [Specification](docs/specs.md) · [Architecture](docs/arf.md) · [UI](docs/UI.md) · [Mobile](docs/mobile.md) · [Delivery tasks](docs/tasks.md) · [Diagrams](docs/diagrams/README.md)
 
@@ -193,7 +193,16 @@ This sequence describes internal development milestones, not partial public rele
 | [docs/diagrams/README.md](docs/diagrams/README.md) | Six original diagrams, their revision notes, and maintained Mermaid sources |
 | [docs/sources.md](docs/sources.md) | Primary technical references, assumptions, and external-conversation access status |
 
-There are no installation/build commands yet because implementation scaffolding does not exist. The foundation tasks require reproducible developer setup and real commands as soon as runnable code is added.
+### Run it locally
+
+```bash
+docker compose up -d --build          # full stack: postgres, valkey, keycloak, seaweedfs, server, web
+open http://localhost:8088            # sign in as alice / alice-dev-password (also bob, carol)
+docker compose --profile e2e run --rm e2e   # Playwright end-to-end suite (Chromium + Firefox)
+```
+
+See [docs/development.md](docs/development.md) for tests, fast iteration and conventions, and
+[docs/configuration.md](docs/configuration.md) for every backend setting.
 
 ## Working on Convo
 

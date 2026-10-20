@@ -1,0 +1,135 @@
+/**
+ * Wire types of the Enclave REST/WebSocket API v1. Binary fields are unpadded base64url strings.
+ * Server counterparts: `IdentityDtos`, `WireFormat`, `MessageController`.
+ */
+
+export interface ReservationResponse {
+  reservationId: string;
+  accountId: string;
+  deviceId: number;
+  challenge: string;
+  deploymentId: string;
+  expiresAt: string;
+}
+
+export interface SignedPreKeyDto {
+  keyId: number;
+  publicKey: string;
+  signature: string;
+}
+
+export interface PreKeyDto {
+  keyId: number;
+  publicKey: string;
+}
+
+export interface PrimaryRegistrationRequest {
+  reservationId: string;
+  identityKey: string;
+  registrationId: number;
+  signedPreKey: SignedPreKeyDto;
+  preKeys: PreKeyDto[];
+  signingKey: string;
+  signingKeyProfile: string;
+  registrationProof: string;
+  platform: 'web';
+  nameEnc?: string;
+}
+
+export interface RegistrationResponse {
+  accountId: string;
+  deviceId: number;
+  deviceListVersion: number;
+}
+
+export interface SelfDto {
+  accountId: string;
+  username: string;
+  deviceId: number;
+  identityKey: string;
+  deviceListVersion: number;
+}
+
+export interface AccountDto {
+  accountId: string;
+  username: string;
+  identityKey?: string;
+}
+
+export interface RosterDto {
+  accountId: string;
+  deviceListVersion: number;
+  devices: { deviceId: number; registrationId: number }[];
+}
+
+export interface BundleDto {
+  deviceId: number;
+  registrationId: number;
+  signedPreKey: SignedPreKeyDto;
+  preKey?: PreKeyDto;
+}
+
+export interface ClaimResponse {
+  accountId: string;
+  identityKey: string;
+  deviceListVersion: number;
+  devices: BundleDto[];
+}
+
+export interface DeviceDto {
+  deviceId: number;
+  platform: string;
+  nameEnc?: string;
+  createdAt: string;
+  lastSeenDay?: string;
+  current: boolean;
+}
+
+export type EnvelopeType = 'CIPHERTEXT' | 'PREKEY_MESSAGE';
+
+export interface DeviceMessageDto {
+  deviceId: number;
+  registrationId: number;
+  type: EnvelopeType;
+  content: string;
+}
+
+export interface SendRequestDto {
+  destination: string;
+  submissionId: string;
+  messages: DeviceMessageDto[];
+  urgent: boolean;
+  transientTtlSeconds: number;
+}
+
+export interface SendResultDto {
+  ok: boolean;
+  duplicate?: boolean;
+  errorCode?: string;
+  missingDevices?: number[];
+  extraDevices?: number[];
+  staleDevices?: number[];
+}
+
+export interface EnvelopeDto {
+  guid: string;
+  type: string;
+  sourceAccount?: string;
+  sourceDevice?: number;
+  serverTimestamp: number;
+  expiresAt: number;
+  urgent: boolean;
+  content: string;
+}
+
+export type Directive = 'KEYS_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED';
+
+export interface ServerFrame {
+  requestId: number;
+  envelope?: EnvelopeDto;
+  sendResult?: SendResultDto;
+  queueEmpty?: Record<string, never>;
+  directive?: { type: Directive };
+  pong?: Record<string, never>;
+  error?: { code: string; detail: string };
+}

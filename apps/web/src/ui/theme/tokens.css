@@ -1,0 +1,81 @@
+/*
+ * Semantic design tokens (UI.md §3). Components use only these variables, never raw colors.
+ * Theme selection: `data-theme="light|dark"` on <html>; without it the OS preference applies.
+ */
+:root {
+  --surface-canvas: #f6f8f7;
+  --surface-panel: #ffffff;
+  --surface-hover: #edf2f0;
+  --surface-selected: #dcebe5;
+  --border: #d6e0dc;
+  --text-primary: #162622;
+  --text-secondary: #4f625b;
+  --action-primary: #086b58;
+  --action-primary-text: #ffffff;
+  --message-outgoing: #ddf3e9;
+  --message-incoming: #ffffff;
+  --state-danger: #b42318;
+  --state-warning-bg: #fff4d6;
+  --state-warning-text: #5c4300;
+  --focus-ring: #185adb;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --radius-control: 10px;
+  --radius-message: 14px;
+  --font-body: 16px;
+  --font-meta: 13px;
+  --target-min: 44px;
+  --motion: 160ms;
+  --shadow-panel: 0 1px 2px rgba(16, 25, 24, 0.08), 0 4px 16px rgba(16, 25, 24, 0.06);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --surface-canvas: #101918;
+    --surface-panel: #182422;
+    --surface-hover: #1f2e2b;
+    --surface-selected: #24403a;
+    --border: #2c3d39;
+    --text-primary: #ecf3f0;
+    --text-secondary: #b1c3bb;
+    --action-primary: #78d9bd;
+    --action-primary-text: #0b2c24;
+    --message-outgoing: #214a3d;
+    --message-incoming: #22302c;
+    --state-danger: #ffb4ab;
+    --state-warning-bg: #3d3214;
+    --state-warning-text: #f8e3a8;
+    --focus-ring: #a6c8ff;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --surface-canvas: #101918;
+  --surface-panel: #182422;
+  --surface-hover: #1f2e2b;
+  --surface-selected: #24403a;
+  --border: #2c3d39;
+  --text-primary: #ecf3f0;
+  --text-secondary: #b1c3bb;
+  --action-primary: #78d9bd;
+  --action-primary-text: #0b2c24;
+  --message-outgoing: #214a3d;
+  --message-incoming: #22302c;
+  --state-danger: #ffb4ab;
+  --state-warning-bg: #3d3214;
+  --state-warning-text: #f8e3a8;
+  --focus-ring: #a6c8ff;
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion: 0ms;
+  }
+}

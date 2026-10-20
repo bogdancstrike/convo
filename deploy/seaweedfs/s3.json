@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "enclave-dev",
+      "credentials": [{ "accessKey": "enclave-dev-access", "secretKey": "enclave-dev-secret-change-me" }],
+      "actions": ["Read", "Write", "List", "Tagging", "Admin"]
+    }
+  ]
+}

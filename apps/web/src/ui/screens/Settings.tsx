@@ -1,0 +1,121 @@
+import { useCallback, useEffect, useState } from 'react';
+import type { DeviceDto } from '../../api/types';
+import type { EnclaveClient } from '../../core/client';
+import type { Settings as SettingsModel } from '../../core/model';
+import { useI18n } from '../i18n/i18n';
+
+/**
+ * Settings (UI.md §7): profile handle, appearance, language, privacy defaults (receipts/typing
+ * off), devices with unlink, and sign-out with local wipe.
+ */
+export function SettingsPane({ client, onSignedOut }: { client: EnclaveClient; onSignedOut: () => void }) {
+  const { t, date } = useI18n();
+  const [settings, setSettings] = useState<SettingsModel>(client.settings);
+  const [devices, setDevices] = useState<DeviceDto[]>([]);
+
+  const loadDevices = useCallback(() => void client.devices().then(setDevices).catch(() => undefined), [client]);
+  useEffect(() => {
+    loadDevices();
+    const offDevices = client.on('devices', loadDevices);
+    const offSettings = client.on('settings', setSettings);
+    return () => {
+      offDevices();
+      offSettings();
+    };
+  }, [client, loadDevices]);
+
+  const update = (patch: Partial<SettingsModel>) => void client.updateSettings(patch);
+
+  return (
+    <main className="settings settings-pane" aria-labelledby="settings-title">
+      <h2 id="settings-title">{t('settings.title')}</h2>
+
+      <section aria-labelledby="profile-title">
+        <h3 id="profile-title">{t('settings.profile')}</h3>
+        <div className="setting-row">
+          <span>{t('settings.handle')}</span>
+          <strong data-testid="own-handle">@{client.device.username}</strong>
+        </div>
+      </section>
+
+      <section aria-labelledby="appearance-title">
+        <h3 id="appearance-title">{t('settings.appearance')}</h3>
+        <div className="setting-row">
+          <label htmlFor="theme">{t('settings.theme')}</label>
+          <select id="theme" className="input" style={{ width: 'auto' }} value={settings.theme}
+            onChange={(e) => update({ theme: e.target.value as SettingsModel['theme'] })}>
+            <option value="system">{t('settings.theme.system')}</option>
+            <option value="light">{t('settings.theme.light')}</option>
+            <option value="dark">{t('settings.theme.dark')}</option>
+          </select>
+        </div>
+        <div className="setting-row">
+          <label htmlFor="locale">{t('settings.language')}</label>
+          <select id="locale" className="input" style={{ width: 'auto' }} value={settings.locale}
+            onChange={(e) => update({ locale: e.target.value as SettingsModel['locale'] })}>
+            <option value="en">English</option>
+            <option value="ro">Română</option>
+          </select>
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={settings.enterToSend} onChange={(e) => update({ enterToSend: e.target.checked })} />
+          <span>{t('settings.enterToSend')}</span>
+        </label>
+      </section>
+
+      <section aria-labelledby="privacy-title">
+        <h3 id="privacy-title">{t('settings.privacy')}</h3>
+        <label className="check">
+          <input type="checkbox" checked={settings.readReceipts} onChange={(e) => update({ readReceipts: e.target.checked })} />
+          <span>
+            {t('settings.readReceipts')}
+            <br />
+            <span className="muted-text">{t('settings.readReceipts.help')}</span>
+          </span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.typingIndicators} onChange={(e) => update({ typingIndicators: e.target.checked })} />
+          <span>
+            {t('settings.typing')}
+            <br />
+            <span className="muted-text">{t('settings.typing.help')}</span>
+          </span>
+        </label>
+      </section>
+
+      <section aria-labelledby="devices-title">
+        <h3 id="devices-title">{t('settings.devices')}</h3>
+        <p className="muted-text">{t('settings.browserTrust')}</p>
+        {devices.map((d) => (
+          <div key={d.deviceId} className="device-row" data-testid="device-row">
+            <div>
+              <strong>{d.current ? t('settings.thisDevice') : `${d.platform} · #${d.deviceId}`}</strong>
+              <div className="muted-text">{t('settings.linkedOn', { date: date(Date.parse(d.createdAt)) })}</div>
+            </div>
+            {!d.current && (
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  if (window.confirm(t('settings.confirmUnlink'))) void client.unlinkDevice(d.deviceId).then(loadDevices);
+                }}
+              >
+                {t('settings.unlink')}
+              </button>
+            )}
+          </div>
+        ))}
+      </section>
+
+      <section>
+        <button
+          className="btn btn-danger"
+          onClick={() => {
+            if (window.confirm(t('settings.confirmSignOut'))) void client.signOutAndWipe().finally(onSignedOut);
+          }}
+        >
+          {t('settings.signOut')}
+        </button>
+      </section>
+    </main>
+  );
+}

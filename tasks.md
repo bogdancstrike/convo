@@ -43,3 +43,42 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 |---|---|---|
 | ✅ | Encrypted IndexedDB store (AES-GCM records, HMAC key pseudonyms, atomic batches) | passphrase lock pending |
 | ✅ | Content schema + padding + unknown-content placeholders | |
+| ✅ | Signed HTTP client, resilient WebSocket (tickets, ping, jittered reconnect, 4401) | |
+| ✅ | Browser-primary enrollment with pending-enrollment persistence and idempotent retry | |
+| ✅ | Multi-device Signal fan-out (claims, registration-ID rebuild, DEVICE_MISMATCH/STALE handling) | |
+| ✅ | Durable outbox: queued → ready → accepted, same-ciphertext retries, blocked/failed + Retry | |
+| ✅ | Decrypt → atomic commit (ratchet + message + processed marker) → ack; GUID + semantic dedupe | |
+| ✅ | Text, safe formatting, replies, reactions, author edit, delete-for-everyone, delete-for-me | |
+| ✅ | Delivery receipts (on), read receipts and typing (off by default, settings) | |
+| ✅ | Note to self, own-device sync transcripts and read cursors | |
+| ✅ | Conversation list: search with diacritic folding, pin, mute, archive, unread, drafts | |
+| ✅ | Safety numbers (5200 iterations), verify/clear, identity-change notice, blocked sends | |
+| ✅ | Settings: theme, EN/RO language, receipts/typing, devices + unlink, sign-out wipe | |
+| ✅ | Cross-tab leader lock (Web Locks, "Use here"), revoked/storage-lost/update/unreachable states | |
+| ✅ | Strict CSP + security headers, same-origin nginx proxy | |
+
+## Delivery & verification
+
+| Status | Item | Notes |
+|---|---|---|
+| ✅ | Root `docker-compose.yaml`: Postgres, Valkey, Keycloak (realm import), SeaweedFS, server, web | |
+| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self | 6/6 passing |
+
+## Fixed along the way
+
+* Composer cleared text typed while the previous message was being persisted (race) — fixed by
+  clearing optimistically and restoring only on local failure.
+* Unreadable local keys left an endless spinner — now shows a "set up this browser again" state.
+* Keycloak advertised the nginx-internal port in its endpoints — proxy now forwards `Host:port`.
+
+## Next up
+
+| Item | Task |
+|---|---|
+| Device linking via QR provisioning (web ↔ web), linked-device sync | ID-02 |
+| Encrypted attachments (SeaweedFS presigned URLs), photos, files, voice notes | FEAT-01 |
+| Passphrase lock for browser storage | WEB-01 |
+| Groups (server roster/ACL, ordered group events) and MLS client integration | GRP-01/02/03 |
+| Durable push/notification intents (outbox table + workers) | MSG-02 |
+| Admin console, audit log, policies | ADM-01 |
+| Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
