@@ -14,6 +14,8 @@ docker compose --profile e2e run --rm e2e          # Chromium + Firefox
 * `tests/messaging.spec.ts` — M1 walking slice: browser-primary registration, directory search,
   bidirectional E2EE messaging, delivery receipts, reactions, edits, delete-for-everyone, offline
   mailbox delivery after reconnect, Note to self.
+* `tests/attachments.spec.ts` — FEAT-01: encrypted photo + file exchange (image renders, download is
+  byte-identical) and proof that uploaded objects contain no plaintext.
 * `tests/linking.spec.ts` — ID-02: second browser links with matching comparison codes, then
   fan-out reaches both devices and sent messages mirror across own devices.
 

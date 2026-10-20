@@ -5,7 +5,9 @@ import type { AccountDto, Directive, EnvelopeDto } from '../api/types';
 import {
   CONTENT_VERSION,
   decodeContent,
+  MAX_ATTACHMENTS,
   MAX_BODY_BYTES,
+  type AttachmentPointer,
   newMessageId,
   type Content,
   type DataMessage,
@@ -16,6 +18,7 @@ import { Emitter } from '../lib/emitter';
 import { Mutex } from '../lib/mutex';
 import { utf8 } from '../lib/bytes';
 import type { StoreOp } from '../storage/encryptedStore';
+import { downloadAttachment, prepareFile, uploadAttachment } from './attachments';
 import { replenishPreKeys } from './enrollment';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
 import { STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
@@ -210,17 +213,52 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * @throws Error if the body is empty or exceeds 64 KiB
    */
   async sendText(conversationId: string, body: string, quote?: Quote): Promise<void> {
-    const text = body.trim();
-    if (!text) throw new Error('empty message');
-    if (utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
-    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), body: text, quote };
+    await this.sendMessage(conversationId, { body, quote });
+  }
+
+  /**
+   * Encrypts and uploads files, then sends them (with an optional caption) as one message.
+   * Uploads happen before the message is queued; a failed upload leaves nothing half-sent.
+   *
+   * @param onProgress called with the number of completed uploads
+   */
+  async sendAttachments(conversationId: string, files: File[], caption: string, onProgress?: (done: number) => void): Promise<void> {
+    if (files.length === 0 || files.length > MAX_ATTACHMENTS) throw new Error('invalid attachment count');
+    const pointers: AttachmentPointer[] = [];
+    for (const file of files) {
+      pointers.push(await uploadAttachment(this.api, await prepareFile(file)));
+      onProgress?.(pointers.length);
+    }
+    await this.sendMessage(conversationId, { body: caption, attachments: pointers });
+  }
+
+  /** Downloads and decrypts an attachment of a message. */
+  downloadAttachment(pointer: AttachmentPointer): Promise<Blob> {
+    return downloadAttachment(this.api, pointer);
+  }
+
+  private async sendMessage(
+    conversationId: string,
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[] },
+  ): Promise<void> {
+    const text = content.body?.trim() || undefined;
+    if (!text && !content.attachments?.length) throw new Error('empty message');
+    if (text && utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
+    const data: DataMessage = {
+      messageId: newMessageId(),
+      timestamp: Date.now(),
+      body: text,
+      quote: content.quote,
+      attachments: content.attachments,
+    };
     const message: ChatMessage = {
       conversationId,
       id: data.messageId,
       authorId: this.accountId,
       direction: 'out',
       body: text,
-      quote,
+      attachments: content.attachments,
+      quote: content.quote,
       sentAt: data.timestamp,
       sort: data.timestamp,
       status: 'queued',
@@ -229,7 +267,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
     if (conversation) {
-      const updated = { ...conversation, lastActivity: data.timestamp, preview: text, draft: undefined, archived: false };
+      const updated = { ...conversation, lastActivity: data.timestamp, preview: previewOf(data), draft: undefined, archived: false };
       ops.push(this.repos.putConversation(updated));
       this.conversationCache.set(conversationId, updated);
     }
@@ -481,7 +519,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ops.push(this.repos.putMessage(tombstone(target)));
       return 'mutation';
     }
-    if (data.body === undefined) return 'ignored';
+    if (data.body === undefined && !data.attachments?.length) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
 
     const message: ChatMessage = {
@@ -490,6 +528,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       authorId,
       direction,
       body: data.body,
+      attachments: data.attachments,
       quote: data.quote,
       sentAt: data.timestamp,
       sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp,
@@ -501,7 +540,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.stage(ops, {
       ...conversation,
       lastActivity: Math.max(conversation.lastActivity, message.sort),
-      preview: data.body,
+      preview: previewOf(data),
       archived: conversation.archived && conversation.muted,
       unread: direction === 'in' && !visible ? conversation.unread + 1 : conversation.unread,
     });
@@ -645,6 +684,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 }
 
+/** Local conversation-list preview of a message. */
+function previewOf(data: DataMessage): string {
+  if (data.body) return data.body;
+  const first = data.attachments?.[0];
+  if (!first) return '';
+  return first.contentType.startsWith('image/') ? '📷 Photo' : `📎 ${first.fileName ?? 'File'}`;
+}
+
 function receipt(type: 'delivery' | 'read', messageIds: string[]): Content {
   return { v: CONTENT_VERSION, kind: 'receipt', receipt: { type, messageIds, timestamp: Date.now() } };
 }
@@ -661,5 +708,5 @@ function applyReaction(message: ChatMessage, accountId: string, emoji: string, r
 }
 
 function tombstone(message: ChatMessage): ChatMessage {
-  return { ...message, body: undefined, quote: undefined, reactions: {}, deleted: true, editedAt: undefined };
+  return { ...message, body: undefined, attachments: undefined, quote: undefined, reactions: {}, deleted: true, editedAt: undefined };
 }

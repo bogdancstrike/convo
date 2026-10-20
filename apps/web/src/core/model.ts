@@ -1,4 +1,4 @@
-import type { Quote } from '../crypto/content';
+import type { AttachmentPointer, Quote } from '../crypto/content';
 
 /**
  * Local domain model rendered by the UI. Everything here is end-to-end data that exists only on
@@ -29,6 +29,7 @@ export interface ChatMessage {
   authorId: string;
   direction: 'in' | 'out';
   body?: string;
+  attachments?: AttachmentPointer[];
   quote?: Quote;
   /** Sender's timestamp (ms). */
   sentAt: number;

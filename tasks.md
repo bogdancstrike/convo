@@ -68,12 +68,23 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Shared enrollment completion path (primary + linked), linked devices get future messages only | history transfer pending (EXT-02) |
 | 🟡 | Own-device notices on link (`DEVICE_LIST_CHANGED` directive refreshes device list) | persistent security notice UI pending |
 
+## Attachments (FEAT-01)
+
+| Status | Item | Notes |
+|---|---|---|
+| ✅ | `attachments` module: presigned PUT (exact size) / GET via SeaweedFS, no uploader column, retention purge | |
+| ✅ | STREAM/AES-256-GCM chunked encryption, authenticated header + final flag, size-bucket padding, digest-before-decrypt | needs SEC-02 review |
+| ✅ | Image re-encode strips EXIF/location; safe download content types (no active content) | |
+| ✅ | Composer: file picker, drag & drop, paste, size limit feedback, upload progress, captions | |
+| ✅ | Photos render inline (decrypted in memory), files download on explicit action; expired/offline/integrity states | |
+| ⬜ | Albums (2–10 photos grid), thumbnails/blurhash, voice notes, resumable multipart uploads, offline-queued uploads | FEAT-01/EXT-02 |
+
 ## Delivery & verification
 
 | Status | Item | Notes |
 |---|---|---|
 | ✅ | Root `docker-compose.yaml`: Postgres, Valkey, Keycloak (realm import), SeaweedFS, server, web | |
-| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self, device linking | 8/8 passing |
+| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self, device linking, encrypted photo/file exchange, ciphertext-only object store | 12/12 passing |
 | ✅ | Shared Java/TypeScript contract vectors for device signatures and enrollment transcripts | `contracts/vectors` |
 
 ## Fixed along the way
@@ -88,7 +99,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Item | Task |
 |---|---|
 | QR display/scan for linking, persistent own-device security notices | ID-02 |
-| Encrypted attachments (SeaweedFS presigned URLs), photos, files, voice notes | FEAT-01 |
+| Albums, voice notes, resumable uploads | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
 | Groups (server roster/ACL, ordered group events) and MLS client integration | GRP-01/02/03 |
 | Durable push/notification intents (outbox table + workers) | MSG-02 |

@@ -22,6 +22,27 @@ export interface Quote {
   excerpt?: string;
 }
 
+/** Maximum attachments per message (specs §26.3). */
+export const MAX_ATTACHMENTS = 10;
+
+/**
+ * Pointer to an encrypted attachment (specs §7.1 `AttachmentPointer`). The key and digest exist
+ * only inside E2EE content; the server knows the opaque ID and ciphertext size.
+ */
+export interface AttachmentPointer {
+  attachmentId: string;
+  /** AES-256 key (base64url). */
+  key: string;
+  /** SHA-256 of the padded ciphertext (base64url). */
+  digest: string;
+  /** Plaintext size in bytes. */
+  size: number;
+  contentType: string;
+  fileName?: string;
+  width?: number;
+  height?: number;
+}
+
 /** Reaction toggle on a target message. */
 export interface Reaction {
   targetMessageId: string;
@@ -46,6 +67,7 @@ export interface DataMessage {
   messageId: string;
   timestamp: number;
   body?: string;
+  attachments?: AttachmentPointer[];
   quote?: Quote;
   reaction?: Reaction;
   edit?: Edit;
@@ -133,5 +155,24 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (!isObject(value)) return false;
   if (typeof value.messageId !== 'string' || typeof value.timestamp !== 'number') return false;
   if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
+  if (value.attachments !== undefined) {
+    if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS) return false;
+    if (!value.attachments.every(isAttachmentPointer)) return false;
+  }
   return true;
+}
+
+function isAttachmentPointer(value: unknown): value is AttachmentPointer {
+  return (
+    isObject(value) &&
+    typeof value.attachmentId === 'string' &&
+    /^[0-9a-f-]{36}$/.test(value.attachmentId) &&
+    typeof value.key === 'string' &&
+    typeof value.digest === 'string' &&
+    typeof value.size === 'number' &&
+    value.size >= 0 &&
+    typeof value.contentType === 'string' &&
+    value.contentType.length <= 128 &&
+    (value.fileName === undefined || (typeof value.fileName === 'string' && value.fileName.length <= 255))
+  );
 }

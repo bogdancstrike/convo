@@ -43,6 +43,7 @@ dependencies {
     implementation("org.springframework.modulith:spring-modulith-starter-jdbc")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("software.amazon.awssdk:s3:2.57.0")
+    implementation("software.amazon.awssdk:url-connection-client:2.57.0")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")

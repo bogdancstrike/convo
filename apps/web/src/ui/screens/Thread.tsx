@@ -2,6 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import type { ConnectionState } from '../../api/socket';
 import { EDIT_WINDOW_MS, type EnclaveClient } from '../../core/client';
 import type { ChatMessage, Conversation } from '../../core/model';
+import { AttachmentRejectedError, MAX_ATTACHMENT_BYTES } from '../../core/attachments';
+import { MAX_ATTACHMENTS } from '../../crypto/content';
+import { AttachmentView, formatBytes } from '../components/AttachmentView';
 import { Avatar } from '../components/Avatar';
 import { FormattedText } from '../components/FormattedText';
 import { Icon } from '../components/Icon';
@@ -34,13 +37,17 @@ export function Thread({
   const messages = useMessages(client, conversation.id);
   const typing = useTyping(client, conversation.id);
   const [mode, setMode] = useState<ComposerMode>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
   const stickToBottom = useRef(true);
   const title = conversation.kind === 'note' ? t('chats.noteToSelf') : conversation.title;
 
   useEffect(() => {
     void client.setActiveConversation(conversation.id);
     setMode(null);
+    setFiles([]);
     stickToBottom.current = true;
     return () => void client.setActiveConversation(null);
   }, [client, conversation.id]);
@@ -57,7 +64,24 @@ export function Thread({
   const authorName = (m: ChatMessage) => (m.authorId === client.accountId ? client.device.username : conversation.title);
 
   return (
-    <section className="thread" aria-label={title}>
+    <section
+      className={`thread${dragging ? ' dragging' : ''}`}
+      aria-label={title}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          setDragging(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragging(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        addFiles(Array.from(e.dataTransfer.files));
+      }}
+    >
       <header className="thread-header">
         <button className="btn btn-icon back-button" onClick={onBack} aria-label={t('thread.back')}>
           <Icon name="back" />
@@ -127,6 +151,10 @@ export function Thread({
         client={client}
         conversation={conversation}
         mode={mode}
+        files={files}
+        onAddFiles={addFiles}
+        onRemoveFile={(index) => setFiles((current) => current.filter((_, i) => i !== index))}
+        onClearFiles={() => setFiles([])}
         authorName={mode ? authorName(mode.target) : ''}
         onDone={() => {
           setMode(null);
@@ -209,9 +237,14 @@ function MessageView({
           ) : m.undecryptable ? (
             t('thread.undecryptable')
           ) : (
-            <span data-testid="message-body">
-              <FormattedText text={m.body ?? ''} />
-            </span>
+            <>
+              {m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} />)}
+              {m.body && (
+                <span data-testid="message-body">
+                  <FormattedText text={m.body} />
+                </span>
+              )}
+            </>
           )}
           {Object.keys(m.reactions).length > 0 && (
             <div className="reactions">
@@ -252,19 +285,31 @@ function Composer({
   client,
   conversation,
   mode,
+  files,
+  onAddFiles,
+  onRemoveFile,
+  onClearFiles,
   authorName,
   onDone,
 }: {
   client: EnclaveClient;
   conversation: Conversation;
   mode: ComposerMode;
+  files: File[];
+  onAddFiles: (files: File[]) => void;
+  onRemoveFile: (index: number) => void;
+  onClearFiles: () => void;
   authorName: string;
   onDone: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [text, setText] = useState(conversation.draft ?? '');
+  const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const typingSent = useRef(0);
+  const oversized = files.find((f) => f.size > MAX_ATTACHMENT_BYTES);
 
   useEffect(() => {
     if (mode?.kind === 'edit') setText(mode.target.body ?? '');
@@ -280,7 +325,33 @@ function Composer({
     return () => clearTimeout(timer);
   }, [client, conversation.id, conversation.draft, text, mode]);
 
+  const sendFiles = async () => {
+    const caption = text.trim();
+    const selected = files;
+    setError(null);
+    setUpload({ done: 0, total: selected.length });
+    try {
+      await client.sendAttachments(conversation.id, selected, caption, (done) => setUpload({ done, total: selected.length }));
+      setText('');
+      onClearFiles();
+      onDone();
+    } catch (e) {
+      setError(
+        e instanceof AttachmentRejectedError
+          ? t(e.reason === 'too-large' ? 'attachment.tooLarge' : 'attachment.unreadable', { name: e.fileName })
+          : t('attachment.uploadFailed'),
+      );
+    } finally {
+      setUpload(null);
+    }
+  };
+
   const submit = async () => {
+    if (upload) return;
+    if (files.length > 0 && mode?.kind !== 'edit') {
+      if (!oversized) await sendFiles();
+      return;
+    }
     const body = text.trim();
     if (!body) return;
     const current = mode;
@@ -327,6 +398,23 @@ function Composer({
 
   return (
     <div className="composer">
+      {files.length > 0 && (
+        <ul className="pending-files" aria-label={t('thread.attach')}>
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`} className={f.size > MAX_ATTACHMENT_BYTES ? 'failed' : ''} data-testid="pending-file">
+              <span>
+                {f.name} · {formatBytes(f.size, locale)}
+              </span>
+              <button className="btn-icon" onClick={() => onRemoveFile(i)} aria-label={t('thread.removeFile', { name: f.name })} disabled={!!upload}>
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {oversized && <div role="alert" className="failed">{t('attachment.tooLarge', { name: oversized.name })}</div>}
+      {upload && <div role="status">{t('thread.uploading', { done: upload.done, total: upload.total })}</div>}
+      {error && <div role="alert" className="failed">{error}</div>}
       {mode && (
         <div className="composer-context">
           <span>
@@ -345,6 +433,26 @@ function Composer({
         </div>
       )}
       <div className="composer-row">
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          data-testid="file-input"
+          onChange={(e) => {
+            onAddFiles(Array.from(e.target.files ?? []));
+            e.target.value = '';
+          }}
+        />
+        <button
+          className="btn btn-icon"
+          onClick={() => fileInput.current?.click()}
+          aria-label={t('thread.attach')}
+          title={t('thread.attach')}
+          disabled={mode?.kind === 'edit' || !!upload}
+        >
+          📎
+        </button>
         <label className="visually-hidden" htmlFor="composer">
           {t('thread.placeholder')}
         </label>
@@ -356,9 +464,21 @@ function Composer({
           value={text}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={(e) => {
+            const pasted = Array.from(e.clipboardData.files);
+            if (pasted.length > 0) {
+              e.preventDefault();
+              onAddFiles(pasted);
+            }
+          }}
           data-testid="composer"
         />
-        <button className="btn btn-primary" onClick={() => void submit()} disabled={!text.trim()} data-testid="send">
+        <button
+          className="btn btn-primary"
+          onClick={() => void submit()}
+          disabled={!!upload || (!text.trim() && files.length === 0) || !!oversized}
+          data-testid="send"
+        >
           {mode?.kind === 'edit' ? t('thread.save') : t('thread.send')}
         </button>
       </div>

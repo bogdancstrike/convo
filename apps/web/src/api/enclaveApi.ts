@@ -122,6 +122,16 @@ export class EnclaveApi {
     return this.signed('PUT', `/v1/messages/${encodeURIComponent(request.destination)}`, request);
   }
 
+  /** Registers an attachment of exactly `size` encrypted bytes; returns a presigned PUT URL. */
+  attachmentUploadForm(size: number): Promise<{ attachmentId: string; uploadUrl: string; expiresAt: string }> {
+    return this.signed('POST', '/v1/attachments/upload-form', { size });
+  }
+
+  /** Presigned GET URL for an attachment. */
+  attachmentDownload(attachmentId: string): Promise<{ downloadUrl: string; expiresAt: string }> {
+    return this.signed('GET', `/v1/attachments/${encodeURIComponent(attachmentId)}`);
+  }
+
   socketTicket(): Promise<{ ticket: string; expiresAt: string }> {
     return this.signed('POST', '/v1/ws/tickets');
   }

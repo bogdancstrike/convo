@@ -15,6 +15,7 @@ public API (types other modules may use); everything under `internal/` is privat
 | `contracts` | Shared module: narrow IDs, error codes, byte encoding. No business logic. | — |
 | `identity` | Accounts, devices, enrollment, prekeys, directory, device request authentication. | contracts |
 | `messaging` | Idempotent submissions, per-device mailboxes, WebSocket gateway, Valkey hints. | identity, contracts |
+| `attachments` | Presigned upload/download of client-encrypted attachment blobs, retention purge. | contracts |
 | `platform` | Cross-cutting runtime wiring: HTTP security chains, error rendering, deployment info. | identity, contracts |
 
 Rules:

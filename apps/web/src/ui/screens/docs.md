@@ -6,7 +6,7 @@
 | `LinkDeviceScreen.tsx` | §4.2 | New-device linking: comparison code, approval wait, expiry/decline/new code |
 | `MainLayout.tsx` | §2.2 | Navigation rail + list + thread/settings; single-pane below 600 px |
 | `ChatList.tsx` | §5.1 | Search with diacritic folding, pinned section, archive toggle, unread badges, drafts |
-| `Thread.tsx` | §5.2–5.3 | Messages with day separators, delivery states, reply/react/edit/delete/copy, identity-change notice, composer with IME-safe Enter, persisted drafts, typing |
+| `Thread.tsx` | §5.2–5.3 | Messages with day separators, delivery states, reply/react/edit/delete/copy, identity-change notice, composer with IME-safe Enter, persisted drafts, typing, attachments (picker, drag & drop, paste, size checks, upload progress) |
 | `NewChatDialog.tsx` | §2 | Directory search by handle |
 | `SafetyNumberDialog.tsx` | §4.3 | 60-digit safety number, mark verified/clear |
 | `Settings.tsx` | §7, §4.2 | Handle, theme, language, receipts/typing (off by default), link requests (compare code → approve/decline), devices/unlink, sign-out + wipe |

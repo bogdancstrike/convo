@@ -10,6 +10,7 @@ and everything else uses WebCrypto primitives.
 | `signalStore.ts` | Signal `StorageType` over the encrypted store with a unit-of-work overlay, TOFU + verified-identity blocking |
 | `content.ts` | E2EE content schema (data, receipts, own-device sync, typing) + validating codec; unknown kinds become placeholders |
 | `padding.ts` | 160-byte bucket padding (specs §5.5) |
+| `attachmentCipher.ts` | Attachment STREAM encryption (AES-256-GCM, 64 KiB chunks, authenticated header/final flag), size-bucket padding, digest-before-decrypt |
 | `provisioning.ts` | Linking channel: X25519 → HKDF-SHA256 → AES-256-GCM bound to the `ENCLAVE-PROVISION-V1` transcript; 12-digit comparison code |
 
 **Interim decision (FND-02 gate):** the specification targets libsignal (Rust/WASM) with PQXDH.

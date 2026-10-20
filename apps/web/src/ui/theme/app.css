@@ -503,6 +503,59 @@ blockquote.fmt {
   color: var(--text-secondary);
 }
 
+/* --- attachments --------------------------------------------------------------------- */
+.attachment-image {
+  display: block;
+  margin-bottom: var(--space-1);
+  max-width: 320px;
+}
+.attachment-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+.attachment-image.placeholder {
+  width: 240px;
+  background: var(--surface-hover);
+  border-radius: 10px;
+}
+.attachment-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-1);
+  white-space: normal;
+}
+.attachment-file .name {
+  overflow-wrap: anywhere;
+}
+.failed {
+  color: var(--state-danger);
+}
+.pending-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pending-files li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 4px 2px 10px;
+  font-size: 0.9rem;
+}
+.thread.dragging .messages {
+  outline: 3px dashed var(--action-primary);
+  outline-offset: -8px;
+}
+
 /* --- dialogs & settings --------------------------------------------------------------- */
 dialog {
   border: none;

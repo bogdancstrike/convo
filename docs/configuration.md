@@ -72,3 +72,19 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `websocket.send-buffer-bytes` | `4194304` | Slow-consumer bound |
 | `websocket.send-time-limit` | `10s` | |
 | `websocket.allowed-origins` | empty | Empty = must match request host |
+
+## `enclave.attachments.*` (`AttachmentsProperties`)
+
+| Key | Env | Default | Notes |
+|---|---|---|---|
+| `endpoint` | `ENCLAVE_ATTACHMENTS_ENDPOINT` | `http://localhost:8333` | S3 endpoint used by the server |
+| `public-endpoint` | `ENCLAVE_ATTACHMENTS_PUBLIC_ENDPOINT` | `ENCLAVE_PUBLIC_URL` | Endpoint presigned URLs point to (must reach the store with the same Host) |
+| `region` | | `us-east-1` | Signing region |
+| `bucket` | `ENCLAVE_ATTACHMENTS_BUCKET` | `enclave-attachments` | |
+| `access-key`, `secret-key` | `ENCLAVE_ATTACHMENTS_ACCESS_KEY`, `..._SECRET_KEY` | dev values | |
+| `path-style` | | `true` | |
+| `create-bucket` | | `true` | Create at start-up if missing |
+| `max-bytes` | | `110100480` | Encrypted size limit (100 MiB + padding) |
+| `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
+| `retention` | | `30d` | Object lifetime |
+| `purge-interval` | | `PT1H` | |
