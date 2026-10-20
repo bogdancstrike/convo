@@ -1,0 +1,117 @@
+import { useEffect, useRef, useState } from 'react';
+import { Track, type Participant, type RemoteTrack } from 'livekit-client';
+import type { EnclaveClient } from '../../core/client';
+import { Avatar } from '../components/Avatar';
+import { Icon } from '../components/Icon';
+import { useI18n } from '../i18n/i18n';
+import { formatDuration } from '../useVoiceRecorder';
+import { accountOf, audioTrackOf, videoTrackOf } from './liveKitCall';
+import { useCalls } from './CallProvider';
+
+/**
+ * Full-window call UI (UI.md §9): incoming ring with Accept/Decline, outgoing "Calling…", and the
+ * connected view with remote tiles, local preview, mute/camera/end controls and an E2EE badge.
+ */
+export function CallScreen({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  const { call, media, accept, decline, hangUp, version } = useCalls();
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => { dialog.current?.querySelector<HTMLButtonElement>('button')?.focus(); }, [call?.phase]);
+  if (!call) return null;
+  const conversation = client.conversations().find((c) => c.id === call.conversationId);
+  const title = conversation?.title ?? t('calls.unknown');
+  const group = conversation?.kind === 'group';
+  void version;
+  const remotes = media?.remotes ?? [];
+  const status = call.phase === 'incoming' ? t(call.video ? 'calls.incomingVideo' : 'calls.incomingVoice')
+    : call.phase === 'outgoing' ? t('calls.calling')
+    : call.phase === 'connecting' ? t('calls.connecting')
+    : call.phase === 'connected' ? formatDuration(now - (call.connectedAt ?? now))
+    : t(`calls.reason.${call.reason ?? 'ended'}`);
+  const showVideo = call.video && call.phase === 'connected';
+
+  return (
+    <div className={`call-screen${showVideo ? ' video' : ''}`} role="dialog" aria-modal="true" aria-label={t('calls.dialog', { name: title })}
+      ref={dialog} data-testid="call-screen" data-phase={call.phase} data-reason={call.reason ?? ''} data-encrypted={media?.encrypted ? 'true' : 'false'}
+      onKeyDown={(e) => { if (e.key === 'Escape' && call.phase !== 'incoming') hangUp(); }}>
+      {showVideo && remotes.length > 0 ? (
+        <div className={`call-grid n${Math.min(remotes.length, 4)}`}>
+          {remotes.map((p) => <RemoteTile key={p.identity} client={client} participant={p} />)}
+        </div>
+      ) : (
+        <div className="call-identity">
+          <Avatar id={call.conversationId} name={title} size={112} group={group} />
+          <h2>{title}</h2>
+          <p className="call-status" data-testid="call-status" aria-live="polite">{status}</p>
+          {call.phase === 'connected' && group && <p className="muted-text">{t('calls.participants', { count: remotes.length + 1 })}</p>}
+        </div>
+      )}
+      {showVideo && <p className="call-status overlay" data-testid="call-status" aria-live="polite">{status}</p>}
+      {media && call.video && media.cameraEnabled && <LocalPreview client={client} />}
+      {remotes.map((p) => <RemoteAudio key={p.identity} participant={p} />)}
+      {call.phase === 'connected' && <p className="call-e2ee" data-testid="call-e2ee"><Icon name="lock" size={14} /> {media?.encrypted ? t('calls.e2ee') : t('calls.encrypting')}</p>}
+      <div className="call-controls">
+        {call.phase === 'incoming' ? (
+          <>
+            <button className="call-btn decline" onClick={decline} aria-label={t('calls.decline')} data-testid="call-decline"><Icon name="callEnd" size={28} /></button>
+            <button className="call-btn accept" onClick={accept} aria-label={t('calls.accept')} data-testid="call-accept"><Icon name={call.video ? 'video' : 'calls'} size={28} /></button>
+          </>
+        ) : call.phase !== 'ended' ? (
+          <>
+            <button className="call-btn" aria-pressed={media ? !media.micEnabled : false} disabled={!media} onClick={() => void media?.setMic(!media.micEnabled)}
+              aria-label={media?.micEnabled === false ? t('calls.unmute') : t('calls.mute')} data-testid="call-mute"><Icon name={media?.micEnabled === false ? 'micOff' : 'mic'} /></button>
+            {call.video && <button className="call-btn" aria-pressed={media ? !media.cameraEnabled : false} disabled={!media} onClick={() => void media?.setCamera(!media.cameraEnabled)}
+              aria-label={media?.cameraEnabled ? t('calls.cameraOff') : t('calls.cameraOn')} data-testid="call-camera"><Icon name={media?.cameraEnabled ? 'video' : 'videoOff'} /></button>}
+            <button className="call-btn decline" onClick={hangUp} aria-label={t('calls.end')} data-testid="call-end"><Icon name="callEnd" size={28} /></button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function RemoteTile({ client, participant }: { client: EnclaveClient; participant: Participant }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const track = videoTrackOf(participant);
+  useEffect(() => {
+    const el = ref.current;
+    if (!track || !el) return undefined;
+    track.attach(el);
+    return () => { track.detach(el); };
+  }, [track]);
+  const account = accountOf(participant);
+  const name = client.conversations().find((c) => c.id === account)?.title ?? account.slice(0, 8);
+  return (
+    <div className={`call-tile${participant.isSpeaking ? ' speaking' : ''}`} data-testid="call-tile">
+      {track ? <video ref={ref} autoPlay playsInline muted data-testid="remote-video" /> : <Avatar id={account} name={name} size={72} />}
+      <span className="call-tile-name">{name}</span>
+    </div>
+  );
+}
+
+function RemoteAudio({ participant }: { participant: Participant }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  const track: RemoteTrack | undefined = audioTrackOf(participant);
+  useEffect(() => {
+    const el = ref.current;
+    if (!track || !el) return undefined;
+    track.attach(el);
+    return () => { track.detach(el); };
+  }, [track]);
+  return <audio ref={ref} autoPlay data-testid="remote-audio" />;
+}
+
+function LocalPreview({ client: _client }: { client: EnclaveClient }) {
+  const { media } = useCalls();
+  const ref = useRef<HTMLVideoElement>(null);
+  const track = media?.room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+  useEffect(() => {
+    const el = ref.current;
+    if (!track || !el) return undefined;
+    track.attach(el);
+    return () => { track.detach(el); };
+  }, [track]);
+  return <video ref={ref} className="call-local" autoPlay playsInline muted aria-hidden="true" data-testid="local-video" />;
+}

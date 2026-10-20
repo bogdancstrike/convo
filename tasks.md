@@ -30,8 +30,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Media auto-download (Storage and data) on web and Android, Android Save to gallery via
   MediaStore. `auto-download.spec.ts` (Chromium/Firefox); emulator: manual photo download and
   Pictures/Convo export verified.
-- Calls (when started) will integrate existing open-source media servers (e.g. LiveKit + coturn)
-  deployed in docker-compose rather than custom media infrastructure.
+- Calls (ADR-0006): self-hosted LiveKit SFU + coturn in Compose, `calls` backend module (room
+  authorization, per-device LiveKit JWTs), E2EE ring/accept/decline/cancel/end messages with a
+  per-call media key, LiveKit frame encryption (no unencrypted fallback), web call screen,
+  header call buttons and Calls history. `calls.spec.ts`: voice answer/end + video decline,
+  LiveKit-reported encrypted frames, Chromium and Firefox. Android native calls in progress.
 - Passkeys: Settings → Privacy shows IdP passkey status (read-only `convo-credential-status`
   service account, `GET /v1/account/credentials`) and opens the Keycloak Account Console.
   Verified with a real Chromium WebAuthn passkey on `convo.doncea.ro`.
@@ -43,7 +46,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Android voice notes: mic ↔ send composer, pause/resume, 15-min cap, Opus/OGG (AAC fallback
   below Android 10), "Voice message · duration" tiles. Sent and replayed on emulator-5554.
 - Still open: full localization, cross-message viewer navigation,
-  web screen lock, Calls, remaining UI parity and legacy-origin migration.
+  web screen lock, Android calls, remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)
 

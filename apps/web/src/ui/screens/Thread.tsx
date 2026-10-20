@@ -1,3 +1,4 @@
+import { useCalls } from '../calls/CallProvider';
 import { conversationMenu } from './conversationMenu';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
@@ -59,6 +60,9 @@ export function Thread({
   const listRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const title = conversation.kind === 'note' ? t('chats.noteToSelf') : conversation.title;
+  const { start: startCall, call: activeCall } = useCalls();
+  // Calls: direct chats and groups you are in; not Note to self or broadcast channels.
+  const callable = conversation.kind !== 'note' && !conversation.left && !conversation.adminOnly;
   const group = conversation.kind === 'group';
   const readOnly = record?.needsJoin || conversation.adminOnly && (!record || record.members.find((m) => m.accountId === client.accountId)?.role === 'member');
   const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
@@ -146,6 +150,16 @@ export function Thread({
           <button className="icon-btn" onClick={onInfo} aria-label={t('thread.verify')} title={t('thread.verify')} data-testid="verify">
             <Icon name="shield" />
           </button>
+        )}
+        {callable && (
+          <>
+            <button className="icon-btn" disabled={!!activeCall} onClick={() => startCall(conversation.id, true)} aria-label={t('calls.videoCall')} title={t('calls.videoCall')} data-testid="start-video-call">
+              <Icon name="video" />
+            </button>
+            <button className="icon-btn" disabled={!!activeCall} onClick={() => startCall(conversation.id, false)} aria-label={t('calls.voiceCall')} title={t('calls.voiceCall')} data-testid="start-voice-call">
+              <Icon name="calls" />
+            </button>
+          </>
         )}
         <button className="icon-btn" onClick={() => setSearch((s) => (s === null ? '' : null))} aria-label={t('header.search')} aria-pressed={search !== null}>
           <Icon name="search" />

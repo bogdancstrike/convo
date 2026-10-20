@@ -13,6 +13,8 @@ export const RecordNs = {
   pendingEnrollment: 'pending-enrollment',
   localDeletedMessage: 'local-deleted-message',
   localHiddenConversation: 'local-hidden-conversation',
+  /** Device-local call history (`CallLogEntry`). */
+  callLog: 'call-log',
 } as const;
 
 export class Repositories {

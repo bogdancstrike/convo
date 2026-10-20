@@ -1,3 +1,4 @@
+import { CallsPanel } from '../calls/CallsPanel';
 import { AllMedia } from './AllMedia';
 import { MediaViewerProvider } from '../components/MediaViewer';
 import { ContactDrawer } from './ContactDrawer';
@@ -85,7 +86,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           />
         );
       case 'calls':
-        return <><header className="panel-header"><h2>{t('nav.calls')}</h2></header><div className="empty"><Icon name="calls" size={44} /><h3>{t('calls.pending')}</h3><p>{t('calls.body')}</p></div></>;
+        return <CallsPanel client={client} onOpenChat={openChat} />;
       case 'new-channel':
         return <NewGroupPanel client={client} channel onBack={() => navigate({ panel: 'channels' })} onCreated={(c) => openChat(c.id)} />;
       case 'new-group':
@@ -162,7 +163,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           onClose={() => navigate({ chat: null, info: false })}
           onOpenConversation={openChat}
         />
-      ) : nav.panel === 'calls' ? (<section className="welcome-pane"><div className="welcome-inner"><Icon name="calls" size={64} /><h2>{t('nav.calls')}</h2><p>{t('calls.pending')}</p></div></section>) : nav.panel === 'settings' ? (
+      ) : nav.panel === 'calls' ? (<section className="welcome-pane"><div className="welcome-inner"><Icon name="calls" size={64} /><h2>{t('nav.calls')}</h2><p>{t('calls.welcome')}</p></div></section>) : nav.panel === 'settings' ? (
         <section className="settings-workspace"><SettingsPanel onAllMedia={() => setAllMedia(true)} client={client} page={nav.page} onNavigate={(page) => navigate({ page })} onBack={() => navigate({ panel: 'chats' })} onSignedOut={onSignedOut} /></section>
       ) : (
         <WelcomePane

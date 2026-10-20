@@ -20,6 +20,8 @@ docker compose down -v              # stop and delete all data
 | https://localhost:8443/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
 | http://localhost:5050 | pgAdmin (database "Enclave (dev)" pre-registered; password `enclave-dev-db`) |
 | localhost:5433 | PostgreSQL (`enclave` / `enclave-dev-db`) |
+| `/rtc` (via nginx), UDP 50000-50100, TCP 7881 | LiveKit SFU for calls (media E2EE in clients) |
+| UDP/TCP 3478, UDP 49160-49200 | coturn TURN relay |
 
 All credentials above are development-only; override them via `.env` (see `.env.example`).
 

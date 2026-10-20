@@ -1,3 +1,4 @@
+import type { CallJoin } from '../core/calls';
 import type { DeviceCredentials, HttpClient } from './http';
 import type {
   AccountDto,
@@ -108,6 +109,10 @@ export class EnclaveApi {
 
   lastSeenPrivacy(): Promise<{ shareLastSeen: boolean }> { return this.signed('GET', '/v1/privacy/last-seen'); }
   setLastSeenPrivacy(shareLastSeen: boolean): Promise<void> { return this.signed('PUT', '/v1/privacy/last-seen', { shareLastSeen }); }
+  /** Authorizes a direct (peer) or group call and returns a LiveKit join token for this device. */
+  createCall(request: { peer?: string; groupId?: string; video: boolean }): Promise<CallJoin> { return this.signed('POST', '/v1/calls', request); }
+  joinCall(callId: string): Promise<CallJoin> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/join`); }
+  endCall(callId: string): Promise<void> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/end`); }
   /** Own sign-in credential types at the IdP (passkey/OTP) for lock gating; `unavailable` on IdP errors. */
   accountCredentials(): Promise<CredentialStatusDto> { return this.signed('GET', '/v1/account/credentials'); }
   lastSeenHeartbeat(): Promise<void> { return this.signed('POST', '/v1/privacy/last-seen/heartbeat'); }

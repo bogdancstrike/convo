@@ -106,6 +106,8 @@ export interface ColorRoles {
   warningText: string;
   danger: string;
   dangerText: string;
+  /** Accept-call button fill (white icon on top). */
+  success: string;
   focus: string;
   chip: string;
   chipText: string;
@@ -153,6 +155,7 @@ export const COLORS: Record<Mode, ColorRoles> = {
     warningText: AMBER[800],
     danger: '#C62828',
     dangerText: '#B42318',
+    success: '#11713F',
     focus: BRAND.ocean,
     chip: GREY.light.hover,
     chipText: GREY.light.muted,
@@ -189,6 +192,7 @@ export const COLORS: Record<Mode, ColorRoles> = {
     warningText: BRAND.amber,
     danger: '#F15C6D',
     dangerText: '#FF8A8A',
+    success: '#1B8A4F',
     focus: BRAND.cyan,
     chip: GREY.dark.selected,
     chipText: GREY.dark.muted,

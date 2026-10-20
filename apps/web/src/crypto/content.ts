@@ -117,6 +117,21 @@ export interface GroupMeta {
   version: number;
 }
 
+/**
+ * Call signalling, carried end-to-end encrypted like any message. `ring` contains the random
+ * media key the LiveKit frame cryptor uses; the SFU and the server never learn it.
+ */
+export interface CallMessage {
+  callId: string;
+  action: 'ring' | 'accept' | 'decline' | 'cancel' | 'end' | 'busy';
+  video?: boolean;
+  /** base64url 32-byte media key (ring only). */
+  key?: string;
+  /** Direct calls: the callee account, so the caller's other devices know the conversation. */
+  to?: string;
+  timestamp: number;
+}
+
 /** Typing indicator (transient, off by default). */
 export interface TypingMessage {
   action: 'started' | 'stopped';
@@ -128,6 +143,7 @@ export type Content =
   | { v: number; kind: 'receipt'; receipt: ReceiptMessage }
   | { v: number; kind: 'sync'; sync: SyncMessage }
   | { v: number; kind: 'typing'; typing: TypingMessage }
+  | { v: number; kind: 'call'; call: CallMessage }
   | { v: number; kind: 'groupMeta'; groupMeta: GroupMeta }
   | { v: number; kind: 'profile'; profile: UserProfile };
 
@@ -175,6 +191,9 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       return parsed as unknown as Content;
     case 'typing':
       return parsed as unknown as Content;
+    case 'call':
+      if (!isCallMessage(parsed.call)) throw new Error('malformed call message');
+      return parsed as unknown as Content;
     case 'groupMeta':
       if (
         !isObject(parsed.groupMeta) ||
@@ -188,6 +207,15 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
     default:
       return { v: parsed.v, kind: 'unknown' };
   }
+}
+
+const CALL_ACTIONS = new Set(['ring', 'accept', 'decline', 'cancel', 'end', 'busy']);
+function isCallMessage(value: unknown): value is CallMessage {
+  return isObject(value) && typeof value.callId === 'string' && /^[0-9a-f-]{36}$/.test(value.callId) && CALL_ACTIONS.has(String(value.action))
+    && Number.isFinite(value.timestamp) && (value.video === undefined || typeof value.video === 'boolean')
+    && (value.to === undefined || typeof value.to === 'string')
+    && (value.key === undefined || (typeof value.key === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value.key)))
+    && (value.action !== 'ring' || typeof value.key === 'string');
 }
 
 function isRevision(value: unknown): value is number {

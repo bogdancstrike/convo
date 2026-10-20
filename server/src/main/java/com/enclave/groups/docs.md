@@ -25,3 +25,5 @@ authentication themselves; this ACL is a server-side mirror, not the cryptograph
 
 Revoked devices are dropped from the routing roster immediately (no new ciphertext); members commit
 the MLS removal (GRP-02 pending-removal gate is a follow-up).
+
+`GroupsApi` (module root) exposes read-only current membership to other modules (used by `calls`).

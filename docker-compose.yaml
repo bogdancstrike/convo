@@ -122,12 +122,67 @@ services:
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ENABLED: "true"
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ADMIN_URL: http://keycloak:8080/auth
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+      ENCLAVE_CALLS_ENABLED: "true"
+      ENCLAVE_CALLS_API_SECRET: ${CONVO_LIVEKIT_SECRET:-convo-dev-livekit-secret-change-me-0123}
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
       keycloak: { condition: service_healthy }
       keycloak-setup: { condition: service_completed_successfully }
       seaweedfs: { condition: service_healthy }
+
+  # Calls: self-hosted LiveKit SFU (Apache-2.0). Signalling is proxied by nginx at /rtc; media
+  # uses UDP 50000-50100 (TCP 7881 fallback) on CONVO_SERVER_IP. Frames are E2EE by the clients.
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 50100
+          use_external_ip: false
+          node_ip: ${CONVO_SERVER_IP:-192.168.1.144}
+          turn_servers:
+            - host: ${CONVO_SERVER_IP:-192.168.1.144}
+              port: 3478
+              protocol: udp
+              username: convo
+              credential: ${CONVO_TURN_PASSWORD:-convo-dev-turn-change-me}
+        room:
+          empty_timeout: 60
+          departure_timeout: 20
+          max_participants: 16
+        keys:
+          convo: ${CONVO_LIVEKIT_SECRET:-convo-dev-livekit-secret-change-me-0123}
+    ports:
+      - "7881:7881/tcp"
+      - "50000-50100:50000-50100/udp"
+
+  # TURN relay (coturn) for clients that cannot reach LiveKit's UDP ports directly.
+  coturn:
+    image: coturn/coturn:4.6.3
+    command:
+      - -n
+      - --listening-port=3478
+      - --external-ip=${CONVO_SERVER_IP:-192.168.1.144}
+      - --realm=convo
+      - --lt-cred-mech
+      - --user=convo:${CONVO_TURN_PASSWORD:-convo-dev-turn-change-me}
+      - --min-port=49160
+      - --max-port=49200
+      - --fingerprint
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
 
   web:
     build: ./apps/web
@@ -145,6 +200,7 @@ services:
     depends_on:
       server: { condition: service_healthy }
       keycloak: { condition: service_healthy }
+      livekit: { condition: service_started }
 
   e2e:
     profiles: ["e2e"]

@@ -14,6 +14,7 @@ import {
   type AttachmentPointer,
   newMessageId,
   type Content,
+  type CallMessage,
   type DataMessage,
   type Quote,
 } from '../crypto/content';
@@ -29,6 +30,7 @@ import { approveRequest, describeRequest, type IncomingLinkRequest } from './lin
 import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
 import { sanitizeAutoDownload } from './mediaPolicy';
+import { newMediaKey, nextStatus, RING_TIMEOUT_MS, type CallEvent, type CallInvite, type CallJoin, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
@@ -64,6 +66,10 @@ export interface ClientEvents extends Record<string, unknown> {
   /** The first mailbox drain after start-up completed (server reported an empty queue). */
   synced: undefined;
   settings: Settings;
+  /** Incoming ring or a call event from the other party / own devices. */
+  call: CallEvent;
+  /** Local call history changed. */
+  callLog: undefined;
 }
 
 const TYPING_TTL_SECONDS = 10;
@@ -446,6 +452,131 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emit('messages', target.conversationId);
   }
 
+  // --- calls ------------------------------------------------------------------------------
+
+  /** Pending incoming rings (with their media key) until answered, declined or timed out. */
+  private readonly invites = new Map<string, CallInvite>();
+
+  /**
+   * Starts a call: the server authorizes the room, then an E2EE ring with a fresh media key goes
+   * to the peer (and this account's other devices) or to the group.
+   */
+  async startCall(conversationId: string, video: boolean): Promise<{ join: CallJoin; key: string }> {
+    const conversation = this.conversationCache.get(conversationId);
+    if (!conversation || conversation.kind === 'note' || conversation.left || conversation.adminOnly) throw new Error('calls unavailable here');
+    const groupId = groupIdOf(conversationId);
+    const join = await this.api.createCall(groupId ? { groupId, video } : { peer: conversationId, video });
+    const key = newMediaKey();
+    await this.logCall({ callId: join.callId, conversationId, direction: 'out', peer: conversationId, video, startedAt: Date.now(), status: 'ringing' });
+    await this.sendCall(conversationId, { callId: join.callId, action: 'ring', video, key, to: groupId ? undefined : conversationId, timestamp: Date.now() });
+    return { join, key };
+  }
+
+  /** Answers a ring; other own devices stop ringing when they receive the accept. */
+  async answerCall(invite: CallInvite): Promise<CallJoin> {
+    const join = await this.api.joinCall(invite.callId);
+    this.invites.delete(invite.callId);
+    await this.updateCallLog(invite.callId, { status: 'answered', answeredAt: Date.now() });
+    await this.sendCall(invite.conversationId, { callId: invite.callId, action: 'accept', to: invite.group ? undefined : invite.from, timestamp: Date.now() });
+    return join;
+  }
+
+  /** Declines (or reports busy for) a ring. */
+  async declineCall(invite: CallInvite, busy = false): Promise<void> {
+    this.invites.delete(invite.callId);
+    await this.updateCallLog(invite.callId, { status: busy ? 'missed' : 'declined', endedAt: Date.now() });
+    // A group ring is not declined for everyone: only direct calls tell the caller.
+    if (!invite.group) await this.sendCall(invite.conversationId, { callId: invite.callId, action: busy ? 'busy' : 'decline', to: invite.from, timestamp: Date.now() });
+  }
+
+  /**
+   * Leaves a call. Direct calls end for both sides (`cancel` before an answer, `end` after); a
+   * group call only ends for this device.
+   */
+  async endCall(callId: string, conversationId: string, answered: boolean): Promise<void> {
+    await this.updateCallLog(callId, { status: answered ? 'ended' : 'cancelled', endedAt: Date.now() });
+    if (groupIdOf(conversationId)) {
+      // Stop the others ringing if nobody answered a group call yet; otherwise just leave.
+      const entry = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, callId);
+      if (!answered && entry?.direction === 'out') await this.sendCall(conversationId, { callId, action: 'cancel', timestamp: Date.now() });
+      return;
+    }
+    await this.sendCall(conversationId, { callId, action: answered ? 'end' : 'cancel', to: conversationId, timestamp: Date.now() });
+    await this.api.endCall(callId).catch(() => undefined);
+  }
+
+  /** A ring that timed out unanswered on this device (no message is sent). */
+  async missCall(invite: CallInvite): Promise<void> {
+    this.invites.delete(invite.callId);
+    const entry = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, invite.callId);
+    if (entry?.status === 'ringing') await this.updateCallLog(invite.callId, { status: 'missed', endedAt: Date.now() });
+  }
+
+  /** Fresh join token for an ongoing call (reconnect after network loss). */
+  rejoinCall(callId: string): Promise<CallJoin> { return this.api.joinCall(callId); }
+
+  pendingInvite(callId: string): CallInvite | undefined { return this.invites.get(callId); }
+
+  async callLog(): Promise<CallLogEntry[]> {
+    return (await this.repos.store.list<CallLogEntry>(RecordNs.callLog)).sort((a, b) => b.startedAt - a.startedAt);
+  }
+
+  async clearCallLog(): Promise<void> {
+    await this.repos.store.commit((await this.callLog()).map((e) => ({ type: 'delete' as const, ns: RecordNs.callLog, id: e.callId })));
+    this.emit('callLog', undefined);
+  }
+
+  private async sendCall(conversationId: string, call: CallMessage): Promise<void> {
+    await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'call', call }, !groupIdOf(conversationId));
+  }
+
+  private async logCall(entry: CallLogEntry, ops?: StoreOp[]): Promise<void> {
+    const op: StoreOp = { type: 'put', ns: RecordNs.callLog, id: entry.callId, value: entry };
+    if (ops) ops.push(op); else { await this.repos.store.commit([op]); this.emit('callLog', undefined); }
+  }
+
+  private async updateCallLog(callId: string, patch: Partial<CallLogEntry>): Promise<void> {
+    const current = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, callId);
+    if (current) await this.logCall({ ...current, ...patch });
+  }
+
+  /**
+   * Applies a received call message. `author` is the authenticated sender account; for direct
+   * calls the conversation is the sender, or the callee named in `to` when an own device sent it.
+   */
+  private async applyCall(call: CallMessage, author: string, groupConversation: string | undefined, envelope: EnvelopeDto, ops: StoreOp[]): Promise<(() => Promise<void>)[]> {
+    const fromSelf = author === this.accountId;
+    const conversationId = groupConversation ?? (fromSelf ? call.to : author);
+    if (!conversationId || conversationId === this.accountId) return [];
+    const existing = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, call.callId);
+    if (call.action === 'ring') {
+      if (existing) return [];
+      if (fromSelf) {
+        await this.logCall({ callId: call.callId, conversationId, direction: 'out', peer: conversationId, video: !!call.video, startedAt: envelope.serverTimestamp, status: 'ringing' }, ops);
+        return [async () => this.emit('callLog', undefined)];
+      }
+      // Ring age uses server time so a late delivery after being offline becomes a missed call.
+      const stale = Date.now() - envelope.serverTimestamp > RING_TIMEOUT_MS;
+      await this.logCall({ callId: call.callId, conversationId, direction: 'in', peer: author, video: !!call.video, startedAt: envelope.serverTimestamp, status: stale ? 'missed' : 'ringing' }, ops);
+      if (stale) return [async () => this.emit('callLog', undefined)];
+      const invite: CallInvite = { callId: call.callId, conversationId, from: author, video: !!call.video, key: call.key!, at: envelope.serverTimestamp, group: !!groupConversation };
+      return [async () => { this.invites.set(invite.callId, invite); this.emit('callLog', undefined); this.emit('call', { type: 'incoming', invite }); }];
+    }
+    // Direct calls: every event concerns this call. Group calls: only own devices, the caller's
+    // cancel/end, or someone answering our own ring change local state.
+    const relevant = !!existing && (!groupConversation || fromSelf
+      || (existing.direction === 'out' ? call.action === 'accept' : author === existing.peer && (call.action === 'cancel' || call.action === 'end')));
+    if (!existing || !relevant) return [];
+    const status = nextStatus(existing.status, call.action, fromSelf, existing.direction);
+    await this.logCall({ ...existing, status, ...(status === 'answered' && !existing.answeredAt ? { answeredAt: envelope.serverTimestamp } : {}),
+      ...(status !== 'answered' && status !== 'ringing' ? { endedAt: existing.endedAt ?? envelope.serverTimestamp } : {}) }, ops);
+    return [async () => {
+      if (call.action !== 'accept' || fromSelf) this.invites.delete(call.callId);
+      this.emit('callLog', undefined);
+      this.emit('call', { type: 'remote', callId: call.callId, conversationId, from: author, action: call.action, fromSelf });
+    }];
+  }
+
   /** True while the author may still edit this message's text (see {@link canEdit}). */
   canEdit(message: ChatMessage, now = Date.now()): boolean {
     return canEdit(message, this.conversationCache.get(message.conversationId), this.accountId, now);
@@ -814,6 +945,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       }
       case 'groupMeta':
         return followUps; // only meaningful inside a group
+      case 'call':
+        return this.applyCall(content.call, sender, undefined, envelope, ops);
     }
   }
 
@@ -847,6 +980,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         this.stageProfile(content.profile, accountId, ops);
       } else if (content.kind === 'groupMeta') {
         await this.applyGroupMeta(result.groupId, content.groupMeta, ops);
+      } else if (content.kind === 'call') {
+        followUps.push(...await this.applyCall(content.call, accountId, conversationId, envelope, ops));
       } else if (content.kind === 'unknown') {
         ops.push(this.repos.putMessage({
           conversationId, id: envelope.guid, authorId: accountId, direction, sentAt: envelope.serverTimestamp,
