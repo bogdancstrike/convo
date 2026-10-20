@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { closeAll, createUser, enroll, newPage, startChat } from './support';
+import { closeAll, createUser, enroll, newPage, openChat, startChat } from './support';
 
 /** 8×8 red PNG. */
 const PNG = Buffer.from(
@@ -19,19 +19,20 @@ test('send an encrypted photo and file; recipient views and downloads them', asy
   const recipient = await newPage(browser);
   await enroll(sender, senderUser);
   await enroll(recipient, recipientUser);
-  await startChat(sender, recipientUser.username);
+  await startChat(sender, recipientUser);
 
   const fileText = `confidential report ${Date.now()}\nline two — ăîșțâ\n`;
   await sender.getByTestId('file-input').setInputFiles([
     { name: 'red.png', mimeType: 'image/png', buffer: PNG },
     { name: 'report.txt', mimeType: 'text/plain', buffer: Buffer.from(fileText, 'utf8') },
   ]);
-  await expect(sender.getByTestId('pending-file')).toHaveCount(2);
-  await sender.getByTestId('composer').fill('quarterly files');
-  await sender.getByTestId('send').click();
-  await expect(sender.getByTestId('pending-file')).toHaveCount(0);
+  // Pre-send preview: both files listed, caption, send.
+  await expect(sender.getByTestId('media-preview')).toBeVisible();
+  await sender.getByTestId('preview-caption').fill('quarterly files');
+  await sender.getByTestId('preview-send').click();
+  await expect(sender.getByTestId('media-preview')).toHaveCount(0);
 
-  await recipient.getByTestId(`conversation-${senderUser.username}`).click();
+  await openChat(recipient, senderUser.name);
   const image = recipient.getByTestId('attachment-image').locator('img');
   await expect(image).toBeVisible();
   expect(await image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(8);
@@ -50,7 +51,8 @@ test('the object store only ever receives ciphertext', async ({ browser, request
   const user = await createUser(request, 'store');
   const page = await newPage(browser);
   await enroll(page, user);
-  await page.getByRole('button', { name: 'Note to self' }).first().click();
+  await page.getByTestId('new-chat').click();
+  await page.getByTestId('note-to-self').click();
 
   const marker = `PLAINTEXT-MARKER-${Date.now()}`;
   const uploads: Buffer[] = [];
@@ -58,10 +60,35 @@ test('the object store only ever receives ciphertext', async ({ browser, request
     if (r.method() === 'PUT' && r.url().includes('/enclave-attachments/')) uploads.push(r.postDataBuffer() ?? Buffer.alloc(0));
   });
   await page.getByTestId('file-input').setInputFiles([{ name: 'secret.txt', mimeType: 'text/plain', buffer: Buffer.from(marker) }]);
-  await page.getByTestId('send').click();
+  await page.getByTestId('preview-send').click();
   await expect(page.getByTestId('attachment-file')).toContainText('secret.txt');
   expect(uploads.length).toBe(1);
   expect(uploads[0]!.includes(Buffer.from(marker))).toBe(false);
   expect(uploads[0]!.length).toBeGreaterThanOrEqual(541); // padded bucket
   await closeAll(page);
+});
+
+test('record and send an encrypted voice note', async ({ browser, request }) => {
+  const senderUser = await createUser(request, 'voice');
+  const recipientUser = await createUser(request, 'listener');
+  const sender = await newPage(browser);
+  const recipient = await newPage(browser);
+  await enroll(sender, senderUser);
+  await enroll(recipient, recipientUser);
+  await startChat(sender, recipientUser);
+
+  // Empty composer shows the microphone; typing turns it into Send.
+  await expect(sender.getByTestId('record')).toBeVisible();
+  await sender.getByTestId('composer').fill('x');
+  await expect(sender.getByTestId('send')).toBeVisible();
+  await sender.getByTestId('composer').fill('');
+
+  await sender.getByTestId('record').click();
+  await sender.waitForTimeout(1500);
+  await sender.getByTestId('send-voice').click();
+  await expect(sender.getByTestId('audio-player')).toBeVisible();
+
+  await openChat(recipient, senderUser.name);
+  await expect(recipient.getByTestId('audio-player')).toBeVisible();
+  await closeAll(sender, recipient);
 });

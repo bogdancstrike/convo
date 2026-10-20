@@ -17,6 +17,7 @@ class OidcIdentityResolver {
 
     OidcIdentity resolve(Jwt jwt) {
         String issuer = jwt.getIssuer() == null ? jwt.getClaimAsString("iss") : jwt.getIssuer().toString();
-        return new OidcIdentity(issuer, jwt.getSubject(), jwt.getClaimAsString(properties.usernameClaim()));
+        return new OidcIdentity(issuer, jwt.getSubject(), jwt.getClaimAsString(properties.usernameClaim()),
+                jwt.getClaimAsString(properties.displayNameClaim()), jwt.getClaimAsString(properties.phoneClaim()));
     }
 }

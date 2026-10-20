@@ -1,53 +1,67 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
-import { EDIT_WINDOW_MS, type EnclaveClient } from '../../core/client';
-import type { ChatMessage, Conversation } from '../../core/model';
-import { AttachmentRejectedError, MAX_ATTACHMENT_BYTES } from '../../core/attachments';
+import type { EnclaveClient } from '../../core/client';
 import { MAX_ATTACHMENTS } from '../../crypto/content';
-import { AttachmentView, formatBytes } from '../components/AttachmentView';
+import { isMuted, type ChatMessage, type Conversation } from '../../core/model';
 import { Avatar } from '../components/Avatar';
-import { FormattedText } from '../components/FormattedText';
 import { Icon } from '../components/Icon';
-import { useMessages, useTyping } from '../hooks';
+import { Menu, type MenuItem } from '../components/Popover';
+import { useAccount, useGroupRecord, useMessages, useTyping } from '../hooks';
 import { useI18n } from '../i18n/i18n';
+import { fold } from './ChatListPanel';
+import { Composer, type ComposerMode } from './Composer';
+import { ForwardDialog } from './ForwardDialog';
+import { MessageBubble, MessageInfoDialog } from './MessageBubble';
 
-/** Quick reaction set; full emoji picker is a later feature. */
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-
-type ComposerMode = { kind: 'reply'; target: ChatMessage } | { kind: 'edit'; target: ChatMessage } | null;
+const HOUR = 3_600_000;
 
 /**
- * Conversation view (UI.md §5.2–5.3): header, security notices, message list with day
- * separators, per-message actions (reply, react, edit, delete, copy) and the composer.
+ * Conversation view (UI.md §5.2–5.3): header (avatar, name, members / handle, search, ⋮ menu),
+ * security and connection notices, wallpaper message list with day separators and grouped
+ * bubbles, drag & drop, and the composer.
  */
 export function Thread({
   client,
   conversation,
   connection,
+  openPicker,
   onBack,
-  onVerify,
+  onInfo,
+  onClose,
+  onOpenConversation,
 }: {
   client: EnclaveClient;
   conversation: Conversation;
   connection: ConnectionState;
+  openPicker?: 'document' | null;
   onBack: () => void;
-  onVerify: () => void;
+  onInfo: () => void;
+  onClose: () => void;
+  onOpenConversation: (id: string) => void;
 }) {
   const { t } = useI18n();
   const messages = useMessages(client, conversation.id);
   const typing = useTyping(client, conversation.id);
+  const record = useGroupRecord(client, conversation.kind === 'group' ? conversation.id : null);
+  const peer = useAccount(client, conversation.kind === 'direct' ? conversation.id : undefined);
+  const [memberNames, setMemberNames] = useState('');
   const [mode, setMode] = useState<ComposerMode>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [search, setSearch] = useState<string | null>(null);
+  const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
+  const [info, setInfo] = useState<ChatMessage | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
   const stickToBottom = useRef(true);
   const title = conversation.kind === 'note' ? t('chats.noteToSelf') : conversation.title;
+  const group = conversation.kind === 'group';
+  const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
 
   useEffect(() => {
     void client.setActiveConversation(conversation.id);
     setMode(null);
     setFiles([]);
+    setSearch(null);
     stickToBottom.current = true;
     return () => void client.setActiveConversation(null);
   }, [client, conversation.id]);
@@ -56,12 +70,81 @@ export function Thread({
     if (conversation.unread > 0 && document.visibilityState === 'visible') void client.markRead(conversation.id);
   }, [client, conversation.id, conversation.unread]);
 
+  // Group subtitle: "Ana, Bob, You".
+  useEffect(() => {
+    if (!record) return undefined;
+    let cancelled = false;
+    void Promise.all(
+      record.members.map((m) => (m.accountId === client.accountId ? Promise.resolve(t('chats.you')) : client.displayName(m.accountId))),
+    ).then((names) => !cancelled && setMemberNames(names.sort((a, b) => (a === t('chats.you') ? 1 : b === t('chats.you') ? -1 : a.localeCompare(b))).join(', ')));
+    return () => {
+      cancelled = true;
+    };
+  }, [client, record, t]);
+
+  const shown = useMemo(() => {
+    const q = search ? fold(search) : '';
+    return q ? messages.filter((m) => m.body && fold(m.body).includes(q)) : messages;
+  }, [messages, search]);
+
   useLayoutEffect(() => {
     const list = listRef.current;
-    if (list && stickToBottom.current) list.scrollTop = list.scrollHeight;
-  }, [messages, typing]);
+    if (list && stickToBottom.current && !search) list.scrollTop = list.scrollHeight;
+  }, [shown, typing, search]);
 
-  const authorName = (m: ChatMessage) => (m.authorId === client.accountId ? client.device.username : conversation.title);
+  const authorName = (m: ChatMessage) => (m.authorId === client.accountId ? t('chats.you') : group ? '' : title);
+
+  const subtitle = typing
+    ? t('header.typing')
+    : group
+      ? memberNames
+      : conversation.kind === 'direct'
+        ? peer
+          ? [`@${peer.username}`, peer.phone].filter(Boolean).join(' · ')
+          : t('header.clickForInfo')
+        : t('thread.noteHint');
+
+  const confirmThen = (question: string, run: () => Promise<void>) => () => {
+    if (window.confirm(question)) void run();
+  };
+
+  const menu: MenuItem[] = [
+    { label: group ? t('header.groupInfo') : t('header.contactInfo'), icon: 'info', onSelect: onInfo, testId: 'menu-info' },
+    { label: t('header.search'), icon: 'search', onSelect: () => setSearch('') },
+    isMuted(conversation)
+      ? { label: t('header.unmuteNow'), icon: 'mute', onSelect: () => void client.setMute(conversation.id, null) }
+      : {
+          label: t('header.mute'),
+          icon: 'mute',
+          testId: 'menu-mute',
+          children: [
+            { label: t('header.mute8h'), onSelect: () => void client.setMute(conversation.id, Date.now() + 8 * HOUR) },
+            { label: t('header.mute1w'), onSelect: () => void client.setMute(conversation.id, Date.now() + 7 * 24 * HOUR) },
+            { label: t('header.muteAlways'), onSelect: () => void client.setMute(conversation.id, Infinity), testId: 'menu-mute-always' },
+          ],
+        },
+    {
+      label: conversation.pinned ? t('header.unpin') : t('header.pin'),
+      icon: 'pin',
+      onSelect: () => void client.updateConversation(conversation.id, { pinned: !conversation.pinned }),
+    },
+    {
+      label: conversation.archived ? t('header.unarchive') : t('header.archive'),
+      icon: 'archive',
+      onSelect: () => void client.updateConversation(conversation.id, { archived: !conversation.archived }),
+    },
+    { label: t('header.close'), icon: 'close', onSelect: onClose },
+    { label: t('header.clear'), icon: 'trash', onSelect: confirmThen(t('header.confirmClear'), () => client.clearConversation(conversation.id)) },
+    {
+      label: t('header.delete'),
+      icon: 'trash',
+      danger: true,
+      onSelect: confirmThen(t('header.confirmDelete'), async () => {
+        await client.deleteConversation(conversation.id);
+        onClose();
+      }),
+    },
+  ];
 
   return (
     <section
@@ -83,31 +166,44 @@ export function Thread({
       }}
     >
       <header className="thread-header">
-        <button className="btn btn-icon back-button" onClick={onBack} aria-label={t('thread.back')}>
+        <button className="icon-btn back-button" onClick={onBack} aria-label={t('thread.back')}>
           <Icon name="back" />
         </button>
-        <Avatar id={conversation.id} name={title} size={36} />
-        <h2 data-testid="thread-title">{title}</h2>
+        <Avatar id={conversation.id} name={title} size={40} group={group} />
+        <button className="who" onClick={onInfo} data-testid="thread-info">
+          <h2 data-testid="thread-title">{title}</h2>
+          <span className={`sub${typing ? ' typing-sub' : ''}`}>{subtitle}</span>
+        </button>
         {conversation.kind === 'direct' && (
-          <button className="btn" onClick={onVerify}>
-            <Icon name="shield" size={18} /> {t('thread.verify')}
+          <button className="icon-btn" onClick={onInfo} aria-label={t('thread.verify')} title={t('thread.verify')} data-testid="verify">
+            <Icon name="shield" />
           </button>
         )}
-        {conversation.kind === 'group' && (
-          <button className="btn" onClick={onVerify} data-testid="group-info">
-            <Icon name="group" size={18} /> {t('group.info')}
-          </button>
-        )}
-        <button className="btn btn-icon" onClick={() => void client.updateConversation(conversation.id, { pinned: !conversation.pinned })}>
-          {conversation.pinned ? t('chats.unpin') : t('chats.pin')}
+        <button className="icon-btn" onClick={() => setSearch((s) => (s === null ? '' : null))} aria-label={t('header.search')} aria-pressed={search !== null}>
+          <Icon name="search" />
         </button>
-        <button className="btn btn-icon" onClick={() => void client.updateConversation(conversation.id, { muted: !conversation.muted })}>
-          {conversation.muted ? t('chats.unmute') : t('chats.mute')}
-        </button>
-        <button className="btn btn-icon" onClick={() => void client.updateConversation(conversation.id, { archived: !conversation.archived })}>
-          {conversation.archived ? t('chats.unarchive') : t('chats.archive')}
-        </button>
+        <Menu
+          label={t('header.more')}
+          items={menu}
+          trigger={({ open, toggle }) => (
+            <button className="icon-btn" aria-label={t('header.more')} aria-expanded={open} onClick={toggle} data-testid="thread-menu">
+              <Icon name="more" />
+            </button>
+          )}
+        />
       </header>
+      {search !== null && (
+        <div className="thread-search">
+          <label className="search">
+            <Icon name="search" size={18} />
+            <input autoFocus type="search" placeholder={t('header.searchPlaceholder')} aria-label={t('header.searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} />
+          </label>
+          {search && <span className="muted-text">{t('header.searchResults', { count: shown.length })}</span>}
+          <button className="icon-btn" onClick={() => setSearch(null)} aria-label={t('thread.cancel')}>
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+      )}
       {connection !== 'online' && (
         <div className="connection-banner" role="status">
           {connection === 'connecting' ? t('conn.connecting') : t('conn.offline')}
@@ -121,12 +217,8 @@ export function Thread({
       {conversation.identityChangedAt && (
         <div className="notice" role="alert">
           <span>{t('identity.changed', { name: conversation.title })}</span>
-          <button className="btn" onClick={onVerify}>
-            {t('identity.review')}
-          </button>
-          <button className="btn" onClick={() => void client.acknowledgeIdentityChange(conversation.id)}>
-            {t('identity.dismiss')}
-          </button>
+          <button className="btn" onClick={onInfo}>{t('identity.review')}</button>
+          <button className="btn btn-ghost" onClick={() => void client.acknowledgeIdentityChange(conversation.id)}>{t('identity.dismiss')}</button>
         </div>
       )}
       <div
@@ -140,383 +232,63 @@ export function Thread({
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
       >
-        {conversation.kind === 'note' && <p className="day-separator">{t('thread.noteHint')}</p>}
-        {messages.map((m, i) => (
-          <MessageView
-            key={`${m.authorId}/${m.id}`}
-            client={client}
-            message={m}
-            showDay={i === 0 || !sameDay(messages[i - 1]!.sort, m.sort)}
-            quotedAuthor={m.quote ? (m.quote.authorId === client.accountId ? client.device.username : conversation.title) : ''}
-            showAuthor={conversation.kind === 'group' && m.direction === 'in' && (i === 0 || messages[i - 1]!.authorId !== m.authorId)}
-            onReply={() => setMode({ kind: 'reply', target: m })}
-            onEdit={() => setMode({ kind: 'edit', target: m })}
-          />
-        ))}
+        <div className="e2ee-banner">
+          <Icon name="lock" size={13} /> {conversation.kind === 'note' ? t('thread.noteHint') : t('home.encrypted')}
+        </div>
+        {shown.map((m, i) => {
+          const prev = shown[i - 1];
+          const newDay = !prev || new Date(prev.sort).toDateString() !== new Date(m.sort).toDateString();
+          const first = newDay || !prev || prev.authorId !== m.authorId || m.sort - prev.sort > 10 * 60_000;
+          return (
+            <MessageBubble
+              key={`${m.authorId}/${m.id}`}
+              client={client}
+              message={m}
+              group={group}
+              first={first}
+              showDay={newDay}
+              highlight={search ?? undefined}
+              quotedAuthor={m.quote ? (m.quote.authorId === client.accountId ? t('chats.you') : group ? '' : title) : ''}
+              actions={{
+                onReply: (target) => setMode({ kind: 'reply', target }),
+                onEdit: (target) => setMode({ kind: 'edit', target }),
+                onForward: setForwarding,
+                onInfo: setInfo,
+              }}
+            />
+          );
+        })}
       </div>
-      <div className="typing" aria-live="polite">
-        {typing ? t('thread.typing', { name: conversation.title }) : ''}
-      </div>
-      {!conversation.left && <Composer
-        key={conversation.id}
-        client={client}
-        conversation={conversation}
-        mode={mode}
-        files={files}
-        onAddFiles={addFiles}
-        onRemoveFile={(index) => setFiles((current) => current.filter((_, i) => i !== index))}
-        onClearFiles={() => setFiles([])}
-        authorName={mode ? authorName(mode.target) : ''}
-        onDone={() => {
-          setMode(null);
-          stickToBottom.current = true;
-        }}
-      />}
+      {!conversation.left && (
+        <Composer
+          key={conversation.id}
+          client={client}
+          conversation={conversation}
+          mode={mode}
+          files={files}
+          onAddFiles={addFiles}
+          onRemoveFile={(index) => setFiles((current) => current.filter((_, i) => i !== index))}
+          onClearFiles={() => setFiles([])}
+          authorName={mode ? authorName(mode.target) : ''}
+          openPicker={openPicker}
+          onDone={() => {
+            setMode(null);
+            stickToBottom.current = true;
+          }}
+        />
+      )}
+      {forwarding && (
+        <ForwardDialog
+          client={client}
+          message={forwarding}
+          onClose={() => setForwarding(null)}
+          onDone={(c) => {
+            setForwarding(null);
+            onOpenConversation(c.id);
+          }}
+        />
+      )}
+      {info && <MessageInfoDialog message={info} onClose={() => setInfo(null)} />}
     </section>
-  );
-}
-
-function MessageView({
-  client,
-  message: m,
-  showDay,
-  quotedAuthor,
-  showAuthor,
-  onReply,
-  onEdit,
-}: {
-  client: EnclaveClient;
-  message: ChatMessage;
-  showDay: boolean;
-  quotedAuthor: string;
-  showAuthor: boolean;
-  onReply: () => void;
-  onEdit: () => void;
-}) {
-  const { t, time, date } = useI18n();
-  const [reacting, setReacting] = useState(false);
-  const own = m.authorId === client.accountId;
-  const system = m.deleted || m.unsupported || m.undecryptable;
-  const canEdit = own && !system && m.body !== undefined && Date.now() - m.sentAt < EDIT_WINDOW_MS;
-
-  const remove = () => {
-    if (window.confirm(t('thread.confirmDelete'))) void client.deleteForEveryone(m);
-  };
-
-  return (
-    <>
-      {showDay && <div className="day-separator">{date(m.sort)}</div>}
-      <div className={`message-row ${m.direction}`} data-testid="message">
-        {!system && (
-          <div className="message-actions" data-open={reacting} role="toolbar" aria-label={t('thread.react')}>
-            {reacting ? (
-              QUICK_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  aria-label={`${t('thread.react')} ${emoji}`}
-                  onClick={() => {
-                    setReacting(false);
-                    void client.react(m, emoji);
-                  }}
-                >
-                  {emoji}
-                </button>
-              ))
-            ) : (
-              <>
-                <button onClick={onReply}>{t('thread.reply')}</button>
-                <button onClick={() => setReacting(true)} aria-label={t('thread.react')}>
-                  🙂
-                </button>
-                {canEdit && <button onClick={onEdit}>{t('thread.edit')}</button>}
-                <button onClick={() => void navigator.clipboard?.writeText(m.body ?? '')}>{t('thread.copy')}</button>
-                {own && <button onClick={remove}>{t('thread.deleteForEveryone')}</button>}
-                <button onClick={() => void client.deleteLocally(m)}>{t('thread.deleteForMe')}</button>
-              </>
-            )}
-          </div>
-        )}
-        <div className={`bubble${system ? ' system' : ''}`} tabIndex={0}>
-          {showAuthor && <AuthorName client={client} accountId={m.authorId} />}
-          {m.quote && !system && (
-            <div className="quote">
-              <strong>{quotedAuthor}</strong>
-              <div>{m.quote.excerpt ?? t('thread.originalUnavailable')}</div>
-            </div>
-          )}
-          {m.deleted ? (
-            t('thread.deleted')
-          ) : m.unsupported ? (
-            t('thread.unsupported')
-          ) : m.undecryptable ? (
-            t('thread.undecryptable')
-          ) : (
-            <>
-              {m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} />)}
-              {m.body && (
-                <span data-testid="message-body">
-                  <FormattedText text={m.body} />
-                </span>
-              )}
-            </>
-          )}
-          {Object.keys(m.reactions).length > 0 && (
-            <div className="reactions">
-              {Object.entries(m.reactions).map(([emoji, ids]) => (
-                <button
-                  key={emoji}
-                  className="reaction"
-                  aria-pressed={ids.includes(client.accountId)}
-                  onClick={() => void client.react(m, emoji)}
-                  data-testid="reaction"
-                >
-                  {emoji} {ids.length}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="meta">
-            {m.editedAt && !m.deleted && <span>{t('thread.edited')}</span>}
-            <span>{time(m.sentAt)}</span>
-            {own && m.status && (
-              <span className={m.status === 'failed' || m.status === 'blocked' ? 'failed' : ''} data-testid="message-status">
-                {t(`status.${m.status}`)}
-              </span>
-            )}
-            {own && (m.status === 'failed' || m.status === 'blocked') && (
-              <button className="btn-icon reaction" onClick={() => void client.retry(m)}>
-                {t('thread.retry')}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function Composer({
-  client,
-  conversation,
-  mode,
-  files,
-  onAddFiles,
-  onRemoveFile,
-  onClearFiles,
-  authorName,
-  onDone,
-}: {
-  client: EnclaveClient;
-  conversation: Conversation;
-  mode: ComposerMode;
-  files: File[];
-  onAddFiles: (files: File[]) => void;
-  onRemoveFile: (index: number) => void;
-  onClearFiles: () => void;
-  authorName: string;
-  onDone: () => void;
-}) {
-  const { t, locale } = useI18n();
-  const [text, setText] = useState(conversation.draft ?? '');
-  const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const textarea = useRef<HTMLTextAreaElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const typingSent = useRef(0);
-  const oversized = files.find((f) => f.size > MAX_ATTACHMENT_BYTES);
-
-  useEffect(() => {
-    if (mode?.kind === 'edit') setText(mode.target.body ?? '');
-    if (mode) textarea.current?.focus();
-  }, [mode]);
-
-  // Persist the draft (debounced) so it survives reloads (UI.md §1.1 "preserve work").
-  useEffect(() => {
-    if (mode?.kind === 'edit') return undefined;
-    const timer = setTimeout(() => {
-      if ((conversation.draft ?? '') !== text) void client.updateConversation(conversation.id, { draft: text || undefined });
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [client, conversation.id, conversation.draft, text, mode]);
-
-  const sendFiles = async () => {
-    const caption = text.trim();
-    const selected = files;
-    setError(null);
-    setUpload({ done: 0, total: selected.length });
-    try {
-      await client.sendAttachments(conversation.id, selected, caption, (done) => setUpload({ done, total: selected.length }));
-      setText('');
-      onClearFiles();
-      onDone();
-    } catch (e) {
-      setError(
-        e instanceof AttachmentRejectedError
-          ? t(e.reason === 'too-large' ? 'attachment.tooLarge' : 'attachment.unreadable', { name: e.fileName })
-          : t('attachment.uploadFailed'),
-      );
-    } finally {
-      setUpload(null);
-    }
-  };
-
-  const submit = async () => {
-    if (upload) return;
-    if (files.length > 0 && mode?.kind !== 'edit') {
-      if (!oversized) await sendFiles();
-      return;
-    }
-    const body = text.trim();
-    if (!body) return;
-    const current = mode;
-    // Clear first: anything typed while the message is being persisted belongs to the next one.
-    setText('');
-    typingSent.current = 0;
-    onDone();
-    try {
-      if (current?.kind === 'edit') {
-        await client.edit(current.target, body);
-      } else {
-        const quote =
-          current?.kind === 'reply'
-            ? { messageId: current.target.id, authorId: current.target.authorId, excerpt: (current.target.body ?? '').slice(0, 120) }
-            : undefined;
-        await client.sendText(conversation.id, body, quote);
-      }
-      void client.sendTyping(conversation.id, 'stopped');
-    } catch (error) {
-      // Local persistence failed (e.g. storage full): give the text back instead of losing it.
-      setText((typed) => (typed ? typed : body));
-      console.warn('Could not queue message', error instanceof Error ? error.message : error);
-    }
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // IME composition Enter never sends (UI.md §5.3).
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && client.settings.enterToSend) {
-      e.preventDefault();
-      void submit();
-    } else if (e.key === 'Escape' && mode) {
-      onDone();
-      if (mode.kind === 'edit') setText('');
-    }
-  };
-
-  const onChange = (value: string) => {
-    setText(value);
-    if (value && Date.now() - typingSent.current > 5000) {
-      typingSent.current = Date.now();
-      void client.sendTyping(conversation.id, 'started');
-    }
-  };
-
-  return (
-    <div className="composer">
-      {files.length > 0 && (
-        <ul className="pending-files" aria-label={t('thread.attach')}>
-          {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className={f.size > MAX_ATTACHMENT_BYTES ? 'failed' : ''} data-testid="pending-file">
-              <span>
-                {f.name} · {formatBytes(f.size, locale)}
-              </span>
-              <button className="btn-icon" onClick={() => onRemoveFile(i)} aria-label={t('thread.removeFile', { name: f.name })} disabled={!!upload}>
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {oversized && <div role="alert" className="failed">{t('attachment.tooLarge', { name: oversized.name })}</div>}
-      {upload && <div role="status">{t('thread.uploading', { done: upload.done, total: upload.total })}</div>}
-      {error && <div role="alert" className="failed">{error}</div>}
-      {mode && (
-        <div className="composer-context">
-          <span>
-            {mode.kind === 'reply' ? t('thread.replyingTo', { name: authorName }) : t('thread.editing')}
-            {mode.kind === 'reply' && `: ${mode.target.body ?? ''}`}
-          </span>
-          <button
-            className="btn btn-icon"
-            onClick={() => {
-              if (mode.kind === 'edit') setText('');
-              onDone();
-            }}
-          >
-            {t('thread.cancel')}
-          </button>
-        </div>
-      )}
-      <div className="composer-row">
-        <input
-          ref={fileInput}
-          type="file"
-          multiple
-          hidden
-          data-testid="file-input"
-          onChange={(e) => {
-            onAddFiles(Array.from(e.target.files ?? []));
-            e.target.value = '';
-          }}
-        />
-        <button
-          className="btn btn-icon"
-          onClick={() => fileInput.current?.click()}
-          aria-label={t('thread.attach')}
-          title={t('thread.attach')}
-          disabled={mode?.kind === 'edit' || !!upload}
-        >
-          📎
-        </button>
-        <label className="visually-hidden" htmlFor="composer">
-          {t('thread.placeholder')}
-        </label>
-        <textarea
-          id="composer"
-          ref={textarea}
-          rows={1}
-          placeholder={t('thread.placeholder')}
-          value={text}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={(e) => {
-            const pasted = Array.from(e.clipboardData.files);
-            if (pasted.length > 0) {
-              e.preventDefault();
-              onAddFiles(pasted);
-            }
-          }}
-          data-testid="composer"
-        />
-        <button
-          className="btn btn-primary"
-          onClick={() => void submit()}
-          disabled={!!upload || (!text.trim() && files.length === 0) || !!oversized}
-          data-testid="send"
-        >
-          {mode?.kind === 'edit' ? t('thread.save') : t('thread.send')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function sameDay(a: number, b: number): boolean {
-  return new Date(a).toDateString() === new Date(b).toDateString();
-}
-
-/** Sender handle above incoming group messages. */
-function AuthorName({ client, accountId }: { client: EnclaveClient; accountId: string }) {
-  const [name, setName] = useState('');
-  useEffect(() => {
-    let cancelled = false;
-    void client.displayName(accountId).then((n) => !cancelled && setName(n));
-    return () => {
-      cancelled = true;
-    };
-  }, [client, accountId]);
-  return (
-    <div className="author" data-testid="message-author">
-      {name}
-    </div>
   );
 }

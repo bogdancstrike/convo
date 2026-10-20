@@ -1,23 +1,56 @@
 /**
- * Inline SVG icon set (bundled; no icon fonts or CDN requests). Decorative by default: pass a
- * `label` to expose it to assistive technology.
+ * Bundled stroke icon set (24 × 24 grid, 1.9 px stroke; no icon fonts or CDN requests).
+ * Decorative by default; pass `label` to expose an icon to assistive technology.
  */
-const PATHS = {
-  chats: 'M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z',
-  settings:
-    'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 4.6-1.9 1.1.2 2.2-2.1 1.2-1.8-1.3-1.9.8-.6 2.1h-2.4l-.6-2.1-1.9-.8-1.8 1.3-2.1-1.2.2-2.2-1.9-1.1v-2.2l1.9-1.1-.2-2.2 2.1-1.2 1.8 1.3 1.9-.8.6-2.1h2.4l.6 2.1 1.9.8 1.8-1.3 2.1 1.2-.2 2.2 1.9 1.1z',
-  plus: 'M12 5v14M5 12h14',
-  send: 'M4 12 20 4l-4 16-4-7z',
-  shield: 'M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z',
-  back: 'M15 5l-7 7 7 7',
-  note: 'M6 3h9l4 4v14H6zM14 3v5h5',
-  group: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 19c0-3 3-5 6-5s6 2 6 5M16 5.5a3 3 0 0 1 0 5.5M18 14c2 .6 3 2.3 3 5',
+const ICONS = {
+  chats: ['M20 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.5A7.5 7.5 0 1 1 20 11.5z'],
+  newChat: ['M20 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.5A7.5 7.5 0 1 1 20 11.5z', 'M12.5 8.5v6', 'M9.5 11.5h6'],
+  settings: [
+    'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+    'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  ],
+  group: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z', 'M2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5', 'M16 4.3a3.5 3.5 0 0 1 0 6.4', 'M18 14.8c2.1.7 3.5 2.6 3.5 5.2'],
+  userPlus: ['M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M3 21c0-3.6 3.1-6 7-6s7 2.4 7 6', 'M19 8v6', 'M16 11h6'],
+  note: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 3v5h5', 'M9 13h6', 'M9 17h4'],
+  back: ['M19 12H5', 'M11 18l-6-6 6-6'],
+  next: ['M5 12h14', 'M13 6l6 6-6 6'],
+  plus: ['M12 5v14', 'M5 12h14'],
+  search: ['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'M20 20l-4-4'],
+  more: ['M12 5.5h.01', 'M12 12h.01', 'M12 18.5h.01'],
+  check: ['M5 12.5l4.5 4.5L19 7.5'],
+  checks: ['M2.5 12.5l4.5 4.5L16.5 7.5', 'M11.5 16.2l.8.8L21.8 7.5'],
+  clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3 2'],
+  alert: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7.5v5.5', 'M12 16.5h.01'],
+  paperclip: ['M20.5 11.5l-8.2 8.2a5.3 5.3 0 0 1-7.5-7.5l8.2-8.2a3.5 3.5 0 1 1 5 5L9.8 17.1a1.8 1.8 0 0 1-2.5-2.5l7.6-7.6'],
+  smile: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8', 'M9 9.5h.01', 'M15 9.5h.01'],
+  send: ['M4.5 12L3 4l18 8-18 8z', 'M4.5 12H12'],
+  mic: ['M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15z', 'M5.5 11a6.5 6.5 0 0 0 13 0', 'M12 17.5V21'],
+  trash: ['M4 7h16', 'M9.5 7V4.5h5V7', 'M6.5 7l1 13h9l1-13', 'M10 11v5', 'M14 11v5'],
+  pause: ['M9 5v14', 'M15 5v14'],
+  play: ['M7 4.5v15l12-7.5z'],
+  lock: ['M6.5 11V8a5.5 5.5 0 0 1 11 0v3', 'M5.5 11h13v9.5h-13z', 'M12 15v2'],
+  close: ['M6 6l12 12', 'M18 6L6 18'],
+  pin: ['M14.5 3.5l6 6-3 1-3.5 3.5-.5 4-2.5-2.5L5 21l5.5-6.5L8 12l4-.5 3.5-3.5z'],
+  mute: ['M10.5 4.5A5.5 5.5 0 0 1 17.5 9.5V13l1.5 3H8', 'M6.6 6.6A5.5 5.5 0 0 0 6.5 9.5V13L5 16h3', 'M10 19.5a2 2 0 0 0 4 0', 'M3 3l18 18'],
+  archive: ['M3.5 4.5h17v4h-17z', 'M5 8.5v11h14v-11', 'M10 12.5h4'],
+  file: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 3v5h5'],
+  image: ['M4 4.5h16v15H4z', 'M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z', 'M20 15.5l-5-5-9 9'],
+  camera: ['M4 7.5h3.5L9 5h6l1.5 2.5H20v12H4z', 'M12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z'],
+  headphones: ['M4 17v-4a8 8 0 0 1 16 0v4', 'M4 15h3v5H4z', 'M17 15h3v5h-3z'],
+  info: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 11v5.5', 'M12 7.5h.01'],
+  shield: ['M12 3l7.5 3v5.5c0 4.7-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.8-7.5-9.5V6z', 'M9 12l2.2 2.2L15.5 10'],
+  devices: ['M3 5.5h13v9H3z', 'M1.5 18h16', 'M18.5 9h4v11h-4z'],
+  reply: ['M10 8L4 13l6 5', 'M4 13h10a6 6 0 0 1 6 6'],
+  copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
+  edit: ['M4 20h4L19.5 8.5a2.8 2.8 0 0 0-4-4L4 16z'],
+  chevronDown: ['M6 9l6 6 6-6'],
+  logout: ['M15 4h4v16h-4', 'M10 16l-4-4 4-4', 'M6 12h11'],
+  palette: ['M12 3a9 9 0 0 0 0 18c1.1 0 1.5-.8 1.5-1.5 0-1.4-1.2-1.6-1.2-2.8 0-1 .8-1.7 1.8-1.7H16a5 5 0 0 0 5-5C21 6.3 17 3 12 3z', 'M7.5 12h.01', 'M9 8h.01', 'M13.5 7h.01', 'M17 10h.01'],
 } as const;
 
-export type IconName = keyof typeof PATHS;
+export type IconName = keyof typeof ICONS;
 
-export function Icon({ name, label, size = 22 }: { name: IconName; label?: string; size?: number }) {
-  const stroked = name === 'plus' || name === 'back' || name === 'note' || name === 'group';
+export function Icon({ name, label, size = 22, filled = false }: { name: IconName; label?: string; size?: number; filled?: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -26,13 +59,16 @@ export function Icon({ name, label, size = 22 }: { name: IconName; label?: strin
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      fill={stroked ? 'none' : 'currentColor'}
-      stroke={stroked ? 'currentColor' : 'none'}
-      strokeWidth={stroked ? 2 : 0}
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={1.9}
       strokeLinecap="round"
       strokeLinejoin="round"
+      focusable="false"
     >
-      <path d={PATHS[name]} />
+      {ICONS[name].map((d) => (
+        <path key={d} d={d} />
+      ))}
     </svg>
   );
 }

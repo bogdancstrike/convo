@@ -1,6 +1,7 @@
 import { NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { decryptAttachment, encryptAttachment } from '../crypto/attachmentCipher';
+import { toBase64Url } from '../lib/bytes';
 import type { AttachmentPointer } from '../crypto/content';
 
 /**
@@ -22,7 +23,14 @@ export interface PreparedFile {
   fileName: string;
   width?: number;
   height?: number;
+  durationMs?: number;
+  /** base64url JPEG poster (videos). */
+  thumbnail?: string;
 }
+
+/** Video containers/codecs we offer inline playback for (browser support still decides). */
+export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'] as const;
+const THUMBNAIL_SIDE = 320;
 
 /** Raised for files the user must change (too large, unreadable). */
 export class AttachmentRejectedError extends Error {
@@ -48,7 +56,50 @@ export async function prepareFile(file: File): Promise<PreparedFile> {
       throw new AttachmentRejectedError('unreadable', file.name);
     }
   }
-  return { data: new Uint8Array(await file.arrayBuffer()), contentType, fileName };
+  const data = new Uint8Array(await file.arrayBuffer());
+  if ((VIDEO_TYPES as readonly string[]).includes(contentType)) {
+    // Metadata/poster are best effort: an undecodable video is still sent as a file.
+    const info = await videoInfo(file).catch(() => undefined);
+    return { data, contentType, fileName, ...info };
+  }
+  return { data, contentType, fileName };
+}
+
+/**
+ * Reads duration and dimensions and captures a poster frame of a local video file. Runs entirely
+ * in the browser (nothing is uploaded unencrypted).
+ */
+export async function videoInfo(file: Blob): Promise<Pick<PreparedFile, 'width' | 'height' | 'durationMs' | 'thumbnail'>> {
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.src = url;
+    await new Promise<void>((resolve, reject) => {
+      video.onloadeddata = () => resolve();
+      video.onerror = () => reject(new Error('undecodable video'));
+      setTimeout(() => reject(new Error('video metadata timeout')), 8000);
+    });
+    const durationMs = Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined;
+    // Seek slightly in to avoid black first frames.
+    await new Promise<void>((resolve) => {
+      video.onseeked = () => resolve();
+      video.currentTime = Math.min(0.5, (video.duration || 1) / 4);
+      setTimeout(resolve, 1500);
+    });
+    const scale = Math.min(1, THUMBNAIL_SIDE / Math.max(video.videoWidth, video.videoHeight, 1));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+    const thumbnail = blob ? toBase64Url(new Uint8Array(await blob.arrayBuffer())) : undefined;
+    return { width: video.videoWidth || undefined, height: video.videoHeight || undefined, durationMs, thumbnail };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 async function reencodeImage(file: File, contentType: string, fileName: string): Promise<PreparedFile> {
@@ -70,7 +121,11 @@ async function reencodeImage(file: File, contentType: string, fileName: string):
 }
 
 /** Encrypts and uploads a prepared file; returns the pointer to embed in E2EE content. */
-export async function uploadAttachment(api: EnclaveApi, file: PreparedFile): Promise<AttachmentPointer> {
+export async function uploadAttachment(
+  api: EnclaveApi,
+  file: PreparedFile,
+  extra: Pick<AttachmentPointer, 'voiceNote' | 'durationMs'> = {},
+): Promise<AttachmentPointer> {
   const encrypted = await encryptAttachment(file.data);
   const form = await api.attachmentUploadForm(encrypted.blob.length);
   let response: Response;
@@ -95,6 +150,9 @@ export async function uploadAttachment(api: EnclaveApi, file: PreparedFile): Pro
     fileName: file.fileName,
     width: file.width,
     height: file.height,
+    durationMs: file.durationMs,
+    thumbnail: file.thumbnail,
+    ...extra,
   };
 }
 
@@ -135,9 +193,23 @@ export class AttachmentDownloadError extends Error {
 
 /** Never let a sender-chosen type turn a download into active content (e.g. text/html). */
 export function safeContentType(contentType: string): string {
-  return /^(image\/(jpeg|png|gif|webp)|audio\/[\w.+-]+|video\/(mp4|webm)|application\/pdf)$/.test(contentType)
-    ? contentType
+  const base = contentType.split(';')[0]!.trim().toLowerCase();
+  return /^(image\/(jpeg|png|gif|webp)|audio\/(webm|ogg|mp4|mpeg|aac|wav)|video\/(mp4|webm|ogg|quicktime)|application\/pdf)$/.test(base)
+    ? base
     : 'application/octet-stream';
+}
+
+/** True if the pointer is playable audio (voice notes and audio files). */
+export function isAudio(pointer: AttachmentPointer): boolean {
+  return safeContentType(pointer.contentType).startsWith('audio/');
+}
+
+/** True if the pointer is a video the browser can probably play inline. */
+export function isVideo(pointer: AttachmentPointer): boolean {
+  const type = safeContentType(pointer.contentType);
+  if (!type.startsWith('video/')) return false;
+  const probe = document.createElement('video');
+  return probe.canPlayType(type) !== '';
 }
 
 /** True if the pointer can be shown inline as an image. */

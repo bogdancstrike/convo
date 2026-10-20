@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { AttachmentDownloadError, isInlineImage } from '../../core/attachments';
+import { useEffect, useRef, useState } from 'react';
+import { AttachmentDownloadError, isAudio, isInlineImage, isVideo } from '../../core/attachments';
 import type { EnclaveClient } from '../../core/client';
 import type { AttachmentPointer } from '../../crypto/content';
 import { useI18n } from '../i18n/i18n';
+import { formatDuration } from '../useVoiceRecorder';
+import { Icon } from './Icon';
 
 /**
  * Renders one encrypted attachment. Images are downloaded, digest-verified and decrypted on
@@ -36,9 +38,10 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const image = isInlineImage(pointer);
+  const audio = isAudio(pointer);
 
   useEffect(() => {
-    if (!image || url) return undefined;
+    if (!(image || audio) || url) return undefined;
     let cancelled = false;
     decryptToUrl(client, pointer)
       .then((u) => !cancelled && setUrl(u))
@@ -46,7 +49,7 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
     return () => {
       cancelled = true;
     };
-  }, [client, pointer, image, url]);
+  }, [client, pointer, image, audio, url]);
 
   const save = async () => {
     setBusy(true);
@@ -66,6 +69,8 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
   };
 
   const name = pointer.fileName ?? (image ? t('attachment.photo') : t('attachment.file'));
+  if (audio && !error) return <AudioPlayer url={url} pointer={pointer} />;
+  if (isVideo(pointer) && !error) return <VideoView client={client} pointer={pointer} onError={(e) => setError(reasonOf(e))} />;
   if (image && !error) {
     return url ? (
       <a href={url} target="_blank" rel="noopener noreferrer" className="attachment-image" data-testid="attachment-image">
@@ -101,4 +106,93 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
 
 function reasonOf(error: unknown): 'expired' | 'offline' | 'integrity' {
   return error instanceof AttachmentDownloadError ? error.reason : 'offline';
+}
+
+/** Inline player for voice notes and audio files (decrypted into a session object URL). */
+function AudioPlayer({ url, pointer }: { url: string | null; pointer: AttachmentPointer }) {
+  const { t } = useI18n();
+  const audio = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(pointer.durationMs ?? 0);
+
+  const toggle = () => {
+    const el = audio.current;
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
+  };
+
+  return (
+    <div className="audio-player" data-testid="audio-player">
+      {url && (
+        <audio
+          ref={audio}
+          src={url}
+          preload="metadata"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => {
+            setPlaying(false);
+            setPosition(0);
+          }}
+          onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime * 1000)}
+          onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setDuration(e.currentTarget.duration * 1000)}
+        />
+      )}
+      <button className="icon-btn" onClick={toggle} disabled={!url} aria-label={playing ? t('composer.pause') : t('msg.play')}>
+        <Icon name={playing ? 'pause' : 'play'} filled={!playing} />
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(1, duration)}
+        value={Math.min(position, duration)}
+        aria-label={pointer.voiceNote ? t('msg.voiceNote') : (pointer.fileName ?? t('attachment.file'))}
+        onChange={(e) => {
+          if (audio.current) audio.current.currentTime = Number(e.target.value) / 1000;
+        }}
+      />
+      <span className="audio-time">{formatDuration(playing || position > 0 ? position : duration)}</span>
+      {pointer.voiceNote && <Icon name="mic" size={18} />}
+    </div>
+  );
+}
+
+/**
+ * Inline video: shows the encrypted-in-message poster with duration; the video itself is downloaded,
+ * digest-verified and decrypted only when the user presses play (videos can be large).
+ */
+function VideoView({ client, pointer, onError }: { client: EnclaveClient; pointer: AttachmentPointer; onError: (e: unknown) => void }) {
+  const { t } = useI18n();
+  const [url, setUrl] = useState<string | null>(() => objectUrls.get(pointer.attachmentId) ?? null);
+  const [loading, setLoading] = useState(false);
+  const poster = pointer.thumbnail ? `data:image/jpeg;base64,${pointer.thumbnail.replace(/-/g, '+').replace(/_/g, '/')}` : undefined;
+  const ratio = pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '16 / 9';
+
+  const play = async () => {
+    setLoading(true);
+    try {
+      setUrl(await decryptToUrl(client, pointer));
+    } catch (e) {
+      onError(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (url) {
+    return (
+      <video className="attachment-video" src={url} controls autoPlay playsInline style={{ aspectRatio: ratio }} data-testid="attachment-video">
+        {pointer.fileName}
+      </video>
+    );
+  }
+  return (
+    <button className="attachment-video poster" style={{ aspectRatio: ratio, backgroundImage: poster ? `url("${poster}")` : undefined }}
+      onClick={() => void play()} aria-label={`${t('msg.play')} ${pointer.fileName ?? ''}`} data-testid="video-poster">
+      <span className="play-badge">{loading ? <span className="spinner" /> : <Icon name="play" filled size={26} />}</span>
+      {pointer.durationMs !== undefined && <span className="video-duration">{formatDuration(pointer.durationMs)}</span>}
+    </button>
+  );
 }

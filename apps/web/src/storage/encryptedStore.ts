@@ -158,6 +158,18 @@ export class EncryptedStore {
     return Promise.all(rows.map((r) => this.open<T>(r)));
   }
 
+  /** Deletes every stored message of a conversation (local "clear chat"). */
+  async deleteConversationMessages(conversationId: string): Promise<void> {
+    const conv = await this.name('conv', conversationId);
+    const tx = this.db.transaction('messages', 'readwrite');
+    let cursor = await tx.store.index('conv_sort').openCursor(IDBKeyRange.bound([conv, -Infinity], [conv, Infinity]));
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  }
+
   /** @returns whether an envelope GUID was already processed (dedupe, specs §10). */
   async isProcessed(guid: string): Promise<boolean> {
     return (await this.db.count('processed', guid)) > 0;

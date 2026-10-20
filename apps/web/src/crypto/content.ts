@@ -41,7 +41,16 @@ export interface AttachmentPointer {
   fileName?: string;
   width?: number;
   height?: number;
+  /** Recorded in the app as a voice note (rendered as an inline player). */
+  voiceNote?: boolean;
+  /** Media duration in milliseconds, when known. */
+  durationMs?: number;
+  /** Small JPEG preview (base64url) for videos; travels only inside E2EE content. */
+  thumbnail?: string;
 }
+
+/** Maximum encoded thumbnail size inside content. */
+export const MAX_THUMBNAIL_CHARS = 64 * 1024;
 
 /** Reaction toggle on a target message. */
 export interface Reaction {
@@ -68,6 +77,8 @@ export interface DataMessage {
   timestamp: number;
   body?: string;
   attachments?: AttachmentPointer[];
+  /** Explicitly forwarded by the sender (shown as "Forwarded", specs §25.1). */
+  forwarded?: boolean;
   quote?: Quote;
   reaction?: Reaction;
   edit?: Edit;
@@ -193,6 +204,7 @@ function isAttachmentPointer(value: unknown): value is AttachmentPointer {
     value.size >= 0 &&
     typeof value.contentType === 'string' &&
     value.contentType.length <= 128 &&
-    (value.fileName === undefined || (typeof value.fileName === 'string' && value.fileName.length <= 255))
+    (value.fileName === undefined || (typeof value.fileName === 'string' && value.fileName.length <= 255)) &&
+    (value.thumbnail === undefined || (typeof value.thumbnail === 'string' && value.thumbnail.length <= MAX_THUMBNAIL_CHARS))
   );
 }

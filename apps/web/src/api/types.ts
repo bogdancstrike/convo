@@ -45,6 +45,8 @@ export interface RegistrationResponse {
 export interface SelfDto {
   accountId: string;
   username: string;
+  displayName?: string;
+  phone?: string;
   deviceId: number;
   identityKey: string;
   deviceListVersion: number;
@@ -53,6 +55,10 @@ export interface SelfDto {
 export interface AccountDto {
   accountId: string;
   username: string;
+  /** Organization display name (IdP-managed, ADR-0002). */
+  displayName?: string;
+  /** Organization phone number (IdP-managed, ADR-0002). */
+  phone?: string;
   identityKey?: string;
 }
 

@@ -1,10 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeAll, createUser, enroll, message, newPage, send } from './support';
+import { closeAll, createUser, enroll, message, newPage, openChat, send } from './support';
 
-async function openGroup(page: Page, name: string) {
-  await page.getByTestId(`conversation-${name}`).click();
-  await expect(page.getByTestId('thread-title')).toHaveText(name);
-}
+const openGroup = (page: Page, name: string) => openChat(page, name);
 
 /**
  * GRP-02/03: MLS groups through the Delivery Service — encrypted name, authenticated senders,
@@ -17,12 +14,14 @@ test('create an MLS group, chat, remove and add members', async ({ browser, requ
 
   // Owner creates the group with Bob and Carol.
   const groupName = `Project Falcon ${Date.now() % 10000}`;
+  await owner.getByTestId('new-chat').click();
   await owner.getByTestId('new-group').click();
-  await owner.getByTestId('group-name').fill(groupName);
   for (const u of [bobU, carolU]) {
     await owner.getByTestId('people-search').fill(u.username);
     await owner.getByTestId(`pick-${u.username}`).click();
   }
+  await owner.getByTestId('group-next').click();
+  await owner.getByTestId('group-name').fill(groupName);
   await owner.getByTestId('create-group').click();
   await expect(owner.getByTestId('thread-title')).toHaveText(groupName);
 
@@ -38,21 +37,21 @@ test('create an MLS group, chat, remove and add members', async ({ browser, requ
   await send(bob, 'bob here');
   const atCarol = message(carol, 'bob here');
   await expect(atCarol).toBeVisible();
-  await expect(atCarol.getByTestId('message-author')).toHaveText(bobU.username);
+  await expect(atCarol.getByTestId('message-author')).toHaveText(bobU.name);
   await expect(message(owner, 'bob here')).toBeVisible();
 
   // Owner removes Carol: she is told and receives nothing new.
-  await owner.getByTestId('group-info').click();
+  await owner.getByTestId('thread-info').click();
   owner.once('dialog', (d) => void d.accept());
   await owner.getByTestId(`member-${carolU.username}`).getByRole('button', { name: 'Remove' }).click();
   await expect(owner.getByTestId(`member-${carolU.username}`)).toHaveCount(0);
 
   // Owner adds Dan.
+  await owner.getByTestId('add-member').click();
   await owner.getByTestId('people-search').fill(danU.username);
   await owner.getByTestId(`pick-${danU.username}`).click();
-  await owner.getByTestId('add-members').click();
   await expect(owner.getByTestId(`member-${danU.username}`)).toBeVisible();
-  await owner.keyboard.press('Escape');
+  await owner.getByTestId('close-info').click();
 
   await expect(carol.getByText('You are no longer a member of this group')).toBeVisible();
   await send(owner, 'after the change');

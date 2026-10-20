@@ -12,7 +12,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class AccountRepository {
 
-    private static final String COLUMNS = "account_id, username, device_list_version, identity_key, status";
+    private static final String COLUMNS =
+            "account_id, username, device_list_version, identity_key, status, display_name, phone";
 
     private final JdbcClient jdbc;
 
@@ -101,25 +102,51 @@ public class AccountRepository {
                 .param("id", accountId).query(Long.class).single();
     }
 
+    private static Account map(ResultSet rs, int row) throws SQLException {
+        return new Account(rs.getObject("account_id", UUID.class), rs.getString("username"),
+                rs.getLong("device_list_version"), rs.getBytes("identity_key"), rs.getString("status"),
+                rs.getString("display_name"), rs.getString("phone"));
+    }
+
+    /** Updates IdP-sourced directory attributes; no-op when unchanged. */
+    public void updateDirectory(UUID accountId, String displayName, String phone) {
+        jdbc.sql("""
+                UPDATE accounts SET display_name = :n, phone = :p, phone_digits = :d, search_text = :s
+                 WHERE account_id = :id
+                   AND (display_name IS DISTINCT FROM :n OR phone IS DISTINCT FROM :p)""")
+                .param("n", displayName).param("p", phone).param("d", DirectoryText.phoneDigits(phone))
+                .param("s", DirectoryText.fold(displayName)).param("id", accountId)
+                .update();
+    }
+
     /**
-     * Prefix search over handles of active accounts that have at least one active device.
-     *
-     * @param prefix lower-case handle prefix (already validated)
-     * @param limit maximum results
+     * Directory search by handle prefix or name (word-prefix, diacritic-insensitive) over active
+     * accounts with at least one active device.
      */
-    public List<Account> searchByUsernamePrefix(String prefix, int limit) {
-        String escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    public List<Account> searchByName(String folded, int limit) {
+        String like = escapeLike(folded);
         return jdbc.sql("SELECT " + COLUMNS + """
                  FROM accounts a
-                WHERE a.status = 'active' AND a.username LIKE :p
+                WHERE a.status = 'active'
+                  AND (a.username LIKE :prefix OR a.search_text LIKE :prefix OR a.search_text LIKE :word)
                   AND EXISTS (SELECT 1 FROM devices d WHERE d.account_id = a.account_id AND d.revoked_at IS NULL)
-                ORDER BY a.username LIMIT :l""")
-                .param("p", escaped + "%").param("l", limit)
+                ORDER BY (a.username LIKE :prefix) DESC, a.search_text, a.username LIMIT :l""")
+                .param("prefix", like + "%").param("word", "% " + like + "%").param("l", limit)
                 .query(AccountRepository::map).list();
     }
 
-    private static Account map(ResultSet rs, int row) throws SQLException {
-        return new Account(rs.getObject("account_id", UUID.class), rs.getString("username"),
-                rs.getLong("device_list_version"), rs.getBytes("identity_key"), rs.getString("status"));
+    /** Directory search by phone digits (substring, so national/international forms both match). */
+    public List<Account> searchByPhone(String digits, int limit) {
+        return jdbc.sql("SELECT " + COLUMNS + """
+                 FROM accounts a
+                WHERE a.status = 'active' AND a.phone_digits LIKE :q
+                  AND EXISTS (SELECT 1 FROM devices d WHERE d.account_id = a.account_id AND d.revoked_at IS NULL)
+                ORDER BY a.search_text, a.username LIMIT :l""")
+                .param("q", "%" + digits + "%").param("l", limit)
+                .query(AccountRepository::map).list();
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

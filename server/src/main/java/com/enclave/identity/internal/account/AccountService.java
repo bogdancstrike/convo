@@ -10,7 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Maps a verified OIDC identity {@code (issuer, sub)} to an application account, provisioning it
- * just-in-time on first sign-in (specs §2, ID-01).
+ * just-in-time on first sign-in (specs §2, ID-01), and keeps IdP-managed directory attributes
+ * (display name, phone; ADR-0002) current.
  */
 @Service
 public class AccountService {
@@ -39,6 +40,9 @@ public class AccountService {
         if (account.disabled()) {
             throw new EnclaveException(ErrorCode.ACCOUNT_DISABLED, "account is disabled");
         }
+        // Directory attributes are IdP-managed; refresh them whenever we see a fresh token.
+        accounts.updateDirectory(account.accountId(), DirectoryText.clean(identity.displayName(), 128),
+                DirectoryText.clean(identity.phone(), 32));
         return account;
     }
 

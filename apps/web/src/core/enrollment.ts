@@ -142,6 +142,7 @@ export async function persistEnrollment(
     accountId: result.accountId,
     deviceId: result.deviceId,
     username: me.username,
+    displayName: me.displayName,
     deploymentId,
     registeredAt: Date.now(),
     nextPreKeyId: PREKEY_BATCH + 1,

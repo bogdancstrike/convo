@@ -11,18 +11,28 @@ const ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? 'admin-dev-passwor
 export interface TestUser {
   username: string;
   password: string;
+  /** Organization display name ("Ana Kx3pz"), shown as chat titles. */
+  name: string;
+  /** Unique organization phone number. */
+  phone: string;
 }
 
-/** Creates a unique realm user, e.g. `ana-k3j9x`. */
+const random = () => Math.random().toString(36).slice(2, 7);
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Creates a unique realm user, e.g. `ana-k3j9x` named "Ana K3j9x" with a unique phone number. */
 export async function createUser(request: APIRequestContext, prefix: string): Promise<TestUser> {
   const tokenResponse = await request.post('/auth/realms/master/protocol/openid-connect/token', {
     form: { grant_type: 'password', client_id: 'admin-cli', username: ADMIN_USER, password: ADMIN_PASSWORD },
   });
   expect(tokenResponse.ok(), 'Keycloak admin token').toBeTruthy();
   const { access_token: token } = (await tokenResponse.json()) as { access_token: string };
+  const suffix = random();
   const user: TestUser = {
-    username: `${prefix}-${Math.random().toString(36).slice(2, 7)}`,
+    username: `${prefix}-${suffix}`,
     password: `pw-${Math.random().toString(36).slice(2)}`,
+    name: `${capitalize(prefix)} ${capitalize(suffix)}`,
+    phone: `+40 7${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`,
   };
   const created = await request.post('/auth/admin/realms/enclave/users', {
     headers: { Authorization: `Bearer ${token}` },
@@ -31,8 +41,9 @@ export async function createUser(request: APIRequestContext, prefix: string): Pr
       enabled: true,
       email: `${user.username}@example.test`,
       emailVerified: true,
-      firstName: prefix,
-      lastName: 'Test',
+      firstName: capitalize(prefix),
+      lastName: capitalize(suffix),
+      attributes: { phoneNumber: [user.phone] },
       credentials: [{ type: 'password', value: user.password, temporary: false }],
     },
   });
@@ -81,12 +92,19 @@ export async function closeAll(...pages: Page[]): Promise<void> {
   await Promise.all(pages.map((p) => p.context().close().catch(() => undefined)));
 }
 
-/** Starts a direct chat with `username` via directory search. */
-export async function startChat(page: Page, username: string): Promise<void> {
+/** Starts a direct chat by searching the directory (by handle, name or phone). */
+export async function startChat(page: Page, user: TestUser, query: string = user.username): Promise<void> {
   await page.getByTestId('new-chat').click();
-  await page.getByTestId('directory-search').fill(username);
-  await page.getByTestId(`directory-${username}`).click();
-  await expect(page.getByTestId('thread-title')).toHaveText(username);
+  await page.getByTestId('directory-search').fill(query);
+  await page.getByTestId(`directory-${user.username}`).click();
+  await expect(page.getByTestId('thread-title')).toHaveText(user.name);
+}
+
+/** Opens an existing conversation from the chat list. */
+export async function openChat(page: Page, title: string): Promise<void> {
+  await page.getByTestId('nav-chats').click();
+  await page.getByTestId(`conversation-${title}`).click();
+  await expect(page.getByTestId('thread-title')).toHaveText(title);
 }
 
 /** Types and sends a message from the open conversation. */
@@ -98,4 +116,11 @@ export async function send(page: Page, text: string): Promise<void> {
 /** Locator of a message bubble containing `text`. */
 export function message(page: Page, text: string) {
   return page.getByTestId('message').filter({ has: page.getByTestId('message-body').getByText(text, { exact: true }) });
+}
+
+/** Opens a message's menu via right-click (same menu as the hover chevron / long-press). */
+export async function messageMenu(page: Page, text: string) {
+  const bubble = message(page, text);
+  await bubble.getByTestId('message-body').click({ button: 'right' });
+  return bubble.getByTestId('message-menu-panel');
 }

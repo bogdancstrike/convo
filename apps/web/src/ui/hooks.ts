@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionState } from '../api/socket';
+import type { AccountDto } from '../api/types';
+import type { GroupRecord } from '../core/groups';
 import type { EnclaveClient } from '../core/client';
 import type { ChatMessage, Conversation } from '../core/model';
 
@@ -62,4 +64,52 @@ export function useTyping(client: EnclaveClient, conversationId: string | null):
     return () => clearTimeout(timer);
   }, [until]);
   return until > Date.now();
+}
+
+/** Resolved display label (organization name or handle) of an account. */
+export function useAccountLabel(client: EnclaveClient, accountId: string | undefined): string {
+  const [label, setLabel] = useState('');
+  useEffect(() => {
+    if (!accountId) return undefined;
+    let cancelled = false;
+    void client.displayName(accountId).then((name) => !cancelled && setLabel(name));
+    return () => {
+      cancelled = true;
+    };
+  }, [client, accountId]);
+  return label;
+}
+
+/** Directory entry of an account (handle, display name, phone). */
+export function useAccount(client: EnclaveClient, accountId: string | undefined): AccountDto | undefined {
+  const [account, setAccount] = useState<AccountDto>();
+  useEffect(() => {
+    if (!accountId) return undefined;
+    let cancelled = false;
+    void client.account(accountId).then((a) => !cancelled && setAccount(a));
+    return () => {
+      cancelled = true;
+    };
+  }, [client, accountId]);
+  return account;
+}
+
+/** Local group record (name, roles), refreshed on membership changes. */
+export function useGroupRecord(client: EnclaveClient, conversationId: string | null): GroupRecord | undefined {
+  const [record, setRecord] = useState<GroupRecord>();
+  useEffect(() => {
+    if (!conversationId?.startsWith('g:')) {
+      setRecord(undefined);
+      return undefined;
+    }
+    let cancelled = false;
+    const load = () => void client.groupRecord(conversationId).then((r) => !cancelled && setRecord(r));
+    load();
+    const off = client.on('groups', load);
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [client, conversationId]);
+  return record;
 }

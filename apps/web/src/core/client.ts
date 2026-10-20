@@ -22,7 +22,7 @@ import { downloadAttachment, prepareFile, uploadAttachment } from './attachments
 import { replenishPreKeys } from './enrollment';
 import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
-import { groupConversationId, groupIdOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
+import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { Outbox, type OutboxItem } from './outbox';
 import type { Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
@@ -53,6 +53,8 @@ export interface ClientEvents extends Record<string, unknown> {
   revoked: undefined;
   /** Group membership/roles changed (group ID). */
   groups: string;
+  /** The first mailbox drain after start-up completed (server reported an empty queue). */
+  synced: undefined;
   settings: Settings;
 }
 
@@ -73,6 +75,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private activeConversation: string | null = null;
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private currentSettings: Settings;
+  private hasSynced = false;
 
   constructor(
     readonly device: DeviceState,
@@ -101,6 +104,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     return this.currentSettings;
   }
 
+  /** Whether the initial mailbox drain completed. */
+  get synced(): boolean {
+    return this.hasSynced;
+  }
+
   /** Loads local state and connects. */
   async start(): Promise<void> {
     for (const c of await this.repos.conversations()) this.conversationCache.set(c.id, c);
@@ -113,6 +121,15 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     });
     this.socket.on('envelope', (envelope) => void this.mutex.run(() => this.processEnvelope(envelope)).then(() => this.outbox.flush()));
     this.socket.on('directive', (directive) => void this.onDirective(directive));
+    this.socket.on('queueEmpty', () => {
+      // Envelopes are processed through the mutex; wait for them before declaring "synced".
+      void this.mutex.run(async () => {
+        if (!this.hasSynced) {
+          this.hasSynced = true;
+          this.emit('synced', undefined);
+        }
+      });
+    });
     this.socket.start();
     this.retryTimer = setInterval(() => void this.outbox.flush(), OUTBOX_RETRY_MS);
     void this.maintainGroups();
@@ -181,10 +198,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   // --- conversation commands --------------------------------------------------------------
 
   /** Opens (creating if needed) a direct conversation or Note to self. */
-  async openConversation(peer: { accountId: string; username: string }): Promise<Conversation> {
+  async openConversation(peer: AccountDto): Promise<Conversation> {
+    this.accountCache.set(peer.accountId, Promise.resolve(peer));
     const existing = this.conversationCache.get(peer.accountId);
     if (existing) return existing;
-    const conversation = this.newConversation(peer.accountId, peer.username);
+    const conversation = this.newConversation(peer.accountId, labelOf(peer));
     await this.saveConversations([conversation]);
     return conversation;
   }
@@ -213,7 +231,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     }
   }
 
-  async updateConversation(id: string, patch: Partial<Pick<Conversation, 'pinned' | 'muted' | 'archived' | 'draft'>>): Promise<void> {
+  async updateConversation(
+    id: string,
+    patch: Partial<Pick<Conversation, 'pinned' | 'muted' | 'mutedUntil' | 'archived' | 'draft'>>,
+  ): Promise<void> {
     const conversation = this.conversationCache.get(id);
     if (conversation) await this.saveConversations([{ ...conversation, ...patch }]);
   }
@@ -262,14 +283,57 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     await this.sendMessage(conversationId, { body: caption, attachments: pointers });
   }
 
+  /** Encrypts, uploads and sends a recorded voice note. */
+  async sendVoiceNote(conversationId: string, file: File, durationMs: number): Promise<void> {
+    const pointer = await uploadAttachment(this.api, await prepareFile(file), { voiceNote: true, durationMs });
+    await this.sendMessage(conversationId, { attachments: [pointer] });
+  }
+
+  /** Mutes notifications until a time (`Infinity` = always) or unmutes (`null`). */
+  async setMute(conversationId: string, until: number | null): Promise<void> {
+    await this.updateConversation(conversationId, { muted: until !== null, mutedUntil: until === null || until === Infinity ? undefined : until });
+  }
+
+  /** Deletes all messages of a conversation on this device (other participants keep theirs). */
+  async clearConversation(conversationId: string): Promise<void> {
+    await this.repos.store.deleteConversationMessages(conversationId);
+    const conversation = this.conversationCache.get(conversationId);
+    if (conversation) await this.saveConversations([{ ...conversation, preview: undefined, unread: 0 }]);
+    this.emit('messages', conversationId);
+  }
+
+  /** Removes a conversation and its messages from this device. */
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.repos.store.deleteConversationMessages(conversationId);
+    await this.repos.store.delete('conversation', conversationId);
+    this.conversationCache.delete(conversationId);
+    this.emitConversations();
+  }
+
   /** Downloads and decrypts an attachment of a message. */
   downloadAttachment(pointer: AttachmentPointer): Promise<Blob> {
     return downloadAttachment(this.api, pointer);
   }
 
+  /**
+   * Forwards a message to one destination conversation (specs §30.8: explicit single-destination
+   * forwarding). Content is re-sent as new E2EE content marked "Forwarded"; the original
+   * conversation is not referenced.
+   */
+  async forward(message: ChatMessage, destinationConversationId: string): Promise<void> {
+    if (message.deleted || message.unsupported || message.undecryptable) throw new Error('nothing to forward');
+    await this.sendMessage(destinationConversationId, { body: message.body, attachments: message.attachments, forwarded: true });
+  }
+
+  /** Stars/unstars a message on this device only. */
+  async setStarred(message: ChatMessage, starred: boolean): Promise<void> {
+    await this.repos.store.commit([this.repos.putMessage({ ...message, starred })]);
+    this.emit('messages', message.conversationId);
+  }
+
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[] },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean },
   ): Promise<void> {
     const text = content.body?.trim() || undefined;
     if (!text && !content.attachments?.length) throw new Error('empty message');
@@ -280,6 +344,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       body: text,
       quote: content.quote,
       attachments: content.attachments,
+      forwarded: content.forwarded || undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -288,6 +353,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       direction: 'out',
       body: text,
       attachments: content.attachments,
+      forwarded: content.forwarded || undefined,
       quote: content.quote,
       sentAt: data.timestamp,
       sort: data.timestamp,
@@ -297,7 +363,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
     if (conversation) {
-      const updated = { ...conversation, lastActivity: data.timestamp, preview: previewOf(data), draft: undefined, archived: false };
+      const updated = { ...conversation, lastActivity: data.timestamp, preview: previewOf(data), previewFromMe: true, previewAuthor: this.accountId, draft: undefined, archived: false };
       ops.push(this.repos.putConversation(updated));
       this.conversationCache.set(conversationId, updated);
     }
@@ -345,11 +411,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   // --- groups -----------------------------------------------------------------------------
 
   /** Creates an MLS group, then shares its encrypted name with the members. */
-  async createGroup(name: string, members: { accountId: string; username: string }[]): Promise<Conversation> {
+  async createGroup(name: string, members: AccountDto[]): Promise<Conversation> {
     const trimmed = name.trim();
     if (!trimmed || trimmed.length > 128) throw new Error('invalid group name');
     const record = await this.mutex.run(() => this.groups.create(trimmed, members.map((m) => m.accountId)));
-    members.forEach((m) => this.accountCache.set(m.accountId, Promise.resolve({ accountId: m.accountId, username: m.username })));
+    members.forEach((m) => this.accountCache.set(m.accountId, Promise.resolve(m)));
     const conversation = this.newGroupConversation(record.groupId, trimmed);
     await this.saveConversations([conversation]);
     await this.shareGroupMeta(record);
@@ -363,8 +429,17 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Display name of an account (cached directory lookup). */
   async displayName(accountId: string): Promise<string> {
-    if (accountId === this.accountId) return this.device.username;
-    return (await this.lookupAccount(accountId))?.username ?? 'Unknown';
+    if (accountId === this.accountId) return labelOf(this.device);
+    const account = await this.lookupAccount(accountId);
+    return account ? labelOf(account) : 'Unknown';
+  }
+
+  /** Directory entry of an account (cached), e.g. for the contact info panel. */
+  account(accountId: string): Promise<AccountDto | undefined> {
+    if (accountId === this.accountId) {
+      return Promise.resolve({ accountId, username: this.device.username, displayName: this.device.displayName });
+    }
+    return this.lookupAccount(accountId);
   }
 
   /** Adds people to a group (admins/owners). */
@@ -681,6 +756,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       direction,
       body: data.body,
       attachments: data.attachments,
+      forwarded: data.forwarded === true || undefined,
       quote: data.quote,
       sentAt: data.timestamp,
       sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp,
@@ -693,6 +769,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ...conversation,
       lastActivity: Math.max(conversation.lastActivity, message.sort),
       preview: previewOf(data),
+      previewFromMe: direction === 'out',
+      previewAuthor: authorId,
       archived: conversation.archived && conversation.muted,
       unread: direction === 'in' && !visible ? conversation.unread + 1 : conversation.unread,
     });
@@ -723,7 +801,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private async ensureConversation(id: string, ops: StoreOp[]): Promise<Conversation> {
     const existing = this.conversationCache.get(id);
     if (existing) return existing;
-    const title = id === this.accountId ? this.device.username : ((await this.lookupAccount(id))?.username ?? 'Unknown');
+    const account = id === this.accountId ? undefined : await this.lookupAccount(id);
+    const title = id === this.accountId ? labelOf(this.device) : account ? labelOf(account) : 'Unknown';
     const conversation = this.newConversation(id, title);
     this.stage(ops, conversation);
     return conversation;
@@ -853,6 +932,7 @@ function previewOf(data: DataMessage): string {
   if (data.body) return data.body;
   const first = data.attachments?.[0];
   if (!first) return '';
+  if (first.voiceNote) return '🎤 Voice message';
   return first.contentType.startsWith('image/') ? '📷 Photo' : `📎 ${first.fileName ?? 'File'}`;
 }
 

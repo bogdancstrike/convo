@@ -147,11 +147,12 @@ final class IdentityDtos {
     /** {@code POST /v1/keypackages/claim} response. */
     record KeyPackageClaimResponse(List<ClaimedKeyPackageDto> keyPackages, List<DeviceRefDto> unavailable) {}
 
-    /** Public account view. */
-    record AccountDto(UUID accountId, String username, String identityKey) {}
+    /** Public account view (directory). */
+    record AccountDto(UUID accountId, String username, String displayName, String phone, String identityKey) {}
 
     /** Caller's own account view. */
-    record SelfDto(UUID accountId, String username, int deviceId, String identityKey, long deviceListVersion) {}
+    record SelfDto(UUID accountId, String username, String displayName, String phone, int deviceId, String identityKey,
+            long deviceListVersion) {}
 
     /** Active device roster of an account (fan-out). */
     record RosterDto(UUID accountId, long deviceListVersion, List<RosterEntryDto> devices) {}

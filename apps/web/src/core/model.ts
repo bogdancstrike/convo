@@ -40,6 +40,10 @@ export interface ChatMessage {
   reactions: Record<string, string[]>;
   editedAt?: number;
   deleted?: boolean;
+  /** Received or sent as a forward. */
+  forwarded?: boolean;
+  /** Private bookmark on this device (never sent). */
+  starred?: boolean;
   /** Content this client version cannot render (UI shows "Update needed"). */
   unsupported?: boolean;
   /** Content that could not be decrypted. */
@@ -58,12 +62,23 @@ export interface Conversation {
   unread: number;
   pinned: boolean;
   muted: boolean;
+  /** Mute expiry (epoch ms); absent with `muted` means "always". */
+  mutedUntil?: number;
+  /** The preview is the user's own message (list shows "You:"). */
+  previewFromMe?: boolean;
+  /** Author of the preview message in groups. */
+  previewAuthor?: string;
   archived: boolean;
   draft?: string;
   /** Set when the peer's identity key changed and the user has not acknowledged it. */
   identityChangedAt?: number;
   /** Groups: this account is no longer a member (removed or left). */
   left?: boolean;
+}
+
+/** Whether notifications are currently muted for a conversation. */
+export function isMuted(c: Conversation, now = Date.now()): boolean {
+  return c.muted && (c.mutedUntil === undefined || c.mutedUntil > now);
 }
 
 /** Conversation ID of a group. */
@@ -98,10 +113,17 @@ export interface DeviceState {
   accountId: string;
   deviceId: number;
   username: string;
+  /** Organization display name, if the IdP provides one. */
+  displayName?: string;
   deploymentId: string;
   registeredAt: number;
   /** Next one-time prekey ID to allocate. */
   nextPreKeyId: number;
+}
+
+/** Best human label for an account: organization display name, else `@handle`. */
+export function labelOf(account: { username: string; displayName?: string }): string {
+  return account.displayName?.trim() || account.username;
 }
 
 /** Storage key of a message: author + message ID is globally unique. */

@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import { Icon } from '../components/Icon';
+import { Logo } from '../components/Logo';
 import { useI18n } from '../i18n/i18n';
 
 /**
@@ -10,7 +12,7 @@ function Screen({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="center-screen">
       <div className="card" role="region" aria-labelledby="screen-title">
-        <img className="logo" src="/favicon.svg" alt="" />
+        <Logo size={56} title="" />
         <h1 id="screen-title">{title}</h1>
         {children}
       </div>
@@ -18,10 +20,35 @@ function Screen({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function LoadingScreen() {
+/**
+ * Start-up splash: logo, product name and the end-to-end encryption promise, with a progress bar
+ * while configuration, local storage, keys and the first mailbox drain load.
+ *
+ * @param progress 0..1, or undefined for an indeterminate bar
+ * @param stage short status text for screen readers and the caption under the bar
+ */
+export function SplashScreen({ progress, stage }: { progress?: number; stage?: string }) {
+  const { t } = useI18n();
   return (
-    <main className="center-screen" aria-busy="true">
-      <img className="logo" src="/favicon.svg" alt="Enclave" />
+    <main className="splash" aria-busy="true" data-testid="splash">
+      <div className="splash-center">
+        <Logo size={88} />
+        <h1>{t('appName')}</h1>
+        <div
+          className={`progress${progress === undefined ? ' indeterminate' : ''}`}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress === undefined ? undefined : Math.round(progress * 100)}
+          aria-label={stage ?? t('splash.loading')}
+        >
+          <span style={progress === undefined ? undefined : { width: `${Math.round(progress * 100)}%` }} />
+        </div>
+        <p className="muted-text" aria-live="polite">{stage ?? '\u00a0'}</p>
+      </div>
+      <p className="splash-footer">
+        <Icon name="lock" size={14} /> {t('splash.e2ee')}
+      </p>
     </main>
   );
 }

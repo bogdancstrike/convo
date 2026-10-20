@@ -17,7 +17,7 @@ export class OrganizationAuth {
       redirect_uri: `${origin}/`,
       post_logout_redirect_uri: `${origin}/`,
       response_type: 'code',
-      scope: 'openid profile',
+      scope: 'openid profile phone',
       userStore: new WebStorageStateStore({ store: window.sessionStorage }),
       stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
       automaticSilentRenew: false,

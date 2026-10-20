@@ -10,8 +10,11 @@ import java.util.UUID;
  * @param deviceListVersion monotonic device-list version
  * @param identityKey account identity public key, {@code null} before the first device registers
  * @param status {@code active} or {@code disabled}
+ * @param displayName organization display name (IdP-managed), may be {@code null}
+ * @param phone organization phone number (IdP-managed), may be {@code null}
  */
-public record Account(UUID accountId, String username, long deviceListVersion, byte[] identityKey, String status) {
+public record Account(UUID accountId, String username, long deviceListVersion, byte[] identityKey, String status,
+        String displayName, String phone) {
 
     /** @return whether the organization has disabled the account */
     public boolean disabled() {

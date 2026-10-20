@@ -7,8 +7,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Organization directory search over handles (specs §12.1). Display names are end-to-end
- * encrypted profile data and therefore never server-searchable.
+ * Organization directory search (specs §12.1 as amended by ADR-0002): handle prefix, IdP display
+ * name (word prefix, diacritic-insensitive) or phone number digits. E2EE profile data is never
+ * searchable; only IdP-managed directory attributes are.
  */
 @Service
 public class DirectoryService {
@@ -27,13 +28,15 @@ public class DirectoryService {
      */
     @Transactional(readOnly = true)
     public List<Account> search(String query) {
-        String q = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
-        if (q.startsWith("@")) {
-            q = q.substring(1);
-        }
-        if (q.isEmpty() || q.length() > 32 || !q.matches("[a-z0-9._-]+")) {
+        if (query == null || query.isBlank() || query.length() > 64) {
             return List.of();
         }
-        return accounts.searchByUsernamePrefix(q, properties.directoryPageSize());
+        if (DirectoryText.looksLikePhone(query)) {
+            String digits = DirectoryText.phoneDigits(query);
+            return digits == null || digits.length() < properties.minPhoneDigits()
+                    ? List.of() : accounts.searchByPhone(digits, properties.directoryPageSize());
+        }
+        String q = DirectoryText.fold(query.startsWith("@") ? query.substring(1) : query);
+        return q == null ? List.of() : accounts.searchByName(q.toLowerCase(Locale.ROOT), properties.directoryPageSize());
     }
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeAll, createUser, enroll, message, newPage, send, signIn, startChat } from './support';
+import { closeAll, createUser, enroll, message, newPage, openChat, send, signIn, startChat } from './support';
 
 /**
  * Device linking (ID-02): a second browser joins an existing account only after a trusted device
@@ -24,6 +24,7 @@ test('link a second browser with code comparison, then fan-out reaches both devi
 
   // Trusted device sees the same code and approves.
   await anaLaptop.getByTestId('nav-settings').click();
+  await anaLaptop.getByTestId('settings-devices').click();
   const pending = anaLaptop.getByTestId('link-request');
   await expect(pending).toBeVisible();
   await expect(pending.getByTestId('link-request-code')).toHaveText(code);
@@ -34,12 +35,11 @@ test('link a second browser with code comparison, then fan-out reaches both devi
   await expect(anaLaptop.getByTestId('device-row')).toHaveCount(2);
 
   // Dan writes to Ana: delivered to both of Ana's devices.
-  await startChat(dan, anaUser.username);
+  await startChat(dan, anaUser);
   await send(dan, 'hello both of your devices');
-  await anaSecond.getByTestId(`conversation-${danUser.username}`).click();
+  await openChat(anaSecond, danUser.name);
   await expect(message(anaSecond, 'hello both of your devices')).toBeVisible();
-  await anaLaptop.getByRole('button', { name: 'Chats' }).click();
-  await anaLaptop.getByTestId(`conversation-${danUser.username}`).click();
+  await openChat(anaLaptop, danUser.name);
   await expect(message(anaLaptop, 'hello both of your devices')).toBeVisible();
 
   // Ana answers from the new browser: Dan receives it and Ana's laptop mirrors it as sent.

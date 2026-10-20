@@ -93,7 +93,7 @@ export function LinkDeviceScreen({
         {state.name === 'waiting' && (
           <>
             <p>{t('link.instructions')}</p>
-            <div className="safety-number" aria-label={t('link.code')} data-testid="link-code">
+            <div className="code-box" aria-label={t('link.code')} data-testid="link-code">
               {state.code}
             </div>
             <p className="muted-text">{t('link.history')}</p>

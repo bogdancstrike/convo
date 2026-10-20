@@ -1,17 +1,30 @@
-/**
- * Initial-based avatar with a stable color derived from the account ID (UI.md §3: stable
- * fallback colors; profile photos require profile keys, a later feature).
- */
-const COLORS = ['#086b58', '#2f5fa7', '#8a4fb0', '#b5532e', '#3f7d3a', '#9b3a5a', '#56607a', '#7a6a1f'];
+import { AVATAR_COLORS } from '../theme/tokens';
+import { Icon } from './Icon';
 
-export function Avatar({ id, name, size = 44 }: { id: string; name: string; size?: number }) {
+/**
+ * Initials avatar with a stable, contrast-checked ground derived from the ID (profile photos need
+ * E2EE profile keys, a later feature). Groups show a people icon.
+ */
+export function avatarColor(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  const color = COLORS[Math.abs(hash) % COLORS.length];
-  const initial = (name.trim()[0] ?? '?').toUpperCase();
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!;
+}
+
+export function initials(name: string): string {
+  const words = name.replace(/^@/, '').trim().split(/\s+/).filter(Boolean);
+  const letters = words.length > 1 ? words[0]![0]! + words[words.length - 1]![0]! : (words[0] ?? '?').slice(0, 1);
+  return letters.toUpperCase();
+}
+
+export function Avatar({ id, name, size = 48, group = false }: { id: string; name: string; size?: number; group?: boolean }) {
   return (
-    <span className="avatar" aria-hidden="true" style={{ background: color, width: size, height: size }}>
-      {initial}
+    <span
+      className="avatar"
+      aria-hidden="true"
+      style={{ background: avatarColor(id), width: size, height: size, fontSize: Math.round(size * 0.38) }}
+    >
+      {group ? <Icon name="group" size={Math.round(size * 0.5)} /> : initials(name)}
     </span>
   );
 }

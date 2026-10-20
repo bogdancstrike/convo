@@ -19,6 +19,9 @@ import org.springframework.validation.annotation.Validated;
  * @param maxPrekeysPerUpload maximum one-time prekeys accepted in one upload
  * @param maxStoredPrekeys maximum one-time prekeys stored per device
  * @param usernameClaim OIDC claim used to derive the organization handle
+ * @param displayNameClaim OIDC claim with the organization display name
+ * @param phoneClaim OIDC claim with the organization phone number
+ * @param minPhoneDigits minimum digits before a phone search runs (limits enumeration)
  * @param directoryPageSize maximum directory search results
  * @param deviceAuth device request-signature settings
  * @param keyPackages MLS KeyPackage limits
@@ -32,6 +35,9 @@ public record IdentityProperties(
         @DefaultValue("200") @Min(1) int maxPrekeysPerUpload,
         @DefaultValue("1000") @Min(1) int maxStoredPrekeys,
         @DefaultValue("preferred_username") @NotBlank String usernameClaim,
+        @DefaultValue("name") @NotBlank String displayNameClaim,
+        @DefaultValue("phone_number") @NotBlank String phoneClaim,
+        @DefaultValue("4") @Min(3) int minPhoneDigits,
         @DefaultValue("20") @Min(1) @Max(100) int directoryPageSize,
         @DefaultValue @Valid DeviceAuth deviceAuth,
         @DefaultValue @Valid KeyPackages keyPackages) {

@@ -39,8 +39,8 @@ class AccountController {
     @GetMapping("/v1/accounts/me")
     SelfDto me(@AuthenticationPrincipal AuthenticatedDevice me) {
         Account a = accounts.findById(me.accountId()).orElseThrow();
-        return new SelfDto(a.accountId(), a.username(), me.deviceId(), encodeNullable(a.identityKey()),
-                a.deviceListVersion());
+        return new SelfDto(a.accountId(), a.username(), a.displayName(), a.phone(), me.deviceId(),
+                encodeNullable(a.identityKey()), a.deviceListVersion());
     }
 
     /** Public view of another account (handle and identity key). */
@@ -60,14 +60,14 @@ class AccountController {
                 .map(e -> new RosterEntryDto(e.deviceId(), e.registrationId())).toList());
     }
 
-    /** Organization directory search by handle prefix. */
+    /** Organization directory search by handle, display name or phone number (ADR-0002). */
     @GetMapping("/v1/directory/search")
     List<AccountDto> search(@RequestParam("q") String query) {
         return directory.search(query).stream().map(AccountController::toDto).toList();
     }
 
     private static AccountDto toDto(Account a) {
-        return new AccountDto(a.accountId(), a.username(), encodeNullable(a.identityKey()));
+        return new AccountDto(a.accountId(), a.username(), a.displayName(), a.phone(), encodeNullable(a.identityKey()));
     }
 
     private static String encodeNullable(byte[] bytes) {
