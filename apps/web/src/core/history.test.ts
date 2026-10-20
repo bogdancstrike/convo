@@ -43,3 +43,31 @@ describe('durable encrypted account history', () => {
     expect(mergeArchivedMessage(message, deleted).body).toBeUndefined();
   });
 });
+
+it('merges receipt details from concurrent devices without losing recipients or regressing times', () => {
+  const first = { ...message, receipts: { a: { deliveredAt: 20, readAt: 40 } }, recipientAccountIds: ['a', 'b'] };
+  const second = { ...message, receipts: { a: { deliveredAt: 10 }, b: { deliveredAt: 30 } } };
+  const merged = mergeArchivedMessage(first, second);
+  expect(merged.receipts).toEqual({ a: { deliveredAt: 20, readAt: 40 }, b: { deliveredAt: 30 } });
+  expect(merged.recipientAccountIds).toEqual(['a', 'b']);
+});
+
+it('never resurrects a locally deleted message when a delayed archive update replays', async () => {
+  vi.stubGlobal('navigator', { onLine: true });
+  const rows: { seq: number; id: string; ciphertext: string }[] = [];
+  const api = { putHistory: async (id: string, ciphertext: string) => { if (!rows.some((r) => r.id === id)) rows.push({ seq: rows.length + 1, id, ciphertext }); }, history: async (after: number) => rows.filter((r) => r.seq > after) } as unknown as EnclaveApi;
+  const source = await EncryptedStore.open(`deletion-${Math.random()}`); const repos = new Repositories(source);
+  await source.commit([repos.putConversation(conversation), repos.putMessage(message)]);
+  const secret = toBase64Url(randomBytes(32)); const history = new AccountHistory(api, source, 'self', 'deployment', async () => {}, () => {}, (task) => task());
+  await history.start(secret);
+  // A star/edit archive event is queued before a local-only deletion, then arrives afterward.
+  await source.commit([repos.putMessage({ ...message, starred: true })]);
+  await source.commit(repos.localDeletion(message));
+  await history.sync(); history.stop();
+  expect(await repos.messages('peer', 100)).toEqual([]);
+  expect(await repos.isLocallyDeleted(message)).toBe(true);
+  // Suppression is per message, never a time watermark that could discard an unseen message.
+  const next = { ...message, id: 'new-unseen', body: 'must still arrive' };
+  expect(await repos.isLocallyDeleted(next)).toBeUndefined();
+  await source.destroy();
+});

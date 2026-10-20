@@ -75,6 +75,7 @@ export interface Delete {
 /** A user-visible message or mutation. Exactly one of body/reaction/edit/delete is meaningful. */
 export interface DataMessage {
   profile?: UserProfile;
+  recipientAccountIds?: string[];
   messageId: string;
   timestamp: number;
   body?: string;
@@ -90,6 +91,7 @@ export interface DataMessage {
 /** Delivery/read receipt for messages sent by the receiver of this content. */
 export interface ReceiptMessage {
   type: 'delivery' | 'read';
+  conversationId?: string;
   messageIds: string[];
   timestamp: number;
 }
@@ -159,7 +161,7 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       if (!isDataMessage(parsed.data)) throw new Error('malformed data message');
       return parsed as unknown as Content;
     case 'receipt':
-      if (!isObject(parsed.receipt) || !Array.isArray(parsed.receipt.messageIds)) throw new Error('malformed receipt');
+      if (!isObject(parsed.receipt) || !Array.isArray(parsed.receipt.messageIds) || parsed.receipt.messageIds.length > 500 || !parsed.receipt.messageIds.every((id) => typeof id === 'string') || !['delivery', 'read'].includes(String(parsed.receipt.type)) || !Number.isFinite(parsed.receipt.timestamp) || (parsed.receipt.conversationId !== undefined && typeof parsed.receipt.conversationId !== 'string')) throw new Error('malformed receipt');
       return parsed as unknown as Content;
     case 'sync':
       if (!isObject(parsed.sync)) throw new Error('malformed sync');
@@ -191,6 +193,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function isDataMessage(value: unknown): value is DataMessage {
   if (!isObject(value)) return false;
   if (typeof value.messageId !== 'string' || typeof value.timestamp !== 'number') return false;
+  if (value.recipientAccountIds !== undefined && (!Array.isArray(value.recipientAccountIds) || value.recipientAccountIds.length > 1000 || !value.recipientAccountIds.every((id) => typeof id === 'string'))) return false;
   if (value.profile !== undefined && !isProfile(value.profile)) return false;
   if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
   if (value.attachments !== undefined) {

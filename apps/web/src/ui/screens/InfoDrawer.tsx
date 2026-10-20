@@ -1,3 +1,6 @@
+import { LastSeen } from '../components/LastSeen';
+import { SharedPreview, ConversationActions } from './ConversationDetails';
+import { Menu } from '../components/Popover';
 import { useProfile } from '../components/ProfileContext';
 import { FingerprintGenerator } from '@privacyresearch/libsignal-protocol-typescript';
 import { useCallback, useEffect, useState } from 'react';
@@ -10,7 +13,7 @@ import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { useAccount, useGroupRecord } from '../hooks';
 import { useI18n } from '../i18n/i18n';
-import { PersonRow, useDirectorySearch } from './NewChatPanel';
+import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel';
 
 /** Safety-number iterations (specs §5.6). */
 const FINGERPRINT_ITERATIONS = 5200;
@@ -19,7 +22,7 @@ const FINGERPRINT_ITERATIONS = 5200;
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
  * group details with members, roles and admin add/remove.
  */
-export function InfoDrawer({ client, conversation, onClose, onShared }: { client: EnclaveClient; conversation: Conversation; onClose: () => void; onShared: () => void }) {
+export function InfoDrawer({ client, conversation, onClose, onShared, onPage, onContact }: { client: EnclaveClient; conversation: Conversation; onClose: () => void; onShared: () => void; onPage: (page: string) => void; onContact: (accountId: string) => void }) {
   const { t } = useI18n();
   const group = conversation.kind === 'group';
   return (
@@ -28,21 +31,18 @@ export function InfoDrawer({ client, conversation, onClose, onShared }: { client
         <button className="icon-btn" onClick={onClose} aria-label={t('info.close')} data-testid="close-info">
           <Icon name="close" />
         </button>
-        <h2 id="drawer-title">{group ? t('info.groupTitle') : t('info.title')}</h2>
+        <h2 id="drawer-title">{group ? t(conversation.adminOnly ? 'info.channelTitle' : 'info.groupTitle') : t('info.title')}</h2>
       </header>
       <div className="panel-body">
-        <section className="drawer-section">
-          <button className="settings-row" onClick={onShared} data-testid="open-shared-content">
-            <Icon name="image" /><span className="settings-row-text">{t('shared.title')}</span><Icon name="next" size={18} />
-          </button>
-        </section>
-        {group ? <GroupInfo client={client} conversation={conversation} /> : <ContactInfo client={client} conversation={conversation} />}
+        {group ? <GroupInfo client={client} conversation={conversation} onContact={onContact} /> : <ContactInfo client={client} conversation={conversation} />}
+        <SharedPreview client={client} conversation={conversation} onOpen={onShared} />
+        <ConversationActions client={client} conversation={conversation} onClose={onClose} onPage={onPage} />
       </div>
     </aside>
   );
 }
 
-function ContactInfo({ client, conversation }: { client: EnclaveClient; conversation: Conversation }) {
+export function ContactInfo({ client, conversation }: { client: EnclaveClient; conversation: Conversation }) {
   const { t } = useI18n();
   const note = conversation.kind === 'note';
   const profile = useProfile(conversation.id);
@@ -54,6 +54,7 @@ function ContactInfo({ client, conversation }: { client: EnclaveClient; conversa
         <Avatar id={conversation.id} name={title} size={120} />
         <h3>{title}</h3>
         {account && <span className="muted-text">@{account.username}</span>}
+        {!note && <LastSeen client={client} accountId={conversation.id} />}
       </section>
       {account?.phone && (
         <section className="drawer-section">
@@ -76,25 +77,37 @@ function SafetyNumber({ client, conversation }: { client: EnclaveClient; convers
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    let generation = 0;
+    let previousKeys = '';
+    const load = async () => {
+      const current = ++generation;
       const keys = await client.identityKeys(conversation.id);
+      if (cancelled || current !== generation) return;
       if (!keys.remote) {
-        if (!cancelled) setDigits(null);
+        setDigits(null);
         return;
       }
+      setVerified(keys.verified);
+      const keyPair = `${keys.local}/${keys.remote}`;
+      if (keyPair === previousKeys) return;
       const number = await new FingerprintGenerator(FINGERPRINT_ITERATIONS).createFor(
         client.accountId,
         toArrayBuffer(fromBase64Url(keys.local)),
         conversation.id,
         toArrayBuffer(fromBase64Url(keys.remote)),
       );
-      if (!cancelled) {
+      if (!cancelled && current === generation) {
+        previousKeys = keyPair;
         setDigits(number);
         setVerified(keys.verified);
       }
-    })();
+    };
+    const refresh = () => void load().catch(() => { if (!cancelled) setDigits(null); });
+    const off = client.on('messages', (id) => { if (id === conversation.id) refresh(); });
+    refresh();
     return () => {
       cancelled = true;
+      off();
     };
   }, [client, conversation.id]);
 
@@ -145,7 +158,7 @@ interface MemberView {
   role: GroupRole;
 }
 
-function GroupInfo({ client, conversation }: { client: EnclaveClient; conversation: Conversation }) {
+function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient; conversation: Conversation; onContact: (id: string) => void }) {
   const { t } = useI18n();
   const record = useGroupRecord(client, conversation.id);
   const [members, setMembers] = useState<MemberView[]>([]);
@@ -154,6 +167,8 @@ function GroupInfo({ client, conversation }: { client: EnclaveClient; conversati
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const results = useDirectorySearch(client, adding ? query : '');
+  const recent = useRecentContacts(client);
+  const choices = (query.trim() ? results ?? [] : recent).filter((a) => !record?.members.some((m) => m.accountId === a.accountId));
 
   const load = useCallback(async () => {
     if (!record) return;
@@ -178,7 +193,7 @@ function GroupInfo({ client, conversation }: { client: EnclaveClient; conversati
   }, [load]);
 
   const myRole = members.find((m) => m.accountId === client.accountId)?.role ?? 'member';
-  const canManage = myRole !== 'member' && !conversation.left;
+  const canManage = myRole !== 'member' && !conversation.left && !record?.needsJoin;
 
   const run = async (task: () => Promise<void>) => {
     setBusy(true);
@@ -211,6 +226,7 @@ function GroupInfo({ client, conversation }: { client: EnclaveClient; conversati
       <section className="drawer-section drawer-hero">
         <Avatar id={conversation.id} name={conversation.title} size={120} group />
         <h3>{conversation.title}</h3>
+        <span className="chat-kind" data-testid="conversation-kind"><Icon name={conversation.adminOnly ? 'channels' : 'group'} size={16} />{t(conversation.adminOnly ? 'channel.type' : 'group.type')}</span>
         <span className="muted-text">{t('group.participants', { count: members.length })}</span>
       </section>
       <section className="drawer-section" aria-labelledby="members-title">
@@ -236,8 +252,11 @@ function GroupInfo({ client, conversation }: { client: EnclaveClient; conversati
                 <Icon name="close" size={16} />
               </button>
             </label>
-            <ul className="list">
-              {results?.filter((a) => !members.some((m) => m.accountId === a.accountId)).map((a) => (
+            {!query.trim() && <span className="section-label">{t('group.recentContacts')}</span>}
+            {!query.trim() && choices.length === 0 && <p className="muted-text">{t('group.noRecentContacts')}</p>}
+            {query.trim() && results?.length === 0 && <p className="muted-text">{t('newChat.none')}</p>}
+            <ul className="list contact-suggestions" aria-label={t('group.recentContacts')} data-testid="member-suggestions">
+              {choices.map((a) => (
                 <li key={a.accountId}>
                   <PersonRow account={a} onClick={() => !busy && add(a)} testId={`pick-${a.username}`} />
                 </li>
@@ -249,18 +268,18 @@ function GroupInfo({ client, conversation }: { client: EnclaveClient; conversati
           {members.map((m) => (
             <li key={m.accountId} className="member-row" data-testid={`member-${m.username}`}>
               <Avatar id={m.accountId} name={m.avatarName} size={40} />
-              <span className="name">
+              <button className="name" onClick={() => onContact(m.accountId)} data-testid={`contact-${m.username}`}>
                 <span style={{ display: 'block', fontWeight: 500 }}>{m.label}</span>
                 <span className="muted-text">@{m.username}</span>
-              </span>
+              </button>
               {m.role !== 'member' && <span className="role-tag">{t(`group.role.${m.role}`)}</span>}
               {canManage && m.accountId !== client.accountId && (m.role !== 'owner' || myRole === 'owner') && (
-                <button className="btn btn-ghost btn-danger" disabled={busy}
-                  onClick={() => {
-                    if (window.confirm(t('group.confirmRemove', { name: m.label }))) void run(() => client.removeGroupMember(conversation.id, m.accountId));
-                  }}>
-                  {t('group.remove')}
-                </button>
+                <Menu label={t('group.memberOptions')} items={[
+                  ...(myRole === 'owner' && m.role !== 'owner' ? [{ label: t(m.role === 'admin' ? 'group.removeAdmin' : 'group.makeAdmin'), icon: 'shield' as const, onSelect: () => void run(() => client.changeGroupRole(conversation.id, m.accountId, m.role === 'admin' ? 'member' : 'admin')) },
+                    { label: t('group.makeOwner'), icon: 'shield' as const, onSelect: () => { if (window.confirm(t('group.confirmOwner', { name: m.label }))) void run(() => client.changeGroupRole(conversation.id, m.accountId, 'owner')); } }] : []),
+                  ...(myRole === 'owner' && m.role === 'owner' ? [{ label: t('group.removeOwner'), icon: 'shield' as const, onSelect: () => void run(() => client.changeGroupRole(conversation.id, m.accountId, 'admin')) }] : []),
+                  { label: t('group.remove'), icon: 'trash', danger: true, onSelect: () => { if (window.confirm(t('group.confirmRemove', { name: m.label }))) void run(() => client.removeGroupMember(conversation.id, m.accountId)); } },
+                ]} trigger={({ open, toggle }) => <button className="icon-btn" disabled={busy} onClick={toggle} aria-label={`${t('group.memberOptions')}: ${m.label}`} aria-expanded={open} data-testid={`member-menu-${m.username}`}><Icon name="more" /></button>} />
               )}
             </li>
           ))}

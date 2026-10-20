@@ -28,7 +28,7 @@ import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
 import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { Outbox, type OutboxItem } from './outbox';
-import type { Repositories } from './repositories';
+import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
 /**
@@ -238,6 +238,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const existing = this.conversationCache.get(peer.accountId);
     if (existing) return existing;
     const conversation = this.newConversation(peer.accountId, labelOf(peer));
+    await this.repos.store.delete(RecordNs.localHiddenConversation, conversation.id);
     await this.saveConversations([conversation]);
     return conversation;
   }
@@ -253,9 +254,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (!conversation || conversation.unread === 0) return;
     const unread = await this.repos.messages(conversationId, conversation.unread);
     await this.saveConversations([{ ...conversation, unread: 0 }]);
-    if (this.currentSettings.readReceipts && conversation.kind === 'direct') {
-      const ids = unread.filter((m) => m.direction === 'in' && !m.deleted).map((m) => m.id);
-      if (ids.length > 0) await this.enqueue(conversationId, receipt('read', ids), false);
+    if (this.currentSettings.readReceipts && conversation.kind !== 'note') {
+      const authors = new Set(unread.filter((m) => m.direction === 'in' && !m.deleted).map((m) => m.authorId));
+      for (const author of authors) {
+        const ids = unread.filter((m) => m.authorId === author && m.direction === 'in' && !m.deleted).map((m) => m.id);
+        if (ids.length) await this.enqueue(author, receipt('read', ids, conversation.kind === 'group' ? conversationId : undefined), false);
+      }
     }
     if (unread.length > 0) {
       await this.enqueue(this.accountId, {
@@ -268,7 +272,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   async updateConversation(
     id: string,
-    patch: Partial<Pick<Conversation, 'pinned' | 'muted' | 'mutedUntil' | 'archived' | 'draft'>>,
+    patch: Partial<Pick<Conversation, 'wallpaper' | 'pinned' | 'muted' | 'mutedUntil' | 'archived' | 'draft'>>,
   ): Promise<void> {
     const conversation = this.conversationCache.get(id);
     if (conversation) await this.saveConversations([{ ...conversation, ...patch }]);
@@ -331,18 +335,26 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Deletes all messages of a conversation on this device (other participants keep theirs). */
   async clearConversation(conversationId: string): Promise<void> {
-    await this.repos.store.deleteConversationMessages(conversationId);
-    const conversation = this.conversationCache.get(conversationId);
-    if (conversation) await this.saveConversations([{ ...conversation, preview: undefined, unread: 0 }]);
-    this.emit('messages', conversationId);
+    await this.mutex.run(async () => {
+      const messages = await this.repos.messages(conversationId, Number.MAX_SAFE_INTEGER);
+      const conversation = this.conversationCache.get(conversationId);
+      await this.repos.store.commit([...messages.flatMap((m) => this.repos.localDeletion(m)),
+        { type: 'put', ns: RecordNs.localHiddenConversation, id: conversationId, value: 'cleared' },
+        ...(conversation ? [this.repos.putConversation({ ...conversation, preview: undefined, unread: 0 })] : [])]);
+      if (conversation) this.conversationCache.set(conversationId, { ...conversation, preview: undefined, unread: 0 });
+      this.emitConversations(); this.emit('messages', conversationId);
+    });
   }
 
-  /** Removes a conversation and its messages from this device. */
+  /** Removes known local messages; future unseen messages remain eligible for delivery. */
   async deleteConversation(conversationId: string): Promise<void> {
-    await this.repos.store.deleteConversationMessages(conversationId);
-    await this.repos.store.delete('conversation', conversationId);
-    this.conversationCache.delete(conversationId);
-    this.emitConversations();
+    await this.mutex.run(async () => {
+      const messages = await this.repos.messages(conversationId, Number.MAX_SAFE_INTEGER);
+      await this.repos.store.commit([...messages.flatMap((m) => this.repos.localDeletion(m)),
+        { type: 'put', ns: RecordNs.localHiddenConversation, id: conversationId, value: 'deleted' },
+        { type: 'delete', ns: RecordNs.conversation, id: conversationId }]);
+      this.conversationCache.delete(conversationId); this.emitConversations(); this.emit('messages', conversationId);
+    });
   }
 
   /** Downloads and decrypts an attachment of a message. */
@@ -362,8 +374,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Stars/unstars a message on this device only. */
   async setStarred(message: ChatMessage, starred: boolean): Promise<void> {
-    await this.repos.store.commit([this.repos.putMessage({ ...message, starred })]);
-    this.emit('messages', message.conversationId);
+    await this.mutex.run(async () => {
+      const current = await this.repos.message(message.conversationId, message.authorId, message.id);
+      if (!current || current.deleted) return;
+      await this.repos.store.commit([this.repos.putMessage({ ...current, starred })]);
+      this.emit('messages', message.conversationId);
+    });
   }
 
   private async sendMessage(
@@ -373,7 +389,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const text = content.body?.trim() || undefined;
     if (!text && !content.attachments?.length) throw new Error('empty message');
     if (text && utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
+    const groupId = groupIdOf(conversationId);
+    const group = groupId ? await this.groups.record(groupId) : undefined;
+    const recipients = group ? group.members.map((m) => m.accountId).filter((id) => id !== this.accountId) : conversationId !== this.accountId ? [conversationId] : [];
     const data: DataMessage = {
+      recipientAccountIds: recipients,
       messageId: newMessageId(),
       timestamp: Date.now(),
       body: text,
@@ -384,6 +404,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     };
     const message: ChatMessage = {
       conversationId,
+      recipientAccountIds: recipients,
       id: data.messageId,
       authorId: this.accountId,
       direction: 'out',
@@ -459,8 +480,16 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   /** Local group record (encrypted name, roles from the server mirror). */
-  groupRecord(conversationId: string): Promise<GroupRecord | undefined> {
-    return this.groups.record(groupIdOf(conversationId) ?? '');
+  async groupRecord(conversationId: string): Promise<GroupRecord | undefined> {
+    const id = groupIdOf(conversationId) ?? '';
+    const record = await this.groups.record(id);
+    return record ? { ...record, needsJoin: !await this.groups.isJoined(id) } : undefined;
+  }
+
+  async changeGroupRole(conversationId: string, accountId: string, role: import('../api/types').GroupRole): Promise<void> {
+    const id = groupIdOf(conversationId)!;
+    await this.mutex.run(() => this.groups.changeRole(id, accountId, role));
+    this.emit('groups', id);
   }
 
   /** Display name of an account (cached directory lookup). */
@@ -501,8 +530,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Deletes a message on this device only. */
   async deleteLocally(target: ChatMessage): Promise<void> {
-    await this.repos.store.commit([{ type: 'deleteMessage', conversationId: target.conversationId, messageKey: `${target.authorId}/${target.id}` }]);
-    this.emit('messages', target.conversationId);
+    await this.mutex.run(async () => {
+      await this.repos.store.commit(this.repos.localDeletion(target));
+      this.emit('messages', target.conversationId);
+    });
   }
 
   /** Retries a failed/blocked outgoing message. */
@@ -534,6 +565,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     await this.repos.store.commit([this.repos.putSettings(this.currentSettings)]);
     this.emit('settings', this.currentSettings);
   }
+
+  lastSeenPrivacy() { return this.api.lastSeenPrivacy(); }
+  setLastSeenPrivacy(enabled: boolean) { return this.api.setLastSeenPrivacy(enabled); }
+  lastSeenHeartbeat() { return this.api.lastSeenHeartbeat(); }
+  lastSeen(accountId: string) { return this.api.lastSeen(accountId); }
 
   profiles(): Map<string, UserProfile> { return new Map(this.profileCache); }
 
@@ -593,6 +629,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   async signOutAndWipe(): Promise<void> {
     await this.syncHistory();
     if (this.historyStatus !== 'synced') throw new Error('history synchronization required before logout');
+    const [devices, recovery] = await Promise.all([this.api.devices(), this.api.recoveryStatus()]);
+    if (devices.length <= 1 && !recovery.configured) throw new LogoutRecoveryRequiredError();
     try {
       await this.api.unregisterSelf();
     } finally {
@@ -681,6 +719,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         const result = await this.applyData(sender, sender, 'in', content.data, envelope, ops, changed);
         if (result === 'new') {
           followUps.push(() => this.enqueue(sender, receipt('delivery', [content.data.messageId]), false));
+          if (this.currentSettings.readReceipts && this.activeConversation === sender && document.visibilityState === 'visible') followUps.push(() => this.enqueue(sender, receipt('read', [content.data.messageId]), false));
           const ownProfile = this.profileCache.get(this.accountId);
           if (ownProfile && !content.data.profile) followUps.push(() => this.enqueue(sender, { v: CONTENT_VERSION, kind: 'profile', profile: ownProfile }, false));
         }
@@ -699,13 +738,22 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         return followUps;
       }
       case 'receipt': {
-        const rank = content.receipt.type === 'read' ? 'read' : 'delivered';
-        for (const id of content.receipt.messageIds.slice(0, 500)) {
-          const target = await this.repos.message(sender, this.accountId, id);
-          if (target && STATUS_RANK[rank] > STATUS_RANK[target.status ?? 'sent']) {
-            ops.push(this.repos.putMessage({ ...target, status: rank }));
-            changed.add(sender);
-          }
+        const conversationId = content.receipt.conversationId ?? sender;
+        if (content.receipt.conversationId && !groupIdOf(conversationId)) return followUps;
+        for (const id of content.receipt.messageIds) {
+          const target = await this.repos.message(conversationId, this.accountId, id);
+          if (!target || target.direction !== 'out' || target.deleted) continue;
+          const recipients = target.recipientAccountIds ?? (groupIdOf(conversationId) ? [] : [sender]);
+          if (!recipients.includes(sender)) continue;
+          const receivedAt = envelope.serverTimestamp;
+          const prior = target.receipts?.[sender] ?? {};
+          const receiptState = { deliveredAt: prior.deliveredAt ?? receivedAt,
+            readAt: content.receipt.type === 'read' ? prior.readAt ?? receivedAt : prior.readAt };
+          const receipts = { ...target.receipts, [sender]: receiptState };
+          const rank = recipients.every((account) => receipts[account]?.readAt) ? 'read'
+            : recipients.every((account) => receipts[account]?.deliveredAt) ? 'delivered' : 'sent';
+          ops.push(this.repos.putMessage({ ...target, receipts, status: STATUS_RANK[rank] > STATUS_RANK[target.status ?? 'sent'] ? rank : target.status }));
+          changed.add(conversationId);
         }
         return followUps;
       }
@@ -745,7 +793,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       if (!this.conversationCache.has(conversationId)) this.stage(ops, conversation);
       const direction = accountId === this.accountId ? 'out' : 'in';
       if (content.kind === 'data') {
-        await this.applyData(conversationId, accountId, direction, content.data, envelope, ops, changed);
+        const applied = await this.applyData(conversationId, accountId, direction, content.data, envelope, ops, changed);
+        if (applied === 'new' && accountId !== this.accountId) {
+          followUps.push(() => this.enqueue(accountId, receipt('delivery', [content.data.messageId], conversationId), false));
+          if (this.currentSettings.readReceipts && this.activeConversation === conversationId && document.visibilityState === 'visible') followUps.push(() => this.enqueue(accountId, receipt('read', [content.data.messageId], conversationId), false));
+        }
       } else if (content.kind === 'profile') {
         this.stageProfile(content.profile, accountId, ops);
       } else if (content.kind === 'groupMeta') {
@@ -799,6 +851,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     changed: Set<string>,
   ): Promise<'new' | 'mutation' | 'ignored'> {
     if (data.profile) this.stageProfile(data.profile, authorId, ops);
+    const targetId = data.reaction?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
+    const targetAuthor = data.reaction?.targetAuthorId ?? authorId;
+    if (await this.repos.isLocallyDeleted({ conversationId, authorId: targetAuthor, id: targetId })) return 'ignored';
     const conversation = await this.ensureConversation(conversationId, ops);
     changed.add(conversation.id);
 
@@ -824,10 +879,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     }
     if (data.body === undefined && !data.attachments?.length) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
+    ops.push({ type: 'delete', ns: RecordNs.localHiddenConversation, id: conversationId });
 
     const message: ChatMessage = {
       conversationId: conversation.id,
       id: data.messageId,
+      recipientAccountIds: data.recipientAccountIds,
       authorId,
       direction,
       body: data.body,
@@ -1012,8 +1069,8 @@ function previewOf(data: DataMessage): string {
   return first.contentType.startsWith('image/') ? '📷 Photo' : `📎 ${first.fileName ?? 'File'}`;
 }
 
-function receipt(type: 'delivery' | 'read', messageIds: string[]): Content {
-  return { v: CONTENT_VERSION, kind: 'receipt', receipt: { type, messageIds, timestamp: Date.now() } };
+function receipt(type: 'delivery' | 'read', messageIds: string[], conversationId?: string): Content {
+  return { v: CONTENT_VERSION, kind: 'receipt', receipt: { type, messageIds, conversationId, timestamp: Date.now() } };
 }
 
 function applyReaction(message: ChatMessage, accountId: string, emoji: string, remove: boolean): ChatMessage {
@@ -1030,3 +1087,6 @@ function applyReaction(message: ChatMessage, accountId: string, emoji: string, r
 function tombstone(message: ChatMessage): ChatMessage {
   return { ...message, body: undefined, attachments: undefined, quote: undefined, reactions: {}, deleted: true, editedAt: undefined };
 }
+
+/** Do not destroy the last copy of the account encryption identity. */
+export class LogoutRecoveryRequiredError extends Error {}

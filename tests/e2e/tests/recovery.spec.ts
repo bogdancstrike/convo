@@ -30,6 +30,7 @@ test('recovery after losing every browser preserves identity and encrypted histo
   await first.getByTestId('new-chat').click(); await first.getByTestId('note-to-self').click(); await send(first, 'keep this after all devices are lost');
   await first.getByTestId('nav-settings').click();
   await expect(first.getByTestId('history-status')).toContainText('History is safely synced');
+  await first.getByTestId('settings-recovery').click();
   await first.getByTestId('create-recovery-code').click();
   const code = await first.getByTestId('recovery-code').inputValue();
   expect(code.replace(/-/g, '')).toHaveLength(64);

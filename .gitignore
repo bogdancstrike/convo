@@ -34,3 +34,7 @@ coverage/
 .vite/
 test-results/
 playwright-report/
+
+# Android local SDK paths and generated protocol bundle
+local.properties
+apps/android/app/src/main/assets/core.js

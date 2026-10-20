@@ -4,6 +4,7 @@ import type { EnclaveClient } from '../../core/client';
 import { labelOf } from '../../core/model';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
+import { useConversations } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 
 /**
@@ -131,4 +132,19 @@ export function useDirectorySearch(client: EnclaveClient, query: string): Accoun
     };
   }, [client, query]);
   return results;
+}
+
+/** Contacts from existing direct conversations, ordered by the most recent conversation. */
+export function useRecentContacts(client: EnclaveClient): AccountDto[] {
+  const conversations = useConversations(client);
+  const [contacts, setContacts] = useState<AccountDto[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const recent = conversations.filter((c) => c.kind === 'direct' && c.id !== client.accountId)
+      .sort((a, b) => b.lastActivity - a.lastActivity);
+    void Promise.all(recent.map((c) => client.account(c.id).catch(() => undefined)))
+      .then((accounts) => { if (!cancelled) setContacts(accounts.filter((a): a is AccountDto => Boolean(a))); });
+    return () => { cancelled = true; };
+  }, [client, conversations]);
+  return contacts;
 }

@@ -105,6 +105,11 @@ export class EnclaveApi {
     return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}`);
   }
 
+  lastSeenPrivacy(): Promise<{ shareLastSeen: boolean }> { return this.signed('GET', '/v1/privacy/last-seen'); }
+  setLastSeenPrivacy(shareLastSeen: boolean): Promise<void> { return this.signed('PUT', '/v1/privacy/last-seen', { shareLastSeen }); }
+  lastSeenHeartbeat(): Promise<void> { return this.signed('POST', '/v1/privacy/last-seen/heartbeat'); }
+  lastSeen(accountId: string): Promise<{ day: string | null; at: string | null }> { return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/last-seen`); }
+
   roster(accountId: string): Promise<RosterDto> {
     return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/devices`);
   }

@@ -1,0 +1,204 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+package com.convo.android
+
+import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.*
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import org.json.JSONArray
+import org.json.JSONObject
+
+@Composable fun ConvoTheme(preference: String, content: @Composable () -> Unit) {
+    val dark = preference == "dark" || (preference == "system" && isSystemInDarkTheme())
+    val colors = if (dark) DarkConvoColors else LightConvoColors
+    val scheme = (if (dark) darkColorScheme() else lightColorScheme()).copy(
+        primary = colors.actionFill, onPrimary = colors.actionText,
+        secondary = colors.accentText, onSecondary = colors.actionText,
+        secondaryContainer = colors.bubbleOut, onSecondaryContainer = colors.textPrimary,
+        primaryContainer = colors.chipActive, onPrimaryContainer = colors.chipActiveText,
+        background = colors.canvas, onBackground = colors.textPrimary,
+        surface = colors.panel, onSurface = colors.textPrimary,
+        surfaceVariant = colors.panelRaised, onSurfaceVariant = colors.textSecondary,
+        outline = colors.border, outlineVariant = colors.border,
+        error = colors.dangerText, surfaceTint = colors.panel,
+        surfaceContainer = colors.rail, surfaceContainerHigh = colors.panelRaised,
+        surfaceContainerHighest = colors.panelRaised, surfaceContainerLow = colors.panel,
+        surfaceContainerLowest = colors.canvas,
+    )
+    CompositionLocalProvider(LocalConvoColors provides colors) {
+        MaterialTheme(colorScheme = scheme, shapes = Shapes(
+            extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(8.dp),
+            medium = RoundedCornerShape(12.dp), large = RoundedCornerShape(18.dp),
+            extraLarge = RoundedCornerShape(18.dp),
+        ), content = content)
+    }
+}
+@Composable fun ConvoApp(app: MainActivity) {
+    BackHandler(app.phase == "ready" && (app.route != "list" || app.selectedTab != "Chats")) { app.back() }
+    var serverEdit by remember { mutableStateOf(false) }; var server by remember { mutableStateOf(app.serverAddress()) }
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        if (app.phase != "ready") {
+            Column(Modifier.fillMaxSize().padding(28.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(androidx.compose.ui.res.painterResource(R.drawable.convo_logo), "Convo", Modifier.size(64.dp))
+                Text("Convo", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                when (app.phase) {
+                    "loading" -> { CircularProgressIndicator(); Text("Preparing your encrypted messages…", Modifier.padding(top = 18.dp)) }
+                    "link", "linkEnded" -> {
+                        Text("Link this phone", style = MaterialTheme.typography.titleLarge)
+                        Text("On a trusted device, open Settings → Devices. Approve only if both devices show this code.", Modifier.padding(vertical = 16.dp))
+                        Text(app.linkCode, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                        Text("Uploaded encrypted history will follow your account after approval.", Modifier.padding(vertical = 16.dp))
+                        TextButton(onClick = { app.call("newLink") }) { Text("Get a new code") }
+                        var code by remember { mutableStateOf("") }; var recovering by remember { mutableStateOf(false) }
+                        TextButton(onClick = { recovering = !recovering }) { Text("Lost every device? Use a recovery code") }
+                        if (recovering) {
+                            OutlinedTextField(code, { code = it }, label = { Text("Recovery code") }, modifier = Modifier.fillMaxWidth())
+                            Text("Recovery signs out lost devices and restores uploaded encrypted history.", style = MaterialTheme.typography.bodySmall)
+                            Button(onClick = { app.call("recover", obj("code" to code)) }, enabled = code.replace("-", "").trim().length == 64) { Text("Recover account") }
+                        }
+                    }
+                    else -> {
+                        Text("Private messaging for your organization", style = MaterialTheme.typography.titleLarge)
+                        Text("Messages and attachments are encrypted on this device. This development app uses the bundled browser protocol engine; native storage certification is still in progress.", Modifier.padding(vertical = 20.dp))
+                        Button(onClick = app::signIn) { Text("Sign in with your organization") }
+                        TextButton(onClick = { serverEdit = true }) { Text(app.serverAddress()) }
+                        if (app.phase == "error") Text("Could not initialize secure local storage. Retry after restarting the app.", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        } else {
+            val title = when {
+                app.route == "thread" -> app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }?.optString("title") ?: "Chat"
+                app.route == "info" -> "Conversation info"
+                app.route.startsWith("contact:") -> "Contact info"
+                app.route == "new" -> "New chat"
+                app.route == "new-group" -> "New group"
+                app.route == "new-channel" -> "New channel"
+                app.route != "list" -> app.route.replaceFirstChar { it.uppercase() }
+                else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
+            }
+            Scaffold(topBar = {
+                TopAppBar(title = { Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { if (app.route == "list" && app.selectedTab == "Chats") Image(androidx.compose.ui.res.painterResource(R.drawable.convo_logo), null, Modifier.size(30.dp)); Text(title, maxLines = 1, style = MaterialTheme.typography.titleLarge) }
+                    if (app.route == "thread") LastSeenLabel(app, app.active ?: "")
+                } }, navigationIcon = {
+                    if (app.route != "list") IconButton(onClick = app::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
+                }, actions = {
+                    if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels")) IconButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" }) { Icon(Icons.Outlined.AddComment, "New chat") }
+                    if (app.route == "thread") { IconButton(onClick = { app.route = "info" }) { Icon(Icons.Outlined.Info, "Conversation info") }; ChatMenu(app) }
+                })
+            }, bottomBar = {
+                if (app.route == "list") NavigationBar {
+                    listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Calls" to Icons.Outlined.Call, "Channels" to Icons.Outlined.Campaign, "Settings" to Icons.Outlined.Settings).forEach { (label, icon) ->
+                        NavigationBarItem(app.selectedTab == label, onClick = { app.selectedTab = label; app.route = "list" }, icon = { Icon(icon, label) }, label = { Text(label) })
+                    }
+                }
+            }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) {
+                Crossfade(targetState = app.route to app.selectedTab, animationSpec = tween(if (app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false) 120 else 0), label = "page") { (route, tab) ->
+                when {
+                    route == "new" -> ContactsPicker(app, onPick = { account -> app.call("newChat", obj("id" to account.optString("accountId"))) { data -> (data as? JSONObject)?.optString("id")?.let(app::openChat) } })
+                    route == "new-group" || route == "new-channel" -> GroupWizard(app, route == "new-channel")
+                    route == "thread" -> NativeThread(app)
+                    route == "info" -> ConversationInfo(app)
+                    route.startsWith("contact:") -> ContactInfo(app, route.substringAfter(':'))
+                    route == "media" -> SharedMedia(app)
+                    route == "starred" -> NativeThread(app, starredOnly = true)
+                    route == "appearance" -> WallpaperPicker(app, perChat = true)
+                    tab == "Settings" -> NativeSettings(app)
+                    tab == "Calls" -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Outlined.Call, null, Modifier.size(56.dp)); Text("Calls", style = MaterialTheme.typography.headlineSmall); Text("To be implemented") }
+                    else -> ChatList(app, tab == "Channels")
+                }
+                }
+            } }
+        }
+        app.error?.let { message -> AlertDialog(onDismissRequest = { app.error = null }, title = { Text("Convo") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { app.error = null }) { Text("OK") } }) }
+        if (serverEdit) AlertDialog(onDismissRequest = { serverEdit = false }, title = { Text("Server address") }, text = { OutlinedTextField(server, { server = it }, label = { Text("HTTPS address") }) }, confirmButton = { TextButton(onClick = { serverEdit = false; app.setServer(server) }) { Text("Save") } }, dismissButton = { TextButton(onClick = { serverEdit = false }) { Text("Cancel") } })
+    }
+}
+
+@Composable fun PersonAvatar(app: MainActivity, id: String, name: String, size: Int = 44, group: Boolean = false) {
+    val photo = app.snapshot.optJSONObject("profiles")?.optJSONObject(id)?.optString("photo")?.takeIf { it.startsWith("data:image/jpeg;base64,") }
+    val bitmap = remember(photo) { try { photo?.substringAfter(',')?.let { android.util.Base64.decode(it, 0) }?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } } catch (_: Exception) { null } }
+    val avatarColor = AvatarColors[kotlin.math.abs(id.hashCode().toLong()).rem(AvatarColors.size).toInt()]
+    val words = name.removePrefix("@").trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    val initials = if (words.size > 1) "${words.first().first()}${words.last().first()}" else words.firstOrNull()?.take(1) ?: "?"
+    Box(Modifier.size(size.dp).clip(CircleShape).background(avatarColor), contentAlignment = Alignment.Center) {
+        if (bitmap != null && !group) Image(bitmap, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        else if (group) Icon(Icons.Outlined.Group, null, tint = Color.White) else Text(initials.uppercase(), color = Color.White, fontWeight = FontWeight.SemiBold)
+    }
+}
+@Composable fun ActionRow(label: String, hint: String? = null, icon: ImageVector = Icons.Outlined.ChevronRight, danger: Boolean = false, onClick: () -> Unit) {
+    ListItem(headlineContent = { Text(label, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }, supportingContent = hint?.let { { Text(it) } }, leadingContent = { Icon(icon, null, tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }, modifier = Modifier.clickable(onClick = onClick).heightIn(min = 64.dp))
+}
+@Composable fun ChatList(app: MainActivity, channels: Boolean) {
+    var query by remember { mutableStateOf("") }; var matches by remember { mutableStateOf(emptyList<String>()) }; var archived by remember { mutableStateOf(false) }
+    LaunchedEffect(query) { if (query.isBlank()) matches = emptyList() else { kotlinx.coroutines.delay(200); app.call("search", obj("query" to query)) { result -> matches = (result as? JSONArray)?.objects()?.map { it.optString("conversationId") } ?: emptyList() } } }
+    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { it.optBoolean("adminOnly") == channels && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
+    Column {
+        OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth().padding(12.dp), singleLine = true, placeholder = { Text("Search or start a new chat") }, leadingIcon = { Icon(Icons.Outlined.Search, null) })
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(!archived, { archived = false }, label = { Text("All") }); FilterChip(archived, { archived = true }, label = { Text("Archived") })
+        }
+        LazyColumn { items(conversations, key = { it.optString("id") }) { c ->
+            Row(Modifier.fillMaxWidth().clickable { app.openChat(c.optString("id")) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                PersonAvatar(app, c.optString("id"), c.optString("title"), group = c.optString("kind") == "group")
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), fontWeight = FontWeight.SemiBold)
+                    Text(c.optString("preview"), maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (c.optBoolean("pinned")) Icon(Icons.Outlined.PushPin, "Pinned", Modifier.size(16.dp))
+                if (c.optInt("unread") > 0) Badge { Text(c.optInt("unread").toString()) }
+                ConversationQuickMenu(app, c)
+            }
+        }
+        if (conversations.isEmpty()) item { Text(if (channels) "Create a channel to share announcements." else "Start a conversation with someone in your organization.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+@Composable fun LastSeenLabel(app: MainActivity, id: String) {
+    var at by remember(id) { mutableStateOf("") }
+    LaunchedEffect(id) { if (id.startsWith("g:")) return@LaunchedEffect; while (true) { app.call("lastSeen", obj("id" to id)) { value -> at = (value as? JSONObject)?.optString("at")?.takeUnless { it == "null" } ?: "" }; kotlinx.coroutines.delay(10000) } }
+    val seen = try { java.time.Instant.parse(at).atZone(java.time.ZoneId.systemDefault()) } catch (_: Exception) { null }
+    if (seen != null) Text(if (seen.toLocalDate() == java.time.LocalDate.now()) "Last seen today: ${seen.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}" else "Last seen on ${seen.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))}", style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable fun ConversationQuickMenu(app: MainActivity, conversation: JSONObject) {
+    var open by remember { mutableStateOf(false) }
+    Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.KeyboardArrowDown, "Chat options") }
+        DropdownMenu(open, { open = false }) { ConversationMenuItems(app, conversation) { open = false } }
+    }
+}
+@Composable fun ChatMenu(app: MainActivity) {
+    val c = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active } ?: return
+    var open by remember { mutableStateOf(false) }
+    Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "Chat options") }; DropdownMenu(open, { open = false }) { ConversationMenuItems(app, c) { open = false } } }
+}
+@Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
+    var confirm by remember { mutableStateOf("") }
+    listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
+    DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })
+    DropdownMenuItem(text = { Text("Delete chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "deleteChat" })
+    if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })
+}

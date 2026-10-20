@@ -1,3 +1,6 @@
+import { linksIn } from '../../lib/links';
+import { ExternalLink } from '../components/ExternalLink';
+export { linksIn } from '../../lib/links';
 import { useMemo, useState } from 'react';
 import { isAudio, isInlineImage, isVideo } from '../../core/attachments';
 import type { EnclaveClient } from '../../core/client';
@@ -8,13 +11,6 @@ import { useMessages } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 
 export type SharedTab = 'media' | 'links' | 'docs';
-
-/** Extract safe explicit links without contacting any external service for previews. */
-export function linksIn(body: string): string[] {
-  return [...new Set((body.match(/https?:\/\/[^\s<>]+/gi) ?? []).map((s) => s.replace(/[.,;!?)\]}]+$/, '')).filter((s) => {
-    try { const url = new URL(s); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
-  }))];
-}
 
 /** Device-only shared content gallery, newest first and grouped by month. */
 export function SharedContent({ client, conversationId, tab, onTab, onBack }: {
@@ -54,7 +50,7 @@ export function SharedContent({ client, conversationId, tab, onTab, onBack }: {
         return visible.length ? <section key={month} className="shared-month"><h3>{month}</h3>
           <div className={tab === 'media' ? 'media-grid' : 'shared-items'}>
             {visible.map((m) => <div className="shared-item" key={`${m.authorId}/${m.id}`} title={date(m.sentAt)}>
-              {tab === 'links' ? linksIn(m.body ?? '').map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="shared-link"><Icon name="next" size={20} /><span>{url}</span></a>) :
+              {tab === 'links' ? linksIn(m.body ?? '').map((url) => <ExternalLink key={url} href={url} className="shared-link"><Icon name="next" size={20} /><span>{url}</span></ExternalLink>) :
                 m.attachments?.filter((a) => tab === 'media' ? isInlineImage(a) || isVideo(a) || isAudio(a) : !isInlineImage(a) && !isVideo(a) && !isAudio(a)).map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} />)}
             </div>)}
           </div>

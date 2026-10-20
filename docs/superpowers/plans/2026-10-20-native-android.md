@@ -11,3 +11,17 @@ The mobile specification's shared Rust/Flutter core is not implemented in this r
 - [ ] Native chat/channel/calls/settings navigation, thread/composer/message actions, info/gallery, profile/status/background controls and external-link confirmation.
 - [ ] Build APK, install on emulator-5554 through adb, drive UI through adb/uiautomator, exchange encrypted messages and files with web, restart the process and verify history.
 - [ ] Copy tested APK and SHA-256 checksum to apps/assets; document tested features and remaining native certification work honestly.
+
+## Checkpoint evidence and parity acceptance
+
+Native Kotlin/Compose client builds and runs on emulator-5554. System-browser PKCE enrollment,
+Android↔web decryption, encrypted image/document reception, APK update and process restart
+have been exercised. Both message directions survive without registering a new device.
+The source and APK are included in Git. Shared light/dark semantic colors are generated from
+web tokens; native launcher/in-app branding reuse the web logo. Material 3 provides native
+controls, customized through shared tokens and reusable Convo components.
+
+Full parity remains an open acceptance gate. Outstanding: global gallery batching/filtering,
+voice-recording UI, draft persistence, full localization, cross-message media navigation,
+visual/button/motion comparison at phone/tablet sizes, physical-device accessibility and
+background-delivery certification. Do not label this checkpoint 100% parity or production-safe.

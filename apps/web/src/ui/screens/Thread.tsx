@@ -4,6 +4,7 @@ import type { ConnectionState } from '../../api/socket';
 import type { EnclaveClient } from '../../core/client';
 import { MAX_ATTACHMENTS } from '../../crypto/content';
 import { type ChatMessage, type Conversation } from '../../core/model';
+import { LastSeen } from '../components/LastSeen';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { Menu } from '../components/Popover';
@@ -59,7 +60,7 @@ export function Thread({
   const stickToBottom = useRef(true);
   const title = conversation.kind === 'note' ? t('chats.noteToSelf') : conversation.title;
   const group = conversation.kind === 'group';
-  const readOnly = conversation.adminOnly && (!record || record.members.find((m) => m.accountId === client.accountId)?.role === 'member');
+  const readOnly = record?.needsJoin || conversation.adminOnly && (!record || record.members.find((m) => m.accountId === client.accountId)?.role === 'member');
   const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
 
   useEffect(() => {
@@ -113,7 +114,7 @@ export function Thread({
 
   return (
     <section
-      data-wallpaper={settings.wallpaper}
+      data-wallpaper={conversation.wallpaper ?? settings.wallpaper}
       className={`thread${dragging ? ' dragging' : ''}`}
       aria-label={title}
       onDragOver={(e) => {
@@ -139,6 +140,7 @@ export function Thread({
         <button className="who" onClick={onInfo} data-testid="thread-info">
           <h2 data-testid="thread-title">{title}</h2>
           <span className={`sub${typing ? ' typing-sub' : ''}`}>{subtitle}</span>
+          {!typing && conversation.kind === 'direct' && <LastSeen client={client} accountId={conversation.id} />}
         </button>
         {conversation.kind === 'direct' && (
           <button className="icon-btn" onClick={onInfo} aria-label={t('thread.verify')} title={t('thread.verify')} data-testid="verify">
@@ -243,7 +245,7 @@ export function Thread({
           }}
         />
       )}
-      {readOnly && !conversation.left && <div className="channel-read-only" role="status"><Icon name="lock" size={16} />{t('channel.readOnly')}</div>}
+      {readOnly && !conversation.left && <div className="channel-read-only" role="status"><Icon name="lock" size={16} />{t(record?.needsJoin ? 'group.rejoin' : 'channel.readOnly')}</div>}
       {forwarding && (
         <ForwardDialog
           client={client}
@@ -255,7 +257,7 @@ export function Thread({
           }}
         />
       )}
-      {info && <MessageInfoDialog message={info} onClose={() => setInfo(null)} />}
+      {info && <MessageInfoDialog client={client} message={messages.find((m) => m.authorId === info.authorId && m.id === info.id) ?? info} onClose={() => setInfo(null)} />}
     </section>
   );
 }

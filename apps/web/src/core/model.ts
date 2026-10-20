@@ -36,6 +36,10 @@ export interface ChatMessage {
   /** Local ordering key: server time for incoming, send time for outgoing. */
   sort: number;
   status?: MessageStatus;
+  /** Recipients at send time; receipt senders must belong to this snapshot. */
+  recipientAccountIds?: string[];
+  receipts?: Record<string, { deliveredAt?: number; readAt?: number }>;
+
   /** emoji → reacting account IDs. */
   reactions: Record<string, string[]>;
   editedAt?: number;
@@ -53,6 +57,7 @@ export interface ChatMessage {
 }
 
 export interface Conversation {
+  wallpaper?: Settings['wallpaper'];
   /** Channel: only owners/admins may publish application messages. */
   adminOnly?: boolean;
   /** Peer account ID for direct chats; own account ID for Note to self; `g:<groupId>` for groups. */
@@ -100,6 +105,8 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   locale: 'en' | 'ro';
   enterToSend: boolean;
+  confirmExternalLinks: boolean;
+  animations: boolean;
   wallpaper: 'dots' | 'plain' | 'ocean' | 'botanical';
 }
 
@@ -109,6 +116,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   locale: 'en',
   enterToSend: true,
+  confirmExternalLinks: true,
+  animations: true,
   wallpaper: 'dots',
 };
 

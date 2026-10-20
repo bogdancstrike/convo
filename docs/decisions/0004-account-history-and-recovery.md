@@ -13,3 +13,20 @@ History only exists after a device has uploaded it; show pending/offline/failure
 Fresh devices need a valid MLS join before sending/receiving new group traffic; restored history alone is not an MLS state transfer. The UI must expose that state where relevant.
 
 References: [Web Cryptography API](https://www.w3.org/TR/webcrypto/), [Keycloak hostname configuration](https://www.keycloak.org/server/hostname).
+
+### Last-device logout safeguard
+
+Logging out must finish archive synchronization. If it would remove the last trusted device,
+a configured recovery code is required before unregistering or destroying local keys. Without
+another trusted device or a recovery code, uploaded ciphertext alone cannot restore the account
+identity. A failed safeguard leaves this browser enrolled and its data intact.
+
+### Local deletion and delayed archive updates
+
+Local deletion records an encrypted suppression marker per known message identity, atomically
+with removing its visible record. Replaying a delayed archive edit/star/receipt cannot recreate
+that message. Clearing or deleting a chat marks only the known message IDs, so genuinely new
+incoming messages remain deliverable. The local conversation hide marker prevents a delayed
+conversation archive entry from reopening a deleted chat. A new unseen message or explicit
+chat opening can reveal the conversation again. These markers remain local: this is not secure
+erasure of the append-only account archive or deletion of another participant's copy.

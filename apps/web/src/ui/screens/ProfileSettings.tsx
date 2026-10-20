@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EnclaveClient } from '../../core/client';
+import { LogoutRecoveryRequiredError, type EnclaveClient } from '../../core/client';
 import { labelOf } from '../../core/model';
 import { prepareProfilePhoto } from '../../core/profile';
 import { Avatar } from '../components/Avatar';
@@ -57,11 +57,11 @@ export function RecoverySettings({ client }: { client: EnclaveClient }) {
   </section>;
 }
 
-export function LogOutButton({ client, onSignedOut }: { client: EnclaveClient; onSignedOut: () => void }) {
-  const { t } = useI18n(); const [busy, setBusy] = useState(false); const [error, setError] = useState(false);
-  return <><button className="btn btn-ghost btn-danger" disabled={busy} data-testid="log-out" onClick={() => {
+export function LogOutButton({ client, onSignedOut, testId = 'log-out' }: { client: EnclaveClient; onSignedOut: () => void; testId?: string }) {
+  const { t } = useI18n(); const [busy, setBusy] = useState(false); const [error, setError] = useState<'sync' | 'recovery' | null>(null);
+  return <><button className="btn btn-ghost btn-danger" disabled={busy} data-testid={testId} onClick={() => {
     if (!window.confirm(t('settings.confirmSignOut'))) return;
-    setBusy(true); setError(false);
-    void client.signOutAndWipe().then(onSignedOut).catch(() => setError(true)).finally(() => setBusy(false));
-  }}><Icon name="logout" size={18} />{t('settings.logOut')}</button>{error && <p role="alert">{t('history.logoutBlocked')}</p>}</>;
+    setBusy(true); setError(null);
+    void client.signOutAndWipe().then(onSignedOut).catch((e) => setError(e instanceof LogoutRecoveryRequiredError ? 'recovery' : 'sync')).finally(() => setBusy(false));
+  }}><Icon name="logout" size={18} />{t('settings.logOut')}</button>{error && <p role="alert">{t(error === 'recovery' ? 'history.logoutNeedsRecovery' : 'history.logoutBlocked')}</p>}</>;
 }

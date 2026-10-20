@@ -5,22 +5,14 @@ import type { AttachmentPointer } from '../../crypto/content';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration } from '../useVoiceRecorder';
 import { Icon } from './Icon';
+import { useMediaViewer } from './MediaViewer';
+import { decryptMediaUrl as decryptToUrl } from './mediaUrls';
 
 /**
  * Renders one encrypted attachment. Images are downloaded, digest-verified and decrypted on
  * display; other files decrypt only on an explicit Download action (UI.md §5.3). Decrypted data
  * lives in memory as object URLs for this page session only — never in persistent caches.
  */
-const objectUrls = new Map<string, string>();
-
-async function decryptToUrl(client: EnclaveClient, pointer: AttachmentPointer): Promise<string> {
-  const cached = objectUrls.get(pointer.attachmentId);
-  if (cached) return cached;
-  const url = URL.createObjectURL(await client.downloadAttachment(pointer));
-  objectUrls.set(pointer.attachmentId, url);
-  return url;
-}
-
 export function formatBytes(size: number, locale: string): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = size;
@@ -34,7 +26,8 @@ export function formatBytes(size: number, locale: string): string {
 
 export function AttachmentView({ client, pointer }: { client: EnclaveClient; pointer: AttachmentPointer }) {
   const { t, locale } = useI18n();
-  const [url, setUrl] = useState<string | null>(() => objectUrls.get(pointer.attachmentId) ?? null);
+  const [url, setUrl] = useState<string | null>(null);
+  const openMedia = useMediaViewer();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const image = isInlineImage(pointer);
@@ -70,12 +63,12 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
 
   const name = pointer.fileName ?? (image ? t('attachment.photo') : t('attachment.file'));
   if (audio && !error) return <AudioPlayer url={url} pointer={pointer} />;
-  if (isVideo(pointer) && !error) return <VideoView client={client} pointer={pointer} onError={(e) => setError(reasonOf(e))} />;
+  if (isVideo(pointer) && !error) return <VideoView pointer={pointer} />;
   if (image && !error) {
     return url ? (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="attachment-image" data-testid="attachment-image">
+      <button type="button" onClick={() => openMedia(pointer)} aria-label={name} className="attachment-image" data-testid="attachment-image">
         <img src={url} alt={name} width={pointer.width} height={pointer.height} />
-      </a>
+      </button>
     ) : (
       <div
         className="attachment-image placeholder"
@@ -163,36 +156,13 @@ function AudioPlayer({ url, pointer }: { url: string | null; pointer: Attachment
  * Inline video: shows the encrypted-in-message poster with duration; the video itself is downloaded,
  * digest-verified and decrypted only when the user presses play (videos can be large).
  */
-function VideoView({ client, pointer, onError }: { client: EnclaveClient; pointer: AttachmentPointer; onError: (e: unknown) => void }) {
-  const { t } = useI18n();
-  const [url, setUrl] = useState<string | null>(() => objectUrls.get(pointer.attachmentId) ?? null);
-  const [loading, setLoading] = useState(false);
+function VideoView({ pointer }: { pointer: AttachmentPointer }) {
+  const { t } = useI18n(); const openMedia = useMediaViewer();
   const poster = pointer.thumbnail ? `data:image/jpeg;base64,${pointer.thumbnail.replace(/-/g, '+').replace(/_/g, '/')}` : undefined;
   const ratio = pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '16 / 9';
-
-  const play = async () => {
-    setLoading(true);
-    try {
-      setUrl(await decryptToUrl(client, pointer));
-    } catch (e) {
-      onError(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (url) {
-    return (
-      <video className="attachment-video" src={url} controls autoPlay playsInline style={{ aspectRatio: ratio }} data-testid="attachment-video">
-        {pointer.fileName}
-      </video>
-    );
-  }
-  return (
-    <button className="attachment-video poster" style={{ aspectRatio: ratio, backgroundImage: poster ? `url("${poster}")` : undefined }}
-      onClick={() => void play()} aria-label={`${t('msg.play')} ${pointer.fileName ?? ''}`} data-testid="video-poster">
-      <span className="play-badge">{loading ? <span className="spinner" /> : <Icon name="play" filled size={26} />}</span>
-      {pointer.durationMs !== undefined && <span className="video-duration">{formatDuration(pointer.durationMs)}</span>}
-    </button>
-  );
+  return <button className="attachment-video poster" style={{ aspectRatio: ratio, backgroundImage: poster ? `url("${poster}")` : undefined }}
+    onClick={() => openMedia(pointer)} aria-label={`${t('msg.play')} ${pointer.fileName ?? ''}`} data-testid="video-poster">
+    <span className="play-badge"><Icon name="play" filled size={26} /></span>
+    {pointer.durationMs !== undefined && <span className="video-duration">{formatDuration(pointer.durationMs)}</span>}
+  </button>;
 }

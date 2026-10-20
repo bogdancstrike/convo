@@ -32,7 +32,7 @@ export interface PrimaryRegistrationRequest {
   signingKey: string;
   signingKeyProfile: string;
   registrationProof: string;
-  platform: 'web';
+  platform: 'web' | 'android' | 'ios' | 'desktop';
   nameEnc?: string;
 }
 

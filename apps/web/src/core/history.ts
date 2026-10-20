@@ -4,7 +4,7 @@ import { fromBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import type { ChatMessage, Conversation } from './model';
 import { STATUS_RANK } from './model';
-import { Repositories } from './repositories';
+import { RecordNs, Repositories } from './repositories';
 
 export type HistoryStatus = 'syncing' | 'synced' | 'pending' | 'error';
 interface ArchiveRecord { v: 1; kind: 'message' | 'conversation' | 'profile' | 'group'; at: number; value: unknown; }
@@ -16,7 +16,13 @@ export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming
   if (!existing) return incoming;
   const content = existing.deleted || (!incoming.deleted && (existing.editedAt ?? 0) > (incoming.editedAt ?? 0)) ? existing : incoming;
   const status = STATUS_RANK[existing.status ?? 'sent'] > STATUS_RANK[incoming.status ?? 'sent'] ? existing.status : incoming.status;
-  return { ...content, status, starred: existing.starred ?? incoming.starred };
+  const receipts: NonNullable<ChatMessage['receipts']> = {};
+  for (const id of new Set([...Object.keys(existing.receipts ?? {}), ...Object.keys(incoming.receipts ?? {})])) {
+    const a = existing.receipts?.[id]; const b = incoming.receipts?.[id];
+    receipts[id] = { deliveredAt: Math.max(a?.deliveredAt ?? 0, b?.deliveredAt ?? 0) || undefined,
+      readAt: Math.max(a?.readAt ?? 0, b?.readAt ?? 0) || undefined };
+  }
+  return { ...content, status, ...(Object.keys(receipts).length ? { receipts } : {}), recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred };
 }
 
 /** Durable local journal → account archive → other trusted devices. No live protocol state. */
@@ -99,13 +105,13 @@ export class AccountHistory {
             const message = record.value as ChatMessage;
             if (typeof message.conversationId !== 'string' || typeof message.authorId !== 'string' || typeof message.id !== 'string' || !Number.isFinite(message.sort)) throw new Error('invalid archived message');
             const existing = await repos.message(message.conversationId, message.authorId, message.id);
-            ops.push(repos.putMessage(mergeArchivedMessage(existing, message)));
+            if (!await repos.isLocallyDeleted(message)) ops.push(repos.putMessage(mergeArchivedMessage(existing, message)));
           } else if (record.kind === 'conversation') {
             const conversation = record.value as Conversation;
             if (typeof conversation.id !== 'string' || !['direct', 'note', 'group'].includes(conversation.kind)) throw new Error('invalid archived conversation');
             const existing = await repos.conversation(conversation.id);
             const newer = !existing || existing.lastActivity <= conversation.lastActivity;
-            ops.push(repos.putConversation(existing ? { ...existing, ...(newer ? { title: conversation.title, preview: conversation.preview, lastActivity: conversation.lastActivity, adminOnly: conversation.adminOnly } : {}) } : { ...conversation, unread: 0, draft: undefined }));
+            if (!await this.store.get(RecordNs.localHiddenConversation, conversation.id)) ops.push(repos.putConversation(existing ? { ...existing, ...(newer ? { title: conversation.title, preview: conversation.preview, lastActivity: conversation.lastActivity, adminOnly: conversation.adminOnly } : {}) } : { ...conversation, unread: 0, draft: undefined }));
           } else if (record.kind === 'profile' || record.kind === 'group') {
             const value = record.value as { accountId?: string; groupId?: string };
             const id = record.kind === 'profile' ? value.accountId : value.groupId;

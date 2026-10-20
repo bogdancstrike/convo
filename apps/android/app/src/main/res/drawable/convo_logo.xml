@@ -1,0 +1,12 @@
+<!-- Same paths and gradient as apps/web/public/logo.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="64dp" android:height="64dp" android:viewportWidth="64" android:viewportHeight="64">
+    <path android:pathData="M32,5C17.1,5 5,15.9 5,29.4c0,7 3.2,13.3 8.4,17.8L10.5,59l12.2,-6.3c2.9,0.9 6.1,1.4 9.3,1.4 14.9,0 27,-10.9 27,-24.4S46.9,5 32,5z">
+        <aapt:attr name="android:fillColor"><gradient android:startX="10" android:startY="6" android:endX="56" android:endY="58" android:type="linear">
+            <item android:offset="0" android:color="#8BD3E2"/><item android:offset="0.5" android:color="#2596BE"/><item android:offset="1" android:color="#17324D"/>
+        </gradient></aapt:attr>
+    </path>
+    <path android:pathData="M25.5,28.5v-4.2a6.5,6.5 0,0 1,13 0v4.2" android:fillColor="@android:color/transparent" android:strokeColor="#F4F8FA" android:strokeWidth="3.6" android:strokeLineCap="round"/>
+    <path android:pathData="M26,27.5H38a4.5,4.5 0,0 1,4.5 4.5v7a4.5,4.5 0,0 1,-4.5 4.5H26a4.5,4.5 0,0 1,-4.5 -4.5v-7a4.5,4.5 0,0 1,4.5 -4.5z" android:fillColor="#F4F8FA"/>
+    <path android:pathData="M29.4,34.2a2.6,2.6 0,1 0,5.2 0a2.6,2.6 0,1 0,-5.2 0M32,35a1.2,1.2 0,0 1,1.2 1.2v2.6a1.2,1.2 0,0 1,-2.4 0v-2.6a1.2,1.2 0,0 1,1.2 -1.2" android:fillColor="#17324D"/>
+    <path android:pathData="M44.3,16.5a3.2,3.2 0,1 0,6.4 0a3.2,3.2 0,1 0,-6.4 0" android:fillColor="#F2B66D"/>
+</vector>

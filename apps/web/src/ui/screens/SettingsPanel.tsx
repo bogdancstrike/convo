@@ -5,6 +5,7 @@ import type { EnclaveClient } from '../../core/client';
 import type { IncomingLinkRequest } from '../../core/linking';
 import { labelOf, type Settings as SettingsModel } from '../../core/model';
 import { Avatar } from '../components/Avatar';
+import { useProfile } from '../components/ProfileContext';
 import { Segmented, Switch } from '../components/Controls';
 import { Icon, type IconName } from '../components/Icon';
 import { useI18n } from '../i18n/i18n';
@@ -20,7 +21,6 @@ export const SETTINGS_PAGES: { page: SettingsPage; icon: IconName; title: Messag
   { page: 'chats', icon: 'palette', title: 'settings.chats', hint: 'settings.chats.hint' },
   { page: 'privacy', icon: 'lock', title: 'settings.privacy', hint: 'settings.privacy.hint' },
   { page: 'devices', icon: 'devices', title: 'settings.devices', hint: 'settings.devices.hint' },
-  { page: 'security', icon: 'shield', title: 'settings.security', hint: 'settings.security.hint' },
 ];
 
 /**
@@ -45,7 +45,11 @@ export function SettingsPanel({
   const [settings, setSettings] = useState<SettingsModel>(client.settings);
   useEffect(() => client.on('settings', setSettings), [client]);
   const update = (patch: Partial<SettingsModel>) => void client.updateSettings(patch);
-  const current = SETTINGS_PAGES.find((p) => p.page === page);
+  // Preserve existing bookmarks; Security is no longer a separate navigation category.
+  const current = page === 'security' ? { page: 'security', title: 'settings.security' as const } : SETTINGS_PAGES.find((p) => p.page === page);
+  const profile = useProfile(client.accountId);
+  const [history, setHistory] = useState(client.historyStatus);
+  useEffect(() => client.on('history', setHistory), [client]);
 
   if (current) {
     return (
@@ -60,7 +64,7 @@ export function SettingsPanel({
           {current.page === 'profile' && <ProfileSettings client={client} />}
           {current.page === 'recovery' && <RecoverySettings client={client} />}
           {current.page === 'chats' && <ChatsPage settings={settings} update={update} />}
-          {current.page === 'privacy' && <PrivacyPage settings={settings} update={update} />}
+          {current.page === 'privacy' && <PrivacyPage client={client} settings={settings} update={update} />}
           {current.page === 'devices' && <DevicesPage client={client} />}
           {current.page === 'security' && <SecurityPage client={client} onSignedOut={onSignedOut} />}
         </div>
@@ -76,32 +80,28 @@ export function SettingsPanel({
         </button>
         <h2 id="settings-title">{t('settings.title')}</h2>
       </header>
-      <div className="panel-body settings-body" aria-labelledby="settings-title">
-        <div className="settings-overview">
-        <ProfileSettings client={client} />
-        <RecoverySettings client={client} />
-        <ul className="settings-card list">
+      <div className="panel-body settings-body settings-home" aria-labelledby="settings-title" data-testid="settings-overview">
+        <button className="settings-profile-summary" onClick={() => onNavigate('profile')} data-testid="settings-profile-summary">
+          <Avatar id={client.accountId} name={labelOf(client.device)} size={64} />
+          <span className="settings-row-text"><strong>{labelOf(client.device)}</strong><span className="muted-text">@{client.device.username}</span>
+            {profile?.status && <span className="settings-summary-status">{profile.status}</span>}
+          </span><Icon name="next" size={20} />
+        </button>
+        <ul className="settings-overview list">
           {SETTINGS_PAGES.map((p) => (
             <li key={p.page}>
-              <button className="settings-row" onClick={() => onNavigate(p.page)} data-testid={`settings-card-${p.page}`}>
-                <span className="settings-icon">
-                  <Icon name={p.icon} size={20} />
-                </span>
-                <span className="settings-row-text">
-                  <span>{t(p.title)}</span>
-                  <span className="muted-text">{t(p.hint)}</span>
-                </span>
+              <button className="settings-category" onClick={() => onNavigate(p.page)} data-testid={`settings-card-${p.page}`}>
+                <span className="settings-icon"><Icon name={p.icon} size={22} /></span>
+                <span className="settings-row-text"><strong>{t(p.title)}</strong><span className="muted-text" {...(p.page === 'recovery' ? { 'data-testid': 'history-status' } : {})}>{p.page === 'recovery' ? t(`history.${history}`) : t(p.hint)}</span></span>
                 <Icon name="next" size={18} />
               </button>
             </li>
           ))}
         </ul>
-        <Card title={t('settings.chats')}><ChatsPage settings={settings} update={update} /></Card>
+        <div className="settings-home-footer">
+          <LogOutButton client={client} onSignedOut={onSignedOut} />
+          <p className="settings-footnote"><Icon name="lock" size={14} /> {t('home.encrypted')}</p>
         </div>
-        <LogOutButton client={client} onSignedOut={onSignedOut} />
-        <p className="settings-footnote">
-          <Icon name="lock" size={14} /> {t('home.encrypted')}
-        </p>
       </div>
     </>
   );
@@ -152,16 +152,34 @@ function ChatsPage({ settings, update }: { settings: SettingsModel; update: (p: 
         />
       </Card>
       <Card>
+        <Switch checked={settings.animations} onChange={(animations) => update({ animations })} label={t('settings.animations')} description={t('settings.animationsHelp')} testId="toggle-animations" />
         <Switch checked={settings.enterToSend} onChange={(enterToSend) => update({ enterToSend })} label={t('settings.enterToSend')} />
       </Card>
     </>
   );
 }
 
-function PrivacyPage({ settings, update }: { settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
+function PrivacyPage({ client, settings, update }: { client: EnclaveClient; settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
   const { t } = useI18n();
+  const [sharing, setSharing] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false); const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => void client.lastSeenPrivacy().then((p) => { if (!cancelled) { setSharing(p.shareLastSeen); setFailed(false); } }).catch(() => !cancelled && setFailed(true));
+    load(); const timer = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [client]);
   return (
     <Card>
+      <h3>{t('settings.browserTrustTitle')}</h3>
+      <p className="muted-text">{t('settings.browserTrust')}</p>
+      <Switch checked={sharing ?? false} disabled={sharing === null || busy} onChange={(enabled) => {
+        setBusy(true); setFailed(false);
+        void client.setLastSeenPrivacy(enabled).then(() => setSharing(enabled)).catch(() => setFailed(true)).finally(() => setBusy(false));
+      }} label={t('presence.setting')} description={t('presence.settingBody')} testId="toggle-last-seen" />
+      {failed && <p role="alert" className="failed">{t('presence.failed')}</p>}
+      <Switch checked={settings.confirmExternalLinks} onChange={(confirmExternalLinks) => update({ confirmExternalLinks })}
+        label={t('links.setting')} description={t('links.settingBody')} testId="toggle-link-confirmation" />
       <Switch
         checked={settings.readReceipts}
         onChange={(readReceipts) => update({ readReceipts })}
@@ -285,9 +303,9 @@ function LinkRequests({ client }: { client: EnclaveClient }) {
   );
 }
 
-export function SettingsNavigation({ client, page, onNavigate, onBack }: { client: EnclaveClient; page: string | null; onNavigate: (page: SettingsPage | null) => void; onBack: () => void }) {
+export function SettingsNavigation({ client, page, onNavigate, onBack, onSignedOut }: { client: EnclaveClient; page: string | null; onNavigate: (page: SettingsPage | null) => void; onBack: () => void; onSignedOut: () => void }) {
   const { t } = useI18n();
   return <><header className="panel-header"><button className="icon-btn back-button" onClick={onBack} aria-label={t('thread.back')}><Icon name="back" /></button><h2>{t('settings.title')}</h2></header>
-    <div className="panel-body settings-body"><button className="settings-row" onClick={() => onNavigate(null)}><Avatar id={client.accountId} name={labelOf(client.device)} size={48} /><span className="settings-row-text">{labelOf(client.device)}<span className="muted-text">{t('settings.overview')}</span></span></button>
-    <ul className="list">{SETTINGS_PAGES.map((p) => <li key={p.page}><button className="settings-row" aria-current={page === p.page ? 'page' : undefined} onClick={() => onNavigate(p.page)} data-testid={`settings-${p.page}`}><span className="settings-icon"><Icon name={p.icon} size={20} /></span><span className="settings-row-text">{t(p.title)}<span className="muted-text">{t(p.hint)}</span></span></button></li>)}</ul></div></>;
+    <div className="panel-body settings-body settings-navigation"><button className="settings-row" onClick={() => onNavigate(null)}><Avatar id={client.accountId} name={labelOf(client.device)} size={48} /><span className="settings-row-text">{labelOf(client.device)}<span className="muted-text">{t('settings.overview')}</span></span></button>
+    <ul className="list">{SETTINGS_PAGES.map((p) => <li key={p.page}><button className="settings-row" aria-current={page === p.page ? 'page' : undefined} onClick={() => onNavigate(p.page)} data-testid={`settings-${p.page}`}><span className="settings-icon"><Icon name={p.icon} size={20} /></span><span className="settings-row-text">{t(p.title)}<span className="muted-text">{t(p.hint)}</span></span></button></li>)}</ul><div className="settings-logout-row"><LogOutButton client={client} onSignedOut={onSignedOut} testId="settings-log-out" /></div></div></>;
 }

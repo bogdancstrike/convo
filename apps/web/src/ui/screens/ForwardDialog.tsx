@@ -12,22 +12,23 @@ import { fold } from './ChatListPanel';
  * Explicit single-destination forwarding (specs §30.8, UI.md §5.4c): pick one chat, review, send.
  * The copy is marked "Forwarded" and does not reference the original conversation.
  */
-export function ForwardDialog({ client, message, onClose, onDone }: { client: EnclaveClient; message: ChatMessage; onClose: () => void; onDone: (c: Conversation) => void }) {
+export function ForwardDialog({ client, message, messages, onClose, onDone }: { client: EnclaveClient; message?: ChatMessage; messages?: ChatMessage[]; onClose: () => void; onDone: (c: Conversation) => void }) {
   const { t } = useI18n();
   const conversations = useConversations(client);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const visible = useMemo(
     () => conversations.filter((c) => !c.left && fold(c.kind === 'note' ? t('chats.noteToSelf') : c.title).includes(fold(query))),
     [conversations, query, t],
   );
 
   const send = async (c: Conversation) => {
-    setBusy(true);
+    setBusy(true); setFailed(false);
     try {
-      await client.forward(message, c.id);
+      for (const item of messages ?? (message ? [message] : [])) await client.forward(item, c.id);
       onDone(c);
-    } finally {
+    } catch { setFailed(true); } finally {
       setBusy(false);
     }
   };
@@ -52,7 +53,8 @@ export function ForwardDialog({ client, message, onClose, onDone }: { client: En
           </li>
         ))}
       </ul>
-      <button className="btn" onClick={onClose}>{t('thread.cancel')}</button>
+      {failed && <p role="alert" className="failed">{t('gallery.failed')}</p>}
+      <button className="btn" disabled={busy} onClick={onClose}>{t('thread.cancel')}</button>
     </Dialog>
   );
 }

@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom';
+import { createPortal } from 'react-dom';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 
 /** One menu entry; `children` renders a submenu. */
@@ -31,13 +33,18 @@ export function Menu({
   const [open, setOpen] = useState(false);
   const [sub, setSub] = useState<MenuItem | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLUListElement>(null);
+  const { refs, floatingStyles } = useFloating({ open, strategy: 'fixed', placement: placement === 'above-start' ? 'top-start' : 'bottom-end',
+    middleware: [offset(6), flip(), shift({ padding: 8 })], whileElementsMounted: autoUpdate });
+  useLayoutEffect(() => { refs.setReference(root.current); refs.setFloating(panel.current); }, [open, sub, refs]);
+
 
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) close();
+      if (root.current && !root.current.contains(e.target as Node) && !panel.current?.contains(e.target as Node)) close();
     };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && (close(), root.current?.querySelector('button')?.focus());
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
@@ -51,12 +58,21 @@ export function Menu({
     setSub(null);
   };
 
+  useEffect(() => { if (open) panel.current?.querySelector('button')?.focus({ preventScroll: true }); }, [open, sub]);
+
   const list = sub?.children ?? items;
   return (
     <div className={`menu ${className}`} ref={root}>
       {trigger({ open, toggle: () => (open ? close() : setOpen(true)) })}
-      {open && (
-        <ul className={`menu-list ${placement}`} role="menu" aria-label={label}>
+      {open && createPortal(
+        <ul className={`menu-list floating-menu ${className}`} ref={panel} style={floatingStyles} role="menu" aria-label={label}
+          onKeyDown={(e) => {
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault(); const buttons = [...(panel.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+            const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : (current + (e.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length;
+            buttons[next]?.focus();
+          }}>
           {sub && (
             <li role="none">
               <button role="menuitem" className="menu-back" onClick={() => setSub(null)}>
@@ -86,7 +102,7 @@ export function Menu({
               </button>
             </li>
           ))}
-        </ul>
+        </ul>, root.current?.closest('dialog') ?? document.body,
       )}
     </div>
   );

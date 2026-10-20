@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
  * Accessible modal built on the native `<dialog>` element (focus trapping, Escape to close and
  * inert background are provided by the browser).
  */
-export function Dialog({ labelledBy, onClose, children }: { labelledBy: string; onClose: () => void; children: ReactNode }) {
+export function Dialog({ labelledBy, onClose, children, className }: { className?: string; labelledBy: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -14,6 +14,7 @@ export function Dialog({ labelledBy, onClose, children }: { labelledBy: string; 
   return (
     <dialog
       ref={ref}
+      className={className}
       aria-labelledby={labelledBy}
       onCancel={(e) => {
         e.preventDefault();

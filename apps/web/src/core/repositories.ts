@@ -11,6 +11,8 @@ export const RecordNs = {
   conversation: 'conversation',
   outbox: 'outbox',
   pendingEnrollment: 'pending-enrollment',
+  localDeletedMessage: 'local-deleted-message',
+  localHiddenConversation: 'local-hidden-conversation',
 } as const;
 
 export class Repositories {
@@ -46,6 +48,15 @@ export class Repositories {
 
   message(conversationId: string, authorId: string, messageId: string): Promise<ChatMessage | undefined> {
     return this.store.getMessage<ChatMessage>(conversationId, messageKey(authorId, messageId));
+  }
+
+  isLocallyDeleted(message: Pick<ChatMessage, 'conversationId' | 'authorId' | 'id'>): Promise<boolean | undefined> {
+    return this.store.get<boolean>(RecordNs.localDeletedMessage, JSON.stringify([message.conversationId, message.authorId, message.id]));
+  }
+
+  localDeletion(message: ChatMessage): StoreOp[] {
+    return [{ type: 'put', ns: RecordNs.localDeletedMessage, id: JSON.stringify([message.conversationId, message.authorId, message.id]), value: true },
+      { type: 'deleteMessage', conversationId: message.conversationId, messageKey: messageKey(message.authorId, message.id) }];
   }
 
   messages(conversationId: string, limit: number, before?: number): Promise<ChatMessage[]> {

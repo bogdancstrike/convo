@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatHash, parseHash } from './navigation';
+import { escapeNavigation, formatHash, parseHash } from './navigation';
 
 describe('hash navigation', () => {
   it.each([
@@ -21,4 +21,13 @@ describe('hash navigation', () => {
     const state = { panel: 'chats' as const, chat: 'g:x/y', info: true, page: null };
     expect(parseHash(formatHash(state))).toEqual(state);
   });
+});
+
+it('Escape walks media → participant contact → group info → chat → list', () => {
+  let state = parseHash('#/chat/g%3Aabc/info/contact/account-id/media');
+  expect(parseHash(formatHash(state))).toEqual(state);
+  state = { ...state, ...escapeNavigation(state) }; expect(state.page).toBe('contact:account-id');
+  state = { ...state, ...escapeNavigation(state) }; expect(state.page).toBeNull(); expect(state.info).toBe(true);
+  state = { ...state, ...escapeNavigation(state) }; expect(state.info).toBe(false); expect(state.chat).toBe('g:abc');
+  state = { ...state, ...escapeNavigation(state) }; expect(state.chat).toBeNull();
 });

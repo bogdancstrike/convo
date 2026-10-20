@@ -15,6 +15,7 @@ export default defineConfig({
   outputDir: 'test-results/artifacts',
   use: {
     actionTimeout: 20_000,
+    navigationTimeout: 20_000,
     ignoreHTTPSErrors: true,
     baseURL: process.env.BASE_URL ?? 'https://localhost:8443',
     trace: 'retain-on-failure',

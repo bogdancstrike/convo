@@ -37,6 +37,15 @@ test('send an encrypted photo and file; recipient views and downloads them', asy
   await expect(image).toBeVisible();
   expect(await image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(8);
   await expect(recipient.getByTestId('message-body').getByText('quarterly files')).toBeVisible();
+  const pagesBefore = recipient.context().pages().length; const routeBefore = recipient.url();
+  await recipient.getByTestId('attachment-image').click();
+  await expect(recipient.getByTestId('media-viewer')).toBeVisible();
+  await expect(recipient.getByTestId('media-image')).toBeVisible();
+  expect(await recipient.getByTestId('media-image').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(8);
+  expect(recipient.context().pages()).toHaveLength(pagesBefore);
+  await recipient.keyboard.press('Escape');
+  await expect(recipient.getByTestId('media-viewer')).toHaveCount(0); expect(recipient.url()).toBe(routeBefore);
+
 
   const file = recipient.getByTestId('attachment-file');
   await expect(file).toContainText('report.txt');
@@ -109,4 +118,27 @@ test('record and send an encrypted voice note', async ({ browser, request }) => 
   await openChat(recipient, senderUser.name);
   await expect(recipient.getByTestId('audio-player')).toBeVisible();
   await closeAll(sender, recipient);
+});
+
+test('photos and videos open in one viewer with keyboard navigation and download', async ({ browser, request }) => {
+  const user = await createUser(request, 'mediaview'); const page = await newPage(browser); await enroll(page, user);
+  await page.getByTestId('new-chat').click(); await page.getByTestId('note-to-self').click();
+  await page.getByTestId('file-input').setInputFiles([
+    { name: 'red.png', mimeType: 'image/png', buffer: PNG },
+    { name: 'preview.webm', mimeType: 'video/webm', buffer: await readFile('fixtures/preview.webm') },
+  ]);
+  await page.getByTestId('preview-send').click();
+  await page.getByTestId('attachment-image').click();
+  await expect(page.getByTestId('media-image')).toBeVisible();
+  await expect(page.locator('.media-thumbnail')).toHaveCount(2);
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('media-video')).toBeVisible();
+  await expect.poll(() => page.getByTestId('media-video').evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(2);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('media-viewer').getByRole('link', { name: 'Download' }).click()]);
+  expect(download.suggestedFilename()).toBe('preview.webm');
+  expect(await readFile((await download.path())!)).toEqual(await readFile('fixtures/preview.webm'));
+  await page.keyboard.press('Escape'); await expect(page.getByTestId('media-viewer')).toHaveCount(0);
+  await page.getByTestId('video-poster').click(); await expect(page.getByTestId('media-video')).toBeVisible();
+  await page.getByTestId('close-media').click(); await expect(page.getByTestId('media-viewer')).toHaveCount(0);
+  await closeAll(page);
 });

@@ -1,6 +1,6 @@
 import { ApiError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
-import type { DeviceRef, EnvelopeDto, GroupRole } from '../api/types';
+import type { CreateGroupRequest, DeviceRef, EnvelopeDto, GroupRole } from '../api/types';
 import {
   addProposals,
   commit,
@@ -47,6 +47,7 @@ const KEY_PACKAGE_BATCH = 20;
 /** Locally known group facts (name and roles come from E2EE metadata and the DS ACL mirror). */
 export interface GroupRecord {
   adminOnly?: boolean;
+  needsJoin?: boolean;
   groupId: string;
   name: string;
   /** Monotonic metadata version (highest wins). */
@@ -164,25 +165,39 @@ export class GroupManager {
    * @returns group ID and the ops to persist (already committed here for the state/record)
    */
   async create(name: string, accountIds: string[], adminOnly = false): Promise<GroupRecord> {
-    const signer = await this.signer();
-    const accounts = unique(accountIds.filter((a) => a !== this.self.accountId));
-    const claimed = await this.claim([...accounts, this.self.accountId]);
-    requireEveryAccount(accounts, claimed);
-    const [own] = await generateKeyPackages(signer, this.self.accountId, this.self.deviceId, 1);
-    const groupId = randomBytes(32);
-    const output = await createGroupWith(signer, own!, groupId, claimed.map((c) => c.keyPackage));
-    const id = toBase64Url(groupId);
-    const view = await this.api.createGroup({
-      groupId: id,
-      adminOnly,
-      epoch: epochOf(output.state),
-      members: accounts,
-      devices: claimed.map((c) => c.device),
-      welcome: output.welcome,
-    });
+    const accounts = unique(accountIds.filter((a) => a !== this.self.accountId)).sort();
+    const signature = JSON.stringify({ name, accounts, adminOnly });
+    type Pending = { signature: string; request: CreateGroupRequest; state: string };
+    let pending = await this.store.get<Pending>('pending-group-create', signature);
+    if (!pending) {
+      const signer = await this.signer();
+      const claimed = await this.claim([...accounts, this.self.accountId]);
+      requireEveryAccount(accounts, claimed);
+      const [own] = await generateKeyPackages(signer, this.self.accountId, this.self.deviceId, 1);
+      const groupId = randomBytes(32);
+      const output = await createGroupWith(signer, own!, groupId, claimed.map((c) => c.keyPackage));
+      const id = toBase64Url(groupId);
+      pending = { signature, state: serializeState(output.state), request: {
+        groupId: id, adminOnly, epoch: epochOf(output.state), members: accounts,
+        devices: claimed.map((c) => c.device), welcome: output.welcome,
+      } };
+      await this.store.put('pending-group-create', signature, pending);
+    }
+    const view = await this.api.createGroup(pending.request);
+    const id = pending.request.groupId;
     const record: GroupRecord = { groupId: id, name, metaVersion: 1, members: view.members, adminOnly: view.adminOnly, left: false };
-    await this.store.commit([this.stateOp(id, output.state), { type: 'put', ns: GroupNs.group, id, value: record }]);
+    await this.store.commit([{ type: 'put', ns: GroupNs.state, id, value: pending.state },
+      { type: 'put', ns: GroupNs.group, id, value: record }, { type: 'delete', ns: 'pending-group-create', id: signature }]);
     return record;
+  }
+
+  async isJoined(groupId: string): Promise<boolean> { return Boolean(await this.state(groupId)); }
+
+  /** Owners can grant/revoke admin and shared ownership; server enforces final-owner protection. */
+  async changeRole(groupId: string, accountId: string, role: GroupRole): Promise<void> {
+    const state = await this.requireState(groupId);
+    const output = await commit(state, []);
+    await this.submitCommit(groupId, state, output, { roleChanges: { [accountId]: role } });
   }
 
   /** Adds accounts (all their devices with KeyPackages). Requires admin/owner on the server. */
@@ -310,7 +325,7 @@ export class GroupManager {
     groupId: string,
     before: ClientState,
     output: CommitOutput,
-    changes: { addMembers?: string[]; removeMembers?: string[]; addDevices?: DeviceRef[]; removeDevices?: DeviceRef[] },
+    changes: { addMembers?: string[]; removeMembers?: string[]; addDevices?: DeviceRef[]; removeDevices?: DeviceRef[]; roleChanges?: Record<string, GroupRole> },
   ): Promise<void> {
     try {
       await this.api.groupCommit(groupId, {

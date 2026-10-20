@@ -47,3 +47,22 @@ LAN-specific E2E base URL uses the host interface address with the HTTPS port. K
 - [ ] Recovery code: random 256-bit secret, separately derived encryption and server authorization keys. Store only an encrypted account-identity backup and a hash of the authorization key on the backend.
 - [ ] Recover after fresh Keycloak login plus recovery authorization, preserve account identity, revoke lost devices, register a fresh device, restore archive. Expose code creation/rotation and archive synchronization state in Settings.
 - [ ] Test historical incoming/outgoing messages on a fresh linked browser, archive retry/offline recovery, wrong code, wrong account, successful all-devices-lost recovery, idempotent uploads, and ciphertext-only database contents.
+
+## Follow-up UX and privacy batch (2026-10-20)
+
+- [x] Replace the expanded Settings root editors with a profile summary and six category cards. Keep forms on subpages; keep red confirmed logout after Security and inside Security. Preserve a compact encrypted-history state on the overview.
+- [x] Reuse Floating UI for anchored menus, implement logical Escape parents and participant contact pages, and add group role menus plus a review step before creation.
+- [x] Suggest recent direct contacts in member pickers, excluding existing members. Keep directory search for other people.
+- [x] Add opt-in account-wide last-seen privacy with backend filtering. Publish only a UTC day from visible clients, never precise presence; hiding clears the public date. No bulk presence feed.
+- [x] Add a native-dialog media viewer for supported safe image/video types with previous/next, keyboard navigation, thumbnails, zoom, captions and explicit download. Decrypt selected media locally; clear plaintext object URLs on workspace exit.
+- [ ] Deploy FE/BE, verify Settings viewport fit and logout cancellation/confirmation, last-seen privacy from a second account, group role changes/recent picker, image/video viewer and existing regressions in both supported browser engines.
+- [ ] Android: permission-based phone address-book matching against account phone numbers, manual search fallback, native contact picker; generate installable APK in apps/assets and test through ADB. Do not upload names or address-book photos; do not use address-book access to bypass enrollment or E2EE.
+
+## Latest requested refinements
+
+- [x] Account last seen now includes local hour/minute. Add V13 rather than changing applied V12; retain only the latest minute timestamp, opt-in, read-time privacy filtering, clear on hiding.
+- [x] Replace the duplicate Settings gear with a Media rail action; profile remains Settings entry.
+- [x] Add a global native-dialog gallery with local caption/filename/link search, sender filter, newest/oldest/largest sorting and bounded selection actions. Use pinned fflate for ZIP downloads. Forward only selected attachments/links; preserve source messages when starring. Delete action explicitly confirms complete selected messages including captions/other attachments.
+- [x] Add brief 120–140 ms transitions with Settings opt-out and OS reduced-motion support. Add Group/Channel labels and Channel info header.
+- [x] Fix portaled menu stretching by clearing inherited right positioning; keep menus inside a modal's top layer when required. Clamp application viewport and safety-number columns to prevent transient document overflow.
+- [ ] Verify the latest refinements, then commit and push the reviewed web/backend checkpoint on master.

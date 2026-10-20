@@ -6,12 +6,14 @@ import { useId, type ReactNode } from 'react';
  */
 export function Switch({
   checked,
+  disabled = false,
   onChange,
   label,
   description,
   testId,
 }: {
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
   label: ReactNode;
   description?: ReactNode;
@@ -28,6 +30,7 @@ export function Switch({
         id={id}
         type="button"
         role="switch"
+        disabled={disabled}
         aria-checked={checked}
         className="switch"
         onClick={() => onChange(!checked)}

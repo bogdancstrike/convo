@@ -23,7 +23,7 @@ test.describe('direct encrypted messaging', () => {
     // Bob receives it in a new conversation and the sender sees delivery.
     await openChat(bob, aliceUser.name);
     await expect(message(bob, 'Bună, Bob! bold hello')).toBeVisible();
-    await expect(aliceFirst.getByTestId('message-status')).toHaveText('Delivered');
+    await expect(aliceFirst.getByTestId('message-status')).toHaveText('Received');
 
     // Bob replies (established session, whisper messages).
     await send(bob, 'Hi Alice 👋');
@@ -70,7 +70,7 @@ test.describe('direct encrypted messaging', () => {
     await openChat(recipient, senderUser.name);
     await expect(message(recipient, 'first while offline')).toBeVisible();
     await expect(message(recipient, 'second while offline')).toBeVisible();
-    await expect(message(sender, 'second while offline').getByTestId('message-status')).toHaveText('Delivered');
+    await expect(message(sender, 'second while offline').getByTestId('message-status')).toHaveText('Received');
     await closeAll(sender, recipient);
   });
 

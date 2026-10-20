@@ -72,6 +72,7 @@ export function App() {
     themePreference.current = settings.theme;
     applyTheme(settings.theme);
     document.documentElement.lang = settings.locale;
+    document.documentElement.dataset.motion = settings.animations ? 'on' : 'off';
   }, []);
 
   // Follow the OS appearance while the preference is "system".

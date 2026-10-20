@@ -32,3 +32,18 @@ encrypted profiles. Product direction is a WhatsApp-like experience: people must
 * Directory freshness depends on users signing in; the IdP reconciliation adapter (§27, ID-02) should
   also refresh these attributes.
 * Rate limiting of directory search is required before launch (SEC-01 enumeration review).
+
+### 2026-10-20 update: required phone and Android address-book discovery
+
+Phone is now required and editable in Keycloak's user profile. Verify Profile is enabled;
+seed accounts missing a number must complete Update Profile on sign-in. The application still
+receives the phone claim from Keycloak, rather than accepting unsigned client profile fields.
+A self-entered number is not proof of ownership; the present development realm does not perform
+SMS verification. Safety numbers and authenticated account identity remain authoritative.
+
+The user has now requested permission-based native address-book discovery. Android will read
+phone numbers only after explicit OS permission, normalize on device and match exact full
+numbers in bounded requests to the organization's directory. Contact names and address-book
+photos stay on the device. Denial must leave manual directory lookup usable. This supersedes
+the earlier no-bulk-matching UI scope, but does not authorize collecting address books or treating
+an unverified phone claim as proof of identity.

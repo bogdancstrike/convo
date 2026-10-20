@@ -1,3 +1,4 @@
+import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { EDIT_WINDOW_MS, type EnclaveClient } from '../../core/client';
@@ -80,7 +81,7 @@ export function MessageBubble({
           onTouchEnd={endPress}
           onTouchMove={endPress}
           onKeyDown={(e) => {
-            if (!system && (e.key === 'Enter' || e.key === 'ContextMenu')) {
+            if (!system && e.target === e.currentTarget && (e.key === 'Enter' || e.key === 'ContextMenu')) {
               e.preventDefault();
               setMenu(true);
             }
@@ -191,22 +192,9 @@ function MessageMenu({ client, message: m, onClose, actions, anchor }: { client:
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ left: 8, top: 8 });
-  useLayoutEffect(() => {
-    const place = () => {
-      const rect = anchor.current?.getBoundingClientRect();
-      const panel = root.current?.getBoundingClientRect();
-      if (!rect || !panel) return;
-      const right = rect.right + 10;
-      const left = right + panel.width <= window.innerWidth - 8 ? right : rect.left - panel.width - 10;
-      setPosition({ left: Math.max(8, Math.min(left, window.innerWidth - panel.width - 8)),
-        top: Math.max(8, Math.min(rect.top, window.innerHeight - panel.height - 8)) });
-    };
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
-  }, [anchor, picker, confirmDelete]);
+  const { refs, floatingStyles } = useFloating({ strategy: 'fixed', placement: m.direction === 'out' ? 'left-start' : 'right-start',
+    middleware: [offset(10), flip({ fallbackPlacements: m.direction === 'out' ? ['right-start'] : ['left-start'] }), shift({ padding: 8, crossAxis: true })], whileElementsMounted: autoUpdate });
+  useLayoutEffect(() => { refs.setReference(anchor.current); refs.setFloating(root.current); }, [anchor, picker, confirmDelete, refs]);
   useEffect(() => () => anchor.current?.focus({ preventScroll: true }), [anchor]);
   const own = m.authorId === client.accountId;
   const canEdit = own && m.body !== undefined && Date.now() - m.sentAt < EDIT_WINDOW_MS;
@@ -268,7 +256,7 @@ function MessageMenu({ client, message: m, onClose, actions, anchor }: { client:
   }
 
   return createPortal(
-    <div className={`message-menu floating ${m.direction}`} ref={root} style={position} data-testid="message-menu-panel"
+    <div className={`message-menu floating ${m.direction}`} ref={root} style={floatingStyles} data-testid="message-menu-panel"
       onKeyDown={(e) => {
         if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
         e.preventDefault();
@@ -321,8 +309,12 @@ function MessageMenu({ client, message: m, onClose, actions, anchor }: { client:
 }
 
 /** Message info dialog: sent time and delivery state. */
-export function MessageInfoDialog({ message, onClose }: { message: ChatMessage; onClose: () => void }) {
+export function MessageInfoDialog({ client, message, onClose }: { client: EnclaveClient; message: ChatMessage; onClose: () => void }) {
   const { t, time, date } = useI18n();
+  const receipts = Object.entries(message.receipts ?? {});
+  const read = receipts.filter(([, r]) => r.readAt);
+  const delivered = receipts.filter(([, r]) => r.deliveredAt && !r.readAt);
+  const remaining = Math.max(0, (message.recipientAccountIds?.length ?? 0) - receipts.filter(([, r]) => r.deliveredAt).length);
   return (
     <Dialog labelledBy="msg-info-title" onClose={onClose}>
       <h2 id="msg-info-title">{t('msg.info')}</h2>
@@ -337,9 +329,25 @@ export function MessageInfoDialog({ message, onClose }: { message: ChatMessage; 
           </>
         )}
       </dl>
+      {message.direction === 'out' && <div className="receipt-details">
+        <section aria-label={t('receipt.readBy')} data-testid="read-by"><h3><span className="tick-read"><Icon name="checks" size={18} /></span>{t('receipt.readBy')}</h3>
+          {read.map(([id, r]) => <ReceiptPerson key={id} client={client} accountId={id} at={r.readAt!} />)}
+          {!read.length && <p className="muted-text">{t('receipt.noReads')}</p>}
+        </section>
+        <section aria-label={t('receipt.deliveredTo')} data-testid="delivered-to"><h3><Icon name="checks" size={18} />{t('receipt.deliveredTo')}</h3>
+          {delivered.map(([id, r]) => <ReceiptPerson key={id} client={client} accountId={id} at={r.deliveredAt!} />)}
+          {remaining > 0 && <p className="muted-text">{t('receipt.remaining', { count: remaining })}</p>}
+        </section>
+        <p className="muted-text">{t('receipt.privacy')}</p>
+      </div>}
       <button className="btn" onClick={onClose}>{t('newChat.close')}</button>
     </Dialog>
   );
+}
+
+function ReceiptPerson({ client, accountId, at }: { client: EnclaveClient; accountId: string; at: number }) {
+  const label = useAccountLabel(client, accountId); const { date, time } = useI18n();
+  return <div className="receipt-person"><Avatar id={accountId} name={label || '?'} size={40} /><div><strong>{label}</strong><span className="muted-text">{date(at)} · {time(at)}</span></div></div>;
 }
 
 function dayLabel(ms: number, today: string, yesterday: string, date: (ms: number) => string): string {

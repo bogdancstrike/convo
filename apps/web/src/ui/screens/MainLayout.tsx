@@ -1,3 +1,8 @@
+import { AllMedia } from './AllMedia';
+import { MediaViewerProvider } from '../components/MediaViewer';
+import { ContactDrawer } from './ContactDrawer';
+import { ConversationSubpage } from './ConversationDetails';
+import { LinkPreferences } from '../components/ExternalLink';
 import { ProfilesProvider } from '../components/ProfileContext';
 import { SharedContent, type SharedTab } from './SharedContent';
 import { useEffect, useState } from 'react';
@@ -8,7 +13,7 @@ import { Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
 import { useConnection, useConversations } from '../hooks';
 import { useI18n } from '../i18n/i18n';
-import { useNavigation } from '../navigation';
+import { escapeNavigation, useNavigation } from '../navigation';
 import { ChatListPanel } from './ChatListPanel';
 import { InfoDrawer } from './InfoDrawer';
 import { NewChatPanel } from './NewChatPanel';
@@ -28,9 +33,26 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
   const connection = useConnection(client);
   const [nav, navigate] = useNavigation();
   const [chatSearch, setChatSearch] = useState<{ id: string; query: string } | null>(null);
+  const [allMedia, setAllMedia] = useState(false);
   const [pendingPicker, setPendingPicker] = useState<'document' | null>(null);
   const active = nav.chat ? (conversations.find((c) => c.id === nav.chat) ?? null) : null;
   const unread = conversations.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('dialog[open], .message-menu, .floating-menu, .emoji-picker')) return;
+      event.preventDefault(); navigate(escapeNavigation(nav));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [nav, navigate]);
+
+  useEffect(() => {
+    const heartbeat = () => { if (document.visibilityState === 'visible') void client.lastSeenHeartbeat().catch(() => undefined); };
+    heartbeat(); const timer = setInterval(heartbeat, 20000);
+    document.addEventListener('visibilitychange', heartbeat);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', heartbeat); };
+  }, [client]);
 
   // "Send document" opens the picker once, in the next chat the user picks.
   useEffect(() => {
@@ -71,6 +93,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
       case 'settings':
         return (
           <SettingsNavigation
+            onSignedOut={onSignedOut}
             client={client}
             page={nav.page}
             onNavigate={(page) => navigate({ page })}
@@ -96,7 +119,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
 
   const pane = active ? 'thread' : 'list';
   return (
-    <ProfilesProvider client={client}><div className="shell" data-settings={nav.panel === 'settings'} data-pane={pane} data-drawer={active && nav.info ? 'open' : 'closed'}>
+    <ProfilesProvider client={client}><LinkPreferences client={client}><MediaViewerProvider client={client}><div className="shell" data-settings={nav.panel === 'settings'} data-pane={pane} data-drawer={active && nav.info ? 'open' : 'closed'}>
       <nav className="rail" aria-label={t('appName')}>
         <span className="brand">
           <Logo size={36} />
@@ -117,17 +140,8 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
         <button className="rail-btn" aria-label={t('nav.channels')} title={t('nav.channels')} aria-current={nav.panel === 'channels' ? 'page' : undefined}
           onClick={() => navigate({ panel: 'channels', chat: null, info: false })} data-testid="nav-channels"><Icon name="channels" /></button>
         <span className="spacer" />
-        <button
-          className="rail-btn"
-          aria-current={nav.panel === 'settings' ? 'page' : undefined}
-          onClick={() => navigate({ panel: 'settings', chat: null })}
-          aria-label={t('nav.settings')}
-          title={t('nav.settings')}
-          data-testid="nav-settings"
-        >
-          <Icon name="settings" />
-        </button>
-        <button className="rail-btn" onClick={() => navigate({ panel: 'settings', chat: null })} aria-label={labelOf(client.device)} title={labelOf(client.device)}>
+        <button className="rail-btn" onClick={() => setAllMedia(true)} aria-label={t('gallery.title')} title={t('gallery.title')} data-testid="nav-media"><Icon name="image" /></button>
+        <button className="rail-btn" data-testid="nav-settings" onClick={() => navigate({ panel: 'settings', chat: null })} aria-label={`${t('settings.title')}: ${labelOf(client.device)}`} title={t('settings.title')} aria-current={nav.panel === 'settings' ? 'page' : undefined}>
           <Avatar id={client.accountId} name={labelOf(client.device)} size={30} />
         </button>
       </nav>
@@ -163,9 +177,21 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           }}
         />
       )}
-      {active && nav.info && (nav.page ? <SharedContent key={active.id} client={client} conversationId={active.id} tab={nav.page as SharedTab}
-        onTab={(page) => navigate({ page })} onBack={() => navigate({ page: null })} /> :
-        <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false, page: null })} onShared={() => navigate({ page: 'media' })} />)}
-    </div></ProfilesProvider>
+      {active && nav.info && (() => {
+        const parts = nav.page?.split(':') ?? [];
+        const contactId = parts[0] === 'contact' ? parts[1] : undefined;
+        const page = contactId ? parts[2] : nav.page;
+        const parent = contactId ? `contact:${contactId}` : null;
+        const onPage = (next: string) => navigate({ page: contactId ? `${parent}:${next}` : next });
+        const view = contactId ? client.conversation(contactId) ?? { ...active, id: contactId, kind: 'direct' as const } : active;
+        if (page === 'starred' || page === 'appearance') return <ConversationSubpage client={client} conversation={view} page={page} onBack={() => navigate({ page: parent })} />;
+        if (page && ['media', 'links', 'docs'].includes(page)) return <SharedContent key={view.id} client={client} conversationId={view.id} tab={page as SharedTab} onTab={onPage} onBack={() => navigate({ page: parent })} />;
+        if (contactId) return <ContactDrawer client={client} accountId={contactId} onBack={() => navigate({ page: null })} onPage={onPage} onGroup={openChat} onMessage={() => {
+          void client.account(contactId).then((account) => account && client.openConversation(account).then((c) => openChat(c.id)));
+        }} />;
+        return <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false, page: null })}
+          onShared={() => navigate({ page: 'media' })} onPage={onPage} onContact={(id) => navigate({ page: `contact:${id}` })} />;
+      })()}
+    </div>{allMedia && <AllMedia client={client} onClose={() => setAllMedia(false)} />}</MediaViewerProvider></LinkPreferences></ProfilesProvider>
   );
 }

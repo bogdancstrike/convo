@@ -21,7 +21,7 @@ export function parseHash(hash: string): NavState {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   switch (parts[0]) {
     case 'chat':
-      return { panel: 'chats', chat: parts[1] ?? null, info: parts[2] === 'info', page: parts[2] === 'info' && ['media', 'links', 'docs'].includes(parts[3] ?? '') ? parts[3]! : null };
+      return { panel: 'chats', chat: parts[1] ?? null, info: parts[2] === 'info', page: parts[2] === 'info' && parts[3] === 'contact' && parts[4] ? `contact:${parts[4]}${parts[5] && ['media', 'links', 'docs', 'starred', 'appearance'].includes(parts[5]) ? `:${parts[5]}` : ''}` : parts[2] === 'info' && ['media', 'links', 'docs', 'starred', 'appearance'].includes(parts[3] ?? '') ? parts[3]! : null };
     case 'calls':
     case 'channels':
     case 'new-channel':
@@ -38,9 +38,23 @@ export function parseHash(hash: string): NavState {
 }
 
 export function formatHash(state: NavState): string {
-  if (state.chat) return `#/chat/${encodeURIComponent(state.chat)}${state.info ? `/info${state.page ? `/${state.page}` : ''}` : ''}`;
+  if (state.chat) return `#/chat/${encodeURIComponent(state.chat)}${state.info ? `/info${state.page ? `/${state.page.startsWith('contact:') ? state.page.split(':').map(encodeURIComponent).join('/') : encodeURIComponent(state.page)}` : ''}` : ''}`;
   if (state.panel === 'settings' && state.page) return `#/settings/${encodeURIComponent(state.page)}`;
   return state.panel === 'chats' ? '#/' : `#/${state.panel}`;
+}
+
+/** Escape acts on the innermost navigation layer; dialogs/popovers handle it first. */
+export function escapeNavigation(state: NavState): Partial<NavState> {
+  if (state.info && state.page) {
+    const contact = state.page.split(':');
+    return { page: contact[0] === 'contact' && contact.length > 2 ? contact.slice(0, 2).join(':') : null };
+  }
+  if (state.info) return { info: false, page: null };
+  if (state.chat) return { chat: null, info: false, page: null };
+  if (state.panel === 'settings' && state.page) return { page: null };
+  if (state.panel === 'new-group') return { panel: 'new' };
+  if (state.panel === 'new-channel') return { panel: 'channels' };
+  return { panel: 'chats', page: null };
 }
 
 /** Navigation state synchronized with `location.hash` (push on navigate, follows Back/Forward). */

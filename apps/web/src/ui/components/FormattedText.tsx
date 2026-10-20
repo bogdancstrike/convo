@@ -1,3 +1,5 @@
+import { LINK_PATTERN, trimLink } from '../../lib/links';
+import { ExternalLink } from './ExternalLink';
 import { Fragment, type ReactNode } from 'react';
 
 /**
@@ -28,13 +30,21 @@ function marked(text: string, highlight: string | undefined, key: string): React
   return parts;
 }
 
+function linked(text: string, highlight: string | undefined, key: string): ReactNode {
+  return text.split(LINK_PATTERN).map((part, i) => {
+    if (!/^(https?:\/\/|www\.)/i.test(part)) return <Fragment key={i}>{marked(part, highlight, `${key}-${i}`)}</Fragment>;
+    const link = trimLink(part);
+    return <Fragment key={i}><ExternalLink href={link}>{marked(link, highlight, `${key}-${i}`)}</ExternalLink>{part.slice(link.length)}</Fragment>;
+  });
+}
+
 function inline(text: string, keyPrefix: string, highlight?: string): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     const key = `${keyPrefix}-${i}`;
     if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) return <code key={key} className="inline">{part.slice(1, -1)}</code>;
-    if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) return <strong key={key}>{marked(part.slice(1, -1), highlight, key)}</strong>;
-    if (part.length > 2 && part.startsWith('_') && part.endsWith('_')) return <em key={key}>{marked(part.slice(1, -1), highlight, key)}</em>;
-    return <Fragment key={key}>{marked(part, highlight, key)}</Fragment>;
+    if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) return <strong key={key}>{linked(part.slice(1, -1), highlight, key)}</strong>;
+    if (part.length > 2 && part.startsWith('_') && part.endsWith('_')) return <em key={key}>{linked(part.slice(1, -1), highlight, key)}</em>;
+    return <Fragment key={key}>{linked(part, highlight, key)}</Fragment>;
   });
 }
 

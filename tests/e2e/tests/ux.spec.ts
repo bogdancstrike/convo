@@ -16,6 +16,14 @@ test('global message search, quick chat actions, calls and beside-message menu',
   await enroll(page, user); await enroll(other, peer); await startChat(page, peer);
   await send(page, 'Ședință în București');
   await send(page, 'a newer unrelated message');
+  const watchWidth = () => page.evaluate(() => new Promise<boolean>((resolve) => {
+    const until = performance.now() + 500; let fits = true;
+    const sample = () => { fits = fits && document.documentElement.scrollWidth <= innerWidth; if (performance.now() < until) requestAnimationFrame(sample); else resolve(fits); }; sample();
+  }));
+  const opening = watchWidth(); await page.getByTestId('verify').click(); expect(await opening).toBe(true);
+  const verifying = watchWidth(); await page.getByTestId('open-safety').click(); expect(await verifying).toBe(true);
+  await expect(page.getByTestId('safety-number')).toBeVisible();
+  await page.keyboard.press('Escape');
   const search = page.getByRole('searchbox', { name: 'Search chats', exact: true });
   await search.fill('SEDINTA');
   const row = page.getByTestId(`conversation-${peer.name}`);
@@ -33,6 +41,7 @@ test('global message search, quick chat actions, calls and beside-message menu',
   expect(box!.x + box!.width <= bubble!.x || box!.x >= bubble!.x + bubble!.width).toBeTruthy();
   await page.keyboard.press('Escape');
   await page.getByTestId(`chat-menu-${peer.name}`).click();
+  expect((await page.locator('.floating-menu').boundingBox())!.width).toBeLessThanOrEqual(320);
   await page.getByRole('menuitem', { name: 'Pin chat', exact: true }).click();
   await expect(row.getByRole('img', { name: 'Pinned' })).toBeVisible();
   await page.getByTestId(`chat-menu-${peer.name}`).click();
@@ -42,6 +51,11 @@ test('global message search, quick chat actions, calls and beside-message menu',
   await expect(row).toBeVisible();
   await page.getByTestId(`chat-menu-${peer.name}`).click();
   await page.getByRole('menuitem', { name: 'Unarchive chat', exact: true }).click();
+  await page.getByTestId('thread-menu').click();
+  const compact = await page.locator('.floating-menu').boundingBox();
+  expect(compact!.width).toBeLessThanOrEqual(320);
+  expect(compact!.x).toBeGreaterThan(800);
+  await page.keyboard.press('Escape');
   await page.getByTestId('nav-calls').click();
   await expect(page.getByText('To be implemented').first()).toBeVisible();
   await closeAll(page, other);
@@ -57,8 +71,13 @@ test('channel owners publish; members see a read-only channel', async ({ browser
   await owner.getByTestId(`pick-${memberU.username}`).click();
   await owner.getByTestId('group-next').click();
   const title = `Announcements ${Date.now()}`;
-  await owner.getByTestId('group-name').fill(title); await owner.getByTestId('create-group').click();
+  await owner.getByTestId('group-name').fill(title); await owner.getByTestId('review-group').click();
+  await owner.getByTestId('create-group').click();
   await expect(owner.getByTestId('thread-title')).toHaveText(title);
+  await owner.getByTestId('thread-info').click();
+  await expect(owner.getByTestId('conversation-kind')).toHaveText('Channel');
+  await expect(owner.getByRole('heading', { name: 'Channel info', exact: true })).toBeVisible();
+  await owner.keyboard.press('Escape');
   await send(owner, 'Team announcement');
   await member.getByTestId('nav-channels').click();
   await member.getByTestId(`conversation-${title}`).click();
