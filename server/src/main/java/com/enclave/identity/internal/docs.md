@@ -4,6 +4,7 @@ Private implementation of the identity module. Nothing here may be referenced fr
 (enforced by `ModularityTests`).
 
 * `IdentityProperties` — typed `enclave.identity.*` configuration.
+* `credentials/` — read-only IdP credential types for lock gating.
 * `account/`, `device/`, `enrollment/`, `keys/`, `auth/`, `web/` — see each package's `docs.md`.
 
 Persistence uses Spring `JdbcClient` with explicit SQL: the schema is security-relevant

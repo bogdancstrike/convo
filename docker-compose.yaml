@@ -61,6 +61,20 @@ services:
           printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
           grep -q '"UP"' <&3
 
+  # One-shot, idempotent: read-only Keycloak client for passkey status (GET /v1/account/credentials).
+  keycloak-setup:
+    image: quay.io/keycloak/keycloak:26.4
+    entrypoint: ["/bin/bash", "/setup/credential-status-client.sh"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
+      CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+    volumes:
+      - ./deploy/keycloak/credential-status-client.sh:/setup/credential-status-client.sh:ro
+    depends_on:
+      keycloak: { condition: service_healthy }
+    restart: "no"
+
   seaweedfs:
     image: chrislusf/seaweedfs:4.48
     command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-volume.max=0", "-master.volumeSizeLimitMB=1024"]
@@ -105,10 +119,14 @@ services:
       ENCLAVE_ATTACHMENTS_ACCESS_KEY: enclave-dev-access
       ENCLAVE_ATTACHMENTS_SECRET_KEY: enclave-dev-secret-change-me
       ENCLAVE_ATTACHMENT_POLICY_MAX_FILE_MEGABYTES: ${CONVO_ATTACHMENT_MAX_MB:-100}
+      ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ENABLED: "true"
+      ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ADMIN_URL: http://keycloak:8080/auth
+      ENCLAVE_IDENTITY_CREDENTIAL_STATUS_CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
       keycloak: { condition: service_healthy }
+      keycloak-setup: { condition: service_completed_successfully }
       seaweedfs: { condition: service_healthy }
 
   web:

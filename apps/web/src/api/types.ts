@@ -229,3 +229,10 @@ export interface GroupMessageRequest {
   submissionId: string;
   message: string;
 }
+
+/** `GET /v1/account/credentials`: registered IdP credential types. `unavailable` is never "none". */
+export interface CredentialStatusDto {
+  state: 'available' | 'unavailable';
+  passkey: boolean;
+  otp: boolean;
+}

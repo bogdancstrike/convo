@@ -5,6 +5,8 @@ import type { EnclaveClient } from '../../core/client';
 import type { IncomingLinkRequest } from '../../core/linking';
 import { labelOf, type Settings as SettingsModel } from '../../core/model';
 import { MEDIA_KINDS, type MediaKind } from '../../core/mediaPolicy';
+import { accountSecurityUrl } from '../../config/deployment';
+import type { CredentialStatusDto } from '../../api/types';
 import { Avatar } from '../components/Avatar';
 import { useProfile } from '../components/ProfileContext';
 import { Segmented, Switch } from '../components/Controls';
@@ -197,6 +199,8 @@ function PrivacyPage({ client, settings, update }: { client: EnclaveClient; sett
     return () => { cancelled = true; clearInterval(timer); };
   }, [client]);
   return (
+    <>
+    <PasskeyCard client={client} />
     <Card>
       <h3>{t('settings.browserTrustTitle')}</h3>
       <p className="muted-text">{t('settings.browserTrust')}</p>
@@ -221,6 +225,36 @@ function PrivacyPage({ client, settings, update }: { client: EnclaveClient; sett
         description={t('settings.typing.help')}
         testId="toggle-typing"
       />
+    </Card>
+    </>
+  );
+}
+
+/**
+ * Passkeys are enrolled and removed in the trusted Keycloak Account Console (new tab); Convo only
+ * shows whether one exists. The Android app uses this to unlock app and chat locks.
+ */
+function PasskeyCard({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<CredentialStatusDto | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => void client.credentialStatus().then((s) => !cancelled && setStatus(s));
+    load();
+    // Re-check when the user returns from the Account Console tab.
+    const onFocus = () => document.visibilityState === 'visible' && load();
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { cancelled = true; document.removeEventListener('visibilitychange', onFocus); };
+  }, [client]);
+  const url = accountSecurityUrl();
+  const label = !status ? t('passkeys.checking') : status.state === 'unavailable' ? t('passkeys.unavailable') : status.passkey ? t('passkeys.enrolled') : t('passkeys.none');
+  return (
+    <Card title={t('passkeys.title')}>
+      <p className="muted-text">{t('passkeys.help')}</p>
+      <p data-testid="passkey-status" data-state={status ? (status.state === 'unavailable' ? 'unavailable' : String(status.passkey)) : 'loading'}>
+        <Icon name={status?.passkey ? 'check' : 'shield'} size={18} /> {label}
+      </p>
+      {url && <a className="btn" href={url} target="_blank" rel="noopener noreferrer" data-testid="manage-passkeys">{t('passkeys.manage')}</a>}
     </Card>
   );
 }

@@ -33,7 +33,21 @@ export async function loadDeploymentInfo(signal?: AbortSignal): Promise<Deployme
   }
   configureAttachmentLimit(info.limits?.attachmentMaxBytes ?? 100 * 1024 * 1024);
   configureEditPolicy(info.limits);
+  current = info;
   return info;
+}
+
+let current: DeploymentInfo | null = null;
+
+/** The deployment info loaded at start-up, if any. */
+export function deploymentInfo(): DeploymentInfo | null { return current; }
+
+/**
+ * Keycloak Account Console page where users add or remove passkeys and authenticator apps.
+ * Convo never handles those credentials itself.
+ */
+export function accountSecurityUrl(info: DeploymentInfo | null = current): string | null {
+  return info ? `${info.oidc.issuer.replace(/\/$/, '')}/account/account-security/signing-in` : null;
 }
 
 /** Thrown when the server no longer supports this client version. */

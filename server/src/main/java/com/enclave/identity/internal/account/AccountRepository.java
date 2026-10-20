@@ -42,6 +42,15 @@ public class AccountRepository {
     }
 
     /**
+     * @param accountId account ID
+     * @return the account's OIDC subject ({@code sub}) at the canonical issuer, if present
+     */
+    public Optional<String> findOidcSubject(UUID accountId) {
+        return jdbc.sql("SELECT oidc_subject FROM accounts WHERE account_id = :id")
+                .param("id", accountId).query(String.class).optional();
+    }
+
+    /**
      * Loads the account row with {@code FOR UPDATE}, serializing device-list mutations.
      *
      * @param accountId account ID

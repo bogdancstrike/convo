@@ -1,6 +1,7 @@
 import type { DeviceCredentials, HttpClient } from './http';
 import type {
   AccountDto,
+  CredentialStatusDto,
   ClaimResponse,
   CreateGroupRequest,
   DeviceDto,
@@ -107,6 +108,8 @@ export class EnclaveApi {
 
   lastSeenPrivacy(): Promise<{ shareLastSeen: boolean }> { return this.signed('GET', '/v1/privacy/last-seen'); }
   setLastSeenPrivacy(shareLastSeen: boolean): Promise<void> { return this.signed('PUT', '/v1/privacy/last-seen', { shareLastSeen }); }
+  /** Own sign-in credential types at the IdP (passkey/OTP) for lock gating; `unavailable` on IdP errors. */
+  accountCredentials(): Promise<CredentialStatusDto> { return this.signed('GET', '/v1/account/credentials'); }
   lastSeenHeartbeat(): Promise<void> { return this.signed('POST', '/v1/privacy/last-seen/heartbeat'); }
   lastSeen(accountId: string): Promise<{ day: string | null; at: string | null }> { return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/last-seen`); }
 

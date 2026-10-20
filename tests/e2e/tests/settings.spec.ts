@@ -117,3 +117,17 @@ test('external links ask for confirmation unless the user turns it off', async (
   await expect(popup).toHaveURL('https://example.test/article'); await popup.close();
   await closeAll(page);
 });
+
+test('passkey status is read from the identity provider and links to its account console', async ({ browser, request }) => {
+  const user = await createUser(request, 'nopasskey');
+  const page = await newPage(browser);
+  try {
+    await enroll(page, user);
+    await page.getByTestId('nav-settings').click();
+    await page.getByTestId('settings-card-privacy').click();
+    await expect(page.getByTestId('passkey-status')).toHaveAttribute('data-state', 'false');
+    await expect(page.getByTestId('passkey-status')).toContainText('No passkey yet');
+    await expect(page.getByTestId('manage-passkeys')).toHaveAttribute('href', /\/auth\/realms\/enclave\/account\/account-security\/signing-in$/);
+    await expect(page.getByTestId('manage-passkeys')).toHaveAttribute('target', '_blank');
+  } finally { await closeAll(page); }
+});

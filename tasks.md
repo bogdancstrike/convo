@@ -32,7 +32,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Pictures/Convo export verified.
 - Calls (when started) will integrate existing open-source media servers (e.g. LiveKit + coturn)
   deployed in docker-compose rather than custom media infrastructure.
-- Still open: passkey Settings
+- Passkeys: Settings → Privacy shows IdP passkey status (read-only `convo-credential-status`
+  service account, `GET /v1/account/credentials`) and opens the Keycloak Account Console.
+  Verified with a real Chromium WebAuthn passkey on `convo.doncea.ro`.
+- Still open: Android passkey
   entry and native app/conversation locks, remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)

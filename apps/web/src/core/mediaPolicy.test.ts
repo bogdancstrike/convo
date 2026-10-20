@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { AttachmentPointer } from '../crypto/content';
-import { AUTO_PREFETCH_MAX_BYTES, DEFAULT_AUTO_DOWNLOAD, mediaKindOf, sanitizeAutoDownload, shouldAutoDownload } from './mediaPolicy';
+import { AUTO_PREFETCH_MAX_BYTES, type AutoDownloadSettings, DEFAULT_AUTO_DOWNLOAD, mediaKindOf, sanitizeAutoDownload, shouldAutoDownload } from './mediaPolicy';
 
 const pointer = (contentType: string, size = 1000, voiceNote?: boolean) => ({ attachmentId: '00000000-0000-0000-0000-000000000000', key: '', digest: '', size, contentType, voiceNote }) as AttachmentPointer;
 
@@ -14,8 +14,7 @@ it('classifies media and keeps the previous photo/voice behaviour by default', (
 });
 
 it('never prefetches large videos or documents automatically', () => {
-  const all = { wifi: ['photos', 'audio', 'videos', 'documents'], cellular: [], roaming: [] } as const;
-  const rules = { ...all, wifi: [...all.wifi] };
+  const rules: AutoDownloadSettings = { wifi: ['photos', 'audio', 'videos', 'documents'], cellular: [], roaming: [] };
   expect(shouldAutoDownload(rules, pointer('video/mp4', AUTO_PREFETCH_MAX_BYTES), 'wifi', false)).toBe(true);
   expect(shouldAutoDownload(rules, pointer('video/mp4', AUTO_PREFETCH_MAX_BYTES + 1), 'wifi', true)).toBe(false);
 });

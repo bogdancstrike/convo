@@ -5,7 +5,7 @@ import { fold, matchesMessage } from './search';
 import { ApiError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { GatewaySocket, type ConnectionState } from '../api/socket';
-import type { AccountDto, Directive, EnvelopeDto } from '../api/types';
+import type { AccountDto, CredentialStatusDto, Directive, EnvelopeDto } from '../api/types';
 import {
   CONTENT_VERSION,
   decodeContent,
@@ -597,6 +597,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   lastSeenPrivacy() { return this.api.lastSeenPrivacy(); }
+  /** Passkey/OTP registration at the IdP; network or IdP failures surface as `unavailable`. */
+  async credentialStatus(): Promise<CredentialStatusDto> {
+    try { return await this.api.accountCredentials(); } catch { return { state: 'unavailable', passkey: false, otp: false }; }
+  }
   setLastSeenPrivacy(enabled: boolean) { return this.api.setLastSeenPrivacy(enabled); }
   lastSeenHeartbeat() { return this.api.lastSeenHeartbeat(); }
   lastSeen(accountId: string) { return this.api.lastSeen(accountId); }

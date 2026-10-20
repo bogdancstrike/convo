@@ -66,6 +66,10 @@ test('hostname supports a real WebAuthn registration and passwordless sign-in', 
   await expect(page.getByTestId('nav-settings')).toBeVisible({ timeout: 45000 });
   const { credentials } = await cdp.send('WebAuthn.getCredentials', { authenticatorId });
   expect(credentials).toHaveLength(1); expect(credentials[0].rpId).toBe('convo.doncea.ro');
+  // Convo learns only that a passkey exists (read-only service account), which gates native locks.
+  await page.getByTestId('nav-settings').click();
+  await page.getByTestId('settings-card-privacy').click();
+  await expect(page.getByTestId('passkey-status')).toHaveAttribute('data-state', 'true');
   // Re-authenticate in Keycloak's account console with the same authenticator and no password.
   let assertions = 0;
   cdp.on('WebAuthn.credentialAsserted', () => { assertions++; });

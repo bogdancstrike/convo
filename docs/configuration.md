@@ -93,6 +93,7 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `enclave.message-policy.edit-window` | `ENCLAVE_MESSAGE_POLICY_EDIT_WINDOW` | `15m` | How long authors may edit text in chats, groups and Note to self. Advertised in `/v1/deployment-info`; receivers enforce it against server timestamps. |
 | `enclave.message-policy.channel-edit-window` | `ENCLAVE_MESSAGE_POLICY_CHANNEL_EDIT_WINDOW` | `30d` | Edit window for channel posts. |
 | `enclave.message-policy.edit-delivery-grace` | `ENCLAVE_MESSAGE_POLICY_EDIT_DELIVERY_GRACE` | `5m` | Tolerance for edits queued offline within the window (max 1h). |
+| `enclave.identity.credential-status.enabled` / `admin-url` / `realm` / `client-id` / `client-secret` | `ENCLAVE_IDENTITY_CREDENTIAL_STATUS_*`; secret from `CONVO_CREDENTIAL_STATUS_SECRET` in `.env` | disabled | Read-only Keycloak service account (`view-users` only) behind `GET /v1/account/credentials`. Compose's one-shot `keycloak-setup` service provisions the client idempotently. Without a secret the status is `unavailable`. |
 | `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
 | `retention` | | `30d` | Object lifetime |
 | `purge-interval` | | `PT1H` | |
