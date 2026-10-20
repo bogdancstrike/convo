@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { closeAll, createUser, enroll, newPage, openChat, startChat } from './support';
+import { closeAll, createUser, enroll, newPage, openChat, startChat, send } from './support';
 
 /** 8×8 red PNG. */
 const PNG = Buffer.from(
@@ -43,6 +43,24 @@ test('send an encrypted photo and file; recipient views and downloads them', asy
   const [download] = await Promise.all([recipient.waitForEvent('download'), file.getByRole('button', { name: 'Download' }).click()]);
   expect(download.suggestedFilename()).toBe('report.txt');
   expect(await readFile((await download.path())!, 'utf8')).toBe(fileText);
+
+  // Shared content works from the info drawer and survives refresh/deep links.
+  await send(sender, 'Project https://example.test/report and javascript:alert(1)');
+  await expect(recipient.getByTestId('message-body').getByText('Project https://example.test/report and javascript:alert(1)')).toBeVisible();
+  await recipient.getByTestId('thread-info').click();
+  await recipient.getByTestId('open-shared-content').click();
+  const gallery = recipient.getByTestId('shared-content');
+  await expect(gallery.getByTestId('attachment-image')).toBeVisible();
+  await recipient.reload();
+  await expect(recipient.getByTestId('shared-content')).toBeVisible();
+  await recipient.getByTestId('shared-docs').click();
+  const galleryFile = recipient.getByTestId('shared-content').getByTestId('attachment-file');
+  const [galleryDownload] = await Promise.all([recipient.waitForEvent('download'), galleryFile.getByRole('button', { name: 'Download' }).click()]);
+  expect(await readFile((await galleryDownload.path())!, 'utf8')).toBe(fileText);
+  await recipient.getByTestId('shared-links').click();
+  await expect(recipient.getByTestId('shared-content').getByRole('link')).toHaveAttribute('href', 'https://example.test/report');
+  await recipient.getByTestId('shared-back').click();
+  await expect(recipient.getByTestId('info-drawer')).toBeVisible();
 
   await closeAll(sender, recipient);
 });

@@ -9,15 +9,15 @@
 
 ```bash
 docker compose up -d --build        # postgres, valkey, keycloak, seaweedfs, server, web
-open http://localhost:8088          # sign in as alice / alice-dev-password (also bob, carol)
+open https://localhost:8443          # sign in as alice / alice-dev-password (also bob, carol)
 docker compose logs -f server       # backend logs
 docker compose down -v              # stop and delete all data
 ```
 
 | URL | What |
 |---|---|
-| http://localhost:8088 | Web app (nginx; proxies `/v1` → server, `/auth` → Keycloak) |
-| http://localhost:8088/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
+| https://localhost:8443 | Web app (nginx; proxies `/v1` → server, `/auth` → Keycloak) |
+| https://localhost:8443/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
 | http://localhost:5050 | pgAdmin (database "Enclave (dev)" pre-registered; password `enclave-dev-db`) |
 | localhost:5433 | PostgreSQL (`enclave` / `enclave-dev-db`) |
 
@@ -77,3 +77,26 @@ users, apply them to the running realm through the admin API/console instead of 
 * Configuration is typed (`@ConfigurationProperties` records, `enclave.*`), validated, and
   documented in `docs/configuration.md`. No hard-coded deployment values.
 * Never log plaintext, keys, tokens, ciphertext payloads or stable personal identifiers.
+
+## LAN, history and recovery
+
+Open `https://192.168.1.144:8443` by default; hostnames and other IPs work without rebuilding.
+`CONVO_HTTPS_PORT` changes HTTPS; `ENCLAVE_HTTP_PORT` changes the HTTP help-page port.
+The generated certificate is in the `web-tls` volume; Keycloak's dev database is in `keycloak-data`.
+Never change the canonical `OIDC_ISSUER` or deployment ID on an enrolled installation.
+
+Message/conversation/profile changes are journaled in the same IndexedDB transaction, then uploaded
+as opaque ciphertext to the account archive. Settings shows synchronization state and Retry. Logout
+waits for archive synchronization before removing the browser's local keys. Linked/recovered devices
+restore uploaded history without needing the old device online. Existing old-origin browser data
+still belongs to that origin; changing from HTTP to HTTPS does not migrate IndexedDB automatically.
+
+Save a recovery code in Settings before all devices are lost. Recovery requires Keycloak sign-in and
+the saved code, preserves the account identity, and revokes lost devices. Live MLS group state is
+not copied between devices; a fresh device must join the group for future traffic (ADR-0004).
+
+Run E2E against the LAN address as well:
+
+```bash
+docker compose --profile e2e run --rm -e BASE_URL=https://192.168.1.144:8443 e2e
+```

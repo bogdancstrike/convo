@@ -15,3 +15,5 @@
 
 Screens talk to the protocol only through `EnclaveClient` (`src/core/client.ts`) and the hooks in
 `src/ui/hooks.ts`.
+
+`ChatListPanel.tsx` searches local messages and titles and shares `conversationMenu.ts` actions with the thread. `SharedContent.tsx` provides routed media/link/document tabs. `ProfileSettings.tsx` edits photo/status and configures recovery; `RecoveryScreen.tsx` restores lost-device access. Settings navigation stays in the sidebar on wide screens; controls use the main workspace. Channels reuse the group wizard with a backend-enforced admin-only posting mode.

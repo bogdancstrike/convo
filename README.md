@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/assets/logo-wordmark.svg" alt="Enclave" width="300">
+  <img src="docs/assets/logo-wordmark.svg" alt="Convo" width="300">
 </p>
 
 <p align="center"><strong>Private conversations. Your infrastructure. Your rules.</strong></p>
 
-Convo (working platform name **Enclave**) is an on-prem messaging platform for organizations that
+Convo is an on-prem messaging platform for organizations that
 want a friendly, feature-rich chat experience while keeping message content, storage, identity and
 media infrastructure under their own control. Message content is end-to-end encrypted on the
 devices; the servers only relay ciphertext.
@@ -33,15 +33,24 @@ subsequent client target.
 
 ```bash
 docker compose up -d --build                  # postgres, valkey, keycloak, seaweedfs, pgadmin, server, web
-open http://localhost:8088                    # sign in as alice / alice-dev-password (also bob, carol)
+open https://localhost:8443                    # sign in as alice / alice-dev-password (also bob, carol)
 docker compose --profile e2e run --rm e2e     # Playwright end-to-end suite (Chromium + Firefox)
 ```
 
 | URL | What |
 |---|---|
-| http://localhost:8088 | Enclave web app |
-| http://localhost:8088/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
+| https://localhost:8443 | Convo web app |
+| https://localhost:8443/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
 | http://localhost:5050 | pgAdmin (database password `enclave-dev-db`) |
+
+For LAN access open **https://192.168.1.144:8443** (or the server's current IP/hostname).
+Accept the self-signed certificate once per device. Plain HTTP on port 8088 shows an HTTPS-required
+page. Development accounts include `bogdan` / `bogdan` and `maria` / `maria`.
+Keycloak, PostgreSQL, attachment storage and the TLS certificate persist in Compose volumes.
+
+Uploaded message history is encrypted under the account key and restores on linked devices.
+Create and save a recovery code in **Settings → History and recovery** before losing all devices.
+Recovery requires organization sign-in plus this code; a password reset alone cannot decrypt history.
 
 All credentials are development-only. See [docs/development.md](docs/development.md) for tests,
 fast iteration and conventions, and [docs/configuration.md](docs/configuration.md) for every

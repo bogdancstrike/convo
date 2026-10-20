@@ -1,3 +1,4 @@
+import { isProfile, type UserProfile } from '../core/profile';
 import { fromUtf8, randomBytes, toBase64Url, utf8 } from '../lib/bytes';
 import { pad, unpad } from './padding';
 
@@ -73,6 +74,7 @@ export interface Delete {
 
 /** A user-visible message or mutation. Exactly one of body/reaction/edit/delete is meaningful. */
 export interface DataMessage {
+  profile?: UserProfile;
   messageId: string;
   timestamp: number;
   body?: string;
@@ -120,7 +122,8 @@ export type Content =
   | { v: number; kind: 'receipt'; receipt: ReceiptMessage }
   | { v: number; kind: 'sync'; sync: SyncMessage }
   | { v: number; kind: 'typing'; typing: TypingMessage }
-  | { v: number; kind: 'groupMeta'; groupMeta: GroupMeta };
+  | { v: number; kind: 'groupMeta'; groupMeta: GroupMeta }
+  | { v: number; kind: 'profile'; profile: UserProfile };
 
 /** Content this client cannot interpret. */
 export interface UnknownContent {
@@ -149,6 +152,9 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
     throw new Error('malformed content');
   }
   switch (parsed.kind) {
+    case 'profile':
+      if (!isProfile(parsed.profile)) throw new Error('malformed profile');
+      return parsed as unknown as Content;
     case 'data':
       if (!isDataMessage(parsed.data)) throw new Error('malformed data message');
       return parsed as unknown as Content;
@@ -185,6 +191,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function isDataMessage(value: unknown): value is DataMessage {
   if (!isObject(value)) return false;
   if (typeof value.messageId !== 'string' || typeof value.timestamp !== 'number') return false;
+  if (value.profile !== undefined && !isProfile(value.profile)) return false;
   if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
   if (value.attachments !== undefined) {
     if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS) return false;

@@ -14,7 +14,7 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `OIDC_JWKS_URI` | `http://localhost:8180/.../certs` | JWKS endpoint reachable from the server |
 | `OIDC_CLIENT_ID` | `enclave-web` | Public client ID published to the web app |
 | `ENCLAVE_DEPLOYMENT_ID` | `enclave-dev` | Deployment ID bound into signed transcripts — never change after first enrollment |
-| `ENCLAVE_DISPLAY_NAME` | `Enclave` | Organization name on sign-in screens |
+| `ENCLAVE_DISPLAY_NAME` | `Convo` | Organization name on sign-in screens |
 | `ENCLAVE_PUBLIC_URL` | `http://localhost:8088` | Public base URL |
 | `PORT` | `8080` | HTTP port |
 
@@ -104,3 +104,24 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `max-handshake-bytes` | `1048576` | Commit/Welcome size |
 | `submission-retention` | `31d` | Idempotency records |
 | `purge-interval` | `PT1H` | |
+
+## Compose request origins
+
+Compose enables `ENCLAVE_REQUEST_ORIGIN=true` (`enclave.deployment.request-origin`; default false
+outside Compose). The trusted nginx request origin supplies public OIDC and S3 URLs. JWT keys always
+come from the configured internal JWKS endpoint; the token issuer must match the current request's
+realm URL before being mapped to the stable configured `OIDC_ISSUER` for account lookup. nginx
+replaces incoming forwarding headers, and backend/Keycloak ports are not published.
+
+`CONVO_HTTPS_PORT` defaults to 8443 and `ENCLAVE_HTTP_PORT` to 8088. Certificate generation happens
+only when the persistent certificate/key are missing. The development Keycloak client allows only
+its relative `/auth/convo/callback` route through a root URL resolved by Keycloak; no wildcard host
+redirect is enabled.
+
+## Account archive and recovery
+
+Device-signed `/v1/history` PUT/GET routes store account-scoped encrypted entries independently of
+mailbox retention. Entries are capped at 256 KiB; pages contain at most 100 entries. Recovery setup
+uses device authentication; recovery download and new enrollment use account authentication plus
+an independent recovery-code authorization verifier. Backup ciphertext is capped at 8 KiB. The
+server never holds the recovery code or archive encryption key. See ADR-0004.

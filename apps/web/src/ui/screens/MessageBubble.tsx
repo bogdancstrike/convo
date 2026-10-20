@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { EDIT_WINDOW_MS, type EnclaveClient } from '../../core/client';
 import type { ChatMessage, MessageStatus } from '../../core/model';
 import { AttachmentView } from '../components/AttachmentView';
@@ -48,6 +49,7 @@ export function MessageBubble({
 }) {
   const { t, time, date } = useI18n();
   const [menu, setMenu] = useState(false);
+  const bubbleRef = useRef<HTMLDivElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const own = m.authorId === client.accountId;
   const system = m.deleted || m.unsupported || m.undecryptable;
@@ -66,6 +68,7 @@ export function MessageBubble({
       <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}`} data-testid="message">
         {group && !own && <span className="msg-avatar">{first && <Avatar id={m.authorId} name={author || '?'} size={28} />}</span>}
         <div
+          ref={bubbleRef}
           className={`bubble${system ? ' system' : ''}${first ? ' tail' : ''}`}
           tabIndex={0}
           onContextMenu={(e) => {
@@ -147,7 +150,7 @@ export function MessageBubble({
             </button>
           )}
         </div>
-        {menu && <MessageMenu client={client} message={m} onClose={() => setMenu(false)} actions={actions} />}
+        {menu && <MessageMenu client={client} message={m} anchor={bubbleRef} onClose={() => setMenu(false)} actions={actions} />}
       </div>
     </>
   );
@@ -183,11 +186,28 @@ export function StatusTicks({ status }: { status: MessageStatus }) {
 }
 
 /** Message menu: quick reactions (+ full picker) and actions. */
-function MessageMenu({ client, message: m, onClose, actions }: { client: EnclaveClient; message: ChatMessage; onClose: () => void; actions: MessageActions }) {
+function MessageMenu({ client, message: m, onClose, actions, anchor }: { client: EnclaveClient; message: ChatMessage; onClose: () => void; actions: MessageActions; anchor: RefObject<HTMLDivElement | null> }) {
   const { t } = useI18n();
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 8, top: 8 });
+  useLayoutEffect(() => {
+    const place = () => {
+      const rect = anchor.current?.getBoundingClientRect();
+      const panel = root.current?.getBoundingClientRect();
+      if (!rect || !panel) return;
+      const right = rect.right + 10;
+      const left = right + panel.width <= window.innerWidth - 8 ? right : rect.left - panel.width - 10;
+      setPosition({ left: Math.max(8, Math.min(left, window.innerWidth - panel.width - 8)),
+        top: Math.max(8, Math.min(rect.top, window.innerHeight - panel.height - 8)) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [anchor, picker, confirmDelete]);
+  useEffect(() => () => anchor.current?.focus({ preventScroll: true }), [anchor]);
   const own = m.authorId === client.accountId;
   const canEdit = own && m.body !== undefined && Date.now() - m.sentAt < EDIT_WINDOW_MS;
 
@@ -247,8 +267,16 @@ function MessageMenu({ client, message: m, onClose, actions }: { client: Enclave
     );
   }
 
-  return (
-    <div className={`message-menu ${m.direction}`} ref={root} data-testid="message-menu-panel">
+  return createPortal(
+    <div className={`message-menu floating ${m.direction}`} ref={root} style={position} data-testid="message-menu-panel"
+      onKeyDown={(e) => {
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        const buttons = [...(root.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+        const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : (current + (e.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
+      }}>
       <div className="quick-reactions" role="group" aria-label={t('thread.react')}>
         {QUICK_REACTIONS.map((emoji) => (
           <button key={emoji} aria-label={`${t('thread.react')} ${emoji}`} onClick={() => react(emoji)}>
@@ -288,7 +316,7 @@ function MessageMenu({ client, message: m, onClose, actions }: { client: Enclave
         <li role="separator" className="menu-separator" />
         {item('trash', t('msg.delete'), () => setConfirmDelete(true), 'action-delete', true)}
       </ul>
-    </div>
+    </div>, document.body,
   );
 }
 

@@ -25,3 +25,5 @@ Invariants:
 * **Author rules.** Edits/deletes apply only when the mutation's author authored the target;
   only own devices may send `sync` content.
 * **Privacy defaults.** Read receipts and typing indicators are off; delivery receipts are on.
+
+`search.ts` matches all locally stored message bodies/file names with Romanian folding. `history.ts` journals and restores the encrypted account archive. `recovery.ts` wraps/retrieves the account identity with a user-held recovery code. `profile.ts` validates/re-encodes encrypted profile photo/status data. ADR-0004 describes trust and recovery limits.

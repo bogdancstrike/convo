@@ -22,30 +22,30 @@ class GroupRepository {
     }
 
     /** Group header. */
-    record GroupRow(byte[] groupId, long epoch, long nextSeq, String status) {}
+    record GroupRow(byte[] groupId, long epoch, long nextSeq, String status, boolean adminOnly) {}
 
     /** Recorded commit. */
     record EventRow(long seq, long epoch, byte[] digest) {}
 
-    boolean insertGroup(byte[] groupId, long epoch) {
-        return jdbc.sql("INSERT INTO mls_groups (group_id, epoch) VALUES (:g, :e) ON CONFLICT DO NOTHING")
-                .param("g", groupId).param("e", epoch).update() == 1;
+    boolean insertGroup(byte[] groupId, long epoch, boolean adminOnly) {
+        return jdbc.sql("INSERT INTO mls_groups (group_id, epoch, admin_only) VALUES (:g, :e, :adminOnly) ON CONFLICT DO NOTHING")
+                .param("g", groupId).param("e", epoch).param("adminOnly", adminOnly).update() == 1;
     }
 
     /** Reads an active group without locking (read-only transactions cannot lock rows). */
     Optional<GroupRow> find(byte[] groupId) {
-        return jdbc.sql("SELECT group_id, epoch, next_seq, status FROM mls_groups WHERE group_id = :g AND status = 'active'")
+        return jdbc.sql("SELECT group_id, epoch, next_seq, status, admin_only FROM mls_groups WHERE group_id = :g AND status = 'active'")
                 .param("g", groupId)
-                .query((rs, i) -> new GroupRow(rs.getBytes(1), rs.getLong(2), rs.getLong(3), rs.getString(4)))
+                .query((rs, i) -> new GroupRow(rs.getBytes(1), rs.getLong(2), rs.getLong(3), rs.getString(4), rs.getBoolean(5)))
                 .optional();
     }
 
     /** Locks the group row; {@code shared} allows concurrent application messages but blocks commits. */
     Optional<GroupRow> lock(byte[] groupId, boolean shared) {
-        return jdbc.sql("SELECT group_id, epoch, next_seq, status FROM mls_groups WHERE group_id = :g AND status = 'active' FOR "
+        return jdbc.sql("SELECT group_id, epoch, next_seq, status, admin_only FROM mls_groups WHERE group_id = :g AND status = 'active' FOR "
                         + (shared ? "SHARE" : "UPDATE"))
                 .param("g", groupId)
-                .query((rs, i) -> new GroupRow(rs.getBytes(1), rs.getLong(2), rs.getLong(3), rs.getString(4)))
+                .query((rs, i) -> new GroupRow(rs.getBytes(1), rs.getLong(2), rs.getLong(3), rs.getString(4), rs.getBoolean(5)))
                 .optional();
     }
 
@@ -107,7 +107,7 @@ class GroupRepository {
     /** Groups of an account with the account's role and the current epoch. */
     List<Map<String, Object>> groupsOf(UUID accountId) {
         return jdbc.sql("""
-                SELECT g.group_id, g.epoch, m.role,
+                SELECT g.group_id, g.epoch, m.role, g.admin_only,
                        (SELECT count(*) FROM mls_group_members x WHERE x.group_id = g.group_id) AS members
                   FROM mls_group_members m JOIN mls_groups g ON g.group_id = m.group_id
                  WHERE m.account_id = :a AND g.status = 'active'

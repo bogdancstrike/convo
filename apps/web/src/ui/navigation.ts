@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
  *
  * Routes: `#/` · `#/chat/<id>` · `#/chat/<id>/info` · `#/new` · `#/new-group` · `#/settings[/<page>]`
  */
-export type SidePanel = 'chats' | 'new' | 'new-group' | 'settings';
+export type SidePanel = 'chats' | 'new' | 'new-group' | 'settings' | 'calls' | 'channels' | 'new-channel';
 
 export interface NavState {
   panel: SidePanel;
@@ -21,7 +21,11 @@ export function parseHash(hash: string): NavState {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   switch (parts[0]) {
     case 'chat':
-      return { panel: 'chats', chat: parts[1] ?? null, info: parts[2] === 'info', page: null };
+      return { panel: 'chats', chat: parts[1] ?? null, info: parts[2] === 'info', page: parts[2] === 'info' && ['media', 'links', 'docs'].includes(parts[3] ?? '') ? parts[3]! : null };
+    case 'calls':
+    case 'channels':
+    case 'new-channel':
+      return { panel: parts[0], chat: null, info: false, page: null };
     case 'new':
       return { panel: 'new', chat: null, info: false, page: null };
     case 'new-group':
@@ -34,7 +38,7 @@ export function parseHash(hash: string): NavState {
 }
 
 export function formatHash(state: NavState): string {
-  if (state.chat) return `#/chat/${encodeURIComponent(state.chat)}${state.info ? '/info' : ''}`;
+  if (state.chat) return `#/chat/${encodeURIComponent(state.chat)}${state.info ? `/info${state.page ? `/${state.page}` : ''}` : ''}`;
   if (state.panel === 'settings' && state.page) return `#/settings/${encodeURIComponent(state.page)}`;
   return state.panel === 'chats' ? '#/' : `#/${state.panel}`;
 }
@@ -56,7 +60,7 @@ export function useNavigation(): [NavState, (next: Partial<NavState>, replace?: 
       // Changing panel or chat leaves any settings sub-page unless one is given explicitly.
       const leavesPage = next.panel !== undefined || next.chat !== undefined;
       merged.page = next.page !== undefined ? next.page : leavesPage ? null : current.page;
-      if (merged.panel !== 'settings') merged.page = null;
+      if (merged.panel !== 'settings' && !(merged.chat && merged.info)) merged.page = null;
       const hash = formatHash(merged);
       if (hash !== window.location.hash) {
         if (replace) window.history.replaceState(null, '', hash);

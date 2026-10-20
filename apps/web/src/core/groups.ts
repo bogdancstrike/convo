@@ -46,6 +46,7 @@ const KEY_PACKAGE_BATCH = 20;
 
 /** Locally known group facts (name and roles come from E2EE metadata and the DS ACL mirror). */
 export interface GroupRecord {
+  adminOnly?: boolean;
   groupId: string;
   name: string;
   /** Monotonic metadata version (highest wins). */
@@ -142,7 +143,7 @@ export class GroupManager {
     if (!record || record.left) return record;
     try {
       const view = await this.api.group(groupId);
-      const updated = { ...record, members: view.members };
+      const updated = { ...record, members: view.members, adminOnly: view.adminOnly };
       await this.store.put(GroupNs.group, groupId, updated);
       return updated;
     } catch (error) {
@@ -162,7 +163,7 @@ export class GroupManager {
    *
    * @returns group ID and the ops to persist (already committed here for the state/record)
    */
-  async create(name: string, accountIds: string[]): Promise<GroupRecord> {
+  async create(name: string, accountIds: string[], adminOnly = false): Promise<GroupRecord> {
     const signer = await this.signer();
     const accounts = unique(accountIds.filter((a) => a !== this.self.accountId));
     const claimed = await this.claim([...accounts, this.self.accountId]);
@@ -173,12 +174,13 @@ export class GroupManager {
     const id = toBase64Url(groupId);
     const view = await this.api.createGroup({
       groupId: id,
+      adminOnly,
       epoch: epochOf(output.state),
       members: accounts,
       devices: claimed.map((c) => c.device),
       welcome: output.welcome,
     });
-    const record: GroupRecord = { groupId: id, name, metaVersion: 1, members: view.members, left: false };
+    const record: GroupRecord = { groupId: id, name, metaVersion: 1, members: view.members, adminOnly: view.adminOnly, left: false };
     await this.store.commit([this.stateOp(id, output.state), { type: 'put', ns: GroupNs.group, id, value: record }]);
     return record;
   }

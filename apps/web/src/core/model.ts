@@ -53,6 +53,8 @@ export interface ChatMessage {
 }
 
 export interface Conversation {
+  /** Channel: only owners/admins may publish application messages. */
+  adminOnly?: boolean;
   /** Peer account ID for direct chats; own account ID for Note to self; `g:<groupId>` for groups. */
   id: string;
   kind: 'direct' | 'note' | 'group';
@@ -98,6 +100,7 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   locale: 'en' | 'ro';
   enterToSend: boolean;
+  wallpaper: 'dots' | 'plain' | 'ocean' | 'botanical';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -106,6 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   locale: 'en',
   enterToSend: true,
+  wallpaper: 'dots',
 };
 
 /** Persistent identity of this enrolled device. */

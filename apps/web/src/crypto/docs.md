@@ -25,3 +25,5 @@ Tests: `padding.test.ts`, `content.test.ts`, `signalStore.test.ts`, `attachmentC
 
 MLS uses `ts-mls` the same way the Signal library is used: an interim FND-02 stand-in for the
 Rust OpenMLS core, with credential binding to the account identity key (GRP-01) still to do.
+
+`accountVault.ts` uses HKDF-SHA256 and AES-256-GCM with explicit context binding for account archives/recovery. It does not copy live protocol ratchets. See ADR-0004 and its remaining review gate.

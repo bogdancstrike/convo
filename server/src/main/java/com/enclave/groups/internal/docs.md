@@ -11,3 +11,5 @@
 
 Locking: commits take `FOR UPDATE` on the group row; application messages take `FOR SHARE`, so
 messages never interleave with an epoch change mid-transaction.
+
+Groups have a persisted `admin_only` mode for channels. `GroupService.message` rejects member application submissions in this mode; owners and admins retain publishing access. Names and content remain encrypted.

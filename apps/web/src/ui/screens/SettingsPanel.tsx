@@ -1,3 +1,4 @@
+import { ProfileSettings, RecoverySettings, LogOutButton } from './ProfileSettings';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { DeviceDto } from '../../api/types';
 import type { EnclaveClient } from '../../core/client';
@@ -11,9 +12,11 @@ import type { MessageKey } from '../i18n/en';
 
 const LINK_POLL_MS = 3000;
 
-export type SettingsPage = 'chats' | 'privacy' | 'devices' | 'security';
+export type SettingsPage = 'profile' | 'chats' | 'privacy' | 'devices' | 'security' | 'recovery';
 
-const PAGES: { page: SettingsPage; icon: IconName; title: MessageKey; hint: MessageKey }[] = [
+export const SETTINGS_PAGES: { page: SettingsPage; icon: IconName; title: MessageKey; hint: MessageKey }[] = [
+  { page: 'profile', icon: 'camera', title: 'profile.title', hint: 'profile.hint' },
+  { page: 'recovery', icon: 'shield', title: 'recovery.title', hint: 'recovery.hint' },
   { page: 'chats', icon: 'palette', title: 'settings.chats', hint: 'settings.chats.hint' },
   { page: 'privacy', icon: 'lock', title: 'settings.privacy', hint: 'settings.privacy.hint' },
   { page: 'devices', icon: 'devices', title: 'settings.devices', hint: 'settings.devices.hint' },
@@ -42,7 +45,7 @@ export function SettingsPanel({
   const [settings, setSettings] = useState<SettingsModel>(client.settings);
   useEffect(() => client.on('settings', setSettings), [client]);
   const update = (patch: Partial<SettingsModel>) => void client.updateSettings(patch);
-  const current = PAGES.find((p) => p.page === page);
+  const current = SETTINGS_PAGES.find((p) => p.page === page);
 
   if (current) {
     return (
@@ -54,6 +57,8 @@ export function SettingsPanel({
           <h2>{t(current.title)}</h2>
         </header>
         <div className="panel-body settings-body">
+          {current.page === 'profile' && <ProfileSettings client={client} />}
+          {current.page === 'recovery' && <RecoverySettings client={client} />}
           {current.page === 'chats' && <ChatsPage settings={settings} update={update} />}
           {current.page === 'privacy' && <PrivacyPage settings={settings} update={update} />}
           {current.page === 'devices' && <DevicesPage client={client} />}
@@ -63,7 +68,6 @@ export function SettingsPanel({
     );
   }
 
-  const me = client.device;
   return (
     <>
       <header className="panel-header">
@@ -73,17 +77,13 @@ export function SettingsPanel({
         <h2 id="settings-title">{t('settings.title')}</h2>
       </header>
       <div className="panel-body settings-body" aria-labelledby="settings-title">
-        <div className="settings-card profile-card">
-          <Avatar id={me.accountId} name={labelOf(me)} size={64} />
-          <div style={{ minWidth: 0 }}>
-            <div className="profile-name">{labelOf(me)}</div>
-            <div className="muted-text" data-testid="own-handle">@{me.username}</div>
-          </div>
-        </div>
+        <div className="settings-overview">
+        <ProfileSettings client={client} />
+        <RecoverySettings client={client} />
         <ul className="settings-card list">
-          {PAGES.map((p) => (
+          {SETTINGS_PAGES.map((p) => (
             <li key={p.page}>
-              <button className="settings-row" onClick={() => onNavigate(p.page)} data-testid={`settings-${p.page}`}>
+              <button className="settings-row" onClick={() => onNavigate(p.page)} data-testid={`settings-card-${p.page}`}>
                 <span className="settings-icon">
                   <Icon name={p.icon} size={20} />
                 </span>
@@ -96,6 +96,9 @@ export function SettingsPanel({
             </li>
           ))}
         </ul>
+        <Card title={t('settings.chats')}><ChatsPage settings={settings} update={update} /></Card>
+        </div>
+        <LogOutButton client={client} onSignedOut={onSignedOut} />
         <p className="settings-footnote">
           <Icon name="lock" size={14} /> {t('home.encrypted')}
         </p>
@@ -117,6 +120,13 @@ function ChatsPage({ settings, update }: { settings: SettingsModel; update: (p: 
   const { t } = useI18n();
   return (
     <>
+      <Card title={t('settings.wallpaper')}>
+        <div className="wallpaper-options">{(['dots', 'plain', 'ocean', 'botanical'] as const).map((wallpaper) =>
+          <button key={wallpaper} className="wallpaper-choice" aria-pressed={settings.wallpaper === wallpaper} onClick={() => update({ wallpaper })} data-testid={`wallpaper-${wallpaper}`}>
+            <span className="wallpaper-preview" data-wallpaper={wallpaper}><span className="preview-bubble">{t('settings.wallpaperPreview')}</span></span>
+            <span>{t(`wallpaper.${wallpaper}`)}</span>{settings.wallpaper === wallpaper && <Icon name="check" size={16} />}
+          </button>)}</div>
+      </Card>
       <Card title={t('settings.theme')}>
         <Segmented
           label={t('settings.theme')}
@@ -213,18 +223,7 @@ function SecurityPage({ client, onSignedOut }: { client: EnclaveClient; onSigned
       <Card title={t('settings.browserTrustTitle')}>
         <p className="muted-text" style={{ margin: 0 }}>{t('settings.browserTrust')}</p>
       </Card>
-      <Card>
-        <button className="settings-row danger" onClick={() => {
-          if (window.confirm(t('settings.confirmSignOut'))) void client.signOutAndWipe().finally(onSignedOut);
-        }}>
-          <span className="settings-icon">
-            <Icon name="logout" size={20} />
-          </span>
-          <span className="settings-row-text">
-            <span>{t('settings.signOut')}</span>
-          </span>
-        </button>
-      </Card>
+      <Card><LogOutButton client={client} onSignedOut={onSignedOut} /></Card>
     </>
   );
 }
@@ -284,4 +283,11 @@ function LinkRequests({ client }: { client: EnclaveClient }) {
       )}
     </section>
   );
+}
+
+export function SettingsNavigation({ client, page, onNavigate, onBack }: { client: EnclaveClient; page: string | null; onNavigate: (page: SettingsPage | null) => void; onBack: () => void }) {
+  const { t } = useI18n();
+  return <><header className="panel-header"><button className="icon-btn back-button" onClick={onBack} aria-label={t('thread.back')}><Icon name="back" /></button><h2>{t('settings.title')}</h2></header>
+    <div className="panel-body settings-body"><button className="settings-row" onClick={() => onNavigate(null)}><Avatar id={client.accountId} name={labelOf(client.device)} size={48} /><span className="settings-row-text">{labelOf(client.device)}<span className="muted-text">{t('settings.overview')}</span></span></button>
+    <ul className="list">{SETTINGS_PAGES.map((p) => <li key={p.page}><button className="settings-row" aria-current={page === p.page ? 'page' : undefined} onClick={() => onNavigate(p.page)} data-testid={`settings-${p.page}`}><span className="settings-icon"><Icon name={p.icon} size={20} /></span><span className="settings-row-text">{t(p.title)}<span className="muted-text">{t(p.hint)}</span></span></button></li>)}</ul></div></>;
 }

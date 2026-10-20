@@ -16,8 +16,10 @@ export function NewGroupPanel({
   client,
   onBack,
   onCreated,
+  channel = false,
 }: {
   client: EnclaveClient;
+  channel?: boolean;
   onBack: () => void;
   onCreated: (conversation: Conversation) => void;
 }) {
@@ -37,7 +39,7 @@ export function NewGroupPanel({
     setBusy(true);
     setError(null);
     try {
-      onCreated(await client.createGroup(name, selected));
+      onCreated(await client.createGroup(name, selected, channel));
     } catch (e) {
       if (e instanceof MembersUnavailableError) {
         const names = selected.filter((s) => e.accountIds.includes(s.accountId)).map(labelOf).join(', ');
@@ -57,7 +59,7 @@ export function NewGroupPanel({
           <button className="icon-btn" onClick={() => setStep('members')} aria-label={t('thread.back')}>
             <Icon name="back" />
           </button>
-          <h2>{t('group.new')}</h2>
+          <h2>{t(channel ? 'channel.new' : 'group.new')}</h2>
         </header>
         <div className="panel-body" style={{ display: 'grid', alignContent: 'start', gap: 20, padding: 24 }}>
           <div style={{ display: 'grid', placeItems: 'center' }}>
@@ -76,7 +78,7 @@ export function NewGroupPanel({
               data-testid="group-name"
             />
           </label>
-          <p className="muted-text">{t('group.encryptedHint')}</p>
+          <p className="muted-text">{t(channel ? 'channel.readOnly' : 'group.encryptedHint')}</p>
           <p className="muted-text">{t('group.participants', { count: selected.length + 1 })}</p>
           {error && <p role="alert" className="failed">{error}</p>}
         </div>

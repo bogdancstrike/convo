@@ -1,6 +1,8 @@
 package com.enclave.platform.security;
 
 import com.enclave.contracts.EnclaveException;
+import com.enclave.contracts.DeploymentProperties;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import com.enclave.contracts.ErrorCode;
 import com.enclave.identity.DeviceRequestAuthenticator;
 import com.enclave.platform.web.ProblemWriter;
@@ -50,6 +52,9 @@ class SecurityConfig {
      * linking). Method-specific because the existing-device side of linking shares paths.
      */
     static final RequestMatcher ACCOUNT_ROUTES = new OrRequestMatcher(
+            route(HttpMethod.GET, "/v1/recovery"),
+            route(HttpMethod.POST, "/v1/recovery/reservations"),
+            route(HttpMethod.POST, "/v1/devices/recover"),
             route(HttpMethod.POST, "/v1/devices/reservations"),
             route(HttpMethod.POST, "/v1/devices/primary"),
             route(HttpMethod.POST, "/v1/devices/link"),
@@ -62,14 +67,21 @@ class SecurityConfig {
 
     @Bean
     @Order(1)
-    SecurityFilterChain accountChain(HttpSecurity http, ProblemWriter problems) throws Exception {
+    SecurityFilterChain accountChain(HttpSecurity http, ProblemWriter problems, JwtDecoder decoder,
+            SecurityProperties properties, DeploymentProperties deployment) throws Exception {
         return http
                 .securityMatcher(ACCOUNT_ROUTES)
                 .csrf(c -> c.disable())
                 .cors(c -> {})
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.anyRequest().authenticated())
-                .oauth2ResourceServer(o -> o.jwt(j -> {}).authenticationEntryPoint(entryPoint(problems)))
+                .oauth2ResourceServer(o -> o.authenticationManagerResolver(request -> {
+                    String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromRequest(request)
+                            .replacePath(null).replaceQuery(null).build().toUriString();
+                    var provider = new JwtAuthenticationProvider(new OriginJwtDecoder(decoder,
+                            deployment.endpointFor(properties.oidc().issuer(), origin), properties.oidc().issuer()));
+                    return provider::authenticate;
+                }).authenticationEntryPoint(entryPoint(problems)))
                 .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint(problems)).accessDeniedHandler(denied(problems)))
                 .build();
     }
@@ -109,7 +121,7 @@ class SecurityConfig {
      * issuer clients see, plus the optional audience list.
      */
     @Bean
-    JwtDecoder jwtDecoder(SecurityProperties properties) {
+    JwtDecoder jwtDecoder(SecurityProperties properties, DeploymentProperties deployment) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(properties.oidc().jwkSetUri()).build();
         List<String> audiences = properties.oidc().audiences();
         OAuth2TokenValidator<Jwt> audience = jwt -> audiences.isEmpty()
@@ -117,7 +129,8 @@ class SecurityConfig {
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "audience not accepted", null));
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(properties.oidc().issuer()), audience));
+                (deployment.requestOrigin() ? JwtValidators.createDefault()
+                        : JwtValidators.createDefaultWithIssuer(properties.oidc().issuer())), audience));
         return decoder;
     }
 

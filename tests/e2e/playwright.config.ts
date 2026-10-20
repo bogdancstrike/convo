@@ -14,7 +14,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'test-results/report' }]],
   outputDir: 'test-results/artifacts',
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://localhost:8088',
+    actionTimeout: 20_000,
+    ignoreHTTPSErrors: true,
+    baseURL: process.env.BASE_URL ?? 'https://localhost:8443',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

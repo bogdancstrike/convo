@@ -17,3 +17,5 @@
 Limits: protects data at rest from casual copying, not from hostile code running in the same
 origin (browser trust tier, UI.md §8). Passphrase/WebAuthn-PRF key wrapping is a follow-up task.
 Tests: `encryptedStore.test.ts` (runs on `fake-indexeddb`).
+
+`EncryptedStore.setJournal` lets account-history ciphertext work be committed atomically with local content changes; archive imports explicitly bypass journaling to avoid replication loops.

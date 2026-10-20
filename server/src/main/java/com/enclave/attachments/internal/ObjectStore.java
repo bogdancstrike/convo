@@ -33,7 +33,7 @@ class ObjectStore implements DisposableBean {
 
     private final AttachmentsProperties properties;
     private final S3Client client;
-    private final S3Presigner presigner;
+
 
     ObjectStore(AttachmentsProperties properties) {
         this.properties = properties;
@@ -49,11 +49,15 @@ class ObjectStore implements DisposableBean {
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
                 .httpClient(UrlConnectionHttpClient.create())
                 .build();
-        this.presigner = S3Presigner.builder()
-                .endpointOverride(URI.create(properties.publicEndpoint()))
+
+    }
+
+    private S3Presigner presigner(String endpoint) {
+        return S3Presigner.builder().endpointOverride(URI.create(endpoint))
                 .region(Region.of(properties.region()))
-                .credentialsProvider(credentials)
-                .serviceConfiguration(s3Config)
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())))
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(properties.pathStyle()).build())
                 .build();
     }
 
@@ -74,16 +78,20 @@ class ObjectStore implements DisposableBean {
     }
 
     /** @return presigned PUT URL bound to the exact content length */
-    String presignUpload(String key, long size, Duration ttl) {
+    String presignUpload(String key, long size, Duration ttl, String endpoint) {
         PutObjectRequest put = PutObjectRequest.builder().bucket(properties.bucket()).key(key)
                 .contentLength(size).contentType("application/octet-stream").build();
-        return presigner.presignPutObject(r -> r.signatureDuration(ttl).putObjectRequest(put)).url().toString();
+        try (var signer = presigner(endpoint)) {
+            return signer.presignPutObject(r -> r.signatureDuration(ttl).putObjectRequest(put)).url().toString();
+        }
     }
 
     /** @return presigned GET URL */
-    String presignDownload(String key, Duration ttl) {
+    String presignDownload(String key, Duration ttl, String endpoint) {
         GetObjectRequest get = GetObjectRequest.builder().bucket(properties.bucket()).key(key).build();
-        return presigner.presignGetObject(r -> r.signatureDuration(ttl).getObjectRequest(get)).url().toString();
+        try (var signer = presigner(endpoint)) {
+            return signer.presignGetObject(r -> r.signatureDuration(ttl).getObjectRequest(get)).url().toString();
+        }
     }
 
     /** Deletes an object; missing objects are not an error. */
@@ -93,7 +101,6 @@ class ObjectStore implements DisposableBean {
 
     @Override
     public void destroy() {
-        presigner.close();
         client.close();
     }
 }

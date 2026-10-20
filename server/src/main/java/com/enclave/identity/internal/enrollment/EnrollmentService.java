@@ -59,11 +59,14 @@ public class EnrollmentService {
     private final DeploymentProperties deployment;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final com.enclave.identity.internal.recovery.RecoveryService recovery;
+    private final com.enclave.identity.internal.device.DeviceService deviceService;
     private final SecureRandom random = new SecureRandom();
 
     EnrollmentService(AccountService accountService, AccountRepository accounts, DeviceRepository devices,
             ReservationRepository reservations, PrekeyService prekeys, ProvisioningService provisioning,
-            IdentityProperties properties, DeploymentProperties deployment, ApplicationEventPublisher events, Clock clock) {
+            IdentityProperties properties, DeploymentProperties deployment, ApplicationEventPublisher events, Clock clock,
+            com.enclave.identity.internal.recovery.RecoveryService recovery, com.enclave.identity.internal.device.DeviceService deviceService) {
         this.accountService = accountService;
         this.accounts = accounts;
         this.devices = devices;
@@ -74,6 +77,8 @@ public class EnrollmentService {
         this.deployment = deployment;
         this.events = events;
         this.clock = clock;
+        this.recovery = recovery;
+        this.deviceService = deviceService;
     }
 
     /**
@@ -88,19 +93,19 @@ public class EnrollmentService {
      */
     @Transactional
     public Reservation reserve(OidcIdentity identity, String purpose) {
-        if (!"primary".equals(purpose) && !"link".equals(purpose)) {
+        if (!"primary".equals(purpose) && !"link".equals(purpose) && !"recovery".equals(purpose)) {
             throw new EnclaveException(ErrorCode.INVALID_REQUEST, "purpose must be primary or link");
         }
         Account account = accountService.resolveOrProvision(identity);
         accounts.lock(account.accountId());
         int active = devices.countActive(account.accountId());
-        if ("primary".equals(purpose) && active > 0) {
+        if ("primary".equals(purpose) && (active > 0 || account.identityKey() != null)) {
             throw new EnclaveException(ErrorCode.ACCOUNT_HAS_DEVICES, "account already has devices; link instead");
         }
         if ("link".equals(purpose) && active == 0) {
             throw new EnclaveException(ErrorCode.ENROLLMENT_INVALID, "no trusted device to link from; register instead");
         }
-        if (active >= properties.maxDevicesPerAccount()) {
+        if (!"recovery".equals(purpose) && active >= properties.maxDevicesPerAccount()) {
             throw new EnclaveException(ErrorCode.DEVICE_LIMIT, "maximum number of devices reached");
         }
         byte[] challenge = new byte[32];
@@ -151,6 +156,25 @@ public class EnrollmentService {
         return registered;
     }
 
+    /** Recovery authenticates with SSO and an independent code before revoking lost devices. */
+    @Transactional
+    public Registered registerRecovered(OidcIdentity identity, PrimaryRegistration cmd, byte[] authorizationKey) {
+        Account account = accountService.resolveOrProvision(identity);
+        accounts.lock(account.accountId());
+        recovery.authorize(account.accountId(), authorizationKey);
+        Reservation reservation = lockReservation(account, cmd.reservationId(), "recovery");
+        if (reservation.consumedAt() == null) {
+            // Validate the recovered identity and proof before changing existing device access.
+            if (account.identityKey() == null || !MessageDigest.isEqual(account.identityKey(), cmd.identityKey())) {
+                throw new EnclaveException(ErrorCode.ENROLLMENT_INVALID, "recovered identity does not match account");
+            }
+            for (Device device : devices.findActive(account.accountId())) {
+                deviceService.revoke(account.accountId(), device.deviceId(), "account-recovery");
+            }
+        }
+        return complete(account, reservation, cmd, false);
+    }
+
     /** Daily cleanup of abandoned reservations. */
     @Scheduled(fixedDelayString = "${enclave.identity.reservation-purge-interval:PT6H}")
     @Transactional
@@ -186,7 +210,7 @@ public class EnrollmentService {
             throw new EnclaveException(ErrorCode.ENROLLMENT_INVALID, "reservation expired");
         }
         int active = devices.countActive(account.accountId());
-        if (primary && active > 0) {
+        if (primary && (active > 0 || account.identityKey() != null)) {
             throw new EnclaveException(ErrorCode.ACCOUNT_HAS_DEVICES, "account already has devices; link instead");
         }
         if (active >= properties.maxDevicesPerAccount()) {

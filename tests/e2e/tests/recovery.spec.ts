@@ -1,0 +1,52 @@
+import { expect, test } from '@playwright/test';
+import { closeAll, createUser, enroll, message, newPage, openChat, send, signIn, startChat } from './support';
+
+test('linked browser restores earlier incoming, outgoing and self messages with the original browser closed', async ({ browser, request }) => {
+  const [own, peer] = await Promise.all(['historyowner', 'historypeer'].map((p) => createUser(request, p)));
+  const [first, second, other] = await Promise.all([newPage(browser), newPage(browser), newPage(browser)]);
+  await enroll(first, own); await enroll(other, peer);
+  await startChat(first, peer); await send(first, 'sent before linking');
+  await openChat(other, own.name); await send(other, 'received before linking');
+  await expect(message(first, 'received before linking')).toBeVisible();
+  await first.getByTestId('new-chat').click(); await first.getByTestId('note-to-self').click(); await send(first, 'self before linking');
+  await first.getByTestId('nav-settings').click();
+  await expect(first.getByTestId('history-status')).toContainText('History is safely synced');
+  await signIn(second, own); await expect(second.getByTestId('link-code')).toBeVisible();
+  await first.getByTestId('settings-devices').click();
+  await first.getByTestId('link-request').getByRole('button', { name: 'Codes match — approve' }).click();
+  await expect(second.getByTestId('nav-settings')).toBeVisible();
+  await first.context().close();
+  await openChat(second, peer.name);
+  await expect(message(second, 'sent before linking')).toBeVisible();
+  await expect(message(second, 'received before linking')).toBeVisible();
+  await openChat(second, 'Note to self'); await expect(message(second, 'self before linking')).toBeVisible();
+  await second.reload(); await expect(message(second, 'self before linking')).toBeVisible();
+  await closeAll(second, other);
+});
+
+test('recovery after losing every browser preserves identity and encrypted history, rejects a wrong code', async ({ browser, request }) => {
+  const user = await createUser(request, 'recover');
+  const first = await newPage(browser); await enroll(first, user);
+  await first.getByTestId('new-chat').click(); await first.getByTestId('note-to-self').click(); await send(first, 'keep this after all devices are lost');
+  await first.getByTestId('nav-settings').click();
+  await expect(first.getByTestId('history-status')).toContainText('History is safely synced');
+  await first.getByTestId('create-recovery-code').click();
+  const code = await first.getByTestId('recovery-code').inputValue();
+  expect(code.replace(/-/g, '')).toHaveLength(64);
+  await first.context().close();
+  const replacement = await newPage(browser); await signIn(replacement, user);
+  await replacement.getByTestId('use-recovery-code').click();
+  await replacement.getByTestId('recovery-code-input').fill('0000-'.repeat(15) + '0000');
+  await replacement.getByTestId('recover-account').click();
+  await expect(replacement.getByRole('alert')).toContainText('Recovery failed');
+  await replacement.getByTestId('recovery-code-input').fill(code);
+  await replacement.getByTestId('recover-account').click();
+  await expect(replacement.getByTestId('nav-settings')).toBeVisible({ timeout: 45_000 });
+  await openChat(replacement, 'Note to self');
+  await expect(message(replacement, 'keep this after all devices are lost')).toBeVisible();
+  await send(replacement, 'new message after recovery');
+  await expect(message(replacement, 'new message after recovery').getByTestId('message-status')).toHaveText('Sent');
+  await replacement.getByTestId('nav-settings').click(); await replacement.getByTestId('settings-devices').click();
+  await expect(replacement.getByTestId('device-row')).toHaveCount(1);
+  await closeAll(replacement);
+});

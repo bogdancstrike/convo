@@ -35,6 +35,20 @@ export class EnclaveApi {
     this.device = device;
   }
 
+  history(after: number): Promise<{ seq: number; id: string; ciphertext: string }[]> {
+    return this.signed('GET', `/v1/history?after=${after}`);
+  }
+
+  putHistory(id: string, ciphertext: string): Promise<void> {
+    return this.signed('PUT', `/v1/history/${id}`, { ciphertext });
+  }
+
+  recoveryStatus(): Promise<{ configured: boolean }> { return this.signed('GET', '/v1/recovery/status'); }
+  saveRecovery(ciphertext: string, authorizationHash: string): Promise<void> { return this.signed('PUT', '/v1/recovery', { ciphertext, authorizationHash }); }
+  recoveryBackup(token: string): Promise<{ accountId: string; deploymentId: string; ciphertext: string }> { return this.http.bearer('GET', '/v1/recovery', token); }
+  reserveRecovery(token: string, authorizationKey: string): Promise<ReservationResponse> { return this.http.bearer('POST', '/v1/recovery/reservations', token, { authorizationKey }); }
+  recoverDevice(token: string, registration: import('./types').PrimaryRegistrationRequest, authorizationKey: string): Promise<RegistrationResponse> { return this.http.bearer('POST', '/v1/devices/recover', token, { registration, authorizationKey }); }
+
   // --- enrollment (Keycloak bearer) ---------------------------------------------------------
 
   reserve(token: string, purpose: 'primary' | 'link'): Promise<ReservationResponse> {

@@ -1,3 +1,4 @@
+import { useProfile } from '../components/ProfileContext';
 import { FingerprintGenerator } from '@privacyresearch/libsignal-protocol-typescript';
 import { useCallback, useEffect, useState } from 'react';
 import type { AccountDto, GroupRole } from '../../api/types';
@@ -18,7 +19,7 @@ const FINGERPRINT_ITERATIONS = 5200;
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
  * group details with members, roles and admin add/remove.
  */
-export function InfoDrawer({ client, conversation, onClose }: { client: EnclaveClient; conversation: Conversation; onClose: () => void }) {
+export function InfoDrawer({ client, conversation, onClose, onShared }: { client: EnclaveClient; conversation: Conversation; onClose: () => void; onShared: () => void }) {
   const { t } = useI18n();
   const group = conversation.kind === 'group';
   return (
@@ -30,6 +31,11 @@ export function InfoDrawer({ client, conversation, onClose }: { client: EnclaveC
         <h2 id="drawer-title">{group ? t('info.groupTitle') : t('info.title')}</h2>
       </header>
       <div className="panel-body">
+        <section className="drawer-section">
+          <button className="settings-row" onClick={onShared} data-testid="open-shared-content">
+            <Icon name="image" /><span className="settings-row-text">{t('shared.title')}</span><Icon name="next" size={18} />
+          </button>
+        </section>
         {group ? <GroupInfo client={client} conversation={conversation} /> : <ContactInfo client={client} conversation={conversation} />}
       </div>
     </aside>
@@ -39,6 +45,7 @@ export function InfoDrawer({ client, conversation, onClose }: { client: EnclaveC
 function ContactInfo({ client, conversation }: { client: EnclaveClient; conversation: Conversation }) {
   const { t } = useI18n();
   const note = conversation.kind === 'note';
+  const profile = useProfile(conversation.id);
   const account = useAccount(client, conversation.id);
   const title = note ? t('chats.noteToSelf') : conversation.title;
   return (
@@ -54,6 +61,7 @@ function ContactInfo({ client, conversation }: { client: EnclaveClient; conversa
           <span>{account.phone}</span>
         </section>
       )}
+      {profile?.status && <section className="drawer-section"><h4>{t('profile.status')}</h4><p data-testid="contact-status">{profile.status}</p></section>}
       {!note && <SafetyNumber client={client} conversation={conversation} />}
     </>
   );

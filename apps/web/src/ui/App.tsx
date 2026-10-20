@@ -1,3 +1,4 @@
+import { RecoveryScreen } from './screens/RecoveryScreen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/errors';
 import { OrganizationAuth } from '../auth/oidc';
@@ -41,6 +42,7 @@ type Phase =
   | { name: 'welcome' }
   | { name: 'enrolling'; failed: boolean }
   | { name: 'link' }
+  | { name: 'recovery' }
   | { name: 'otherTab' }
   | { name: 'revoked' }
   | { name: 'storageLost' }
@@ -220,14 +222,16 @@ export function App() {
             );
           case 'enrolling':
             return <EnrollingScreen failed={phase.failed} onRetry={() => void enroll()} />;
-          case 'link':
+          case 'recovery':
+        return <RecoveryScreen api={context.current!.api} repos={context.current!.repos} accessToken={accessToken} onRecovered={onLinked} onBack={() => setPhase({ name: 'link' })} />;
+      case 'link':
             return (
               <LinkDeviceScreen
                 api={context.current!.api}
                 repos={context.current!.repos}
                 accessToken={accessToken}
                 onLinked={onLinked}
-                onSignInAgain={signInAgain}
+                onSignInAgain={signInAgain} onRecover={() => setPhase({ name: 'recovery' })}
               />
             );
           case 'otherTab':

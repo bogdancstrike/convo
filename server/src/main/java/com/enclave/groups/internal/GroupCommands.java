@@ -19,7 +19,7 @@ final class GroupCommands {
      * @param devices devices added in the initial commit (excluding the creator device)
      * @param welcome encoded MLS Welcome for {@code devices}, may be {@code null} for solo groups
      */
-    record Create(byte[] groupId, long epoch, List<UUID> members, List<DeviceAddress> devices, byte[] welcome) {}
+    record Create(byte[] groupId, long epoch, List<UUID> members, List<DeviceAddress> devices, byte[] welcome, boolean adminOnly) {}
 
     /**
      * Ordered commit with the roster/ACL changes it performs.

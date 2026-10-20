@@ -19,22 +19,31 @@ import org.springframework.web.bind.annotation.RestController;
 class AttachmentController {
 
     private final AttachmentService attachments;
+    private final com.enclave.contracts.DeploymentProperties deployment;
+    private final AttachmentsProperties properties;
 
-    AttachmentController(AttachmentService attachments) {
+    AttachmentController(AttachmentService attachments, com.enclave.contracts.DeploymentProperties deployment, AttachmentsProperties properties) {
         this.attachments = attachments;
+        this.deployment = deployment;
+        this.properties = properties;
     }
 
     /** Registers an attachment and returns a presigned upload URL. */
     @PostMapping("/v1/attachments/upload-form")
     @ResponseStatus(HttpStatus.CREATED)
     AttachmentService.UploadForm uploadForm(@RequestBody UploadRequest body) {
-        return attachments.createUpload(body.size());
+        return attachments.createUpload(body.size(), publicEndpoint());
     }
 
     /** Returns a short-lived presigned download URL. */
     @GetMapping("/v1/attachments/{attachmentId}")
     ResponseEntity<AttachmentService.Download> download(@PathVariable UUID attachmentId) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(attachments.download(attachmentId));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(attachments.download(attachmentId, publicEndpoint()));
+    }
+
+    private String publicEndpoint() {
+        String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
+        return deployment.endpointFor(properties.publicEndpoint(), origin);
     }
 
     /** @param size exact encrypted size in bytes */

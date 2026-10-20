@@ -17,7 +17,7 @@ export function useConversations(client: EnclaveClient): Conversation[] {
 }
 
 /** Live messages of a conversation (newest page, ascending). */
-export function useMessages(client: EnclaveClient, conversationId: string | null): ChatMessage[] {
+export function useMessages(client: EnclaveClient, conversationId: string | null, limit = 200): ChatMessage[] {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useEffect(() => {
     if (!conversationId) {
@@ -26,7 +26,7 @@ export function useMessages(client: EnclaveClient, conversationId: string | null
     }
     let cancelled = false;
     const load = () =>
-      void client.messages(conversationId).then((m) => {
+      void client.messages(conversationId, limit).then((m) => {
         if (!cancelled) setMessages(m);
       });
     load();
@@ -37,7 +37,7 @@ export function useMessages(client: EnclaveClient, conversationId: string | null
       cancelled = true;
       off();
     };
-  }, [client, conversationId]);
+  }, [client, conversationId, limit]);
   return messages;
 }
 
@@ -112,4 +112,31 @@ export function useGroupRecord(client: EnclaveClient, conversationId: string | n
     };
   }, [client, conversationId]);
   return record;
+}
+
+/** Live local search, cancelled on query changes and refreshed after edits/deletes. */
+export function useMessageSearch(client: EnclaveClient, query: string): ChatMessage[] {
+  const [results, setResults] = useState<ChatMessage[]>([]);
+  useEffect(() => {
+    let generation = 0;
+    let cancelled = false;
+    setResults([]);
+    const load = () => {
+      const current = ++generation;
+      void client.searchMessages(query).then((found) => {
+        if (!cancelled && current === generation) setResults(found);
+      });
+    };
+    const timer = setTimeout(load, 150);
+    const offMessages = client.on('messages', load);
+    const offConversations = client.on('conversations', load);
+    return () => { cancelled = true; clearTimeout(timer); offMessages(); offConversations(); };
+  }, [client, query]);
+  return results;
+}
+
+export function useSettings(client: EnclaveClient) {
+  const [settings, setSettings] = useState(client.settings);
+  useEffect(() => client.on('settings', setSettings), [client]);
+  return settings;
 }

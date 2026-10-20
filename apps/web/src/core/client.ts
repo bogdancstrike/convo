@@ -1,3 +1,7 @@
+import { configureRecovery } from './recovery';
+import { isProfile, type UserProfile } from './profile';
+import { AccountHistory, type HistoryStatus } from './history';
+import { fold, matchesMessage } from './search';
 import { ApiError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { GatewaySocket, type ConnectionState } from '../api/socket';
@@ -40,6 +44,8 @@ import { SessionManager, UntrustedIdentityError } from './sessions';
  */
 
 export interface ClientEvents extends Record<string, unknown> {
+  history: HistoryStatus;
+  profiles: Map<string, UserProfile>;
   /** Conversation list changed. */
   conversations: Conversation[];
   /** Messages of a conversation changed. */
@@ -65,6 +71,9 @@ const OUTBOX_RETRY_MS = 15_000;
 
 export class EnclaveClient extends Emitter<ClientEvents> {
   readonly socket: GatewaySocket;
+  private readonly profileCache = new Map<string, UserProfile>();
+  private historySync: AccountHistory | null = null;
+  historyStatus: HistoryStatus = 'pending';
   private readonly mutex = new Mutex();
   private readonly sessions: SessionManager;
   /** MLS group membership and encryption. */
@@ -111,6 +120,19 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Loads local state and connects. */
   async start(): Promise<void> {
+    for (const p of await this.repos.store.list<UserProfile>('profile')) this.profileCache.set(p.accountId, p);
+    const identity = await this.signal.localIdentity();
+    if (!identity) throw new Error('missing account identity');
+    this.historySync = new AccountHistory(this.api, this.repos.store, this.accountId, this.device.deploymentId,
+      () => this.mutex.run(async () => {
+        for (const c of await this.repos.conversations()) this.conversationCache.set(c.id, c);
+        for (const p of await this.repos.store.list<UserProfile>('profile')) this.profileCache.set(p.accountId, p);
+        this.emit('profiles', this.profiles());
+        this.emitConversations();
+        for (const c of this.conversations()) this.emit('messages', c.id);
+      }), (status) => { this.historyStatus = status; this.emit('history', status); }, (task) => this.mutex.run(task));
+    await this.historySync.start(identity.identityPrivate);
+
     for (const c of await this.repos.conversations()) this.conversationCache.set(c.id, c);
     this.emitConversations();
     await this.repos.store.pruneProcessed();
@@ -160,6 +182,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Disconnects (tab closing / leadership lost). */
   stop(): void {
+    this.historySync?.stop();
     this.socket.stop();
     if (this.retryTimer) clearInterval(this.retryTimer);
     this.retryTimer = null;
@@ -181,6 +204,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** Loads the newest messages of a conversation, ascending. */
   messages(conversationId: string, limit = 200, before?: number): Promise<ChatMessage[]> {
     return this.repos.messages(conversationId, limit, before);
+  }
+
+  /** Search every locally stored message, including history outside the rendered page. */
+  async searchMessages(query: string): Promise<ChatMessage[]> {
+    const q = fold(query);
+    if (!q) return [];
+    const results: ChatMessage[] = [];
+    for (const conversation of this.conversations()) {
+      const messages = await this.repos.messages(conversation.id, Number.MAX_SAFE_INTEGER);
+      results.push(...messages.filter((m) => matchesMessage(m, q)));
+    }
+    return results.sort((a, b) => b.sort - a.sort);
   }
 
   /** Organization directory search (handles only). */
@@ -345,6 +380,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       quote: content.quote,
       attachments: content.attachments,
       forwarded: content.forwarded || undefined,
+      profile: this.profileCache.get(this.accountId),
     };
     const message: ChatMessage = {
       conversationId,
@@ -411,12 +447,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   // --- groups -----------------------------------------------------------------------------
 
   /** Creates an MLS group, then shares its encrypted name with the members. */
-  async createGroup(name: string, members: AccountDto[]): Promise<Conversation> {
+  async createGroup(name: string, members: AccountDto[], adminOnly = false): Promise<Conversation> {
     const trimmed = name.trim();
     if (!trimmed || trimmed.length > 128) throw new Error('invalid group name');
-    const record = await this.mutex.run(() => this.groups.create(trimmed, members.map((m) => m.accountId)));
+    const record = await this.mutex.run(() => this.groups.create(trimmed, members.map((m) => m.accountId), adminOnly));
     members.forEach((m) => this.accountCache.set(m.accountId, Promise.resolve(m)));
-    const conversation = this.newGroupConversation(record.groupId, trimmed);
+    const conversation = { ...this.newGroupConversation(record.groupId, trimmed), adminOnly };
     await this.saveConversations([conversation]);
     await this.shareGroupMeta(record);
     return conversation;
@@ -499,6 +535,32 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emit('settings', this.currentSettings);
   }
 
+  profiles(): Map<string, UserProfile> { return new Map(this.profileCache); }
+
+  async updateProfile(patch: { photo?: string; status?: string }): Promise<void> {
+    const profile: UserProfile = { accountId: this.accountId, status: '', ...this.profileCache.get(this.accountId), ...patch, updatedAt: Date.now() };
+    if (!isProfile(profile)) throw new Error('invalid profile');
+    await this.repos.store.put('profile', this.accountId, profile);
+    this.profileCache.set(this.accountId, profile); this.emit('profiles', this.profiles());
+    for (const conversation of this.conversations()) {
+      if (conversation.kind === 'group' && (conversation.left || (conversation.adminOnly && (await this.groups.record(groupIdOf(conversation.id)!))?.members.find((m) => m.accountId === this.accountId)?.role === 'member'))) continue;
+      await this.enqueue(conversation.id, { v: CONTENT_VERSION, kind: 'profile', profile }, false);
+    }
+    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'profile', profile }, false);
+  }
+
+  private stageProfile(profile: UserProfile, author: string, ops: StoreOp[]): void {
+    if (profile.accountId !== author || (this.profileCache.get(author)?.updatedAt ?? 0) >= profile.updatedAt) return;
+    this.profileCache.set(author, profile);
+    ops.push({ type: 'put', ns: 'profile', id: author, value: profile });
+  }
+
+  recoveryStatus() { return this.api.recoveryStatus(); }
+  async createRecoveryCode(): Promise<string> { await this.syncHistory(); return configureRecovery(this.api, this.signal, this.accountId, this.device.deploymentId); }
+
+  /** Retry archival upload/download; usable on already linked browsers. */
+  async syncHistory(): Promise<void> { await this.historySync?.sync(); }
+
   // --- devices ----------------------------------------------------------------------------
 
   devices() {
@@ -529,6 +591,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Unregisters this browser and wipes local data. */
   async signOutAndWipe(): Promise<void> {
+    await this.syncHistory();
+    if (this.historyStatus !== 'synced') throw new Error('history synchronization required before logout');
     try {
       await this.api.unregisterSelf();
     } finally {
@@ -557,6 +621,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       this.socket.ack([envelope.guid]);
       changed.forEach((id) => this.emit('messages', id));
       this.emitConversations();
+      this.emit('profiles', this.profiles());
       for (const task of followUps) await task();
       return;
     }
@@ -577,6 +642,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.socket.ack([envelope.guid]);
     changed.forEach((id) => this.emit('messages', id));
     this.emitConversations();
+    this.emit('profiles', this.profiles());
     for (const task of followUps) await task();
   }
 
@@ -607,10 +673,17 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     }
 
     switch (content.kind) {
+      case 'profile':
+        this.stageProfile(content.profile, sender, ops);
+        return followUps;
       case 'data': {
         if (fromSelf) return followUps; // own devices exchange data via sync transcripts
         const result = await this.applyData(sender, sender, 'in', content.data, envelope, ops, changed);
-        if (result === 'new') followUps.push(() => this.enqueue(sender, receipt('delivery', [content.data.messageId]), false));
+        if (result === 'new') {
+          followUps.push(() => this.enqueue(sender, receipt('delivery', [content.data.messageId]), false));
+          const ownProfile = this.profileCache.get(this.accountId);
+          if (ownProfile && !content.data.profile) followUps.push(() => this.enqueue(sender, { v: CONTENT_VERSION, kind: 'profile', profile: ownProfile }, false));
+        }
         return followUps;
       }
       case 'sync': {
@@ -673,6 +746,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       const direction = accountId === this.accountId ? 'out' : 'in';
       if (content.kind === 'data') {
         await this.applyData(conversationId, accountId, direction, content.data, envelope, ops, changed);
+      } else if (content.kind === 'profile') {
+        this.stageProfile(content.profile, accountId, ops);
       } else if (content.kind === 'groupMeta') {
         await this.applyGroupMeta(result.groupId, content.groupMeta, ops);
       } else if (content.kind === 'unknown') {
@@ -700,7 +775,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const record = await this.groups.refreshRecord(groupId).catch(() => undefined);
     const conversation = this.conversationCache.get(groupConversationId(groupId));
     if (record && conversation) {
-      await this.saveConversations([{ ...conversation, title: record.name || conversation.title, left: record.left }]);
+      await this.saveConversations([{ ...conversation, title: record.name || conversation.title, left: record.left, adminOnly: record.adminOnly }]);
     }
     this.emit('groups', groupId);
   }
@@ -723,6 +798,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     ops: StoreOp[],
     changed: Set<string>,
   ): Promise<'new' | 'mutation' | 'ignored'> {
+    if (data.profile) this.stageProfile(data.profile, authorId, ops);
     const conversation = await this.ensureConversation(conversationId, ops);
     changed.add(conversation.id);
 

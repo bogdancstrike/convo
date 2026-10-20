@@ -1,0 +1,72 @@
+import { expect, test } from '@playwright/test';
+import { closeAll, createUser, enroll, message, messageMenu, newPage, openChat, send, startChat } from './support';
+
+test('HTTP explains HTTPS, forwarding headers cannot change the sign-in origin', async ({ page, request, baseURL }) => {
+  const http = new URL(baseURL!); http.protocol = 'http:'; http.port = process.env.HTTP_PORT ?? '8088';
+  await page.goto(http.href);
+  await expect(page.getByRole('heading', { name: 'HTTPS required' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Convo securely' })).toHaveAttribute('href', new URL('/', baseURL).href);
+  const response = await request.get('/v1/deployment-info', { headers: { Forwarded: 'host=evil.example;proto=http', 'X-Forwarded-Host': 'evil.example', 'X-Forwarded-Proto': 'http', 'X-Forwarded-Port': '9999' } });
+  expect((await response.json()).oidc.issuer).toBe(`${baseURL}/auth/realms/enclave`);
+});
+
+test('global message search, quick chat actions, calls and beside-message menu', async ({ browser, request }) => {
+  const [user, peer] = await Promise.all(['searcher', 'searchpeer'].map((name) => createUser(request, name)));
+  const [page, other] = await Promise.all([newPage(browser), newPage(browser)]);
+  await enroll(page, user); await enroll(other, peer); await startChat(page, peer);
+  await send(page, 'Ședință în București');
+  await send(page, 'a newer unrelated message');
+  const search = page.getByRole('searchbox', { name: 'Search chats', exact: true });
+  await search.fill('SEDINTA');
+  const row = page.getByTestId(`conversation-${peer.name}`);
+  await expect(row).toContainText('Ședință în București');
+  await row.click();
+  await expect(message(page, 'Ședință în București')).toBeVisible();
+  await expect(message(page, 'a newer unrelated message')).toHaveCount(0);
+  await search.fill('nothing-matches-this');
+  await expect(row).toHaveCount(0);
+  await search.fill('');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  const menu = await messageMenu(page, 'a newer unrelated message');
+  const box = await menu.boundingBox(); const bubble = await message(page, 'a newer unrelated message').locator('.bubble').boundingBox();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(721);
+  expect(box!.x + box!.width <= bubble!.x || box!.x >= bubble!.x + bubble!.width).toBeTruthy();
+  await page.keyboard.press('Escape');
+  await page.getByTestId(`chat-menu-${peer.name}`).click();
+  await page.getByRole('menuitem', { name: 'Pin chat', exact: true }).click();
+  await expect(row.getByRole('img', { name: 'Pinned' })).toBeVisible();
+  await page.getByTestId(`chat-menu-${peer.name}`).click();
+  await page.getByRole('menuitem', { name: 'Archive chat', exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await page.getByRole('button', { name: /Archived/ }).click();
+  await expect(row).toBeVisible();
+  await page.getByTestId(`chat-menu-${peer.name}`).click();
+  await page.getByRole('menuitem', { name: 'Unarchive chat', exact: true }).click();
+  await page.getByTestId('nav-calls').click();
+  await expect(page.getByText('To be implemented').first()).toBeVisible();
+  await closeAll(page, other);
+});
+
+test('channel owners publish; members see a read-only channel', async ({ browser, request }) => {
+  const [ownerU, memberU] = await Promise.all(['publisher', 'subscriber'].map((name) => createUser(request, name)));
+  const [owner, member] = await Promise.all([newPage(browser), newPage(browser)]);
+  await enroll(owner, ownerU); await enroll(member, memberU);
+  await owner.getByTestId('nav-channels').click();
+  await owner.getByTestId('new-chat').click();
+  await owner.getByTestId('people-search').fill(memberU.username);
+  await owner.getByTestId(`pick-${memberU.username}`).click();
+  await owner.getByTestId('group-next').click();
+  const title = `Announcements ${Date.now()}`;
+  await owner.getByTestId('group-name').fill(title); await owner.getByTestId('create-group').click();
+  await expect(owner.getByTestId('thread-title')).toHaveText(title);
+  await send(owner, 'Team announcement');
+  await member.getByTestId('nav-channels').click();
+  await member.getByTestId(`conversation-${title}`).click();
+  await expect(message(member, 'Team announcement')).toBeVisible();
+  await expect(member.getByTestId('composer')).toHaveCount(0);
+  await expect(member.getByText('Only admins can post in this channel')).toBeVisible();
+  await member.reload();
+  await expect(member.getByTestId('composer')).toHaveCount(0);
+  await expect(message(member, 'Team announcement')).toBeVisible();
+  await closeAll(owner, member);
+});

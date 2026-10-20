@@ -1,19 +1,20 @@
+import { conversationMenu } from './conversationMenu';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
 import type { EnclaveClient } from '../../core/client';
 import { MAX_ATTACHMENTS } from '../../crypto/content';
-import { isMuted, type ChatMessage, type Conversation } from '../../core/model';
+import { type ChatMessage, type Conversation } from '../../core/model';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
-import { Menu, type MenuItem } from '../components/Popover';
-import { useAccount, useGroupRecord, useMessages, useTyping } from '../hooks';
+import { Menu } from '../components/Popover';
+import { useAccount, useGroupRecord, useMessages, useTyping, useSettings } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { fold } from './ChatListPanel';
 import { Composer, type ComposerMode } from './Composer';
 import { ForwardDialog } from './ForwardDialog';
 import { MessageBubble, MessageInfoDialog } from './MessageBubble';
 
-const HOUR = 3_600_000;
+
 
 /**
  * Conversation view (UI.md §5.2–5.3): header (avatar, name, members / handle, search, ⋮ menu),
@@ -25,6 +26,7 @@ export function Thread({
   conversation,
   connection,
   openPicker,
+  initialSearch,
   onBack,
   onInfo,
   onClose,
@@ -34,12 +36,14 @@ export function Thread({
   conversation: Conversation;
   connection: ConnectionState;
   openPicker?: 'document' | null;
+  initialSearch?: string;
   onBack: () => void;
   onInfo: () => void;
   onClose: () => void;
   onOpenConversation: (id: string) => void;
 }) {
   const { t } = useI18n();
+  const settings = useSettings(client);
   const messages = useMessages(client, conversation.id);
   const typing = useTyping(client, conversation.id);
   const record = useGroupRecord(client, conversation.kind === 'group' ? conversation.id : null);
@@ -55,16 +59,17 @@ export function Thread({
   const stickToBottom = useRef(true);
   const title = conversation.kind === 'note' ? t('chats.noteToSelf') : conversation.title;
   const group = conversation.kind === 'group';
+  const readOnly = conversation.adminOnly && (!record || record.members.find((m) => m.accountId === client.accountId)?.role === 'member');
   const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
 
   useEffect(() => {
     void client.setActiveConversation(conversation.id);
     setMode(null);
     setFiles([]);
-    setSearch(null);
+    setSearch(initialSearch ?? null);
     stickToBottom.current = true;
     return () => void client.setActiveConversation(null);
-  }, [client, conversation.id]);
+  }, [client, conversation.id, initialSearch]);
 
   useEffect(() => {
     if (conversation.unread > 0 && document.visibilityState === 'visible') void client.markRead(conversation.id);
@@ -104,50 +109,11 @@ export function Thread({
           : t('header.clickForInfo')
         : t('thread.noteHint');
 
-  const confirmThen = (question: string, run: () => Promise<void>) => () => {
-    if (window.confirm(question)) void run();
-  };
-
-  const menu: MenuItem[] = [
-    { label: group ? t('header.groupInfo') : t('header.contactInfo'), icon: 'info', onSelect: onInfo, testId: 'menu-info' },
-    { label: t('header.search'), icon: 'search', onSelect: () => setSearch('') },
-    isMuted(conversation)
-      ? { label: t('header.unmuteNow'), icon: 'mute', onSelect: () => void client.setMute(conversation.id, null) }
-      : {
-          label: t('header.mute'),
-          icon: 'mute',
-          testId: 'menu-mute',
-          children: [
-            { label: t('header.mute8h'), onSelect: () => void client.setMute(conversation.id, Date.now() + 8 * HOUR) },
-            { label: t('header.mute1w'), onSelect: () => void client.setMute(conversation.id, Date.now() + 7 * 24 * HOUR) },
-            { label: t('header.muteAlways'), onSelect: () => void client.setMute(conversation.id, Infinity), testId: 'menu-mute-always' },
-          ],
-        },
-    {
-      label: conversation.pinned ? t('header.unpin') : t('header.pin'),
-      icon: 'pin',
-      onSelect: () => void client.updateConversation(conversation.id, { pinned: !conversation.pinned }),
-    },
-    {
-      label: conversation.archived ? t('header.unarchive') : t('header.archive'),
-      icon: 'archive',
-      onSelect: () => void client.updateConversation(conversation.id, { archived: !conversation.archived }),
-    },
-    { label: t('header.close'), icon: 'close', onSelect: onClose },
-    { label: t('header.clear'), icon: 'trash', onSelect: confirmThen(t('header.confirmClear'), () => client.clearConversation(conversation.id)) },
-    {
-      label: t('header.delete'),
-      icon: 'trash',
-      danger: true,
-      onSelect: confirmThen(t('header.confirmDelete'), async () => {
-        await client.deleteConversation(conversation.id);
-        onClose();
-      }),
-    },
-  ];
+  const menu = conversationMenu(client, conversation, t, onInfo, () => setSearch(''), onClose);
 
   return (
     <section
+      data-wallpaper={settings.wallpaper}
       className={`thread${dragging ? ' dragging' : ''}`}
       aria-label={title}
       onDragOver={(e) => {
@@ -259,7 +225,7 @@ export function Thread({
           );
         })}
       </div>
-      {!conversation.left && (
+      {!conversation.left && !readOnly && (
         <Composer
           key={conversation.id}
           client={client}
@@ -277,6 +243,7 @@ export function Thread({
           }}
         />
       )}
+      {readOnly && !conversation.left && <div className="channel-read-only" role="status"><Icon name="lock" size={16} />{t('channel.readOnly')}</div>}
       {forwarding && (
         <ForwardDialog
           client={client}

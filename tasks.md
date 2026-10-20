@@ -135,3 +135,26 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ⬜ | Global search across message text in "Search or start a new chat" | next |
 | ⬜ | LAN access: HTTPS (secure context needed for WebCrypto), dynamic Keycloak hostname, per-host presigning | next |
 | 🟡 | Firefox e2e: intermittent enroll wait timeout (KeyPackage upload response) | investigate |
+
+## Convo LAN and account continuity — 2026-10-20
+
+| Status | Item | Evidence |
+|---|---|---|
+| ✅ | HTTPS on 8443, HTTP help on 8088, persistent certificate, dynamic Keycloak/JWT/S3 origins | LAN HTTP 200 / HTTPS 200; Chromium enrollment, file transfer and forwarding-header checks |
+| ✅ | Convo UI branding; message-text/file-name search across local history; chat-row actions; beside-message menus | 117 web unit tests; focused Chromium UX journeys |
+| ✅ | Encrypted media/docs/links gallery with routed tabs, downloads and month grouping | Existing attachment journey extended; Chromium and Firefox passed before recovery batch |
+| ✅ | Channels backed by groups with admin-only posting; Calls rail placeholder | Backend role-denial test and Chromium owner/member journey |
+| ✅ | Durable encrypted account archive, atomic local journaling, idempotent append, stable pagination and device restoration | Chromium restores historical sent/received/self messages with original browser closed |
+| ✅ | Recovery code with separately derived wrapping/authorization keys; same-identity recovery and lost-device revocation | Chromium wrong-code rejection and fresh-browser recovery, device count 1 |
+| 🟡 | Expanded Settings, encrypted profile photo/status, wallpaper previews and guarded Log out | Implemented; dedicated profile/wallpaper/logout E2E journey pending |
+| ✅ | Keycloak data persists across container replacement; bogdan/bogdan and maria/maria created | Running realm checked after restart |
+
+Validation checkpoint: backend tests/module boundaries passed, web type checks and 117 unit tests
+passed; 4 existing Chromium messaging journeys and 5 focused recovery/UX journeys passed. Full
+Chromium/Firefox regression will run again after this checkpoint. ADR-0004 records remaining
+security review, deployment-backup and group-join limits. Existing HTTP-origin IndexedDB data
+requires explicit migration to the HTTPS origin; browser origins do not share local storage.
+
+Additional requested work in progress: clickable links with an optional redirect confirmation,
+richer conversation info/actions, old-origin migration, native Android with emulator/ADB evidence
+and APK in `apps/assets`, followed by iOS. See the implementation plans in `docs/superpowers/plans`.

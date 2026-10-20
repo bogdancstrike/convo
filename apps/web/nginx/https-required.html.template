@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HTTPS required · Convo</title>
+<style>body{margin:0;background:#f4f8fa;color:#17324d;font:17px/1.6 system-ui;min-height:100vh;display:grid;place-items:center}main{max-width:480px;padding:40px}img{width:64px}h1{line-height:1.2}a{display:inline-block;background:#18657f;color:white;padding:12px 20px;border-radius:12px;text-decoration:none}p{color:#465c6d}</style>
+</head><body><main><strong>Convo</strong><h1>HTTPS required</h1><p>Convo needs a secure connection to protect your encryption keys, sign-in and calls.</p><p id="instructions">Open this address using HTTPS. For this development installation, accept the self-signed certificate once on each device.</p><a id="secure-link" hidden>Open Convo securely</a><noscript>Enable JavaScript, then open this host with HTTPS on port ${CONVO_HTTPS_PORT}.</noscript></main><script>const target = new URL(window.location.href);
+target.protocol = 'https:';
+target.port = '${CONVO_HTTPS_PORT}';
+const link = document.getElementById('secure-link');
+link.href = target.href;
+link.hidden = false;
+if (navigator.language.toLowerCase().startsWith('ro')) {
+  document.documentElement.lang = 'ro';
+  document.querySelector('h1').textContent = 'Este necesar HTTPS';
+  document.querySelector('p').textContent = 'Convo are nevoie de o conexiune securizată pentru cheile de criptare, autentificare și apeluri.';
+  document.getElementById('instructions').textContent = 'Deschide această adresă prin HTTPS. Pentru această instalare de dezvoltare, acceptă certificatul autosemnat o dată pe fiecare dispozitiv.';
+  link.textContent = 'Deschide Convo în siguranță';
+}
+</script></body></html>

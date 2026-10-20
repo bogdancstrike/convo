@@ -41,7 +41,7 @@ class GroupController {
     }
 
     /** {@code POST /v1/groups} request. */
-    record CreateRequest(String groupId, long epoch, List<UUID> members, List<DeviceDto> devices, String welcome) {}
+    record CreateRequest(String groupId, long epoch, List<UUID> members, List<DeviceDto> devices, String welcome, boolean adminOnly) {}
 
     /** {@code POST /v1/groups/{gid}/commits} request. */
     record CommitRequest(long epoch, String submissionId, String commit, String welcome, List<UUID> addMembers,
@@ -54,16 +54,16 @@ class GroupController {
     record MemberDto(UUID accountId, String role) {}
 
     /** Group view. */
-    record GroupDto(String groupId, long epoch, List<MemberDto> members, List<DeviceDto> devices) {
+    record GroupDto(String groupId, long epoch, List<MemberDto> members, List<DeviceDto> devices, boolean adminOnly) {
         static GroupDto of(GroupService.GroupView v) {
             return new GroupDto(encode(v.groupId()), v.epoch(),
                     v.members().entrySet().stream().map(e -> new MemberDto(e.getKey(), e.getValue().db())).toList(),
-                    v.devices().stream().map(DeviceDto::of).toList());
+                    v.devices().stream().map(DeviceDto::of).toList(), v.adminOnly());
         }
     }
 
     /** Group summary. */
-    record GroupSummaryDto(String groupId, long epoch, String role, long members) {}
+    record GroupSummaryDto(String groupId, long epoch, String role, long members, boolean adminOnly) {}
 
     /** Commit acceptance. */
     record AcceptedDto(long epoch, long seq, boolean duplicate) {}
@@ -74,14 +74,14 @@ class GroupController {
         return GroupDto.of(groups.create(me.address(), new GroupCommands.Create(
                 decode(body.groupId(), "groupId"), body.epoch(), list(body.members()),
                 list(body.devices()).stream().map(DeviceDto::toAddress).toList(),
-                body.welcome() == null ? null : decode(body.welcome(), "welcome"))));
+                body.welcome() == null ? null : decode(body.welcome(), "welcome"), body.adminOnly())));
     }
 
     @GetMapping("/v1/groups/mine")
     List<GroupSummaryDto> mine(@AuthenticationPrincipal AuthenticatedDevice me) {
         return groups.mine(me.accountId()).stream().map(row -> new GroupSummaryDto(
                 encode((byte[]) row.get("group_id")), ((Number) row.get("epoch")).longValue(),
-                (String) row.get("role"), ((Number) row.get("members")).longValue())).toList();
+                (String) row.get("role"), ((Number) row.get("members")).longValue(), (Boolean) row.get("admin_only"))).toList();
     }
 
     @GetMapping("/v1/groups/{groupId}")

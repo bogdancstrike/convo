@@ -22,12 +22,14 @@ export function LinkDeviceScreen({
   accessToken,
   onLinked,
   onSignInAgain,
+  onRecover,
 }: {
   api: EnclaveApi;
   repos: Repositories;
   accessToken: () => Promise<string | null>;
   onLinked: () => void;
   onSignInAgain: () => void;
+  onRecover: () => void;
 }) {
   const { t } = useI18n();
   const [state, setState] = useState<State>({ name: 'starting' });
@@ -120,6 +122,7 @@ export function LinkDeviceScreen({
             </button>
           </>
         )}
+        <button className="btn btn-ghost" onClick={onRecover} data-testid="use-recovery-code">{t('recovery.useCode')}</button>
       </div>
     </main>
   );

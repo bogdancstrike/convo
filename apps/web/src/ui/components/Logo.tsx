@@ -1,10 +1,10 @@
 import { useId } from 'react';
 
 /**
- * Enclave mark: chat bubble with a lock, Ice → Cyan → Ocean → Navy gradient and an amber dot.
+ * Convo mark: chat bubble with a lock, Ice → Cyan → Ocean → Navy gradient and an amber dot.
  * Mirrors `docs/assets/logo.svg`; gradient IDs are unique per instance.
  */
-export function Logo({ size = 48, title = 'Enclave' }: { size?: number; title?: string }) {
+export function Logo({ size = 48, title = 'Convo' }: { size?: number; title?: string }) {
   const id = useId();
   return (
     <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={title}>

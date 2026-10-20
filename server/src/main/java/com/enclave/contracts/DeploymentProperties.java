@@ -20,5 +20,12 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("enclave.deployment")
 public record DeploymentProperties(
         @NotBlank @Pattern(regexp = "[a-z0-9][a-z0-9.-]{1,62}") @DefaultValue("enclave-dev") String id,
-        @NotBlank @DefaultValue("Enclave") String displayName,
-        @NotBlank @DefaultValue("http://localhost:8088") String publicBaseUrl) {}
+        @NotBlank @DefaultValue("Convo") String displayName,
+        @NotBlank @DefaultValue("http://localhost:8088") String publicBaseUrl,
+        @DefaultValue("false") boolean requestOrigin) {
+
+    /** Resolve a public endpoint against the trusted proxy request, retaining its path. */
+    public String endpointFor(String configured, String origin) {
+        return requestOrigin ? origin + java.net.URI.create(configured).getRawPath() : configured;
+    }
+}

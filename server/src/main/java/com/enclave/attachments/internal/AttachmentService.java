@@ -36,7 +36,7 @@ class AttachmentService {
      * @param size exact encrypted (padded) size in bytes
      */
     @Transactional
-    UploadForm createUpload(long size) {
+    UploadForm createUpload(long size, String endpoint) {
         if (size <= 0 || size > properties.maxBytes()) {
             throw new EnclaveException(ErrorCode.PAYLOAD_TOO_LARGE, "attachment size out of range");
         }
@@ -44,15 +44,15 @@ class AttachmentService {
         String key = "a/" + id;
         Instant now = clock.instant();
         attachments.insert(id, key, size, now.plus(properties.retention()));
-        return new UploadForm(id, store.presignUpload(key, size, properties.uploadUrlTtl()), now.plus(properties.uploadUrlTtl()));
+        return new UploadForm(id, store.presignUpload(key, size, properties.uploadUrlTtl(), endpoint), now.plus(properties.uploadUrlTtl()));
     }
 
     /** Presigns a download of a live attachment. */
     @Transactional(readOnly = true)
-    Download download(UUID id) {
+    Download download(UUID id, String endpoint) {
         String key = attachments.findLiveObjectKey(id)
                 .orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "attachment expired or unknown"));
-        return new Download(store.presignDownload(key, properties.downloadUrlTtl()), clock.instant().plus(properties.downloadUrlTtl()));
+        return new Download(store.presignDownload(key, properties.downloadUrlTtl(), endpoint), clock.instant().plus(properties.downloadUrlTtl()));
     }
 
     /** Deletes expired objects, then their registry rows (object first so nothing is orphaned). */

@@ -1,9 +1,13 @@
+import { Menu } from '../components/Popover';
+import { conversationMenu } from './conversationMenu';
+import { fold } from '../../core/search';
+export { fold } from '../../core/search';
 import { useMemo, useState } from 'react';
 import type { EnclaveClient } from '../../core/client';
 import { isMuted, type Conversation } from '../../core/model';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
-import { useAccountLabel } from '../hooks';
+import { useAccountLabel, useMessageSearch } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 
 type Filter = 'all' | 'unread' | 'groups';
@@ -19,29 +23,40 @@ export function ChatListPanel({
   activeId,
   onSelect,
   onNewChat,
+  onInfo,
+  onSearch,
+  onClose,
+  channels = false,
 }: {
+  channels?: boolean;
   client: EnclaveClient;
   conversations: Conversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  onInfo: (id: string) => void;
+  onSearch: (id: string, query: string) => void;
+  onClose: (id: string) => void;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [showArchived, setShowArchived] = useState(false);
 
+  const matches = useMessageSearch(client, query);
+  const matched = useMemo(() => new Map([...matches].reverse().map((m) => [m.conversationId, m])), [matches]);
   const archivedCount = conversations.filter((c) => c.archived).length;
   const visible = useMemo(() => {
     const q = fold(query);
     return conversations.filter(
       (c) =>
         (showArchived ? c.archived : !c.archived) &&
-        (!q || fold(c.kind === 'note' ? t('chats.noteToSelf') : c.title).includes(q)) &&
+        (!channels || c.adminOnly) &&
+        (!q || fold(c.kind === 'note' ? t('chats.noteToSelf') : c.title).includes(q) || matched.has(c.id)) &&
         (filter !== 'unread' || c.unread > 0) &&
         (filter !== 'groups' || c.kind === 'group'),
     );
-  }, [conversations, query, filter, showArchived, t]);
+  }, [conversations, query, filter, showArchived, t, matched, channels]);
 
   return (
     <>
@@ -51,7 +66,7 @@ export function ChatListPanel({
             <Icon name="back" />
           </button>
         )}
-        <h2>{showArchived ? t('chats.archived') : t('appName')}</h2>
+        <h2>{showArchived ? t('chats.archived') : t(channels ? 'nav.channels' : 'appName')}</h2>
         <button className="icon-btn" onClick={onNewChat} title={t('chats.new')} aria-label={t('chats.new')} data-testid="new-chat">
           <Icon name="newChat" />
         </button>
@@ -96,7 +111,7 @@ export function ChatListPanel({
           conversations.length === 0 ? (
             <div className="empty">
               <h3>{t('chats.empty.title')}</h3>
-              <p>{t('chats.empty.body')}</p>
+              <p>{t(channels ? 'channel.empty' : 'chats.empty.body')}</p>
               <button className="btn btn-primary" onClick={onNewChat}>
                 {t('chats.new')}
               </button>
@@ -108,7 +123,9 @@ export function ChatListPanel({
           <ul className="list">
             {visible.map((c) => (
               <li key={c.id}>
-                <ChatRow client={client} conversation={c} active={c.id === activeId} onSelect={() => onSelect(c.id)} />
+                <ChatRow client={client} conversation={c} active={c.id === activeId} onSelect={() => matched.has(c.id) ? onSearch(c.id, query) : onSelect(c.id)}
+                  excerpt={query ? matched.get(c.id)?.body : undefined}
+                  onInfo={() => onInfo(c.id)} onSearch={() => onSearch(c.id, '')} onClose={() => onClose(c.id)} />
               </li>
             ))}
           </ul>
@@ -118,13 +135,17 @@ export function ChatListPanel({
   );
 }
 
-function ChatRow({ client, conversation: c, active, onSelect }: { client: EnclaveClient; conversation: Conversation; active: boolean; onSelect: () => void }) {
+function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, onSearch, onClose }: {
+  client: EnclaveClient; conversation: Conversation; active: boolean; onSelect: () => void;
+  excerpt?: string; onInfo: () => void; onSearch: () => void; onClose: () => void;
+}) {
   const { t, time, date } = useI18n();
   const author = useAccountLabel(client, c.kind === 'group' && !c.previewFromMe ? c.previewAuthor : undefined);
   const title = c.kind === 'note' ? t('chats.noteToSelf') : c.title;
   const today = new Date().toDateString() === new Date(c.lastActivity).toDateString();
   const prefix = c.draft ? null : c.previewFromMe ? `${t('chats.you')}: ` : author ? `${author.split(' ')[0]}: ` : '';
   return (
+    <div className="chat-row">
     <button className="row" aria-current={active} onClick={onSelect} data-testid={`conversation-${c.title}`}>
       <Avatar id={c.id} name={title} group={c.kind === 'group'} />
       <span className="row-main">
@@ -139,7 +160,7 @@ function ChatRow({ client, conversation: c, active, onSelect }: { client: Enclav
                 <strong style={{ color: 'var(--c-accent-text)' }}>✎</strong> {c.draft}
               </>
             ) : (
-              `${prefix}${c.preview ?? ''}`
+              excerpt ?? `${prefix}${c.preview ?? ''}`
             )}
           </span>
           <span className="row-icons">
@@ -155,10 +176,11 @@ function ChatRow({ client, conversation: c, active, onSelect }: { client: Enclav
       </span>
       <span />
     </button>
+    <Menu label={t('header.more')} items={conversationMenu(client, c, t, onInfo, onSearch, onClose)}
+      trigger={({ open, toggle }) => <button className="icon-btn chat-row-menu" onClick={toggle}
+        aria-label={`${t('header.more')}: ${title}`} aria-expanded={open} aria-haspopup="menu" data-testid={`chat-menu-${c.title}`}>
+        <Icon name="chevronDown" size={18} />
+      </button>} />
+    </div>
   );
-}
-
-/** Lower-case + strip combining marks (Romanian diacritics, UI.md §5.5). */
-export function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 }

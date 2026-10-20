@@ -43,6 +43,8 @@ class EnrollmentController {
     @PostMapping("/reservations")
     @ResponseStatus(HttpStatus.CREATED)
     ReservationResponse reserve(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ReservationRequest body) {
+        if ("recovery".equals(body.purpose())) throw new com.enclave.contracts.EnclaveException(
+                com.enclave.contracts.ErrorCode.INVALID_REQUEST, "use the authorized recovery endpoint");
         Reservation r = enrollment.reserve(identities.resolve(jwt), body.purpose());
         return new ReservationResponse(r.reservationId(), r.accountId(), r.deviceId(), encode(r.challenge()),
                 deployment.id(), r.expiresAt());

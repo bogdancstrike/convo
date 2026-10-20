@@ -14,8 +14,8 @@ export class OrganizationAuth {
     this.manager = new UserManager({
       authority: info.oidc.issuer,
       client_id: info.oidc.clientId,
-      redirect_uri: `${origin}/`,
-      post_logout_redirect_uri: `${origin}/`,
+      redirect_uri: `${origin}/auth/convo/callback`,
+      post_logout_redirect_uri: `${origin}/auth/convo/callback`,
       response_type: 'code',
       scope: 'openid profile phone',
       userStore: new WebStorageStateStore({ store: window.sessionStorage }),

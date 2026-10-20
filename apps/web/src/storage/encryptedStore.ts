@@ -68,6 +68,11 @@ type PreparedOp =
   | { type: 'processed'; row: ProcessedRow };
 
 export class EncryptedStore {
+  private journal: ((ops: StoreOp[]) => Promise<StoreOp[]>) | null = null;
+
+  /** Add durable encrypted archive work to the same transaction as message persistence. */
+  setJournal(journal: ((ops: StoreOp[]) => Promise<StoreOp[]>) | null): void { this.journal = journal; }
+
   private constructor(
     private readonly db: IDBPDatabase<EnclaveDb>,
     private readonly sealKey: CryptoKey,
@@ -190,7 +195,8 @@ export class EncryptedStore {
    * Applies a batch atomically. All encryption happens first because an IndexedDB transaction
    * auto-commits as soon as it awaits non-IndexedDB work.
    */
-  async commit(ops: StoreOp[]): Promise<void> {
+  async commit(ops: StoreOp[], journal = true): Promise<void> {
+    if (journal && this.journal) ops = [...ops, ...await this.journal(ops)];
     if (ops.length === 0) return;
     const prepared = await Promise.all(ops.map((op) => this.prepare(op)));
     const tx = this.db.transaction(['records', 'messages', 'processed'], 'readwrite');

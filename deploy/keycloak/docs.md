@@ -13,3 +13,5 @@
 
 Keycloak runs behind nginx at `/auth` (`KC_HTTP_RELATIVE_PATH=/auth`) so the issuer is
 `http://localhost:8088/auth/realms/enclave`, same-origin with the web app.
+
+The dev realm is branded Convo and includes bogdan/bogdan and maria/maria. Keycloak resolves public hosts dynamically from nginx. Relative redirects are restricted to the app callback under `/auth`; the H2 development database persists in a Compose volume.

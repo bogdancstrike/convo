@@ -188,6 +188,7 @@ export interface DeviceRef {
 }
 
 export interface GroupDto {
+  adminOnly: boolean;
   groupId: string;
   epoch: number;
   members: { accountId: string; role: GroupRole }[];
@@ -195,6 +196,7 @@ export interface GroupDto {
 }
 
 export interface GroupSummaryDto {
+  adminOnly: boolean;
   groupId: string;
   epoch: number;
   role: GroupRole;
@@ -202,6 +204,7 @@ export interface GroupSummaryDto {
 }
 
 export interface CreateGroupRequest {
+  adminOnly?: boolean;
   groupId: string;
   epoch: number;
   members: string[];

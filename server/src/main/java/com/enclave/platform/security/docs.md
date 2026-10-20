@@ -16,3 +16,5 @@ Spring Security wiring for the two authentication layers of specs §4.1:
 
 All failures are rendered as RFC 9457 problem details through `platform.web.ProblemWriter`.
 Stateless: no cookies, no HTTP sessions, so no CSRF surface.
+
+`OriginJwtDecoder` validates the request-specific issuer with fixed internal JWKS keys before normalizing the account issuer. Recovery download/reservation/registration are account-authenticated; setup/history remain device-authenticated.

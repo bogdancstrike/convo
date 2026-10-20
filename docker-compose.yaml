@@ -1,12 +1,11 @@
-# Enclave — complete local development stack.
+# Convo — complete local development stack.
 #
-#   docker compose up -d --build                       # run everything, open http://localhost:8088
+#   docker compose up -d --build                       # run everything, open https://localhost:8443
 #   docker compose --profile e2e run --rm e2e          # run the Playwright end-to-end suite
 #   docker compose down -v                              # stop and delete all data
 #   pgAdmin (database UI): http://localhost:5050   (DB password: enclave-dev-db)
 #
-# Everything here is DEVELOPMENT configuration: test users, static dev secrets and plain HTTP on
-# localhost. Production uses the certified profiles in deploy/ (OPS-01). Override values in a
+# Everything here is DEVELOPMENT configuration: test users, static dev secrets and a self-signed development TLS certificate. Production uses the certified profiles in deploy/ (OPS-01). Override values in a
 # local `.env` (see .env.example).
 name: enclave
 
@@ -44,12 +43,12 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       KC_HTTP_RELATIVE_PATH: /auth
-      KC_HOSTNAME: ${ENCLAVE_PUBLIC_URL:-http://localhost:8088}/auth
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
     volumes:
+      - keycloak-data:/opt/keycloak/data/h2
       - ./deploy/keycloak/enclave-realm.json:/opt/keycloak/data/import/enclave-realm.json:ro
     healthcheck:
       <<: *healthcheck
@@ -95,11 +94,12 @@ services:
       DB_USER: enclave
       DB_PASSWORD: ${ENCLAVE_DB_PASSWORD:-enclave-dev-db}
       VALKEY_HOST: valkey
-      OIDC_ISSUER: ${ENCLAVE_PUBLIC_URL:-http://localhost:8088}/auth/realms/enclave
+      OIDC_ISSUER: ${OIDC_ISSUER:-http://localhost:8088/auth/realms/enclave}
       OIDC_JWKS_URI: http://keycloak:8080/auth/realms/enclave/protocol/openid-connect/certs
       ENCLAVE_PUBLIC_URL: ${ENCLAVE_PUBLIC_URL:-http://localhost:8088}
       ENCLAVE_DEPLOYMENT_ID: ${ENCLAVE_DEPLOYMENT_ID:-enclave-dev}
-      ENCLAVE_DISPLAY_NAME: ${ENCLAVE_DISPLAY_NAME:-Enclave Dev}
+      ENCLAVE_DISPLAY_NAME: ${ENCLAVE_DISPLAY_NAME:-Convo}
+      ENCLAVE_REQUEST_ORIGIN: "true"
       ENCLAVE_ATTACHMENTS_ENDPOINT: http://seaweedfs:8333
       ENCLAVE_ATTACHMENTS_ACCESS_KEY: enclave-dev-access
       ENCLAVE_ATTACHMENTS_SECRET_KEY: enclave-dev-secret-change-me
@@ -114,6 +114,11 @@ services:
     image: enclave/web:dev
     ports:
       - "${ENCLAVE_HTTP_PORT:-8088}:80"
+      - "${CONVO_HTTPS_PORT:-8443}:443"
+    environment:
+      CONVO_HTTPS_PORT: ${CONVO_HTTPS_PORT:-8443}
+    volumes:
+      - web-tls:/etc/nginx/tls
     depends_on:
       server: { condition: service_healthy }
       keycloak: { condition: service_healthy }
@@ -124,7 +129,8 @@ services:
     image: enclave/e2e:dev
     network_mode: host
     environment:
-      BASE_URL: ${ENCLAVE_PUBLIC_URL:-http://localhost:8088}
+      BASE_URL: ${E2E_BASE_URL:-https://localhost:8443}
+      HTTP_PORT: ${ENCLAVE_HTTP_PORT:-8088}
       CI: "true"
     volumes:
       - ./tests/e2e/test-results:/e2e/test-results
@@ -132,6 +138,8 @@ services:
       web: { condition: service_healthy }
 
 volumes:
+  keycloak-data:
+  web-tls:
   pgadmin-data:
   postgres-data:
   seaweedfs-data:

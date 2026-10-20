@@ -77,7 +77,7 @@ export async function enroll(page: Page, user: TestUser): Promise<void> {
 
 /** Opens a fresh, isolated browser profile with a page. Close it with `page.context().close()`. */
 export async function newPage(browser: Browser): Promise<Page> {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
   // Surface client-side warnings/errors in the test log; they are the first clue on failures.
   page.on('console', (m) => {
@@ -103,7 +103,7 @@ export async function startChat(page: Page, user: TestUser, query: string = user
 /** Opens an existing conversation from the chat list. */
 export async function openChat(page: Page, title: string): Promise<void> {
   await page.getByTestId('nav-chats').click();
-  await page.getByTestId(`conversation-${title}`).click();
+  await page.locator('.chat-row > button.row').filter({ has: page.locator('.row-title').getByText(title, { exact: true }) }).click();
   await expect(page.getByTestId('thread-title')).toHaveText(title);
 }
 
@@ -122,5 +122,5 @@ export function message(page: Page, text: string) {
 export async function messageMenu(page: Page, text: string) {
   const bubble = message(page, text);
   await bubble.getByTestId('message-body').click({ button: 'right' });
-  return bubble.getByTestId('message-menu-panel');
+  return page.getByTestId('message-menu-panel');
 }

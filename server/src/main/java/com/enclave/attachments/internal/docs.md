@@ -10,3 +10,5 @@
 
 Multipart/resumable uploads (AC-MED-07, EXT-02) will extend `ObjectStore` with multipart
 presigning; the registry already stores the exact expected size.
+
+Controllers resolve public signing endpoints from the trusted request origin when configured; the S3 Host is preserved through nginx, so LAN URLs remain valid without rewriting signatures.

@@ -1,3 +1,4 @@
+import { useProfile } from './ProfileContext';
 import { AVATAR_COLORS } from '../theme/tokens';
 import { Icon } from './Icon';
 
@@ -18,13 +19,14 @@ export function initials(name: string): string {
 }
 
 export function Avatar({ id, name, size = 48, group = false }: { id: string; name: string; size?: number; group?: boolean }) {
+  const profile = useProfile(id);
   return (
     <span
       className="avatar"
       aria-hidden="true"
       style={{ background: avatarColor(id), width: size, height: size, fontSize: Math.round(size * 0.38) }}
     >
-      {group ? <Icon name="group" size={Math.round(size * 0.5)} /> : initials(name)}
+      {!group && profile?.photo ? <img src={profile.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /> : group ? <Icon name="group" size={Math.round(size * 0.5)} /> : initials(name)}
     </span>
   );
 }

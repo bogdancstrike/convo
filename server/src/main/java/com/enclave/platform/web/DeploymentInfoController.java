@@ -26,8 +26,9 @@ class DeploymentInfoController {
 
     @GetMapping("/v1/deployment-info")
     DeploymentInfo info() {
+        String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
         return new DeploymentInfo(deployment.id(), deployment.displayName(), API_VERSIONS,
-                new OidcInfo(security.oidc().issuer(), security.oidc().publicClientId()));
+                new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()));
     }
 
     /**

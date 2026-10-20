@@ -8,3 +8,5 @@ Security headers (specs §28): strict CSP (`script-src 'self'`, `connect-src 'se
 `frame-ancestors 'none'`), `no-referrer`, `nosniff`, COOP, Permissions-Policy allowing camera/microphone
 for this origin only (voice notes, photo capture; requested only on user action), `no-cache` for the shell and immutable caching for
 fingerprinted assets. `/actuator/*` is not exposed publicly.
+
+TLS terminates on 443 (Compose 8443); port 80 serves an HTTPS-required helper. `15-self-signed-tls.sh` generates a persistent certificate. The exact `/auth/convo/callback` route serves the SPA; remaining `/auth` routes proxy Keycloak. All forwarding headers are overwritten.

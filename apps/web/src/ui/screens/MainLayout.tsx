@@ -1,3 +1,5 @@
+import { ProfilesProvider } from '../components/ProfileContext';
+import { SharedContent, type SharedTab } from './SharedContent';
 import { useEffect, useState } from 'react';
 import type { EnclaveClient } from '../../core/client';
 import { labelOf } from '../../core/model';
@@ -11,9 +13,9 @@ import { ChatListPanel } from './ChatListPanel';
 import { InfoDrawer } from './InfoDrawer';
 import { NewChatPanel } from './NewChatPanel';
 import { NewGroupPanel } from './NewGroupPanel';
-import { SettingsPanel } from './SettingsPanel';
+import { SettingsPanel, SettingsNavigation } from './SettingsPanel';
 import { Thread } from './Thread';
-import { SettingsHome, WelcomePane } from './WelcomePane';
+import { WelcomePane } from './WelcomePane';
 
 /**
  * Application shell (UI.md §2.2): navigation rail · side panel (chats, new chat, group wizard,
@@ -25,6 +27,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
   const conversations = useConversations(client);
   const connection = useConnection(client);
   const [nav, navigate] = useNavigation();
+  const [chatSearch, setChatSearch] = useState<{ id: string; query: string } | null>(null);
   const [pendingPicker, setPendingPicker] = useState<'document' | null>(null);
   const active = nav.chat ? (conversations.find((c) => c.id === nav.chat) ?? null) : null;
   const unread = conversations.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
@@ -41,7 +44,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
     if (nav.chat && conversations.length > 0 && !active) navigate({ chat: null, info: false }, true);
   }, [nav.chat, active, conversations.length, navigate]);
 
-  const openChat = (id: string) => navigate({ panel: 'chats', chat: id, info: false });
+  const openChat = (id: string) => { setChatSearch(null); navigate({ panel: 'chats', chat: id, info: false }); };
   const openNoteToSelf = async () => {
     const c = await client.openConversation({ accountId: client.accountId, username: client.device.username, displayName: client.device.displayName });
     openChat(c.id);
@@ -59,16 +62,19 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
             onPick={(a) => void client.openConversation(a).then((c) => openChat(c.id))}
           />
         );
+      case 'calls':
+        return <><header className="panel-header"><h2>{t('nav.calls')}</h2></header><div className="empty"><Icon name="calls" size={44} /><h3>{t('calls.pending')}</h3><p>{t('calls.body')}</p></div></>;
+      case 'new-channel':
+        return <NewGroupPanel client={client} channel onBack={() => navigate({ panel: 'channels' })} onCreated={(c) => openChat(c.id)} />;
       case 'new-group':
         return <NewGroupPanel client={client} onBack={() => navigate({ panel: 'new' })} onCreated={(c) => openChat(c.id)} />;
       case 'settings':
         return (
-          <SettingsPanel
+          <SettingsNavigation
             client={client}
             page={nav.page}
             onNavigate={(page) => navigate({ page })}
             onBack={() => navigate({ panel: 'chats' })}
-            onSignedOut={onSignedOut}
           />
         );
       default:
@@ -76,9 +82,13 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           <ChatListPanel
             client={client}
             conversations={conversations}
+            channels={nav.panel === 'channels'}
             activeId={active?.id ?? null}
             onSelect={openChat}
-            onNewChat={() => navigate({ panel: 'new', chat: null })}
+            onInfo={(id) => navigate({ chat: id, info: true })}
+            onSearch={(id, query) => { setChatSearch({ id, query }); navigate({ chat: id, info: false }); }}
+            onClose={(id) => { if (active?.id === id) navigate({ chat: null, info: false }); }}
+            onNewChat={() => navigate({ panel: nav.panel === 'channels' ? 'new-channel' : 'new', chat: null })}
           />
         );
     }
@@ -86,14 +96,14 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
 
   const pane = active ? 'thread' : 'list';
   return (
-    <div className="shell" data-pane={pane} data-drawer={active && nav.info ? 'open' : 'closed'}>
+    <ProfilesProvider client={client}><div className="shell" data-settings={nav.panel === 'settings'} data-pane={pane} data-drawer={active && nav.info ? 'open' : 'closed'}>
       <nav className="rail" aria-label={t('appName')}>
         <span className="brand">
           <Logo size={36} />
         </span>
         <button
           className="rail-btn"
-          aria-current={nav.panel !== 'settings' ? 'page' : undefined}
+          aria-current={nav.panel === 'chats' ? 'page' : undefined}
           onClick={() => navigate({ panel: 'chats' })}
           aria-label={t('nav.chats')}
           title={t('nav.chats')}
@@ -102,6 +112,10 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           <Icon name="chats" />
           {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
         </button>
+        <button className="rail-btn" aria-label={t('nav.calls')} title={t('nav.calls')} aria-current={nav.panel === 'calls' ? 'page' : undefined}
+          onClick={() => navigate({ panel: 'calls', chat: null, info: false })} data-testid="nav-calls"><Icon name="calls" /></button>
+        <button className="rail-btn" aria-label={t('nav.channels')} title={t('nav.channels')} aria-current={nav.panel === 'channels' ? 'page' : undefined}
+          onClick={() => navigate({ panel: 'channels', chat: null, info: false })} data-testid="nav-channels"><Icon name="channels" /></button>
         <span className="spacer" />
         <button
           className="rail-btn"
@@ -127,13 +141,14 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           conversation={active}
           connection={connection}
           openPicker={pendingPicker}
+          initialSearch={chatSearch?.id === active.id ? chatSearch.query : undefined}
           onBack={() => navigate({ chat: null, info: false })}
           onInfo={() => navigate({ info: !nav.info })}
           onClose={() => navigate({ chat: null, info: false })}
           onOpenConversation={openChat}
         />
-      ) : nav.panel === 'settings' ? (
-        <SettingsHome />
+      ) : nav.panel === 'calls' ? (<section className="welcome-pane"><div className="welcome-inner"><Icon name="calls" size={64} /><h2>{t('nav.calls')}</h2><p>{t('calls.pending')}</p></div></section>) : nav.panel === 'settings' ? (
+        <section className="settings-workspace"><SettingsPanel client={client} page={nav.page} onNavigate={(page) => navigate({ page })} onBack={() => navigate({ panel: 'chats' })} onSignedOut={onSignedOut} /></section>
       ) : (
         <WelcomePane
           onAction={(action) => {
@@ -148,7 +163,9 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           }}
         />
       )}
-      {active && nav.info && <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false })} />}
-    </div>
+      {active && nav.info && (nav.page ? <SharedContent key={active.id} client={client} conversationId={active.id} tab={nav.page as SharedTab}
+        onTab={(page) => navigate({ page })} onBack={() => navigate({ page: null })} /> :
+        <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false, page: null })} onShared={() => navigate({ page: 'media' })} />)}
+    </div></ProfilesProvider>
   );
 }

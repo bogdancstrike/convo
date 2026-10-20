@@ -44,7 +44,7 @@ class GroupService {
     }
 
     /** Current server view of a group. */
-    record GroupView(byte[] groupId, long epoch, Map<UUID, Role> members, List<DeviceAddress> devices) {}
+    record GroupView(byte[] groupId, long epoch, Map<UUID, Role> members, List<DeviceAddress> devices, boolean adminOnly) {}
 
     /** Commit acceptance. */
     record Accepted(long epoch, long seq, boolean duplicate) {}
@@ -66,7 +66,7 @@ class GroupService {
                 throw new EnclaveException(ErrorCode.INVALID_REQUEST, "invalid initial device " + d);
             }
         }
-        if (!groups.insertGroup(cmd.groupId(), cmd.epoch())) {
+        if (!groups.insertGroup(cmd.groupId(), cmd.epoch(), cmd.adminOnly())) {
             GroupRow existing = groups.lock(cmd.groupId(), false)
                     .orElseThrow(() -> new EnclaveException(ErrorCode.INVALID_REQUEST, "group ID already used"));
             if (groups.members(cmd.groupId()).get(creator.accountId()) == Role.OWNER && groups.hasDevice(cmd.groupId(), creator)) {
@@ -137,6 +137,9 @@ class GroupService {
     @Transactional
     boolean message(DeviceAddress caller, byte[] groupId, GroupCommands.Message cmd) {
         GroupRow group = lockForMember(groupId, caller, true);
+        if (group.adminOnly() && groups.members(groupId).get(caller.accountId()) == Role.MEMBER) {
+            throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only admins can post in this channel");
+        }
         if (cmd.submissionId() == null || cmd.submissionId().length != 16) {
             throw new EnclaveException(ErrorCode.INVALID_REQUEST, "submissionId must be 16 bytes");
         }
@@ -263,7 +266,7 @@ class GroupService {
     }
 
     private GroupView view(GroupRow group) {
-        return new GroupView(group.groupId(), group.epoch(), groups.members(group.groupId()), groups.devices(group.groupId()));
+        return new GroupView(group.groupId(), group.epoch(), groups.members(group.groupId()), groups.devices(group.groupId()), group.adminOnly());
     }
 
     private static void requireGroupId(byte[] groupId) {

@@ -3,6 +3,8 @@
  * Decorative by default; pass `label` to expose an icon to assistive technology.
  */
 const ICONS = {
+  calls: ['M7 3H4a1 1 0 0 0-1 1c0 9.4 7.6 17 17 17a1 1 0 0 0 1-1v-3l-5-2-2 2a14 14 0 0 1-7-7l2-2z'],
+  channels: ['M4 8a6 6 0 1 1 9 9l-5 3 1-5a6 6 0 0 1-5-7z', 'M8 8h5', 'M8 11h3', 'M18 5a9 9 0 0 1 0 12'],
   chats: ['M20 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.5A7.5 7.5 0 1 1 20 11.5z'],
   newChat: ['M20 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.5A7.5 7.5 0 1 1 20 11.5z', 'M12.5 8.5v6', 'M9.5 11.5h6'],
   settings: [
