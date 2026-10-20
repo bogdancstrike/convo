@@ -226,6 +226,7 @@ export const en = {
   'thread.editing': 'Editing message',
   'thread.cancel': 'Cancel',
   'thread.save': 'Save',
+  'thread.editExpired': 'This message can no longer be edited.',
   'thread.edited': 'edited',
   'thread.deleted': 'This message was deleted',
   'thread.unsupported': 'Update needed to view this item',

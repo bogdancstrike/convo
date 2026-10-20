@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { AttachmentRejectedError, MAX_ATTACHMENT_BYTES } from '../../core/attachments';
-import type { EnclaveClient } from '../../core/client';
+import { EditNotAllowedError, type EnclaveClient } from '../../core/client';
 import type { ChatMessage, Conversation } from '../../core/model';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaPreview } from '../components/MediaPreview';
@@ -129,6 +129,7 @@ export function Composer({
       }
       void client.sendTyping(conversation.id, 'stopped');
     } catch (e) {
+      if (e instanceof EditNotAllowedError) { setError(t('thread.editExpired')); return; }
       // Local persistence failed (e.g. storage full): give the text back instead of losing it.
       setText((typed) => (typed ? typed : body));
       console.warn('Could not queue message', e instanceof Error ? e.message : e);
@@ -204,6 +205,7 @@ export function Composer({
           files={files}
           caption={caption}
           busy={!!upload}
+          blocked={!!oversized}
           progress={upload ? t('thread.uploading', { done: upload.done, total: upload.total }) : null}
           error={oversized ? t('attachment.tooLarge', { name: oversized.name, limit: String(MAX_ATTACHMENT_BYTES / 1048576) }) : error}
           onCaption={setCaption}

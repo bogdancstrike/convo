@@ -11,10 +11,18 @@ interface ArchiveRecord { v: 1; kind: 'message' | 'conversation' | 'profile' | '
 interface Pending { id: string; ciphertext: string; order: number; }
 const PENDING = 'history-pending';
 
-/** Prefer edits/tombstones and monotonic delivery state when histories overlap. */
+/**
+ * Prefer tombstones, then the newest content revision, and monotonic delivery state when
+ * histories overlap. Receipts describe one revision: they only merge between equal revisions.
+ */
 export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming: ChatMessage): ChatMessage {
   if (!existing) return incoming;
-  const content = existing.deleted || (!incoming.deleted && (existing.editedAt ?? 0) > (incoming.editedAt ?? 0)) ? existing : incoming;
+  const newer = (a: ChatMessage, b: ChatMessage) => (a.revision ?? 0) !== (b.revision ?? 0) ? (a.revision ?? 0) > (b.revision ?? 0) : (a.editedAt ?? 0) > (b.editedAt ?? 0);
+  const content = existing.deleted || (!incoming.deleted && newer(existing, incoming)) ? existing : incoming;
+  if ((existing.revision ?? 0) !== (incoming.revision ?? 0) && !content.deleted) {
+    return { ...content, recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
+      serverAt: existing.serverAt ?? incoming.serverAt };
+  }
   const status = STATUS_RANK[existing.status ?? 'sent'] > STATUS_RANK[incoming.status ?? 'sent'] ? existing.status : incoming.status;
   const receipts: NonNullable<ChatMessage['receipts']> = {};
   for (const id of new Set([...Object.keys(existing.receipts ?? {}), ...Object.keys(incoming.receipts ?? {})])) {
@@ -22,7 +30,8 @@ export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming
     receipts[id] = { deliveredAt: Math.max(a?.deliveredAt ?? 0, b?.deliveredAt ?? 0) || undefined,
       readAt: Math.max(a?.readAt ?? 0, b?.readAt ?? 0) || undefined };
   }
-  return { ...content, status, ...(Object.keys(receipts).length ? { receipts } : {}), recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred };
+  return { ...content, status, ...(Object.keys(receipts).length ? { receipts } : {}), recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
+    serverAt: existing.serverAt ?? incoming.serverAt };
 }
 
 /** Durable local journal → account archive → other trusted devices. No live protocol state. */

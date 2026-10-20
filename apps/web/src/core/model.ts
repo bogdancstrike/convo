@@ -43,6 +43,10 @@ export interface ChatMessage {
   /** emoji → reacting account IDs. */
   reactions: Record<string, string[]>;
   editedAt?: number;
+  /** Content revision: 0/undefined for the original text, incremented by each accepted edit. */
+  revision?: number;
+  /** Server time of the envelope that delivered the original (anchors the edit window). */
+  serverAt?: number;
   deleted?: boolean;
   /** Received or sent as a forward. */
   forwarded?: boolean;
@@ -67,6 +71,8 @@ export interface Conversation {
   lastActivity: number;
   preview?: string;
   unread: number;
+  /** Incoming messages edited while not on screen; their new revision still needs a read receipt. */
+  revisedUnread?: { authorId: string; id: string }[];
   pinned: boolean;
   muted: boolean;
   /** Mute expiry (epoch ms); absent with `muted` means "always". */

@@ -27,9 +27,14 @@ E2EE or losing existing account data. Existing master checkpoint: 89ef009.
   Keycloak passkey RP ID is convo.doncea.ro. New certificate copied into debug APK trust resource.
 - [x] Keycloak responsive theme built on stock keycloak.v2 forms; larger controls, Convo branding,
   light/dark colors, mandatory phone input uses a telephone keyboard.
-- [ ] Finish hostname browser suite, native gallery/save/restart checks and commit/push updated APK.
+- [x] Finish hostname browser suite, native gallery/save/restart checks and commit/push updated APK.
 
-## Edit policy (new user request; not yet implemented)
+## Edit policy (implemented 2026-10-20, see ADR-0005)
+
+Implemented with server envelope timestamps instead of edit grants/commitments; the remaining
+bullets below are the original design notes. Done: windows, revisions, per-revision receipts,
+re-read receipts, archive merge, preview update, web + Android UI and unit/E2E tests.
+
 
 - Chats/groups/notes: own text only, 15 minutes; being read does not prevent editing. Channel
   text updates: 30 days, existing author-only security rule retained. No media rewriting.

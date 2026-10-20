@@ -90,6 +90,9 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `path-style` | | `true` | |
 | `create-bucket` | | `true` | Create at start-up if missing |
 | `enclave.attachment-policy.max-file-megabytes` | `CONVO_ATTACHMENT_MAX_MB` in Compose | `100` | Plaintext MiB limit, advertised to both clients. Ciphertext overhead is calculated separately. |
+| `enclave.message-policy.edit-window` | `ENCLAVE_MESSAGE_POLICY_EDIT_WINDOW` | `15m` | How long authors may edit text in chats, groups and Note to self. Advertised in `/v1/deployment-info`; receivers enforce it against server timestamps. |
+| `enclave.message-policy.channel-edit-window` | `ENCLAVE_MESSAGE_POLICY_CHANNEL_EDIT_WINDOW` | `30d` | Edit window for channel posts. |
+| `enclave.message-policy.edit-delivery-grace` | `ENCLAVE_MESSAGE_POLICY_EDIT_DELIVERY_GRACE` | `5m` | Tolerance for edits queued offline within the window (max 1h). |
 | `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
 | `retention` | | `30d` | Object lifetime |
 | `purge-interval` | | `PT1H` | |

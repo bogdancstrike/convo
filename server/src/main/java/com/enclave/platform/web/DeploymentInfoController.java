@@ -2,6 +2,7 @@ package com.enclave.platform.web;
 
 import com.enclave.contracts.DeploymentProperties;
 import com.enclave.contracts.AttachmentPolicy;
+import com.enclave.contracts.MessagePolicy;
 import com.enclave.platform.security.SecurityProperties;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,18 +21,22 @@ class DeploymentInfoController {
     private final DeploymentProperties deployment;
     private final SecurityProperties security;
     private final AttachmentPolicy attachments;
+    private final MessagePolicy messages;
 
-    DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security, AttachmentPolicy attachments) {
+    DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security, AttachmentPolicy attachments,
+            MessagePolicy messages) {
         this.deployment = deployment;
         this.security = security;
         this.attachments = attachments;
+        this.messages = messages;
     }
 
     @GetMapping("/v1/deployment-info")
     DeploymentInfo info() {
         String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
         return new DeploymentInfo(deployment.id(), deployment.displayName(), API_VERSIONS,
-                new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()), new Limits(attachments.maxFileBytes()));
+                new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()), new Limits(attachments.maxFileBytes(),
+                        messages.editWindow().toMillis(), messages.channelEditWindow().toMillis(), messages.editDeliveryGrace().toMillis()));
     }
 
     /**
@@ -41,7 +46,13 @@ class DeploymentInfoController {
      * @param oidc OIDC client settings for the web app
      */
     record DeploymentInfo(String deploymentId, String displayName, List<String> apiVersions, OidcInfo oidc, Limits limits) {}
-    record Limits(long attachmentMaxBytes) {}
+    /**
+     * @param attachmentMaxBytes plaintext attachment limit
+     * @param editWindowMs edit window for chats, groups and Note to self
+     * @param channelEditWindowMs edit window for channel posts
+     * @param editGraceMs tolerance for edits accepted shortly after the window closed
+     */
+    record Limits(long attachmentMaxBytes, long editWindowMs, long channelEditWindowMs, long editGraceMs) {}
 
     /**
      * @param issuer OIDC issuer URL

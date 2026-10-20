@@ -228,6 +228,7 @@ export const ro: Record<MessageKey, string> = {
   'thread.editing': 'Editezi mesajul',
   'thread.cancel': 'Anulează',
   'thread.save': 'Salvează',
+  'thread.editExpired': 'Acest mesaj nu mai poate fi editat.',
   'thread.edited': 'editat',
   'thread.deleted': 'Acest mesaj a fost șters',
   'thread.unsupported': 'Este necesară o actualizare pentru a vedea acest element',

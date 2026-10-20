@@ -107,6 +107,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 }
                 message.optJSONObject("reactions")?.let { reactions -> if (reactions.length() > 0) Text(reactions.keys().asSequence().joinToString("  ") { "${it} ${reactions.optJSONArray(it)?.length() ?: 0}" }) }
                 Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                    if (message.has("editedAt") && !message.optBoolean("deleted")) Text("edited ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), style = MaterialTheme.typography.labelSmall)
                     if (message.optBoolean("starred")) Icon(Icons.Outlined.StarOutline, "Starred", Modifier.size(14.dp).padding(start = 3.dp))
                     if (outgoing) { val status = message.optString("status"); Icon(if (status in listOf("read", "delivered")) Icons.Outlined.DoneAll else if (status == "sent") Icons.Outlined.Done else if (status == "failed") Icons.Outlined.ErrorOutline else Icons.Outlined.Schedule, when(status) { "read" -> "Seen"; "delivered" -> "Received"; "sent" -> "Sent"; else -> status }, Modifier.size(18.dp).padding(start = 4.dp), tint = if (status == "read") LocalConvoColors.current.tickRead else MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -118,7 +119,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                             DropdownMenuItem(text = { Text("Forward") }, onClick = { menu = false; forwarding = true })
                             DropdownMenuItem(text = { Text(if (message.optBoolean("starred")) "Unstar" else "Star") }, onClick = { menu = false; app.call("star", message.targetArgs(conversation).put("value", !message.optBoolean("starred"))) })
                             DropdownMenuItem(text = { Text("Copy text") }, onClick = { menu = false; (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo message", message.optString("body"))) })
-                            if (outgoing && !message.optBoolean("deleted")) DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; edit = true })
+                            if (outgoing && message.optLong("editableUntil", 0L) > System.currentTimeMillis()) DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; edit = true })
                             DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; delete = true })
                             if (message.optString("status") == "failed") DropdownMenuItem(text = { Text("Retry") }, onClick = { menu = false; app.call("retry", message.targetArgs(conversation)) })
                         }

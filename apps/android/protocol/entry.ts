@@ -4,7 +4,7 @@ import { MAX_ATTACHMENT_BYTES, configureAttachmentLimit } from '../../web/src/co
 import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
 import { ApiError } from '../../web/src/api/errors';
-import { EnclaveClient, LogoutRecoveryRequiredError } from '../../web/src/core/client';
+import { EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError } from '../../web/src/core/client';
 import { createClient, type LocalContext } from '../../web/src/core/bootstrap';
 import { enrollPrimary } from '../../web/src/core/enrollment';
 import { LinkRequest } from '../../web/src/core/linking';
@@ -30,7 +30,8 @@ let context: LocalContext; let client: EnclaveClient | null = null;
 let accessToken = ''; let active: string | null = null; let refreshTimer: ReturnType<typeof setTimeout>;
 let link: LinkRequest | null = null; let linkTimer: ReturnType<typeof setTimeout>;
 const emit = (type: string, value: unknown) => window.NativeConvo.emit(JSON.stringify({ type, value }));
-const publicMessage = (message: ChatMessage) => ({ ...message, attachments: message.attachments?.map((p) => ({
+// editableUntil lets native UI offer Edit with the same policy the shared core enforces.
+const publicMessage = (message: ChatMessage) => ({ ...message, editableUntil: client?.editableUntil(message), attachments: message.attachments?.map((p) => ({
   attachmentId: p.attachmentId, contentType: p.contentType, fileName: p.fileName, size: p.size,
   width: p.width, height: p.height, durationMs: p.durationMs, thumbnail: p.thumbnail, voiceNote: p.voiceNote,
 })) });
@@ -191,7 +192,7 @@ window.ConvoCore = { command(json: string) {
   let request: { id: number; method: string; args?: Record<string, any> };
   try { request = JSON.parse(json); } catch { return; }
   void command(request.method, request.args ?? {}).then((value) => { emit('result', { id: request.id, ok: true, value }); refresh(); })
-    .catch((e) => { emit('diagnostic', { stage: request.method, name: e instanceof Error ? e.name : 'unknown' }); emit('result', { id: request.id, ok: false, error: e instanceof LogoutRecoveryRequiredError ? 'recovery-required' : e instanceof ApiError ? e.code : 'operation-failed' }); });
+    .catch((e) => { emit('diagnostic', { stage: request.method, name: e instanceof Error ? e.name : 'unknown' }); emit('result', { id: request.id, ok: false, error: e instanceof LogoutRecoveryRequiredError ? 'recovery-required' : e instanceof EditNotAllowedError ? 'edit-not-allowed' : e instanceof ApiError ? e.code : 'operation-failed' }); });
 } };
 void (async () => { context = await openContext(); await startClient(); })().catch(() => emit('phase', { name: 'error' }));
 

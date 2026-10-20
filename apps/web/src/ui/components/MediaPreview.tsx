@@ -12,6 +12,7 @@ export function MediaPreview({
   files,
   caption,
   busy,
+  blocked = false,
   progress,
   error,
   onCaption,
@@ -23,6 +24,7 @@ export function MediaPreview({
   files: File[];
   caption: string;
   busy: boolean;
+  blocked?: boolean;
   progress: string | null;
   error: string | null;
   onCaption: (caption: string) => void;
@@ -45,7 +47,7 @@ export function MediaPreview({
 
   return (
     <div className="media-preview" role="dialog" aria-label={t('preview.title')} data-testid="media-preview"
-      onKeyDown={(e) => e.key === 'Escape' && !busy && onCancel()}>
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!busy) onCancel(); } }}>
       <header className="media-preview-header">
         <button className="icon-btn" onClick={onCancel} disabled={busy} aria-label={t('thread.cancel')} data-testid="preview-cancel">
           <Icon name="close" />
@@ -98,7 +100,7 @@ export function MediaPreview({
             </button>
           </li>
         </ul>
-        <button className="fab" onClick={onSend} disabled={busy} aria-label={t('thread.send')} data-testid="preview-send">
+        <button className="fab" onClick={onSend} disabled={busy || blocked} aria-label={t('thread.send')} data-testid="preview-send">
           <Icon name="send" size={24} />
         </button>
       </footer>

@@ -65,6 +65,8 @@ export interface Reaction {
 export interface Edit {
   targetMessageId: string;
   body: string;
+  /** Strictly increasing per target message (1 for the first edit). */
+  revision?: number;
 }
 
 /** Author delete-for-everyone request. */
@@ -93,6 +95,8 @@ export interface ReceiptMessage {
   type: 'delivery' | 'read';
   conversationId?: string;
   messageIds: string[];
+  /** Content revision acknowledged for each message ID (same order); absent means 0. */
+  revisions?: number[];
   timestamp: number;
 }
 
@@ -161,7 +165,7 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       if (!isDataMessage(parsed.data)) throw new Error('malformed data message');
       return parsed as unknown as Content;
     case 'receipt':
-      if (!isObject(parsed.receipt) || !Array.isArray(parsed.receipt.messageIds) || parsed.receipt.messageIds.length > 500 || !parsed.receipt.messageIds.every((id) => typeof id === 'string') || !['delivery', 'read'].includes(String(parsed.receipt.type)) || !Number.isFinite(parsed.receipt.timestamp) || (parsed.receipt.conversationId !== undefined && typeof parsed.receipt.conversationId !== 'string')) throw new Error('malformed receipt');
+      if (!isObject(parsed.receipt) || !Array.isArray(parsed.receipt.messageIds) || parsed.receipt.messageIds.length > 500 || !parsed.receipt.messageIds.every((id) => typeof id === 'string') || !['delivery', 'read'].includes(String(parsed.receipt.type)) || !Number.isFinite(parsed.receipt.timestamp) || (parsed.receipt.conversationId !== undefined && typeof parsed.receipt.conversationId !== 'string') || (parsed.receipt.revisions !== undefined && (!Array.isArray(parsed.receipt.revisions) || parsed.receipt.revisions.length !== parsed.receipt.messageIds.length || !parsed.receipt.revisions.every(isRevision)))) throw new Error('malformed receipt');
       return parsed as unknown as Content;
     case 'sync':
       if (!isObject(parsed.sync)) throw new Error('malformed sync');
@@ -186,6 +190,10 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
   }
 }
 
+function isRevision(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -195,6 +203,8 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (typeof value.messageId !== 'string' || typeof value.timestamp !== 'number') return false;
   if (value.recipientAccountIds !== undefined && (!Array.isArray(value.recipientAccountIds) || value.recipientAccountIds.length > 1000 || !value.recipientAccountIds.every((id) => typeof id === 'string'))) return false;
   if (value.profile !== undefined && !isProfile(value.profile)) return false;
+  if (value.edit !== undefined && (!isObject(value.edit) || typeof value.edit.targetMessageId !== 'string' || typeof value.edit.body !== 'string'
+    || utf8(value.edit.body).length > MAX_BODY_BYTES || (value.edit.revision !== undefined && !isRevision(value.edit.revision)))) return false;
   if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
   if (value.attachments !== undefined) {
     if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS) return false;

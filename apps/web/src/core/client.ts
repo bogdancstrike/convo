@@ -27,6 +27,7 @@ import { replenishPreKeys } from './enrollment';
 import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
 import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
+import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
 import { Outbox, type OutboxItem } from './outbox';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
@@ -64,8 +65,6 @@ export interface ClientEvents extends Record<string, unknown> {
   settings: Settings;
 }
 
-/** Edit window for own messages (UI shows Edit only within it). */
-export const EDIT_WINDOW_MS = 24 * 3600 * 1000;
 const TYPING_TTL_SECONDS = 10;
 const OUTBOX_RETRY_MS = 15_000;
 
@@ -251,14 +250,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   async markRead(conversationId: string): Promise<void> {
     const conversation = this.conversationCache.get(conversationId);
-    if (!conversation || conversation.unread === 0) return;
-    const unread = await this.repos.messages(conversationId, conversation.unread);
-    await this.saveConversations([{ ...conversation, unread: 0 }]);
+    if (!conversation || (conversation.unread === 0 && !conversation.revisedUnread?.length)) return;
+    const unread = conversation.unread ? await this.repos.messages(conversationId, conversation.unread) : [];
+    // Messages edited after they were read need a read receipt for their new revision too.
+    const revisedMessages = await Promise.all((conversation.revisedUnread ?? []).map((r) => this.repos.message(conversationId, r.authorId, r.id)));
+    await this.saveConversations([{ ...conversation, unread: 0, revisedUnread: undefined }]);
     if (this.currentSettings.readReceipts && conversation.kind !== 'note') {
-      const authors = new Set(unread.filter((m) => m.direction === 'in' && !m.deleted).map((m) => m.authorId));
+      const seen = new Map<string, ChatMessage>();
+      for (const m of [...unread, ...revisedMessages]) if (m && m.direction === 'in' && !m.deleted) seen.set(`${m.authorId}/${m.id}`, m);
+      const authors = new Set([...seen.values()].map((m) => m.authorId));
       for (const author of authors) {
-        const ids = unread.filter((m) => m.authorId === author && m.direction === 'in' && !m.deleted).map((m) => m.id);
-        if (ids.length) await this.enqueue(author, receipt('read', ids, conversation.kind === 'group' ? conversationId : undefined), false);
+        const messages = [...seen.values()].filter((m) => m.authorId === author);
+        await this.enqueue(author, receipt('read', messages.map((m) => m.id), conversation.kind === 'group' ? conversationId : undefined, messages.map((m) => m.revision ?? 0)), false);
       }
     }
     if (unread.length > 0) {
@@ -442,17 +445,37 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emit('messages', target.conversationId);
   }
 
-  /** Author edit (own messages only). */
+  /** True while the author may still edit this message's text (see {@link canEdit}). */
+  canEdit(message: ChatMessage, now = Date.now()): boolean {
+    return canEdit(message, this.conversationCache.get(message.conversationId), this.accountId, now);
+  }
+
+  /** End of the edit window, or `undefined` when the message is not editable at all. */
+  editableUntil(message: ChatMessage): number | undefined {
+    return editableUntil(message, this.conversationCache.get(message.conversationId), this.accountId);
+  }
+
+  /**
+   * Author edit of own text inside the deployment edit window. Each edit is a new content
+   * revision: earlier delivery/read receipts no longer apply, and recipients acknowledge the new
+   * revision separately. Unchanged or empty text is a no-op.
+   */
   async edit(target: ChatMessage, body: string): Promise<void> {
-    if (target.authorId !== this.accountId || target.deleted) throw new Error('only the author can edit');
-    const text = body.trim();
-    if (!text || text === target.body) return;
+    const current = await this.repos.message(target.conversationId, target.authorId, target.id) ?? target;
+    if (!this.canEdit(current)) throw new EditNotAllowedError();
+    const text = normalizeEditBody(current, body);
+    if (!text) return;
     const now = Date.now();
-    const data: DataMessage = { messageId: newMessageId(), timestamp: now, edit: { targetMessageId: target.id, body: text } };
-    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [
-      this.repos.putMessage({ ...target, body: text, editedAt: now }),
+    const revision = (current.revision ?? 0) + 1;
+    const data: DataMessage = { messageId: newMessageId(), timestamp: now, edit: { targetMessageId: current.id, body: text, revision } };
+    const conversation = this.conversationCache.get(current.conversationId);
+    const preview = conversation && await this.withEditedPreview(conversation, current, text);
+    await this.enqueue(current.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [
+      this.repos.putMessage(revised(current, text, now, revision)),
+      ...(preview && preview !== conversation ? [this.repos.putConversation(preview)] : []),
     ]);
-    this.emit('messages', target.conversationId);
+    if (preview && preview !== conversation) { this.conversationCache.set(preview.id, preview); this.emitConversations(); }
+    this.emit('messages', current.conversationId);
   }
 
   /** Delete for everyone (author only); leaves a tombstone. */
@@ -574,15 +597,28 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   profiles(): Map<string, UserProfile> { return new Map(this.profileCache); }
 
   async updateProfile(patch: { photo?: string; status?: string }): Promise<void> {
-    const profile: UserProfile = { accountId: this.accountId, status: '', ...this.profileCache.get(this.accountId), ...patch, updatedAt: Date.now() };
-    if (!isProfile(profile)) throw new Error('invalid profile');
-    await this.repos.store.put('profile', this.accountId, profile);
-    this.profileCache.set(this.accountId, profile); this.emit('profiles', this.profiles());
-    for (const conversation of this.conversations()) {
-      if (conversation.kind === 'group' && (conversation.left || (conversation.adminOnly && (await this.groups.record(groupIdOf(conversation.id)!))?.members.find((m) => m.accountId === this.accountId)?.role === 'member'))) continue;
-      await this.enqueue(conversation.id, { v: CONTENT_VERSION, kind: 'profile', profile }, false);
-    }
-    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'profile', profile }, false);
+    await this.mutex.run(async () => {
+      // Merge against durable state while holding the same lock as history/mailbox processing.
+      // A photo save must not replace a status saved concurrently or reloaded from the archive.
+      const current = await this.repos.store.get<UserProfile>('profile', this.accountId);
+      const profile: UserProfile = { accountId: this.accountId, status: '', ...current, ...patch,
+        updatedAt: Math.max(Date.now(), (current?.updatedAt ?? 0) + 1) };
+      if (!isProfile(profile)) throw new Error('invalid profile');
+      const destinations = new Set([this.accountId]);
+      for (const conversation of this.conversations()) {
+        if (conversation.kind === 'group' && (conversation.left || (conversation.adminOnly && (await this.groups.record(groupIdOf(conversation.id)!))?.members.find((m) => m.accountId === this.accountId)?.role === 'member'))) continue;
+        destinations.add(conversation.id);
+      }
+      const items = [...destinations].map((destination) => {
+        const groupId = groupIdOf(destination);
+        return Outbox.op(Outbox.create({ destination: groupId ?? destination, group: !!groupId,
+          content: { v: CONTENT_VERSION, kind: 'profile', profile }, selfAccountId: this.accountId, syncTranscript: false }));
+      });
+      // Local changes and their outgoing broadcasts survive a crash together.
+      await this.repos.store.commit([{ type: 'put', ns: 'profile', id: this.accountId, value: profile }, ...items]);
+      this.profileCache.set(this.accountId, profile); this.emit('profiles', this.profiles());
+    });
+    void this.outbox.flush();
   }
 
   private stageProfile(profile: UserProfile, author: string, ops: StoreOp[]): void {
@@ -717,9 +753,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       case 'data': {
         if (fromSelf) return followUps; // own devices exchange data via sync transcripts
         const result = await this.applyData(sender, sender, 'in', content.data, envelope, ops, changed);
+        followUps.push(...this.receiptFollowUps(result, sender, sender, content.data));
         if (result === 'new') {
-          followUps.push(() => this.enqueue(sender, receipt('delivery', [content.data.messageId]), false));
-          if (this.currentSettings.readReceipts && this.activeConversation === sender && document.visibilityState === 'visible') followUps.push(() => this.enqueue(sender, receipt('read', [content.data.messageId]), false));
           const ownProfile = this.profileCache.get(this.accountId);
           if (ownProfile && !content.data.profile) followUps.push(() => this.enqueue(sender, { v: CONTENT_VERSION, kind: 'profile', profile: ownProfile }, false));
         }
@@ -733,16 +768,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         }
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
-          if (c && c.unread > 0) this.stage(ops, { ...c, unread: 0 });
+          if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined });
         }
         return followUps;
       }
       case 'receipt': {
         const conversationId = content.receipt.conversationId ?? sender;
         if (content.receipt.conversationId && !groupIdOf(conversationId)) return followUps;
-        for (const id of content.receipt.messageIds) {
+        for (const [index, id] of content.receipt.messageIds.entries()) {
           const target = await this.repos.message(conversationId, this.accountId, id);
           if (!target || target.direction !== 'out' || target.deleted) continue;
+          // Receipts for an older revision cannot mark edited content as delivered or read.
+          if ((content.receipt.revisions?.[index] ?? 0) < (target.revision ?? 0)) continue;
           const recipients = target.recipientAccountIds ?? (groupIdOf(conversationId) ? [] : [sender]);
           if (!recipients.includes(sender)) continue;
           const receivedAt = envelope.serverTimestamp;
@@ -794,10 +831,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       const direction = accountId === this.accountId ? 'out' : 'in';
       if (content.kind === 'data') {
         const applied = await this.applyData(conversationId, accountId, direction, content.data, envelope, ops, changed);
-        if (applied === 'new' && accountId !== this.accountId) {
-          followUps.push(() => this.enqueue(accountId, receipt('delivery', [content.data.messageId], conversationId), false));
-          if (this.currentSettings.readReceipts && this.activeConversation === conversationId && document.visibilityState === 'visible') followUps.push(() => this.enqueue(accountId, receipt('read', [content.data.messageId], conversationId), false));
-        }
+        if (accountId !== this.accountId) followUps.push(...this.receiptFollowUps(applied, accountId, conversationId, content.data));
       } else if (content.kind === 'profile') {
         this.stageProfile(content.profile, accountId, ops);
       } else if (content.kind === 'groupMeta') {
@@ -849,7 +883,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     envelope: EnvelopeDto,
     ops: StoreOp[],
     changed: Set<string>,
-  ): Promise<'new' | 'mutation' | 'ignored'> {
+  ): Promise<'new' | 'edited' | 'mutation' | 'ignored'> {
     if (data.profile) this.stageProfile(data.profile, authorId, ops);
     const targetId = data.reaction?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
     const targetAuthor = data.reaction?.targetAuthorId ?? authorId;
@@ -865,11 +899,22 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       return 'mutation';
     }
     if (data.edit) {
-      // Only the original author may edit (specs §25.1).
+      // Only the original author may edit (looked up by author), inside the server-time window,
+      // with a newer revision. Edits never notify or change unread counts (specs §25.1).
       const target = await this.repos.message(conversation.id, authorId, data.edit.targetMessageId);
-      if (!target || target.deleted || typeof data.edit.body !== 'string') return 'ignored';
-      ops.push(this.repos.putMessage({ ...target, body: data.edit.body, editedAt: data.timestamp }));
-      return 'mutation';
+      if (!target) return 'ignored';
+      const body = acceptsEdit(target, conversation, data.edit.body, data.edit.revision, data.timestamp, envelope.serverTimestamp);
+      if (body === undefined) return 'ignored';
+      ops.push(this.repos.putMessage(direction === 'out' ? revised(target, body, data.timestamp, data.edit.revision)
+        : { ...target, body, editedAt: data.timestamp, revision: data.edit.revision }));
+      const visible = this.activeConversation === conversation.id && document.visibilityState === 'visible';
+      let updated = await this.withEditedPreview(conversation, target, body);
+      if (direction === 'in' && !visible && conversation.kind !== 'note') {
+        const pending = (conversation.revisedUnread ?? []).filter((r) => r.authorId !== authorId || r.id !== target.id);
+        updated = { ...updated, revisedUnread: [...pending, { authorId, id: target.id }].slice(-MAX_REVISED_UNREAD) };
+      }
+      if (updated !== conversation) this.stage(ops, updated);
+      return 'edited';
     }
     if (data.delete) {
       const target = await this.repos.message(conversation.id, authorId, data.delete.targetMessageId);
@@ -892,6 +937,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       forwarded: data.forwarded === true || undefined,
       quote: data.quote,
       sentAt: data.timestamp,
+      serverAt: envelope.serverTimestamp,
       sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp,
       status: direction === 'out' ? 'sent' : undefined,
       reactions: {},
@@ -1043,6 +1089,29 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   // --- helpers ----------------------------------------------------------------------------
 
+  /** The chat-list preview follows an edit of the conversation's latest message. */
+  private async withEditedPreview(conversation: Conversation, target: ChatMessage, body: string): Promise<Conversation> {
+    const [latest] = await this.repos.messages(conversation.id, 1);
+    const isLatest = latest?.id === target.id && latest.authorId === target.authorId;
+    return isLatest && conversation.preview !== body ? { ...conversation, preview: body } : conversation;
+  }
+
+  /**
+   * Delivery (and, when the chat is on screen, read) receipts after a new message or an accepted
+   * edit. Edits acknowledge the new revision; nothing is sent for other mutations.
+   */
+  private receiptFollowUps(result: 'new' | 'edited' | 'mutation' | 'ignored', author: string, conversationId: string, data: DataMessage): (() => Promise<void>)[] {
+    if (result !== 'new' && result !== 'edited') return [];
+    const id = result === 'edited' ? data.edit!.targetMessageId : data.messageId;
+    const revisions = result === 'edited' ? [data.edit!.revision ?? 0] : undefined;
+    const group = groupIdOf(conversationId) ? conversationId : undefined;
+    const followUps = [() => this.enqueue(author, receipt('delivery', [id], group, revisions), false)];
+    if (this.currentSettings.readReceipts && this.activeConversation === conversationId && document.visibilityState === 'visible') {
+      followUps.push(() => this.enqueue(author, receipt('read', [id], group, revisions), false));
+    }
+    return followUps;
+  }
+
   /** Stages a conversation update into a batch and the in-memory cache. */
   private stage(ops: StoreOp[], conversation: Conversation): void {
     this.conversationCache.set(conversation.id, conversation);
@@ -1069,8 +1138,23 @@ function previewOf(data: DataMessage): string {
   return first.contentType.startsWith('image/') ? '📷 Photo' : `📎 ${first.fileName ?? 'File'}`;
 }
 
-function receipt(type: 'delivery' | 'read', messageIds: string[], conversationId?: string): Content {
-  return { v: CONTENT_VERSION, kind: 'receipt', receipt: { type, messageIds, conversationId, timestamp: Date.now() } };
+function receipt(type: 'delivery' | 'read', messageIds: string[], conversationId?: string, revisions?: number[]): Content {
+  return { v: CONTENT_VERSION, kind: 'receipt', receipt: { type, messageIds, conversationId, timestamp: Date.now(),
+    ...(revisions?.some((r) => r > 0) ? { revisions } : {}) } };
+}
+
+/** Pending re-read acknowledgements kept per conversation (oldest dropped first). */
+const MAX_REVISED_UNREAD = 200;
+
+/** A new own revision: receipts of earlier revisions no longer describe the visible text. */
+function revised(message: ChatMessage, body: string, editedAt: number, revision: number | undefined): ChatMessage {
+  const status = message.status && STATUS_RANK[message.status] > STATUS_RANK.sent ? 'sent' : message.status;
+  return { ...message, body, editedAt, revision, receipts: undefined, status };
+}
+
+/** The author tried to edit outside the edit window, or content that is not editable text. */
+export class EditNotAllowedError extends Error {
+  constructor() { super('edit not allowed'); this.name = 'EditNotAllowedError'; }
 }
 
 function applyReaction(message: ChatMessage, accountId: string, emoji: string, remove: boolean): ChatMessage {

@@ -1,7 +1,7 @@
 import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { EDIT_WINDOW_MS, type EnclaveClient } from '../../core/client';
+import type { EnclaveClient } from '../../core/client';
 import type { ChatMessage, MessageStatus } from '../../core/model';
 import { AttachmentView } from '../components/AttachmentView';
 import { Avatar } from '../components/Avatar';
@@ -197,7 +197,7 @@ function MessageMenu({ client, message: m, onClose, actions, anchor }: { client:
   useLayoutEffect(() => { refs.setReference(anchor.current); refs.setFloating(root.current); }, [anchor, picker, confirmDelete, refs]);
   useEffect(() => () => anchor.current?.focus({ preventScroll: true }), [anchor]);
   const own = m.authorId === client.accountId;
-  const canEdit = own && m.body !== undefined && Date.now() - m.sentAt < EDIT_WINDOW_MS;
+  const canEdit = client.canEdit(m);
 
   useEffect(() => {
     if (picker || confirmDelete) return undefined;

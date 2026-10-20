@@ -22,7 +22,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Web Settings no longer exposes a separate Security category; confirmed red Log out remains.
 - Shared safety-number display preserves existing pinned-library bytes and avoids Firefox's
   slow timer-per-digest path. Compatibility and focused Firefox UX tests pass.
-- Still open: edit policy/revision receipts, auto-download/gallery preferences, passkey Settings
+- Edit policy (ADR-0005): 15 min chats / 30 days channels from `/v1/deployment-info`, enforced by
+  receivers with server timestamps; revisions, per-revision receipts and silent edits. Web unit
+  tests, Chromium/Firefox `edit-policy.spec.ts`, Android edit/"edited" checked on emulator-5554.
+- Profile photo/status saves are serialized with their broadcasts; oversized attachments disable
+  Send before upload (`attachment-policy.spec.ts`). Full suite: 46 passed, 2 skipped.
+- Still open: auto-download/gallery preferences, passkey Settings
   entry and native app/conversation locks, remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)

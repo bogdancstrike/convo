@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                 if (!quiet) error = when (result.optString("error")) {
                     "recovery-required" -> "Save a recovery code in Settings → History and recovery before logging out of your last device."
                     "FORBIDDEN_ROLE" -> "Only a group owner or admin can do that."
+                    "edit-not-allowed" -> "This message can no longer be edited."
                     "ACCOUNT_HAS_DEVICES" -> "Link this phone from a device you trust."
                     "DEVICE_REVOKED" -> "This device was signed out."
                     else -> "Could not complete that action. Your stored messages are still here. Check your connection and try again."

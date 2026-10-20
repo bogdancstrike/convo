@@ -1279,7 +1279,7 @@ Android restricted mode uses a separately installed/certified UnifiedPush distri
 ## 17. Disappearing messages, edits, deletes, receipts
 
 - **Disappearing**: timer changes are authenticated conversation events. Received timers start at earliest known own-device read; sender timers start on send, with optional absolute maximum lifetime and cleanup rules in §25.3. Enforce customer maximum retention independently of timer choices.
-- **Edits**: `Edit` referencing `message_id`, original sender only within policy; retain local edit history only under the configured content-retention policy. Group administrators cannot rewrite someone else's message.
+- **Edits**: `Edit` referencing `message_id` with a strictly increasing `revision`, original sender only within policy (15 min chats/groups/notes, 30 days channels, measured with server envelope timestamps — ADR-0005); receipts acknowledge a revision and earlier-revision receipts never mark edited text read; retain local edit history only under the configured content-retention policy. Group administrators cannot rewrite someone else's message.
 - **Delete for everyone**: author `Delete` and separately typed `ModerationDelete` (§30.2) reference `message_id`; recipients show the correct author/moderator tombstone. Best effort: modified clients or previously saved copies can retain content.
 - **Receipts**: `ReceiptMessage{type: DELIVERY | READ | VIEWED, message_ids[]}` sent 1:1 (also in groups: sent as an MLS application message only if group size ≤ 100; above that, delivery receipts are suppressed to limit traffic).
 
@@ -1302,7 +1302,8 @@ Signed by the server's policy key and delivered to clients via `Directive{POLICY
   "version": 12,
   "messaging": {
     "disappearing": { "default_seconds": 604800, "min_seconds": 3600, "max_seconds": 2419200, "user_can_disable": false },
-    "edit_window_seconds": 86400,
+    "edit_window_seconds": 900,
+    "channel_edit_window_seconds": 2592000,
     "delete_window_seconds": 86400,
     "max_attachment_bytes": 104857600,
     "link_previews": false
