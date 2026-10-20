@@ -116,6 +116,10 @@ class LockManager(private val activity: FragmentActivity) {
         Text("Sign in without a password. Passkeys are managed by your organization’s sign-in service; Convo never sees them. A passkey is required to turn on app and chat locks.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(when (state) { "loading" -> "Checking…"; "true" -> "Passkey set up"; "false" -> "No passkey yet"; else -> "Status unavailable right now" })
+        if (state == "false") {
+            Text("Turn on passwordless sign-in to create a passkey with your organization’s sign-in service. Return here when it’s done.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button({ app.openPasskeySetup() }) { Text("Turn on passwordless sign-in") }
+        }
         OutlinedButton({ app.openAccountSecurity() }) { Text("Manage passkeys") }
         PrivacySwitch("App lock", when {
             locks.appLock -> "Convo asks for your fingerprint or screen lock each time you open it."

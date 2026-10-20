@@ -176,6 +176,24 @@ class MainActivity : FragmentActivity() {
         try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
         catch (_: Exception) { error = "No browser is available to open your account settings." }
     }
+    /**
+     * Keycloak's passkey-registration action (kc_action) in a Custom Tab; it returns to the static
+     * "passkey ready" page. A throwaway PKCE challenge satisfies the client policy; the code is unused.
+     */
+    fun openPasskeySetup() {
+        val random = java.security.SecureRandom()
+        fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        val verifier = ByteArray(32).also(random::nextBytes)
+        val uri = Uri.parse("$server/auth/realms/enclave/protocol/openid-connect/auth").buildUpon()
+            .appendQueryParameter("client_id", "enclave-web").appendQueryParameter("redirect_uri", "$server/auth/convo/passkey-done")
+            .appendQueryParameter("response_type", "code").appendQueryParameter("scope", "openid")
+            .appendQueryParameter("kc_action", "webauthn-register-passwordless")
+            .appendQueryParameter("state", b64(ByteArray(16).also(random::nextBytes)))
+            .appendQueryParameter("code_challenge", b64(java.security.MessageDigest.getInstance("SHA-256").digest(verifier)))
+            .appendQueryParameter("code_challenge_method", "S256").build()
+        try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
+        catch (_: Exception) { error = "No browser is available to set up a passkey." }
+    }
     override fun onStop() { super.onStop(); locks.onBackground() }
     override fun onResume() { super.onResume(); if (phase == "ready") refreshCredentialStatus() }
     /** Updates lock eligibility. An unavailable IdP answer keeps the last confirmed value. */

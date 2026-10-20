@@ -8,3 +8,7 @@
 Accessibility baseline: semantic landmarks, labelled controls, visible focus, `role="log"` for
 messages, `aria-live` for typing/status, ≥ 44 px targets, keyboard-reachable message actions
 (they appear on hover *and* focus).
+
+`chatLocks.tsx` + `passkeyUnlock.ts`: chats that require the account's passkey (WebAuthn user
+verification for this origin's RP ID) to open on this device. Locked chat IDs live in the
+device-local encrypted settings; Android keeps its own list behind BiometricPrompt.

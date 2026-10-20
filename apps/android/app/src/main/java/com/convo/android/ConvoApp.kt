@@ -205,7 +205,7 @@ import org.json.JSONObject
 
 @Composable fun ConversationQuickMenu(app: MainActivity, conversation: JSONObject) {
     var open by remember { mutableStateOf(false) }
-    Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.KeyboardArrowDown, "Chat options") }
+    Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "Chat options") }
         DropdownMenu(open, { open = false }) { ConversationMenuItems(app, conversation) { open = false } }
     }
 }
@@ -218,7 +218,7 @@ import org.json.JSONObject
     var confirm by remember { mutableStateOf("") }
     listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
     val chatLocked = app.locks.locked(c.optString("id"))
-    if (chatLocked || app.locks.passkey == true) DropdownMenuItem(text = { Text(if (chatLocked) "Unlock chat" else "Lock chat") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) }, onClick = {
+    if (chatLocked || app.locks.passkey == true) DropdownMenuItem(text = { Text(if (chatLocked) "Stop requiring authentication" else "Require authentication to open") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) }, onClick = {
         close(); app.locks.setChatLocked(c.optString("id"), !chatLocked) { app.notice = if (chatLocked) "Chat unlocked" else "Chat locked"; if (!chatLocked && app.route != "list") app.back() }
     })
     DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })

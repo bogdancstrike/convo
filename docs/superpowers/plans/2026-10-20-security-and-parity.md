@@ -75,7 +75,8 @@ conversation-lock work.
 
 Done: read-only credential-status service account and endpoint, web/Android Manage passkeys,
 Android BiometricPrompt app lock and chat locks with list/search/media/gallery exclusion.
-Remaining: web screen lock, physical-device biometric checks.
+Web chat locks use passkey user verification (2026-10-21). Remaining: web app-wide screen lock,
+physical-device biometric checks.
 
 
 - Keycloak owns passwordless enrollment; Android owns fingerprint/device PIN. Never obtain/store

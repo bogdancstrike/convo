@@ -34,6 +34,11 @@ import org.json.JSONObject
         item { ActionRow("Media, links and docs", icon = Icons.Outlined.PermMedia) { app.route = "media" } }
         item { ActionRow("Starred messages", icon = Icons.Outlined.StarOutline) { app.route = "starred" } }
         item { ActionRow("Chat background", icon = Icons.Outlined.Palette) { app.route = "appearance" } }
+        // Per-chat "require authentication", same control as the chat ⋮ menu (all chat types).
+        if (app.locks.locked(id) || app.locks.passkey == true) item {
+            PrivacySwitch("Require authentication to open", "Fingerprint, face or screen lock. The chat is hidden from the chat list, search, media and gallery saving until you confirm.",
+                app.locks.locked(id)) { lock -> app.locks.setChatLocked(id, lock) { app.notice = if (lock) "Chat locked" else "Chat unlocked" } }
+        }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { ConversationQuickMenu(app, c) } }
         item { var export by remember { mutableStateOf(false) }; ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }; if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) } }
         if (isGroup) {

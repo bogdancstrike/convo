@@ -47,6 +47,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   APK replacement keeps locks.
 - Android voice notes: mic ↔ send composer, pause/resume, 15-min cap, Opus/OGG (AAC fallback
   below Android 10), "Voice message · duration" tiles. Sent and replayed on emulator-5554.
+- Passwordless from Settings (web + Android): Keycloak `webauthn-register-passwordless` action in
+  a new tab / Custom Tab, returning to `/auth/convo/passkey-done`. With a passkey, any chat (direct,
+  group, Note to self, channel) can require authentication to open from the chat list's ⋮ menu
+  (replaces the arrow), the chat menu and chat info. Web verifies with the passkey (WebAuthn user
+  verification); Android with fingerprint/face/screen lock. `chat-lock.spec.ts` (Chromium virtual
+  authenticator on convo.doncea.ro); emulator: ⋮ lock and info-page unlock verified.
 - Still open: full localization, cross-message viewer navigation,
   web screen lock, background call ringing (push), remaining UI parity and legacy-origin migration.
 
