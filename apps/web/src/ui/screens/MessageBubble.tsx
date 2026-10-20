@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { EnclaveClient } from '../../core/client';
 import { timerLabel } from './TimerNotice';
+import { useMentionLabels } from '../mentions';
 import type { ChatMessage, MessageStatus } from '../../core/model';
 import { AttachmentView } from '../components/AttachmentView';
 import { Avatar } from '../components/Avatar';
@@ -56,6 +57,7 @@ export function MessageBubble({
   const own = m.authorId === client.accountId;
   const system = m.deleted || m.unsupported || m.undecryptable;
   const author = useAccountLabel(client, group && !own && first ? m.authorId : undefined);
+  const mentionLabels = useMentionLabels(client, m.mentions);
 
   const startPress = () => {
     pressTimer.current = setTimeout(() => setMenu(true), LONG_PRESS_MS);
@@ -120,7 +122,7 @@ export function MessageBubble({
               {m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}
               {m.body && (
                 <span data-testid="message-body">
-                  <FormattedText text={m.body} highlight={highlight} />
+                  <FormattedText text={m.body} highlight={highlight} mentions={mentionLabels} />
                 </span>
               )}
             </>

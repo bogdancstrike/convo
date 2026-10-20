@@ -472,6 +472,8 @@ export const en = {
   'block.unblock': 'Unblock',
   'block.confirm': 'Block {name}? Their messages and calls will no longer reach you, and they won’t be told.',
   'block.banner': 'You blocked {name}.',
+  'mention.suggestions': 'Mention a member',
+  'mention.badge': 'You were mentioned',
   'settings.chats.hint': 'Theme, language, Enter to send',
   'settings.privacy.hint': 'Passwordless sign-in, chat locks, receipts',
   'settings.devices.hint': 'Linked devices and link requests',

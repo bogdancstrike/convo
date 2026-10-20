@@ -46,6 +46,8 @@ export interface ChatMessage {
   editedAt?: number;
   /** Disappearing-message timer (seconds) the sender applied. */
   expireTimer?: number;
+  /** Mentioned account IDs (groups). */
+  mentions?: string[];
   /** Deadline after which this device deletes the message. */
   expiresAt?: number;
   /** System notice instead of content (e.g. disappearing timer changed). */
@@ -78,6 +80,8 @@ export interface Conversation {
   lastActivity: number;
   preview?: string;
   unread: number;
+  /** An unread message mentions this account (cleared when read). */
+  mentioned?: boolean;
   /** Direct chat: this account blocked the peer (their direct content is dropped on arrival). */
   blocked?: boolean;
   /** When `blocked` last changed (last writer wins across own devices). */

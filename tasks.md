@@ -75,6 +75,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   receipts, sending/calling is refused, banner offers Unblock; flag travels with the encrypted
   conversation archive (last change wins). Conversation updates are now serialized with envelope
   processing (fixed a lost-update race). `blocking.spec.ts` Chromium/Firefox; emulator checked.
+- @mentions in groups (FEAT-02): composer suggestions (keyboard/touch), structured mention IDs
+  in E2EE content (members only), highlighted mentions, @ badge until read. Web and Android;
+  `mentions.spec.ts` Chromium/Firefox; Android→web mention verified (badge + highlight).
+  Fixed caret placement after picking a suggestion on both clients.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 

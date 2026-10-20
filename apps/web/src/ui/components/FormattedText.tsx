@@ -30,36 +30,45 @@ function marked(text: string, highlight: string | undefined, key: string): React
   return parts;
 }
 
-function linked(text: string, highlight: string | undefined, key: string): ReactNode {
+/** Highlights `@Label` tokens of structured mentions (labels come from the message's mention IDs). */
+function withMentions(text: string, highlight: string | undefined, key: string, mentions: string[]): ReactNode {
+  if (!mentions.length) return marked(text, highlight, key);
+  const pattern = new RegExp(`(${mentions.map((m) => `@${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('|')})`, 'gu');
+  return text.split(pattern).map((part, i) => mentions.includes(part.slice(1)) && part.startsWith('@')
+    ? <span key={`${key}-m${i}`} className="mention" data-testid="mention">{part}</span>
+    : <Fragment key={`${key}-m${i}`}>{marked(part, highlight, `${key}-m${i}`)}</Fragment>);
+}
+
+function linked(text: string, highlight: string | undefined, key: string, mentions: string[] = []): ReactNode {
   return text.split(LINK_PATTERN).map((part, i) => {
-    if (!/^(https?:\/\/|www\.)/i.test(part)) return <Fragment key={i}>{marked(part, highlight, `${key}-${i}`)}</Fragment>;
+    if (!/^(https?:\/\/|www\.)/i.test(part)) return <Fragment key={i}>{withMentions(part, highlight, `${key}-${i}`, mentions)}</Fragment>;
     const link = trimLink(part);
     return <Fragment key={i}><ExternalLink href={link}>{marked(link, highlight, `${key}-${i}`)}</ExternalLink>{part.slice(link.length)}</Fragment>;
   });
 }
 
-function inline(text: string, keyPrefix: string, highlight?: string): ReactNode[] {
+function inline(text: string, keyPrefix: string, highlight?: string, mentions: string[] = []): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     const key = `${keyPrefix}-${i}`;
     if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) return <code key={key} className="inline">{part.slice(1, -1)}</code>;
-    if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) return <strong key={key}>{linked(part.slice(1, -1), highlight, key)}</strong>;
-    if (part.length > 2 && part.startsWith('_') && part.endsWith('_')) return <em key={key}>{linked(part.slice(1, -1), highlight, key)}</em>;
-    return <Fragment key={key}>{linked(part, highlight, key)}</Fragment>;
+    if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) return <strong key={key}>{linked(part.slice(1, -1), highlight, key, mentions)}</strong>;
+    if (part.length > 2 && part.startsWith('_') && part.endsWith('_')) return <em key={key}>{linked(part.slice(1, -1), highlight, key, mentions)}</em>;
+    return <Fragment key={key}>{linked(part, highlight, key, mentions)}</Fragment>;
   });
 }
 
-export function FormattedText({ text, highlight }: { text: string; highlight?: string }) {
+export function FormattedText({ text, highlight, mentions = [] }: { text: string; highlight?: string; mentions?: string[] }) {
   const lines = text.split('\n');
   return (
     <>
       {lines.map((line, i) => {
         const last = i === lines.length - 1;
         if (line.startsWith('> ')) {
-          return <blockquote key={i} className="fmt">{inline(line.slice(2), `q${i}`, highlight)}</blockquote>;
+          return <blockquote key={i} className="fmt">{inline(line.slice(2), `q${i}`, highlight, mentions)}</blockquote>;
         }
         return (
           <Fragment key={i}>
-            {inline(line, `l${i}`, highlight)}
+            {inline(line, `l${i}`, highlight, mentions)}
             {!last && '\n'}
           </Fragment>
         );

@@ -269,7 +269,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const unread = conversation.unread ? (await this.repos.messages(conversationId, conversation.unread + 50)).filter((m) => !m.notice).slice(-conversation.unread) : [];
     // Messages edited after they were read need a read receipt for their new revision too.
     const revisedMessages = await Promise.all((conversation.revisedUnread ?? []).map((r) => this.repos.message(conversationId, r.authorId, r.id)));
-    await this.saveConversations([{ ...conversation, unread: 0, revisedUnread: undefined }]);
+    await this.saveConversations([{ ...conversation, unread: 0, revisedUnread: undefined, mentioned: undefined }]);
     const started = unread.filter((m) => m.direction === 'in' && m.expireTimer && !m.expiresAt).map((m) => startExpiry(m, Date.now()));
     if (started.length) await this.repos.store.commit(started.flatMap((m) => [this.repos.putMessage(m), expiryOp(m)!]));
     if (this.currentSettings.readReceipts && conversation.kind !== 'note') {
@@ -340,8 +340,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    *
    * @throws Error if the body is empty or exceeds 64 KiB
    */
-  async sendText(conversationId: string, body: string, quote?: Quote): Promise<void> {
-    await this.sendMessage(conversationId, { body, quote });
+  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[]): Promise<void> {
+    await this.sendMessage(conversationId, { body, quote, mentions });
   }
 
   /**
@@ -422,7 +422,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[] },
   ): Promise<void> {
     const text = content.body?.trim() || undefined;
     if (!text && !content.attachments?.length) throw new Error('empty message');
@@ -441,6 +441,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       forwarded: content.forwarded || undefined,
       profile: this.profileCache.get(this.accountId),
       expireTimer: this.conversationCache.get(conversationId)?.expireSeconds || undefined,
+      // Mentions only make sense in groups and only for current members.
+      mentions: group && content.mentions?.length ? [...new Set(content.mentions)].filter((id) => recipients.includes(id)).slice(0, 50) : undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -458,6 +460,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       reactions: {},
       expireTimer: data.expireTimer,
       expiresAt: data.expireTimer ? data.timestamp + data.expireTimer * 1000 : undefined,
+      mentions: data.mentions,
     };
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
@@ -1035,7 +1038,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         }
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
-          if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined });
+          if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined, mentioned: undefined });
         }
         return followUps;
       }
@@ -1214,8 +1217,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       status: direction === 'out' ? 'sent' : undefined,
       reactions: {},
       expireTimer: data.expireTimer || undefined,
+      mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
     };
     const visible = this.activeConversation === conversation.id && document.visibilityState === 'visible';
+    const mentionsMe = direction === 'in' && !visible && !!message.mentions?.includes(this.accountId);
     // Own messages count down from sending; received ones from being read on this device.
     const timed = direction === 'out' ? (message.expireTimer ? { ...message, expiresAt: data.timestamp + message.expireTimer * 1000 } : message)
       : visible ? startExpiry(message, Date.now()) : message;
@@ -1229,6 +1234,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       previewAuthor: authorId,
       archived: conversation.archived && conversation.muted,
       unread: direction === 'in' && !visible ? conversation.unread + 1 : conversation.unread,
+      mentioned: conversation.mentioned || mentionsMe || undefined,
     });
     return 'new';
   }

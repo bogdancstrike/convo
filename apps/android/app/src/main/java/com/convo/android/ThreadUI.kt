@@ -10,6 +10,7 @@ import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
@@ -84,14 +85,28 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 else Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                     quote?.let { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("Reply: ${it.optString("excerpt")}", Modifier.weight(1f), maxLines = 2); IconButton({ quote = null }) { Icon(Icons.Outlined.Close, "Cancel reply") } } }
                     var voice by remember(id) { mutableStateOf(false) }
+                    // Caret position (coerced to the text): moves to the end after inserting a mention.
+                    var selection by remember(id) { mutableStateOf(androidx.compose.ui.text.TextRange(input.length)) }
+                    // @mentions (groups): suggestions for the trailing `@query`, picked members sent as IDs.
+                    var members by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
+                    val picked = remember(id) { mutableStateListOf<JSONObject>() }
+                    LaunchedEffect(id) { if (id.startsWith("g:")) app.call("memberLabels", obj("id" to id), quiet = true) { v -> members = (v as? org.json.JSONArray)?.objects().orEmpty() } }
+                    val mentionQuery = Regex("(^|\\s)@([^\\s@]{0,32})$").find(input)?.groupValues?.get(2)
+                    val suggestions = if (mentionQuery == null) emptyList() else members.filter { m -> m.optString("label").lowercase().split(" ").any { it.startsWith(mentionQuery.lowercase()) } }.take(5)
+                    if (suggestions.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        suggestions.forEach { m -> AssistChip({ input = input.dropLast(mentionQuery!!.length + 1) + "@${m.optString("label")} "; selection = androidx.compose.ui.text.TextRange(input.length); picked.removeAll { it.optString("accountId") == m.optString("accountId") }; picked.add(m) },
+                            label = { RawText("@${m.optString("label")}") }) }
+                    }
                     Row(Modifier.fillMaxWidth().padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (!voice) {
                             IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file") }
-                            OutlinedTextField(input, { input = it }, placeholder = { Text("Type a message") }, modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(24.dp))
+                            OutlinedTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> input = v.text; selection = v.selection }, placeholder = { Text("Type a message") }, modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(24.dp))
                         } else Spacer(Modifier.weight(1f))
                         // One VoiceComposer instance for the whole recording (recomposition must not cancel it).
                         if (voice || input.isBlank()) VoiceComposer(app, id) { voice = it }
-                        else IconButton(onClick = { app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote)) { if (it != null) { input = ""; quote = null } } }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
+                        else IconButton(onClick = {
+                            val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
+                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions)) { if (it != null) { input = ""; quote = null; picked.clear() } } }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
                     }
                 }
             }
@@ -111,7 +126,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
-                    if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"))
+                    if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty())
                     message.optJSONArray("attachments")?.objects()?.forEachIndexed { index, a ->
                         AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
                     }
@@ -146,11 +161,19 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     if (delete) AlertDialog(onDismissRequest = { delete = false }, title = { Text("Delete message?") }, text = { Text("Choose whether to remove your local copy or delete your message for everyone.") }, confirmButton = { Column { if (outgoing) TextButton({ app.call("deleteMessage", message.targetArgs(conversation).put("everyone", true)); delete = false }) { Text("Delete for everyone") }; TextButton({ app.call("deleteMessage", message.targetArgs(conversation).put("everyone", false)); delete = false }) { Text("Delete for me") } } }, dismissButton = { TextButton({ delete = false }) { Text("Cancel") } })
     if (forwarding) AlertDialog(onDismissRequest = { forwarding = false }, title = { Text("Forward to") }, text = { LazyColumn { items(app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { !app.locks.locked(it.optString("id")) }) { c -> TextButton({ app.call("forward", message.targetArgs(conversation).put("destination", c.optString("id"))); forwarding = false }) { Text(c.optString("title")) } } } }, confirmButton = { TextButton({ forwarding = false }) { Text("Cancel") } })
 }
-@Composable fun LinkedBody(app: MainActivity, body: String) {
+@Composable fun LinkedBody(app: MainActivity, body: String, mentions: List<String> = emptyList()) {
     var external by remember { mutableStateOf<String?>(null) }
     val pattern = remember { Regex("https?://[^\\s<>]+|www\\.[^\\s<>]+", RegexOption.IGNORE_CASE) }
     val links = pattern.findAll(body).map { it.value.trimEnd('.', ',', ';', '!', '?', ')', ']', '}') }.toList()
-    SelectionContainer { RawText(body) }
+    // @mentions are highlighted; the labels come from the message's structured mention IDs.
+    val accent = MaterialTheme.colorScheme.primary
+    val annotated = remember(body, mentions) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            append(body)
+            mentions.forEach { label -> var at = body.indexOf("@$label"); while (at >= 0) { addStyle(androidx.compose.ui.text.SpanStyle(color = accent, fontWeight = FontWeight.SemiBold), at, at + label.length + 1); at = body.indexOf("@$label", at + 1) } }
+        }
+    }
+    SelectionContainer { androidx.compose.material3.Text(annotated) }
     links.forEach { text -> val target = if (text.startsWith("www.")) "https://$text" else text
         val uri = Uri.parse(target)
         if (uri.scheme in listOf("https", "http") && uri.userInfo == null) TextButton(onClick = { if (app.snapshot.optJSONObject("settings")?.optBoolean("confirmExternalLinks", true) != false) external = target else app.startActivity(Intent(Intent.ACTION_VIEW, uri)) }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Outlined.OpenInNew, null, Modifier.size(16.dp)); Text("Open $text", maxLines = 2) }

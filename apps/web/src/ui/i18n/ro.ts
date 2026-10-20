@@ -474,6 +474,8 @@ export const ro: Record<MessageKey, string> = {
   'block.unblock': 'Deblochează',
   'block.confirm': 'Blochezi pe {name}? Mesajele și apelurile sale nu te vor mai ajunge, iar persoana nu va fi anunțată.',
   'block.banner': 'Ai blocat contactul {name}.',
+  'mention.suggestions': 'Menționează un membru',
+  'mention.badge': 'Te-a menționat cineva',
   'settings.chats.hint': 'Temă, limbă, Enter pentru trimitere',
   'settings.privacy.hint': 'Autentificare fără parolă, conversații blocate, confirmări',
   'settings.devices.hint': 'Dispozitive conectate și cereri de conectare',

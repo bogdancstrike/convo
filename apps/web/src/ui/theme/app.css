@@ -820,6 +820,7 @@ select {
   min-height: 18px;
 }
 .composer {
+  position: relative;
   background: var(--c-panel);
   padding: var(--space-2) var(--space-3);
   display: grid;
@@ -2259,3 +2260,11 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .system-notice { align-self: center; display: inline-flex; align-items: center; gap: 6px; margin: var(--space-2) auto; padding: 4px 12px;
   border-radius: 8px; background: var(--c-panel); color: var(--c-text-secondary); font-size: 0.8125rem; text-align: center; max-width: 80%; }
 .settings-row-switch.disappearing strong { display: inline-flex; align-items: center; gap: 6px; }
+
+/* @mentions */
+.mention { color: var(--c-accent-text); font-weight: 600; }
+.mention-suggestions { position: absolute; bottom: calc(100% + 6px); left: 48px; z-index: 20; list-style: none; margin: 0; padding: 4px; min-width: 200px;
+  background: var(--c-panel-raised); border: 1px solid var(--c-border); border-radius: 10px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); }
+.mention-suggestions button { width: 100%; text-align: left; padding: 8px 12px; border: 0; border-radius: 6px; background: none; color: var(--c-text-primary); cursor: pointer; }
+.mention-suggestions li[aria-selected='true'] button, .mention-suggestions button:hover { background: var(--c-hover); }
+.chat-mention-badge { color: var(--c-accent-text); font-weight: 700; margin-right: 4px; }

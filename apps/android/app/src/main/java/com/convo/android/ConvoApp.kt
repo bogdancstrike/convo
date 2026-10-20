@@ -188,6 +188,7 @@ import org.json.JSONObject
                     RawText(c.optString("preview").let { p -> if (p in setOf("📷 Photo", "🎤 Voice message", "📎 File")) tr(p) else p }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (c.optBoolean("pinned")) Icon(Icons.Outlined.PushPin, "Pinned", Modifier.size(16.dp))
+                if (c.optBoolean("mentioned") && c.optInt("unread") > 0) RawText("@ ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 if (c.optInt("unread") > 0) Badge { Text(c.optInt("unread").toString()) }
                 ConversationQuickMenu(app, c)
             }

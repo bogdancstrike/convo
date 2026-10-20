@@ -39,7 +39,9 @@ async function snapshot() {
   if (!client) return;
   emit('snapshot', { accountId: client.accountId, device: client.device, conversations: client.conversations(),
     limits: { attachmentMaxBytes: MAX_ATTACHMENT_BYTES }, settings: client.settings, history: client.historyStatus, connection: client.socket.state,
-    profiles: Object.fromEntries(client.profiles()), active, messages: active ? (await client.messages(active, 1000)).map(publicMessage) : [] });
+    profiles: Object.fromEntries(client.profiles()), active, messages: active ? await Promise.all((await client.messages(active, 1000)).map(async (m) => ({
+      ...publicMessage(m), mentionLabels: m.mentions?.length ? await Promise.all(m.mentions.map((id) => client!.displayName(id))) : undefined,
+    }))) : [] });
 }
 const refresh = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void snapshot().catch(() => undefined), 60); };
 async function startClient() {
@@ -126,7 +128,11 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'directory': return client.searchDirectory(String(args.query));
     case 'account': return client.account(String(args.id));
     case 'newChat': { const account = args.id === client.accountId ? { accountId: client.accountId, username: client.device.username, displayName: client.device.displayName } : await client.account(args.id); if (!account) throw new Error('account unavailable'); return client.openConversation(account); }
-    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote);
+    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined);
+    case 'memberLabels': {
+      const record = await client.groupRecord(String(args.id));
+      return Promise.all((record?.members ?? []).filter((m) => m.accountId !== client!.accountId).map(async (m) => ({ accountId: m.accountId, label: await client!.displayName(m.accountId) })));
+    }
     case 'attach': {
       const bytes = fromBase64Url(args.data); const file = new File([bytes], String(args.name), { type: String(args.mime) });
       return args.voice ? client.sendVoiceNote(args.conversationId, file, Number(args.duration)) : client.sendAttachments(args.conversationId, [file], String(args.caption ?? ''));

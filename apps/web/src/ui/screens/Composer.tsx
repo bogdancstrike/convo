@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { activeMentionQuery, mentionsIn, useGroupMembers, useMentionSuggestions, type MentionCandidate } from '../mentions';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { AttachmentRejectedError, MAX_ATTACHMENT_BYTES } from '../../core/attachments';
 import { EditNotAllowedError, type EnclaveClient } from '../../core/client';
 import type { ChatMessage, Conversation } from '../../core/model';
@@ -51,6 +52,12 @@ export function Composer({
 }) {
   const { t } = useI18n();
   const [text, setText] = useState(conversation.draft ?? '');
+  // @mentions (groups): suggestions for the `@query` at the caret, and the members picked so far.
+  const members = useGroupMembers(client, conversation.id);
+  const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
+  const [picked, setPicked] = useState<MentionCandidate[]>([]);
+  const [highlighted, setHighlighted] = useState(0);
+  const suggestions = useMentionSuggestions(members, mentionQuery?.query ?? null);
   const [caption, setCaption] = useState('');
   const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +132,8 @@ export function Composer({
           current?.kind === 'reply'
             ? { messageId: current.target.id, authorId: current.target.authorId, excerpt: (current.target.body ?? '').slice(0, 120) }
             : undefined;
-        await client.sendText(conversation.id, body, quote);
+        await client.sendText(conversation.id, body, quote, mentionsIn(body, picked));
+        setPicked([]);
       }
       void client.sendTyping(conversation.id, 'stopped');
     } catch (e) {
@@ -151,6 +159,11 @@ export function Composer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggestions.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setHighlighted((h) => (h + (e.key === 'ArrowDown' ? 1 : suggestions.length - 1)) % suggestions.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(suggestions[highlighted] ?? suggestions[0]!); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); return; }
+    }
     // IME composition Enter never sends (UI.md §5.3).
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && client.settings.enterToSend) {
       e.preventDefault();
@@ -161,8 +174,26 @@ export function Composer({
     }
   };
 
+  const pickMention = (member: MentionCandidate) => {
+    if (!mentionQuery) return;
+    const caret = textarea.current?.selectionStart ?? text.length;
+    const next = `${text.slice(0, mentionQuery.start)}@${member.label} ${text.slice(caret)}`;
+    pendingCaret.current = mentionQuery.start + member.label.length + 2;
+    setText(next); setPicked((p) => [...p.filter((m) => m.accountId !== member.accountId), member]); setMentionQuery(null);
+  };
+  // Applied synchronously after the text update, before any further keystroke is handled.
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null) return;
+    textarea.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    textarea.current?.focus();
+    pendingCaret.current = null;
+  }, [text]);
+
   const onChange = (value: string) => {
     setText(value);
+    setMentionQuery(members.length ? activeMentionQuery(value, textarea.current?.selectionStart ?? value.length) : null);
+    setHighlighted(0);
     if (value && Date.now() - typingSent.current > 5000) {
       typingSent.current = Date.now();
       void client.sendTyping(conversation.id, 'started');
@@ -296,6 +327,15 @@ export function Composer({
             <label className="visually-hidden" htmlFor="composer">
               {t('thread.placeholder')}
             </label>
+            {suggestions.length > 0 && (
+              <ul className="mention-suggestions" role="listbox" aria-label={t('mention.suggestions')} data-testid="mention-suggestions">
+                {suggestions.map((m, i) => (
+                  <li key={m.accountId} role="option" aria-selected={i === highlighted}>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pickMention(m)} data-testid={`mention-${m.label}`}>@{m.label}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <textarea
               id="composer"
               ref={textarea}

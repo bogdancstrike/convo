@@ -181,9 +181,10 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
             {isMuted(c) && <Icon name="mute" size={16} label={t('chats.mute')} />}
             {c.pinned && <Icon name="pin" size={16} label={t('chats.pinned')} />}
             {c.unread > 0 && (
+              <>{c.mentioned && <span className="chat-mention-badge" aria-label={t('mention.badge')} data-testid="mention-badge">@</span>}
               <span className="badge" aria-label={t('chats.unread', { count: c.unread })}>
                 {c.unread}
-              </span>
+              </span></>
             )}
           </span>
         </span>
