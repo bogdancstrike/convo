@@ -57,12 +57,24 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Cross-tab leader lock (Web Locks, "Use here"), revoked/storage-lost/update/unreachable states | |
 | ✅ | Strict CSP + security headers, same-origin nginx proxy | |
 
+## Device linking (ID-02)
+
+| Status | Item | Notes |
+|---|---|---|
+| ✅ | Provisioning sessions: E2EE ProvisionMessage relay, single-use code hash, expiry, cancel/decline | |
+| ✅ | `POST /v1/devices/link`: Keycloak token **and** approving-device code required; IK must match account | |
+| ✅ | X25519 → HKDF → AES-GCM channel bound to `ENCLAVE-PROVISION-V1` transcript (AAD) | WebCrypto X25519 |
+| ✅ | 12-digit comparison code on both screens; approve/decline in Settings | QR scan alternative pending |
+| ✅ | Shared enrollment completion path (primary + linked), linked devices get future messages only | history transfer pending (EXT-02) |
+| 🟡 | Own-device notices on link (`DEVICE_LIST_CHANGED` directive refreshes device list) | persistent security notice UI pending |
+
 ## Delivery & verification
 
 | Status | Item | Notes |
 |---|---|---|
 | ✅ | Root `docker-compose.yaml`: Postgres, Valkey, Keycloak (realm import), SeaweedFS, server, web | |
-| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self | 6/6 passing |
+| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self, device linking | 8/8 passing |
+| ✅ | Shared Java/TypeScript contract vectors for device signatures and enrollment transcripts | `contracts/vectors` |
 
 ## Fixed along the way
 
@@ -75,7 +87,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Device linking via QR provisioning (web ↔ web), linked-device sync | ID-02 |
+| QR display/scan for linking, persistent own-device security notices | ID-02 |
 | Encrypted attachments (SeaweedFS presigned URLs), photos, files, voice notes | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
 | Groups (server roster/ACL, ordered group events) and MLS client integration | GRP-01/02/03 |

@@ -4,7 +4,7 @@ Spring Security wiring for the two authentication layers of specs §4.1:
 
 | Chain | Matches | Authentication |
 |---|---|---|
-| `accountChain` (order 1) | `/v1/devices/reservations`, `/v1/devices/primary`, `/v1/devices/link`, `/v1/provisioning/sessions` | Keycloak bearer JWT (`JwtDecoder` with internal JWKS URI + public issuer + optional audience) |
+| `accountChain` (order 1) | `POST /v1/devices/{reservations,primary,link}`, `POST /v1/provisioning/sessions`, `GET`/`DELETE /v1/provisioning/sessions/{id}` (method-specific matchers) | Keycloak bearer JWT (`JwtDecoder` with internal JWKS URI + public issuer + optional audience) |
 | `deviceChain` (order 2) | all other `/v1/**` | `DeviceSignatureFilter` → identity `DeviceRequestAuthenticator`; `/v1/deployment-info` and `/v1/ws` are public (WS uses one-use tickets) |
 | `operationsChain` (order 3) | `/actuator/**` | health/info public, everything else denied |
 

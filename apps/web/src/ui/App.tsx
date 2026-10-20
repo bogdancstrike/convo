@@ -8,10 +8,10 @@ import { enrollPrimary } from '../core/enrollment';
 import { LeaderLock } from '../core/leader';
 import type { Settings } from '../core/model';
 import { browserLocale, I18nProvider, type Locale } from './i18n/i18n';
+import { LinkDeviceScreen } from './screens/LinkDeviceScreen';
 import { MainLayout } from './screens/MainLayout';
 import {
   EnrollingScreen,
-  HasDevicesScreen,
   LoadingScreen,
   OtherTabScreen,
   RevokedScreen,
@@ -88,7 +88,7 @@ export function App() {
         setPhase({ name: 'welcome' });
         return;
       }
-      await enrollPrimary(context.current!.api, token, context.current!.repos, context.current!.signal);
+      await enrollPrimary(context.current!.api, token, context.current!.repos);
       await auth.current!.forget();
       await startClient();
     } catch (error) {
@@ -99,6 +99,13 @@ export function App() {
         setPhase({ name: 'enrolling', failed: true });
       }
     }
+  }, [startClient]);
+
+  const accessToken = useCallback(() => auth.current!.accessToken(), []);
+  const signInAgain = useCallback(() => setPhase({ name: 'welcome' }), []);
+  const onLinked = useCallback(() => {
+    void auth.current?.forget();
+    void startClient();
   }, [startClient]);
 
   const boot = useCallback(async () => {
@@ -173,7 +180,15 @@ export function App() {
           case 'enrolling':
             return <EnrollingScreen failed={phase.failed} onRetry={() => void enroll()} />;
           case 'hasDevices':
-            return <HasDevicesScreen />;
+            return (
+              <LinkDeviceScreen
+                api={context.current!.api}
+                repos={context.current!.repos}
+                accessToken={accessToken}
+                onLinked={onLinked}
+                onSignInAgain={signInAgain}
+              />
+            );
           case 'otherTab':
             return <OtherTabScreen onUseHere={() => void startClient(true)} />;
           case 'revoked':

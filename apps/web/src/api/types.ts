@@ -133,3 +133,35 @@ export interface ServerFrame {
   pong?: Record<string, never>;
   error?: { code: string; detail: string };
 }
+
+export interface ProvisioningOpenResponse {
+  provisioningId: string;
+  reservationId: string;
+  accountId: string;
+  deviceId: number;
+  challenge: string;
+  deploymentId: string;
+  expiresAt: string;
+}
+
+export interface ProvisioningStatusResponse {
+  status: 'pending' | 'approved' | 'completed' | 'cancelled';
+  ephemeralPublicKey?: string;
+  message?: string;
+}
+
+export interface PendingProvisioningDto {
+  provisioningId: string;
+  deviceId: number;
+  ephemeralPublicKey: string;
+  clientLabel: string;
+  challenge: string;
+  deploymentId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface LinkRegistrationRequest extends Omit<PrimaryRegistrationRequest, 'reservationId'> {
+  provisioningId: string;
+  provisioningCode: string;
+}

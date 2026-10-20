@@ -17,6 +17,7 @@ import { Mutex } from '../lib/mutex';
 import { utf8 } from '../lib/bytes';
 import type { StoreOp } from '../storage/encryptedStore';
 import { replenishPreKeys } from './enrollment';
+import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
 import { STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { Outbox, type OutboxItem } from './outbox';
 import type { Repositories } from './repositories';
@@ -313,6 +314,23 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   devices() {
     return this.api.devices();
+  }
+
+  /** Pending requests from new devices that want to join this account. */
+  async incomingLinkRequests(): Promise<IncomingLinkRequest[]> {
+    const pending = await this.api.pendingProvisioning();
+    return Promise.all(pending.map((p) => describeRequest(this.accountId, p)));
+  }
+
+  /** Approves a link request after the user compared the codes on both screens. */
+  async approveLink(request: IncomingLinkRequest): Promise<void> {
+    await approveRequest(this.api, this.signal, this.device, request, this.currentSettings.readReceipts);
+    this.emit('devices', undefined);
+  }
+
+  /** Declines a link request. */
+  async declineLink(provisioningId: string): Promise<void> {
+    await this.api.declineProvisioning(provisioningId);
   }
 
   async unlinkDevice(deviceId: number): Promise<void> {

@@ -92,6 +92,43 @@ final class IdentityDtos {
     /** Claim response. */
     record ClaimResponse(UUID accountId, String identityKey, long deviceListVersion, List<BundleDto> devices) {}
 
+    /** {@code POST /v1/provisioning/sessions} request (new device). */
+    record ProvisioningOpenRequest(@NotBlank String ephemeralPublicKey, @Size(max = 64) String clientLabel) {}
+
+    /** Provisioning session as seen by the new device right after opening it. */
+    record ProvisioningOpenResponse(UUID provisioningId, UUID reservationId, UUID accountId, int deviceId,
+            String challenge, String deploymentId, Instant expiresAt) {}
+
+    /** Polling view for the new device; {@code message} appears once approved. */
+    record ProvisioningStatusResponse(String status, String ephemeralPublicKey, String message) {}
+
+    /** Open session listed to existing devices for comparison and approval. */
+    record PendingProvisioningDto(UUID provisioningId, int deviceId, String ephemeralPublicKey, String clientLabel,
+            String challenge, String deploymentId, Instant createdAt, Instant expiresAt) {}
+
+    /** {@code POST /v1/devices/provisioning-code} request/response. */
+    record ProvisioningCodeRequest(@NotNull UUID provisioningId) {}
+
+    /** Issued single-use code. */
+    record ProvisioningCodeResponse(String code) {}
+
+    /** {@code POST /v1/provisioning/sessions/{id}/message} request. */
+    record ProvisioningMessageRequest(@NotBlank String ephemeralPublicKey, @NotBlank String message) {}
+
+    /** {@code POST /v1/devices/link} request. */
+    record LinkRegistrationRequest(
+            @NotNull UUID provisioningId,
+            @NotBlank String provisioningCode,
+            @NotBlank String identityKey,
+            int registrationId,
+            @NotNull @Valid SignedPreKeyDto signedPreKey,
+            @NotNull @Size(max = 1000) List<@Valid PreKeyDto> preKeys,
+            @NotBlank String signingKey,
+            @NotBlank String signingKeyProfile,
+            @NotBlank String registrationProof,
+            @NotBlank String platform,
+            String nameEnc) {}
+
     /** Public account view. */
     record AccountDto(UUID accountId, String username, String identityKey) {}
 

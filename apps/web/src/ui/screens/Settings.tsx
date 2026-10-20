@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DeviceDto } from '../../api/types';
 import type { EnclaveClient } from '../../core/client';
+import type { IncomingLinkRequest } from '../../core/linking';
 import type { Settings as SettingsModel } from '../../core/model';
 import { useI18n } from '../i18n/i18n';
 
@@ -83,6 +84,8 @@ export function SettingsPane({ client, onSignedOut }: { client: EnclaveClient; o
         </label>
       </section>
 
+      <LinkRequests client={client} />
+
       <section aria-labelledby="devices-title">
         <h3 id="devices-title">{t('settings.devices')}</h3>
         <p className="muted-text">{t('settings.browserTrust')}</p>
@@ -117,5 +120,72 @@ export function SettingsPane({ client, onSignedOut }: { client: EnclaveClient; o
         </button>
       </section>
     </main>
+  );
+}
+
+const LINK_POLL_MS = 3000;
+
+/**
+ * Approving side of device linking (UI.md §4.2): pending requests with the comparison code.
+ * The user approves only after checking the code matches the new device's screen.
+ */
+function LinkRequests({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  const [requests, setRequests] = useState<IncomingLinkRequest[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stopped = false;
+    const load = () =>
+      void client
+        .incomingLinkRequests()
+        .then((r) => !stopped && setRequests(r))
+        .catch(() => undefined);
+    load();
+    const timer = setInterval(load, LINK_POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [client]);
+
+  const act = async (request: IncomingLinkRequest, approve: boolean) => {
+    setBusy(request.provisioningId);
+    try {
+      if (approve) await client.approveLink(request);
+      else await client.declineLink(request.provisioningId);
+      setRequests((r) => r.filter((x) => x.provisioningId !== request.provisioningId));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section aria-labelledby="link-requests-title">
+      <h3 id="link-requests-title">{t('link.requests.title')}</h3>
+      {requests.length === 0 ? (
+        <p className="muted-text">{t('link.requests.none')}</p>
+      ) : (
+        requests.map((r) => (
+          <div key={r.provisioningId} className="device-row" data-testid="link-request">
+            <div>
+              <strong>{t('link.requests.prompt', { label: r.label })}</strong>
+              <div className="muted-text">{t('link.requests.compare')}</div>
+              <div className="safety-number" data-testid="link-request-code">
+                {r.code}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <button className="btn btn-primary" disabled={busy !== null} onClick={() => void act(r, true)}>
+                {t('link.requests.approve')}
+              </button>
+              <button className="btn" disabled={busy !== null} onClick={() => void act(r, false)}>
+                {t('link.requests.decline')}
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </section>
   );
 }

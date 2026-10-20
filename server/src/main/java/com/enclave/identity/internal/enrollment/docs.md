@@ -1,7 +1,9 @@
 # `identity.internal.enrollment`
 
-First-device enrollment (specs §4.3, §27.1; task ID-01). Linking additional devices (ID-02)
-will add a `LinkService` here that reuses reservations with `purpose = link`.
+Device enrollment (specs §4.3–4.4, §27.1; tasks ID-01/02): first-device (`registerPrimary`) and
+linked-device (`registerLinked`, authorized by `provisioning.ProvisioningService`) registration.
+Both share `complete(...)`; `EnrollmentKeys` is the common key-material interface implemented by
+`PrimaryRegistration` and `LinkRegistration`.
 
 Flow:
 
@@ -15,3 +17,7 @@ Flow:
 
 A retry after an uncertain response with the same signing key returns the original result; a
 different key on a consumed reservation is rejected (no duplicate devices from repeated taps).
+
+Linking differs in two checks: the reservation purpose is `link`, the submitted identity key must
+equal the account's existing identity key (shared IK, specs §3.3), and the provisioning session
+must be approved with a matching single-use code.

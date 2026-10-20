@@ -3,6 +3,10 @@ import type {
   AccountDto,
   ClaimResponse,
   DeviceDto,
+  LinkRegistrationRequest,
+  PendingProvisioningDto,
+  ProvisioningOpenResponse,
+  ProvisioningStatusResponse,
   PreKeyDto,
   PrimaryRegistrationRequest,
   RegistrationResponse,
@@ -33,6 +37,42 @@ export class EnclaveApi {
 
   registerPrimary(token: string, request: PrimaryRegistrationRequest): Promise<RegistrationResponse> {
     return this.http.bearer('POST', '/v1/devices/primary', token, request);
+  }
+
+  // --- linking: new device (Keycloak bearer) -----------------------------------------------
+
+  openProvisioning(token: string, ephemeralPublicKey: string, clientLabel: string): Promise<ProvisioningOpenResponse> {
+    return this.http.bearer('POST', '/v1/provisioning/sessions', token, { ephemeralPublicKey, clientLabel });
+  }
+
+  provisioningStatus(token: string, provisioningId: string): Promise<ProvisioningStatusResponse> {
+    return this.http.bearer('GET', `/v1/provisioning/sessions/${encodeURIComponent(provisioningId)}`, token);
+  }
+
+  cancelProvisioning(token: string, provisioningId: string): Promise<void> {
+    return this.http.bearer('DELETE', `/v1/provisioning/sessions/${encodeURIComponent(provisioningId)}`, token);
+  }
+
+  linkDevice(token: string, request: LinkRegistrationRequest): Promise<RegistrationResponse> {
+    return this.http.bearer('POST', '/v1/devices/link', token, request);
+  }
+
+  // --- linking: approving device (device-signed) --------------------------------------------
+
+  pendingProvisioning(): Promise<PendingProvisioningDto[]> {
+    return this.signed('GET', '/v1/provisioning/sessions');
+  }
+
+  provisioningCode(provisioningId: string): Promise<{ code: string }> {
+    return this.signed('POST', '/v1/devices/provisioning-code', { provisioningId });
+  }
+
+  deliverProvisioning(provisioningId: string, ephemeralPublicKey: string, message: string): Promise<void> {
+    return this.signed('POST', `/v1/provisioning/sessions/${encodeURIComponent(provisioningId)}/message`, { ephemeralPublicKey, message });
+  }
+
+  declineProvisioning(provisioningId: string): Promise<void> {
+    return this.signed('DELETE', `/v1/provisioning/sessions/${encodeURIComponent(provisioningId)}/approval`);
   }
 
   // --- device-signed ------------------------------------------------------------------------

@@ -61,15 +61,6 @@ export function EnrollingScreen({ failed, onRetry }: { failed: boolean; onRetry:
   );
 }
 
-export function HasDevicesScreen() {
-  const { t } = useI18n();
-  return (
-    <Screen title={t('enroll.hasDevices.title')}>
-      <p>{t('enroll.hasDevices.body')}</p>
-    </Screen>
-  );
-}
-
 export function OtherTabScreen({ onUseHere }: { onUseHere: () => void }) {
   const { t } = useI18n();
   return (

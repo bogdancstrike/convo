@@ -23,6 +23,9 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.preauth.AbstractPreAuthenticatedProcessingFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -42,10 +45,17 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration(proxyBeanMethods = false)
 class SecurityConfig {
 
-    /** Routes authenticated by Keycloak bearer tokens. */
-    static final String[] ACCOUNT_ROUTES = {
-        "/v1/devices/reservations", "/v1/devices/primary", "/v1/devices/link", "/v1/provisioning/sessions"
-    };
+    /**
+     * Routes authenticated by Keycloak bearer tokens (enrollment and the new-device side of
+     * linking). Method-specific because the existing-device side of linking shares paths.
+     */
+    static final RequestMatcher ACCOUNT_ROUTES = new OrRequestMatcher(
+            route(HttpMethod.POST, "/v1/devices/reservations"),
+            route(HttpMethod.POST, "/v1/devices/primary"),
+            route(HttpMethod.POST, "/v1/devices/link"),
+            route(HttpMethod.POST, "/v1/provisioning/sessions"),
+            route(HttpMethod.GET, "/v1/provisioning/sessions/{provisioningId}"),
+            route(HttpMethod.DELETE, "/v1/provisioning/sessions/{provisioningId}"));
 
     /** Routes that need no authentication. */
     static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws"};
@@ -125,6 +135,10 @@ class SecurityConfig {
             source.registerCorsConfiguration("/v1/**", cors);
         }
         return source;
+    }
+
+    private static RequestMatcher route(HttpMethod method, String pattern) {
+        return PathPatternRequestMatcher.withDefaults().matcher(method, pattern);
     }
 
     private static AuthenticationEntryPoint entryPoint(ProblemWriter problems) {

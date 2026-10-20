@@ -40,14 +40,19 @@ export async function createUser(request: APIRequestContext, prefix: string): Pr
   return user;
 }
 
-/** Signs in through Keycloak and registers this browser as the account's first device. */
-export async function enroll(page: Page, user: TestUser): Promise<void> {
+/** Completes the Keycloak sign-in form after "Sign in with your organization". */
+export async function signIn(page: Page, user: TestUser): Promise<void> {
   await page.goto('/');
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Sign in with your organization' }).click();
   await page.locator('#username').fill(user.username);
   await page.locator('#password').fill(user.password);
   await page.locator('#kc-login').click();
+}
+
+/** Signs in through Keycloak and registers this browser as the account's first device. */
+export async function enroll(page: Page, user: TestUser): Promise<void> {
+  await signIn(page, user);
   await expect(page.getByTestId('nav-settings')).toBeVisible({ timeout: 45_000 });
 }
 

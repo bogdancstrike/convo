@@ -10,6 +10,7 @@ and everything else uses WebCrypto primitives.
 | `signalStore.ts` | Signal `StorageType` over the encrypted store with a unit-of-work overlay, TOFU + verified-identity blocking |
 | `content.ts` | E2EE content schema (data, receipts, own-device sync, typing) + validating codec; unknown kinds become placeholders |
 | `padding.ts` | 160-byte bucket padding (specs §5.5) |
+| `provisioning.ts` | Linking channel: X25519 → HKDF-SHA256 → AES-256-GCM bound to the `ENCLAVE-PROVISION-V1` transcript; 12-digit comparison code |
 
 **Interim decision (FND-02 gate):** the specification targets libsignal (Rust/WASM) with PQXDH.
 Until the browser build of the shared Rust core passes its feasibility gate, the web client uses

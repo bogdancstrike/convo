@@ -21,7 +21,8 @@ It never sees private keys or message content.
 |---|---|
 | `account` | Account provisioning from OIDC identity, directory search |
 | `device` | Device persistence, listing, revocation |
-| `enrollment` | Reservations and first-device (primary) registration |
+| `enrollment` | Reservations, first-device (primary) and linked-device registration |
+| `provisioning` | Device-linking sessions: E2EE ProvisionMessage relay, single-use codes |
 | `keys` | Signed/one-time prekey upload, status and atomic claims |
 | `auth` | ECDSA request-signature verification and replay protection |
 | `web` | REST controllers and JSON DTOs |

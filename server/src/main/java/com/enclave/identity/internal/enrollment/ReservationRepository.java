@@ -28,9 +28,18 @@ class ReservationRepository {
 
     /** Loads a reservation with a row lock so consumption is serialized. */
     Optional<Reservation> lock(UUID reservationId) {
+        return select(reservationId, " FOR UPDATE");
+    }
+
+    /** Loads a reservation without locking (read-only use). */
+    Optional<Reservation> find(UUID reservationId) {
+        return select(reservationId, "");
+    }
+
+    private Optional<Reservation> select(UUID reservationId, String suffix) {
         return jdbc.sql("""
                 SELECT reservation_id, account_id, device_id, purpose, challenge, expires_at, consumed_at, accepted_key
-                  FROM enrollment_reservations WHERE reservation_id = :id FOR UPDATE""")
+                  FROM enrollment_reservations WHERE reservation_id = :id""" + suffix)
                 .param("id", reservationId)
                 .query((rs, i) -> {
                     Timestamp consumed = rs.getTimestamp("consumed_at");

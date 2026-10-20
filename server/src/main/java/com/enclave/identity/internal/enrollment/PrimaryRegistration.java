@@ -29,4 +29,4 @@ public record PrimaryRegistration(
         String signingKeyProfile,
         byte[] registrationProof,
         String platform,
-        byte[] nameEnc) {}
+        byte[] nameEnc) implements EnrollmentKeys {}
