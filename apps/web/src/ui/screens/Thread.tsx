@@ -63,7 +63,7 @@ export function Thread({
   const title = conversation.kind === 'note' ? t('chats.noteToSelf') : conversation.title;
   const { start: startCall, call: activeCall } = useCalls();
   // Calls: direct chats and groups you are in; not Note to self or broadcast channels.
-  const callable = conversation.kind !== 'note' && !conversation.left && !conversation.adminOnly;
+  const callable = conversation.kind !== 'note' && !conversation.left && !conversation.adminOnly && !conversation.blocked;
   const group = conversation.kind === 'group';
   const readOnly = record?.needsJoin || conversation.adminOnly && (!record || record.members.find((m) => m.accountId === client.accountId)?.role === 'member');
   const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
@@ -243,7 +243,11 @@ export function Thread({
           );
         })}
       </div>
-      {!conversation.left && !readOnly && (
+      {conversation.blocked && (
+        <div className="channel-read-only" role="status" data-testid="blocked-banner"><Icon name="lock" size={16} />{t('block.banner', { name: title })}
+          <button className="btn" onClick={() => void client.setBlocked(conversation.id, false)} data-testid="unblock">{t('block.unblock')}</button></div>
+      )}
+      {!conversation.left && !readOnly && !conversation.blocked && (
         <Composer
           key={conversation.id}
           client={client}

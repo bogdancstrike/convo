@@ -41,6 +41,9 @@ export function conversationMenu(client: EnclaveClient, conversation: Conversati
     },
     // "Require passkey to open": offered once a passkey exists; turning it off is always possible.
     ...(lock && (lock.locked || lock.available) ? [{ label: lock.locked ? t('lock.disable') : t('lock.enable'), icon: 'lock' as const, onSelect: lock.toggle, testId: 'menu-lock' }] : []),
+    ...(conversation.kind === 'direct' ? [conversation.blocked
+      ? { label: t('block.unblock'), icon: 'shield' as const, onSelect: () => void client.setBlocked(conversation.id, false), testId: 'menu-unblock' }
+      : { label: t('block.block'), icon: 'shield' as const, danger: true, onSelect: confirmThen(t('block.confirm', { name: conversation.title }), () => client.setBlocked(conversation.id, true)), testId: 'menu-block' }] : []),
     { label: t('header.close'), icon: 'close', onSelect: onClose },
     { label: t('header.clear'), icon: 'trash', onSelect: confirmThen(t('header.confirmClear'), () => client.clearConversation(conversation.id)) },
     {

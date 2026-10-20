@@ -113,7 +113,7 @@ import org.json.JSONObject
                     if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" }) { Icon(Icons.Outlined.AddComment, "New chat") }
                     if (app.route == "thread") {
                         val current = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }
-                        if (current != null && current.optString("kind") != "note" && !current.optBoolean("left") && !current.optBoolean("adminOnly")) {
+                        if (current != null && current.optString("kind") != "note" && !current.optBoolean("left") && !current.optBoolean("adminOnly") && !current.optBoolean("blocked")) {
                             IconButton(onClick = { app.calls.start(current.optString("id"), true) }, enabled = app.calls.call == null) { Icon(Icons.Outlined.Videocam, "Video call") }
                             IconButton(onClick = { app.calls.start(current.optString("id"), false) }, enabled = app.calls.call == null) { Icon(Icons.Outlined.Call, "Voice call") }
                         }
@@ -217,11 +217,20 @@ import org.json.JSONObject
 @Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
+    if (c.optString("kind") == "direct") {
+        val blocked = c.optBoolean("blocked")
+        DropdownMenuItem(text = { Text(if (blocked) "Unblock" else "Block contact", color = if (blocked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Outlined.Block, null) },
+            onClick = { if (blocked) { close(); app.call("block", obj("id" to c.optString("id"), "blocked" to false), success = "Contact unblocked") } else confirm = "block" })
+    }
     val chatLocked = app.locks.locked(c.optString("id"))
     if (chatLocked || app.locks.passkey == true) DropdownMenuItem(text = { Text(if (chatLocked) "Stop requiring authentication" else "Require authentication to open") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) }, onClick = {
         close(); app.locks.setChatLocked(c.optString("id"), !chatLocked) { app.notice = if (chatLocked) "Chat unlocked" else "Chat locked"; if (!chatLocked && app.route != "list") app.back() }
     })
     DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })
     DropdownMenuItem(text = { Text("Delete chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "deleteChat" })
-    if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })
+    if (confirm == "block") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text("Block contact?") },
+        text = { Text("Their messages and calls will no longer reach you, and they won’t be told.") },
+        confirmButton = { TextButton({ confirm = ""; close(); app.call("block", obj("id" to c.optString("id"), "blocked" to true), success = "Contact blocked") }) { Text("Block", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
+    else     if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })
 }

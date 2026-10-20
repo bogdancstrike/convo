@@ -78,6 +78,10 @@ export interface Conversation {
   lastActivity: number;
   preview?: string;
   unread: number;
+  /** Direct chat: this account blocked the peer (their direct content is dropped on arrival). */
+  blocked?: boolean;
+  /** When `blocked` last changed (last writer wins across own devices). */
+  blockedChangedAt?: number;
   /** Disappearing-message timer in seconds (0/absent = off). */
   expireSeconds?: number;
   /** Sender timestamp of the timer change in effect (last writer wins). */

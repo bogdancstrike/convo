@@ -123,7 +123,8 @@ export class AccountHistory {
             const existing = await repos.conversation(conversation.id);
             const newer = !existing || existing.lastActivity <= conversation.lastActivity;
             const timer = existing && (existing.expireUpdatedAt ?? 0) >= (conversation.expireUpdatedAt ?? 0) ? {} : { expireSeconds: conversation.expireSeconds, expireUpdatedAt: conversation.expireUpdatedAt };
-            if (!await this.store.get(RecordNs.localHiddenConversation, conversation.id)) ops.push(repos.putConversation(existing ? { ...existing, ...(newer ? { title: conversation.title, preview: conversation.preview, lastActivity: conversation.lastActivity, adminOnly: conversation.adminOnly } : {}), ...timer } : { ...conversation, unread: 0, draft: undefined }));
+            const block = existing && (existing.blockedChangedAt ?? 0) >= (conversation.blockedChangedAt ?? 0) ? {} : { blocked: conversation.blocked, blockedChangedAt: conversation.blockedChangedAt };
+            if (!await this.store.get(RecordNs.localHiddenConversation, conversation.id)) ops.push(repos.putConversation(existing ? { ...existing, ...(newer ? { title: conversation.title, preview: conversation.preview, lastActivity: conversation.lastActivity, adminOnly: conversation.adminOnly } : {}), ...timer, ...block } : { ...conversation, unread: 0, draft: undefined }));
           } else if (record.kind === 'profile' || record.kind === 'group') {
             const value = record.value as { accountId?: string; groupId?: string };
             const id = record.kind === 'profile' ? value.accountId : value.groupId;

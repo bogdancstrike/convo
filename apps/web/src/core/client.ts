@@ -294,9 +294,27 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     id: string,
     patch: Partial<Pick<Conversation, 'wallpaper' | 'pinned' | 'muted' | 'mutedUntil' | 'archived' | 'draft'>>,
   ): Promise<void> {
-    const conversation = this.conversationCache.get(id);
-    if (conversation) await this.saveConversations([{ ...conversation, ...patch }]);
+    // Serialized with envelope processing so a concurrent receipt cannot write back a stale copy.
+    await this.mutex.run(async () => {
+      const conversation = this.conversationCache.get(id);
+      if (conversation) await this.saveConversations([{ ...conversation, ...patch }]);
+    });
   }
+
+  /**
+   * Blocks or unblocks a direct contact. While blocked, their direct messages, calls, typing,
+   * receipts and profile updates are dropped without acknowledgement content, and sending to them
+   * is refused. The flag travels with the encrypted conversation archive to own devices.
+   */
+  async setBlocked(peerId: string, blocked: boolean): Promise<void> {
+    await this.mutex.run(async () => {
+      const conversation = this.conversationCache.get(peerId);
+      if (!conversation || conversation.kind !== 'direct') throw new Error('only direct chats can be blocked');
+      await this.saveConversations([{ ...conversation, blocked: blocked || undefined, blockedChangedAt: Date.now() }]);
+    });
+  }
+
+  isBlocked(accountId: string): boolean { return !!this.conversationCache.get(accountId)?.blocked; }
 
   /** Acknowledges an identity change notice after the user reviewed it. */
   async acknowledgeIdentityChange(peerId: string): Promise<void> {
@@ -408,6 +426,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   ): Promise<void> {
     const text = content.body?.trim() || undefined;
     if (!text && !content.attachments?.length) throw new Error('empty message');
+    if (this.isBlocked(conversationId)) throw new ContactBlockedError();
     if (text && utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
     const groupId = groupIdOf(conversationId);
     const group = groupId ? await this.groups.record(groupId) : undefined;
@@ -478,13 +497,15 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (!conversation || conversation.left) throw new Error('conversation unavailable');
     const groupId = groupIdOf(conversationId);
     if (groupId && !(await this.canChangeTimer(groupId, this.accountId))) throw new Error('only admins can change the timer');
+    await this.mutex.run(async () => {
     const now = Date.now();
     const data: DataMessage = { messageId: newMessageId(), timestamp: now, timerUpdate: { seconds } };
     const notice: ChatMessage = { conversationId, id: data.messageId, authorId: this.accountId, direction: 'out', sentAt: now, sort: now, reactions: {}, notice: { kind: 'timer', seconds }, status: 'queued' };
-    const updated = { ...conversation, expireSeconds: seconds || undefined, expireUpdatedAt: now };
+    const updated = { ...this.conversationCache.get(conversationId)!, expireSeconds: seconds || undefined, expireUpdatedAt: now };
     this.conversationCache.set(conversationId, updated);
     await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, { conversationId, id: data.messageId },
       [this.repos.putMessage(notice), this.repos.putConversation(updated)]);
+    });
     this.emit('messages', conversationId);
     this.emitConversations();
   }
@@ -545,7 +566,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    */
   async startCall(conversationId: string, video: boolean): Promise<{ join: CallJoin; key: string }> {
     const conversation = this.conversationCache.get(conversationId);
-    if (!conversation || conversation.kind === 'note' || conversation.left || conversation.adminOnly) throw new Error('calls unavailable here');
+    if (!conversation || conversation.kind === 'note' || conversation.left || conversation.adminOnly || conversation.blocked) throw new Error('calls unavailable here');
     const groupId = groupIdOf(conversationId);
     const join = await this.api.createCall(groupId ? { groupId, video } : { peer: conversationId, video });
     const key = newMediaKey();
@@ -990,6 +1011,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       return followUps;
     }
 
+    // Blocked contacts: drop all direct content (nothing is stored, no receipts are sent).
+    if (!fromSelf && this.isBlocked(sender)) return followUps;
     switch (content.kind) {
       case 'profile':
         this.stageProfile(content.profile, sender, ops);
@@ -1404,6 +1427,11 @@ const MAX_REVISED_UNREAD = 200;
 function revised(message: ChatMessage, body: string, editedAt: number, revision: number | undefined): ChatMessage {
   const status = message.status && STATUS_RANK[message.status] > STATUS_RANK.sent ? 'sent' : message.status;
   return { ...message, body, editedAt, revision, receipts: undefined, status };
+}
+
+/** Sending to a blocked contact (unblock first). */
+export class ContactBlockedError extends Error {
+  constructor() { super('contact blocked'); this.name = 'ContactBlockedError'; }
 }
 
 /** The author tried to edit outside the edit window, or content that is not editable text. */

@@ -77,7 +77,10 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 items(messages, key = { "${it.optString("authorId")}/${it.optString("id")}" }) { message -> MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }) }
             }
             if (!starredOnly) {
-                if (readOnly) Text(if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
+                if (conversation.optBoolean("blocked")) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("You blocked this contact.", Modifier.weight(1f)); TextButton({ app.call("block", obj("id" to id, "blocked" to false), success = "Contact unblocked") }) { Text("Unblock") }
+                }
+                else if (readOnly) Text(if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
                 else Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                     quote?.let { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("Reply: ${it.optString("excerpt")}", Modifier.weight(1f), maxLines = 2); IconButton({ quote = null }) { Icon(Icons.Outlined.Close, "Cancel reply") } } }
                     var voice by remember(id) { mutableStateOf(false) }

@@ -70,6 +70,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   notices, bubble badges, sent messages expire from sending and received ones from first read,
   30 s sweeper with suppression markers, expired archive entries never restored. Web and
   Android; `disappearing.spec.ts` (Chromium/Firefox, simulated 24 h) and emulator checks.
+- Blocking contacts (FEAT-02): block/unblock from chat menus on web and Android; blocked
+  contacts' direct content (messages, calls, typing, receipts, profile) is dropped without
+  receipts, sending/calling is refused, banner offers Unblock; flag travels with the encrypted
+  conversation archive (last change wins). Conversation updates are now serialized with envelope
+  processing (fixed a lost-update race). `blocking.spec.ts` Chromium/Firefox; emulator checked.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
