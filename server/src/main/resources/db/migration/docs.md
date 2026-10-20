@@ -9,6 +9,9 @@ table ownership (specs §1.2, ARF §15.2) stays explicit:
 | `V2__messaging.sql` | messaging | `submissions`, `envelopes`, `ws_tickets` |
 | `V3__identity_provisioning.sql` | identity | `provisioning_sessions` |
 | `V4__attachments.sql` | attachments | `attachments` |
+| `V5__identity_key_packages.sql` | identity | `mls_key_packages` |
+| `V6__messaging_group_envelopes.sql` | messaging | `envelopes` (+ `group_id`, `epoch`, `group_seq`) |
+| `V7__groups.sql` | groups | `mls_groups`, `mls_group_members`, `mls_group_devices`, `mls_group_events`, `mls_group_submissions` |
 
 Spring Modulith's `event_publication` registry table is created by the
 `spring-modulith-starter-jdbc` schema initializer.

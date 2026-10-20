@@ -26,20 +26,22 @@ public class MailboxRepository {
     public void insert(Envelope e) {
         jdbc.sql("""
                 INSERT INTO envelopes (account_id, device_id, guid, type, source_account, source_device,
-                                       urgent, expires_at, content)
-                VALUES (:a, :d, :g, :t, :sa, :sd, :u, :e, :c)""")
+                                       urgent, expires_at, content, group_id, epoch, group_seq)
+                VALUES (:a, :d, :g, :t, :sa, :sd, :u, :e, :c, :gid, :ep, :gs)""")
                 .param("a", e.recipient().accountId()).param("d", e.recipient().deviceId())
                 .param("g", e.guid()).param("t", e.type().code())
                 .param("sa", e.source() == null ? null : e.source().accountId())
                 .param("sd", e.source() == null ? null : e.source().deviceId())
                 .param("u", e.urgent()).param("e", Timestamp.from(e.expiresAt())).param("c", e.content())
+                .param("gid", e.groupId()).param("ep", e.epoch()).param("gs", e.groupSeq())
                 .update();
     }
 
     /** @return oldest-first page of unexpired envelopes (specs §24.5) */
     public List<Envelope> page(DeviceAddress device, int limit) {
         return jdbc.sql("""
-                SELECT account_id, device_id, guid, type, source_account, source_device, server_ts, expires_at, urgent, content
+                SELECT account_id, device_id, guid, type, source_account, source_device, server_ts, expires_at, urgent, content,
+                       group_id, epoch, group_seq
                   FROM envelopes
                  WHERE account_id = :a AND device_id = :d AND expires_at > now()
                  ORDER BY server_ts, guid
@@ -99,6 +101,9 @@ public class MailboxRepository {
                 rs.getTimestamp("server_ts").toInstant(),
                 rs.getTimestamp("expires_at").toInstant(),
                 rs.getBoolean("urgent"),
-                rs.getBytes("content"));
+                rs.getBytes("content"),
+                rs.getBytes("group_id"),
+                rs.getObject("epoch", Long.class),
+                rs.getObject("group_seq", Long.class));
     }
 }

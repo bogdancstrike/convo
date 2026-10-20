@@ -129,6 +129,24 @@ final class IdentityDtos {
             @NotBlank String platform,
             String nameEnc) {}
 
+    /** One KeyPackage upload. */
+    record KeyPackageDto(@NotBlank String ref, @NotBlank String keyPackage) {}
+
+    /** {@code PUT /v1/keypackages} request. */
+    record KeyPackagesUploadRequest(@NotNull @Size(max = 200) List<@Valid KeyPackageDto> keyPackages) {}
+
+    /** {@code POST /v1/keypackages/claim} request. */
+    record KeyPackageClaimRequest(@NotNull @Size(max = 100) List<UUID> accountIds) {}
+
+    /** Claimed KeyPackage of one device. */
+    record ClaimedKeyPackageDto(UUID accountId, int deviceId, String keyPackage) {}
+
+    /** Device address without a KeyPackage. */
+    record DeviceRefDto(UUID accountId, int deviceId) {}
+
+    /** {@code POST /v1/keypackages/claim} response. */
+    record KeyPackageClaimResponse(List<ClaimedKeyPackageDto> keyPackages, List<DeviceRefDto> unavailable) {}
+
     /** Public account view. */
     record AccountDto(UUID accountId, String username, String identityKey) {}
 

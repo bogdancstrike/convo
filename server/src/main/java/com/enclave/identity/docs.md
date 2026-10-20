@@ -13,7 +13,7 @@ It never sees private keys or message content.
 | `AuthenticatedDevice` | Request principal | all device-authenticated controllers |
 | `SignedDeviceRequest` | Signature inputs incl. canonical string definition | platform security chain |
 | `DeviceRoster` | Active devices + list version | messaging |
-| `DeviceRegistered`, `DeviceRevoked`, `PrekeysLow` | Domain events | messaging gateway |
+| `DeviceRegistered`, `DeviceRevoked`, `PrekeysLow`, `KeyPackagesLow` | Domain events | messaging gateway |
 
 ## Internals (`internal/`)
 
@@ -23,7 +23,7 @@ It never sees private keys or message content.
 | `device` | Device persistence, listing, revocation |
 | `enrollment` | Reservations, first-device (primary) and linked-device registration |
 | `provisioning` | Device-linking sessions: E2EE ProvisionMessage relay, single-use codes |
-| `keys` | Signed/one-time prekey upload, status and atomic claims |
+| `keys` | Signed/one-time prekeys and MLS KeyPackages: upload, status, atomic single-use claims |
 | `auth` | ECDSA request-signature verification and replay protection |
 | `web` | REST controllers and JSON DTOs |
 

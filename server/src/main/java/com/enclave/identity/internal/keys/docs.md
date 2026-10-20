@@ -12,3 +12,12 @@ Signal prekey distribution (specs §5.1, §12.2; task ID-01).
 Signature verification of signed prekeys happens on clients under the peer's identity key; the
 server stores and relays public material only. Kyber (PQXDH) prekeys and replay-safe claim IDs are
 pending FND-02 (see `tasks.md`).
+
+## MLS KeyPackages
+
+* `KeyPackageService.upload` — stores client-generated KeyPackages (opaque, ≤ 8 KiB, client-computed
+  `KeyPackageRef`), bounded per upload/device.
+* `KeyPackageService.claim` — one package per active device of each requested account, consumed with
+  the same `SKIP LOCKED` pattern; devices without packages are returned as `unavailable`;
+  `KeyPackagesLow` drives the `KEYPACKAGES_LOW` directive.
+* Revocation deletes a device's KeyPackages (`DeviceRepository.revoke`).

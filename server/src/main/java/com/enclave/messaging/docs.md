@@ -4,6 +4,9 @@
 identity module's public `IdentityApi` and consumes its `DeviceRegistered`, `DeviceRevoked` and
 `PrekeysLow` events. Never sees plaintext or keys.
 
+Public API: `DeliveryApi` (in-transaction group fan-out used by the groups module) and
+`GroupEnvelope`.
+
 | Package | Responsibility |
 |---|---|
 | `internal/mailbox` | Per-device envelope storage, drain/ack, expiry purge, revocation purge |

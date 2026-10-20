@@ -7,6 +7,8 @@ package com.enclave.messaging.internal.gateway;
 public enum Directive {
     /** One-time prekeys are running low; upload more. */
     KEYS_LOW,
+    /** MLS KeyPackages are running low; upload more. */
+    KEYPACKAGES_LOW,
     /** The account's device list changed; refresh own devices / rosters. */
     DEVICE_LIST_CHANGED,
     /** Organization policy changed. */

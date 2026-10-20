@@ -21,6 +21,7 @@ import org.springframework.validation.annotation.Validated;
  * @param usernameClaim OIDC claim used to derive the organization handle
  * @param directoryPageSize maximum directory search results
  * @param deviceAuth device request-signature settings
+ * @param keyPackages MLS KeyPackage limits
  */
 @Validated
 @ConfigurationProperties("enclave.identity")
@@ -32,7 +33,24 @@ public record IdentityProperties(
         @DefaultValue("1000") @Min(1) int maxStoredPrekeys,
         @DefaultValue("preferred_username") @NotBlank String usernameClaim,
         @DefaultValue("20") @Min(1) @Max(100) int directoryPageSize,
-        @DefaultValue @Valid DeviceAuth deviceAuth) {
+        @DefaultValue @Valid DeviceAuth deviceAuth,
+        @DefaultValue @Valid KeyPackages keyPackages) {
+
+    /**
+     * MLS KeyPackage settings (specs §6.9).
+     *
+     * @param lowWatermark publish {@code KeyPackagesLow} below this count
+     * @param maxPerUpload maximum packages per upload
+     * @param maxStored maximum stored packages per device
+     * @param maxBytes maximum encoded size of one package
+     * @param maxAccountsPerClaim maximum accounts in one claim
+     */
+    public record KeyPackages(
+            @DefaultValue("10") @Min(0) int lowWatermark,
+            @DefaultValue("100") @Min(1) int maxPerUpload,
+            @DefaultValue("200") @Min(1) int maxStored,
+            @DefaultValue("8192") @Min(256) int maxBytes,
+            @DefaultValue("100") @Min(1) int maxAccountsPerClaim) {}
 
     /**
      * Device proof-of-possession settings (specs §4.2).

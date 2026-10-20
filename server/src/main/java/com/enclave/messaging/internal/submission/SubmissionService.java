@@ -93,7 +93,7 @@ public class SubmissionService {
             if (mailbox.queuedBytes(to) + m.content().length > properties.maxMailboxBytes()) {
                 throw new EnclaveException(ErrorCode.RATE_LIMITED, "recipient mailbox is full");
             }
-            mailbox.insert(new Envelope(to, Uuids.v7(), m.type(), sender, now, now.plus(ttl), send.urgent(), m.content()));
+            mailbox.insert(Envelope.direct(to, Uuids.v7(), m.type(), sender, now, now.plus(ttl), send.urgent(), m.content()));
             recipients.add(to);
         }
         if (!submissions.insert(sender, send.submissionId(), digest, ACCEPTED, now.plus(properties.submissionRetention()))) {

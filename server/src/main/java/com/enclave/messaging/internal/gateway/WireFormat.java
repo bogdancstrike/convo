@@ -25,14 +25,16 @@ public final class WireFormat {
     /** Delivered envelope. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record EnvelopeDto(String guid, String type, UUID sourceAccount, Integer sourceDevice,
-            long serverTimestamp, long expiresAt, boolean urgent, String content) {
+            long serverTimestamp, long expiresAt, boolean urgent, String content, String groupId, Long epoch,
+            Long groupSeq) {
 
         /** @return wire form of a stored envelope */
         public static EnvelopeDto of(Envelope e) {
             return new EnvelopeDto(e.guid().toString(), e.type().name(),
                     e.source() == null ? null : e.source().accountId(),
                     e.source() == null ? null : e.source().deviceId(),
-                    e.serverTimestamp().toEpochMilli(), e.expiresAt().toEpochMilli(), e.urgent(), encode(e.content()));
+                    e.serverTimestamp().toEpochMilli(), e.expiresAt().toEpochMilli(), e.urgent(), encode(e.content()),
+                    e.groupId() == null ? null : encode(e.groupId()), e.epoch(), e.groupSeq());
         }
     }
 

@@ -4,6 +4,7 @@ import com.enclave.contracts.DeviceAddress;
 import com.enclave.identity.DeviceRegistered;
 import com.enclave.identity.DeviceRevoked;
 import com.enclave.identity.IdentityApi;
+import com.enclave.identity.KeyPackagesLow;
 import com.enclave.identity.PrekeysLow;
 import com.enclave.messaging.internal.mailbox.MailboxService;
 import com.enclave.messaging.internal.submission.EnvelopesStored;
@@ -58,6 +59,12 @@ class GatewayEventListener {
     @ApplicationModuleListener
     void on(PrekeysLow event) {
         hints.signalControl(event.address(), Directive.KEYS_LOW);
+    }
+
+    /** Ask the device to replenish MLS KeyPackages. */
+    @ApplicationModuleListener
+    void on(KeyPackagesLow event) {
+        hints.signalControl(event.address(), Directive.KEYPACKAGES_LOW);
     }
 
     /** Graceful shutdown: ask clients to reconnect to another replica (close code 4100). */

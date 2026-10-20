@@ -15,6 +15,9 @@ import java.util.UUID;
  * @param expiresAt deletion deadline if never acknowledged
  * @param urgent priority hint
  * @param content opaque ciphertext
+ * @param groupId MLS group ID for MLS types, otherwise {@code null}
+ * @param epoch MLS epoch for MLS types, otherwise {@code null}
+ * @param groupSeq accepted commit sequence for commits, otherwise {@code null}
  */
 public record Envelope(
         DeviceAddress recipient,
@@ -24,4 +27,14 @@ public record Envelope(
         Instant serverTimestamp,
         Instant expiresAt,
         boolean urgent,
-        byte[] content) {}
+        byte[] content,
+        byte[] groupId,
+        Long epoch,
+        Long groupSeq) {
+
+    /** Creates a direct (non-group) envelope. */
+    public static Envelope direct(DeviceAddress recipient, UUID guid, EnvelopeType type, DeviceAddress source,
+            Instant serverTimestamp, Instant expiresAt, boolean urgent, byte[] content) {
+        return new Envelope(recipient, guid, type, source, serverTimestamp, expiresAt, urgent, content, null, null, null);
+    }
+}

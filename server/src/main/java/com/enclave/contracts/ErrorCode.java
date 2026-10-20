@@ -44,7 +44,15 @@ public enum ErrorCode {
     /** Registration IDs changed (reinstall); re-establish sessions. */
     STALE_DEVICES(HttpStatus.GONE, "Stale devices"),
     /** Submission ID reused with different bytes. */
-    IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "Submission ID reused with different content");
+    IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "Submission ID reused with different content"),
+
+    // --- groups --------------------------------------------------------------------------------
+    /** MLS message for an old epoch; process pending commits and retry. */
+    EPOCH_CONFLICT(HttpStatus.CONFLICT, "Epoch conflict"),
+    /** Caller is not a member (or the device is not in the group roster). */
+    NOT_GROUP_MEMBER(HttpStatus.FORBIDDEN, "Not a group member"),
+    /** Caller's group role does not permit the action. */
+    FORBIDDEN_ROLE(HttpStatus.FORBIDDEN, "Role does not permit this action");
 
     private final HttpStatus status;
     private final String title;

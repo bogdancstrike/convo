@@ -55,7 +55,7 @@ public class DeviceRepository {
     }
 
     /**
-     * Marks a device revoked and deletes its prekeys in the same transaction.
+     * Marks a device revoked and deletes its prekeys and MLS KeyPackages in the same transaction.
      *
      * @return {@code true} if an active device was revoked by this call
      */
@@ -68,6 +68,8 @@ public class DeviceRepository {
             jdbc.sql("DELETE FROM one_time_prekeys WHERE account_id = :a AND device_id = :d")
                     .param("a", accountId).param("d", deviceId).update();
             jdbc.sql("DELETE FROM signed_prekeys WHERE account_id = :a AND device_id = :d")
+                    .param("a", accountId).param("d", deviceId).update();
+            jdbc.sql("DELETE FROM mls_key_packages WHERE account_id = :a AND device_id = :d")
                     .param("a", accountId).param("d", deviceId).update();
         }
         return updated == 1;
