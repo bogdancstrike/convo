@@ -37,6 +37,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   LiveKit-reported encrypted frames, Chromium and Firefox. Android: livekit-android 2.29.0 call
   screen, ringtone/vibration, voice/video buttons, Calls tab; emulator-5554 ↔ Chromium verified
   both directions (voice and video), both SDKs report encrypted frames, hang-up ends both sides.
+  Group voice calls (3 participants, encrypted, leaving keeps the call for others) pass in
+  Chromium and Firefox.
 - Passkeys: Settings → Privacy shows IdP passkey status (read-only `convo-credential-status`
   service account, `GET /v1/account/credentials`) and opens the Keycloak Account Console.
   Verified with a real Chromium WebAuthn passkey on `convo.doncea.ro`.

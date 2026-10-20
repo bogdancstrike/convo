@@ -65,3 +65,46 @@ test('a declined video call tells the caller and is logged on both devices', asy
     await expect(caller.getByTestId('call-log-entry').first()).toHaveAttribute('data-status', 'declined');
   } finally { await closeAll(caller, callee); }
 });
+
+test('group voice call: two members join, the caller sees both, leaving does not end it for others', async ({ browser, request }) => {
+  test.setTimeout(150_000);
+  const [ownerU, bobU, carolU] = await Promise.all(['gowner', 'gbob', 'gcarol'].map((p) => createUser(request, p)));
+  const [owner, bob, carol] = await Promise.all([1, 2, 3].map(() => newPage(browser)));
+  try {
+    for (const [page, user] of [[owner, ownerU], [bob, bobU], [carol, carolU]] as const) await enroll(page, user);
+    const groupName = `Call group ${Date.now() % 10000}`;
+    await owner.getByTestId('new-chat').click();
+    await owner.getByTestId('new-group').click();
+    for (const u of [bobU, carolU]) {
+      await owner.getByTestId('people-search').fill(u.username);
+      await owner.getByTestId(`pick-${u.username}`).click();
+    }
+    await owner.getByTestId('group-next').click();
+    await owner.getByTestId('group-name').fill(groupName);
+    await owner.getByTestId('review-group').click();
+    await owner.getByTestId('create-group').click();
+    await send(owner, 'call in a minute');
+    await openChat(bob, groupName);
+    await openChat(carol, groupName);
+
+    await owner.getByTestId('start-voice-call').click();
+    for (const page of [bob, carol]) {
+      await expect(screen(page)).toHaveAttribute('data-phase', 'incoming', { timeout: 20_000 });
+      await page.getByTestId('call-accept').click();
+    }
+    for (const page of [owner, bob, carol]) {
+      await expect(screen(page)).toHaveAttribute('data-phase', 'connected', { timeout: 30_000 });
+      await expect(screen(page)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
+      await expect(page.getByTestId('remote-audio')).toHaveCount(2, { timeout: 20_000 });
+    }
+    await expect(screen(owner)).toContainText('3 in call');
+
+    // Carol leaves; the call continues for the others.
+    await carol.getByTestId('call-end').click();
+    await expect(owner.getByTestId('remote-audio')).toHaveCount(1, { timeout: 20_000 });
+    await expect(screen(bob)).toHaveAttribute('data-phase', 'connected');
+    await owner.getByTestId('call-end').click();
+    await bob.getByTestId('call-end').click();
+    await expect(screen(bob)).toHaveCount(0, { timeout: 10_000 });
+  } finally { await closeAll(owner, bob, carol); }
+});
