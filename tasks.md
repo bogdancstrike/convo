@@ -55,6 +55,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   authenticator on convo.doncea.ro); emulator: ⋮ lock and info-page unlock verified.
 - Android media viewer pages through every photo/video of the chat (Previous/Next and swipe),
   like the web viewer; documents/audio open alone. Verified on emulator-5554.
+- Full regression 2026-10-21: 54 passed, 4 skipped (hostname-only passkey specs); the stale
+  Calls-placeholder assertion in `ux.spec.ts` now checks the real Calls panel.
 - Still open: full localization,
   web screen lock, background call ringing (push), remaining UI parity and legacy-origin migration.
 

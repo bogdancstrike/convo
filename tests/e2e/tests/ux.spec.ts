@@ -58,7 +58,9 @@ test('global message search, quick chat actions, calls and beside-message menu',
   expect(compact!.x).toBeGreaterThan(800);
   await page.keyboard.press('Escape');
   await page.getByTestId('nav-calls').click();
-  await expect(page.getByText('To be implemented').first()).toBeVisible();
+  // Calls panel: device-local history (empty for a new account) and the E2EE note.
+  await expect(page.getByRole('heading', { name: 'No calls yet' })).toBeVisible();
+  await expect(page.getByText('Voice and video calls are end-to-end encrypted.')).toBeVisible();
   await closeAll(page, other);
 });
 
