@@ -3,6 +3,7 @@
 | Path | Purpose |
 |---|---|
 | `keycloak/` | Development realm import (PKCE client, TOTP/passkey policy, test users) |
+| `pgadmin/` | pgAdmin server registration for the compose database (dev UI on :5050) |
 | `seaweedfs/` | Development S3 identities for the object store |
 
 The root `docker-compose.yaml` runs the complete development stack. Kubernetes/Helm charts,
