@@ -1,0 +1,137 @@
+import { fromUtf8, randomBytes, toBase64Url, utf8 } from '../lib/bytes';
+import { pad, unpad } from './padding';
+
+/**
+ * End-to-end encrypted content schema (specs §11, §25). This is the plaintext inside Signal
+ * ciphertext; the server never sees it.
+ *
+ * Encoding: JSON → UTF-8 → {@link pad}. Every content carries `v` (schema version). Unknown
+ * `kind`s or newer versions decode to {@link UnknownContent} so the UI can show "Update needed to
+ * view this item" instead of failing (specs §25.1).
+ */
+export const CONTENT_VERSION = 1;
+
+/** Maximum UTF-8 body length (specs §26.3: 64 KiB). */
+export const MAX_BODY_BYTES = 64 * 1024;
+
+/** A quoted reply reference. */
+export interface Quote {
+  messageId: string;
+  authorId: string;
+  /** Short local excerpt for display if the original is unavailable. */
+  excerpt?: string;
+}
+
+/** Reaction toggle on a target message. */
+export interface Reaction {
+  targetMessageId: string;
+  targetAuthorId: string;
+  emoji: string;
+  remove: boolean;
+}
+
+/** Author edit of an earlier message. */
+export interface Edit {
+  targetMessageId: string;
+  body: string;
+}
+
+/** Author delete-for-everyone request. */
+export interface Delete {
+  targetMessageId: string;
+}
+
+/** A user-visible message or mutation. Exactly one of body/reaction/edit/delete is meaningful. */
+export interface DataMessage {
+  messageId: string;
+  timestamp: number;
+  body?: string;
+  quote?: Quote;
+  reaction?: Reaction;
+  edit?: Edit;
+  delete?: Delete;
+}
+
+/** Delivery/read receipt for messages sent by the receiver of this content. */
+export interface ReceiptMessage {
+  type: 'delivery' | 'read';
+  messageIds: string[];
+  timestamp: number;
+}
+
+/** Own-device synchronization. */
+export interface SyncMessage {
+  /** Transcript of a message this account sent from another device. */
+  sent?: { destination: string; data: DataMessage };
+  /** Read cursor of a conversation advanced on another device. */
+  read?: { conversationId: string; upTo: number };
+}
+
+/** Typing indicator (transient, off by default). */
+export interface TypingMessage {
+  action: 'started' | 'stopped';
+  timestamp: number;
+}
+
+export type Content =
+  | { v: number; kind: 'data'; data: DataMessage }
+  | { v: number; kind: 'receipt'; receipt: ReceiptMessage }
+  | { v: number; kind: 'sync'; sync: SyncMessage }
+  | { v: number; kind: 'typing'; typing: TypingMessage };
+
+/** Content this client cannot interpret. */
+export interface UnknownContent {
+  v: number;
+  kind: 'unknown';
+}
+
+/** Generates a 16-byte random message ID (specs §2). */
+export function newMessageId(): string {
+  return toBase64Url(randomBytes(16));
+}
+
+/** Serializes and pads content for encryption. */
+export function encodeContent(content: Content): Uint8Array<ArrayBuffer> {
+  return pad(utf8(JSON.stringify(content)));
+}
+
+/**
+ * Unpads and parses decrypted content, validating the structure of known kinds.
+ *
+ * @throws Error on malformed padding/JSON or invalid known-kind payloads
+ */
+export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
+  const parsed: unknown = JSON.parse(fromUtf8(unpad(bytes)));
+  if (!isObject(parsed) || typeof parsed.v !== 'number' || typeof parsed.kind !== 'string') {
+    throw new Error('malformed content');
+  }
+  switch (parsed.kind) {
+    case 'data':
+      if (!isDataMessage(parsed.data)) throw new Error('malformed data message');
+      return parsed as unknown as Content;
+    case 'receipt':
+      if (!isObject(parsed.receipt) || !Array.isArray(parsed.receipt.messageIds)) throw new Error('malformed receipt');
+      return parsed as unknown as Content;
+    case 'sync':
+      if (!isObject(parsed.sync)) throw new Error('malformed sync');
+      if (parsed.sync.sent !== undefined && (!isObject(parsed.sync.sent) || !isDataMessage(parsed.sync.sent.data))) {
+        throw new Error('malformed sync transcript');
+      }
+      return parsed as unknown as Content;
+    case 'typing':
+      return parsed as unknown as Content;
+    default:
+      return { v: parsed.v, kind: 'unknown' };
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDataMessage(value: unknown): value is DataMessage {
+  if (!isObject(value)) return false;
+  if (typeof value.messageId !== 'string' || typeof value.timestamp !== 'number') return false;
+  if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
+  return true;
+}

@@ -28,3 +28,9 @@ build/
 dist/
 target/
 coverage/
+
+# Tooling caches
+*.tsbuildinfo
+.vite/
+test-results/
+playwright-report/
