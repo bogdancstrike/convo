@@ -41,6 +41,6 @@ Media, drafts persist locally, profile changes show success feedback, Storage an
 per-network media auto-download and an opt-in Save to gallery (MediaStore, Android 10+), and Edit
 follows the shared 15-minute / 30-day channel window. Privacy shows passkey status and offers an
 app lock and per-chat locks (BiometricPrompt with screen-lock fallback) once a passkey exists. Voice notes are recorded natively (Opus/OGG). Voice/video calls use the LiveKit Android SDK with
-frame E2EE (ADR-0006); APK native libraries are limited to arm64-v8a and x86_64. Remaining gaps include complete localization, cross-message viewer navigation and exhaustive
+frame E2EE (ADR-0006); APK native libraries are limited to arm64-v8a and x86_64. Remaining gaps include complete localization and exhaustive
 visual/accessibility/device testing. iOS has not been implemented. Native background delivery,
 Keystore wrapping and the reviewed Rust/SQLCipher core remain separate security/release gates.

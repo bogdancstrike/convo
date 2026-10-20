@@ -10,6 +10,8 @@ import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -163,10 +165,31 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         Text("Read confirmations appear only when recipients choose to share them.", style = MaterialTheme.typography.bodySmall)
     } }, confirmButton = { TextButton(close) { Text("Close") } })
 }
+private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let { it in setOf("image/jpeg", "image/png", "image/webp", "image/gif") || it.startsWith("video/") }
+
+/**
+ * Viewer entry point: photos and videos page through every visual attachment of the open chat
+ * (like the web viewer); documents and audio show on their own.
+ */
 @Composable fun AttachmentDialog(app: MainActivity, message: JSONObject, conversation: String, initial: Int, close: () -> Unit) {
-    var index by remember { mutableIntStateOf(initial) }; val attachments = message.optJSONArray("attachments")?.objects().orEmpty(); val pointer = attachments.getOrNull(index) ?: return
-    var loaded by remember(index) { mutableStateOf<JSONObject?>(null) }; var zoom by remember { mutableStateOf(false) }
-    LaunchedEffect(index) { app.call("download", message.targetArgs(conversation).put("index", index)) { loaded = it as? JSONObject; loaded?.optString("data")?.takeIf { d -> d.isNotEmpty() }?.let { d -> app.saveReceivedMedia(message, pointer, d) } } }
+    val own = message.optJSONArray("attachments")?.objects().orEmpty()
+    val items = remember(message, initial) {
+        val chosen = own.getOrNull(initial)
+        val chat = if (conversation == app.active) app.snapshot.optJSONArray("messages")?.objects().orEmpty() else emptyList()
+        val visual = chat.filter { !it.optBoolean("deleted") }.flatMap { m -> m.optJSONArray("attachments")?.objects().orEmpty().mapIndexedNotNull { i, p -> if (isVisual(p)) m to i else null } }
+        if (chosen != null && isVisual(chosen) && visual.any { (m, i) -> m.optString("id") == message.optString("id") && i == initial }) visual
+        else own.indices.map { message to it }
+    }
+    val start = items.indexOfFirst { (m, i) -> m.optString("id") == message.optString("id") && m.optString("authorId") == message.optString("authorId") && i == initial }.coerceAtLeast(0)
+    MediaViewer(app, items, start, conversation, close)
+}
+
+@Composable fun MediaViewer(app: MainActivity, items: List<Pair<JSONObject, Int>>, initial: Int, conversation: String, close: () -> Unit) {
+    var position by remember { mutableIntStateOf(initial) }
+    val (message, index) = items.getOrNull(position) ?: return
+    val attachments = message.optJSONArray("attachments")?.objects().orEmpty(); val pointer = attachments.getOrNull(index) ?: return
+    var loaded by remember(position) { mutableStateOf<JSONObject?>(null) }; var zoom by remember { mutableStateOf(false) }
+    LaunchedEffect(position) { app.call("download", message.targetArgs(conversation).put("index", index)) { loaded = it as? JSONObject; loaded?.optString("data")?.takeIf { d -> d.isNotEmpty() }?.let { d -> app.saveReceivedMedia(message, pointer, d) } } }
     val bytes = remember(loaded) { loaded?.optString("data")?.let { app.decode(it) } }
     val mime = pointer.optString("contentType"); val video = mime.startsWith("video/"); val audio = mime.startsWith("audio/")
     val bitmap = remember(bytes) { if (mime in listOf("image/jpeg", "image/png", "image/webp") && bytes != null) mediaBitmap(bytes) else null }
@@ -175,13 +198,19 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Column {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) { Text(pointer.optString("fileName", "Media"), Modifier.weight(1f), maxLines = 1); IconButton(onClick = { if (bytes != null) app.export(pointer.optString("fileName", "file"), mime, bytes) }, enabled = bytes != null) { Icon(Icons.Outlined.Download, "Download") }; IconButton(close) { Icon(Icons.Outlined.Close, "Close viewer") } }
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            var drag by remember { mutableFloatStateOf(0f) }
+            Box(Modifier.weight(1f).fillMaxWidth().pointerInput(position, items.size) {
+                // Swipe left/right pages through the chat's photos and videos.
+                detectHorizontalDragGestures(onDragStart = { drag = 0f }, onDragEnd = {
+                    if (drag < -120 && position < items.lastIndex) position++ else if (drag > 120 && position > 0) position--
+                }) { _, amount -> drag += amount }
+            }, contentAlignment = Alignment.Center) {
                 if (loaded == null) CircularProgressIndicator()
                 else if (bitmap != null) Image(bitmap, pointer.optString("fileName"), Modifier.fillMaxSize().clickable { zoom = !zoom }, contentScale = if (zoom) androidx.compose.ui.layout.ContentScale.Crop else androidx.compose.ui.layout.ContentScale.Fit)
                 else if (temp != null) AndroidView(factory = { context -> VideoView(context).apply { setVideoURI(Uri.fromFile(temp)); setMediaController(MediaController(context).also { it.setAnchorView(this) }); setOnPreparedListener { start() } } }, modifier = Modifier.fillMaxSize())
                 else Text("This file is ready to save.")
             }
-            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { TextButton({ index-- }, enabled = index > 0) { Text("Previous") }; Text("${index + 1} / ${attachments.size}"); TextButton({ index++ }, enabled = index < attachments.lastIndex) { Text("Next") } }
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { TextButton({ position-- }, enabled = position > 0) { Text("Previous") }; Text("${position + 1} / ${items.size}"); TextButton({ position++ }, enabled = position < items.lastIndex) { Text("Next") } }
         } }
     }
 }

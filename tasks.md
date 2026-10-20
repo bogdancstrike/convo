@@ -53,7 +53,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   (replaces the arrow), the chat menu and chat info. Web verifies with the passkey (WebAuthn user
   verification); Android with fingerprint/face/screen lock. `chat-lock.spec.ts` (Chromium virtual
   authenticator on convo.doncea.ro); emulator: ⋮ lock and info-page unlock verified.
-- Still open: full localization, cross-message viewer navigation,
+- Android media viewer pages through every photo/video of the chat (Previous/Next and swipe),
+  like the web viewer; documents/audio open alone. Verified on emulator-5554.
+- Still open: full localization,
   web screen lock, background call ringing (push), remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)
