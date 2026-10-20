@@ -103,7 +103,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         Card(Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (conversation.startsWith("g:") && !outgoing) AccountName(app, message.optString("authorId"))
-                message.optJSONObject("quote")?.let { Text(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }
+                message.optJSONObject("quote")?.let { RawText(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
@@ -145,7 +145,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     var external by remember { mutableStateOf<String?>(null) }
     val pattern = remember { Regex("https?://[^\\s<>]+|www\\.[^\\s<>]+", RegexOption.IGNORE_CASE) }
     val links = pattern.findAll(body).map { it.value.trimEnd('.', ',', ';', '!', '?', ')', ']', '}') }.toList()
-    SelectionContainer { Text(body) }
+    SelectionContainer { RawText(body) }
     links.forEach { text -> val target = if (text.startsWith("www.")) "https://$text" else text
         val uri = Uri.parse(target)
         if (uri.scheme in listOf("https", "http") && uri.userInfo == null) TextButton(onClick = { if (app.snapshot.optJSONObject("settings")?.optBoolean("confirmExternalLinks", true) != false) external = target else app.startActivity(Intent(Intent.ACTION_VIEW, uri)) }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Outlined.OpenInNew, null, Modifier.size(16.dp)); Text("Open $text", maxLines = 2) }

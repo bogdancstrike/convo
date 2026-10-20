@@ -174,7 +174,7 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
                 <strong style={{ color: 'var(--c-accent-text)' }}>✎</strong> {c.draft}
               </>
             ) : (
-              excerpt ?? `${prefix}${c.preview ?? ''}`
+              excerpt ?? `${prefix}${localizedPreview(c.preview ?? '', t)}`
             )}
           </span>
           <span className="row-icons">
@@ -198,4 +198,12 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
       </button>} />
     </div>
   );
+}
+
+/** Previews of media messages are generated in English by the shared core; show them localized. */
+function localizedPreview(preview: string, t: ReturnType<typeof useI18n>['t']): string {
+  if (preview === '📷 Photo') return `📷 ${t('attachment.photo')}`;
+  if (preview === '🎤 Voice message') return `🎤 ${t('msg.voiceNote')}`;
+  if (preview === '📎 File') return `📎 ${t('attachment.file')}`;
+  return preview;
 }

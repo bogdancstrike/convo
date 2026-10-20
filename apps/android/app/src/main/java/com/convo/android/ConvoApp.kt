@@ -56,7 +56,7 @@ import org.json.JSONObject
 }
 @Composable fun ConvoApp(app: MainActivity) {
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(app.notice) { app.notice?.let { message -> snackbar.showSnackbar(message, duration = SnackbarDuration.Short); if (app.notice == message) app.notice = null } }
+    LaunchedEffect(app.notice) { app.notice?.let { message -> snackbar.showSnackbar(tr(message), duration = SnackbarDuration.Short); if (app.notice == message) app.notice = null } }
     BackHandler(app.phase == "ready" && (app.route != "list" || app.selectedTab != "Chats")) { app.back() }
     var mediaOpen by remember { mutableStateOf(false) }
     var serverEdit by remember { mutableStateOf(false) }; var server by remember { mutableStateOf(app.serverAddress()) }
@@ -185,7 +185,7 @@ import org.json.JSONObject
                 PersonAvatar(app, c.optString("id"), c.optString("title"), group = c.optString("kind") == "group")
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), fontWeight = FontWeight.SemiBold)
-                    Text(c.optString("preview"), maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    RawText(c.optString("preview").let { p -> if (p in setOf("📷 Photo", "🎤 Voice message", "📎 File")) tr(p) else p }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (c.optBoolean("pinned")) Icon(Icons.Outlined.PushPin, "Pinned", Modifier.size(16.dp))
                 if (c.optInt("unread") > 0) Badge { Text(c.optInt("unread").toString()) }

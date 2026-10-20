@@ -124,7 +124,7 @@ class MainActivity : FragmentActivity() {
                 "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus() }
                 "call" -> calls.onEvent(value)
                 "callLog" -> callLogVersion++
-                "snapshot" -> { snapshot = value; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
+                "snapshot" -> { snapshot = value; Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
         setContent { ConvoTheme(snapshot.optJSONObject("settings")?.optString("theme") ?: "system") {

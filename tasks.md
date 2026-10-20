@@ -57,7 +57,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   like the web viewer; documents/audio open alone. Verified on emulator-5554.
 - Full regression 2026-10-21: 54 passed, 4 skipped (hostname-only passkey specs); the stale
   Calls-placeholder assertion in `ux.spec.ts` now checks the real Calls panel.
-- Still open: full localization,
+- Android localization: native UI follows the shared EN/RO `settings.locale` live (`I18n.kt`:
+  package-level Text/Icon shadows translate UI strings; user content uses RawText). Media
+  previews are localized on both clients. Verified on emulator-5554 in Română.
+- Still open: physical-device/accessibility testing,
   web screen lock, background call ringing (push), remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)

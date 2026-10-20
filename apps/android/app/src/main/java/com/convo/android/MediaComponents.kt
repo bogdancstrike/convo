@@ -64,7 +64,7 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
         }
     } else Row(Modifier.widthIn(max = 280.dp).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(if (pointer.optBoolean("voiceNote")) Icons.Outlined.Mic else if (mime.startsWith("audio/")) Icons.Outlined.PlayCircleOutline else Icons.Outlined.InsertDriveFile, null)
-        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) { Text(name, maxLines = 2, style = MaterialTheme.typography.bodyMedium); Text(if (pointer.has("durationMs")) formatDuration(pointer.optLong("durationMs")) else formatSize(pointer.optLong("size")), style = MaterialTheme.typography.labelSmall) }
+        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) { RawText(name, maxLines = 2, style = MaterialTheme.typography.bodyMedium); Text(if (pointer.has("durationMs")) formatDuration(pointer.optLong("durationMs")) else formatSize(pointer.optLong("size")), style = MaterialTheme.typography.labelSmall) }
         IconButton(open) { Icon(if (mime.startsWith("audio/")) Icons.Outlined.PlayArrow else Icons.Outlined.Download, if (mime.startsWith("audio/")) "Play $name" else "View or download $name") }
     }
 }
