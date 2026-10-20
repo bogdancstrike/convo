@@ -13,12 +13,14 @@ export function ChatList({
   activeId,
   onSelect,
   onNewChat,
+  onNewGroup,
   onNoteToSelf,
 }: {
   conversations: Conversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  onNewGroup: () => void;
   onNoteToSelf: () => void;
 }) {
   const { t, time } = useI18n();
@@ -70,6 +72,9 @@ export function ChatList({
           <h2>{showArchived ? t('chats.archived') : t('nav.chats')}</h2>
           <button className="btn btn-icon" onClick={onNoteToSelf} title={t('chats.noteToSelf')} aria-label={t('chats.noteToSelf')}>
             <Icon name="note" />
+          </button>
+          <button className="btn btn-icon" onClick={onNewGroup} title={t('group.new')} aria-label={t('group.new')} data-testid="new-group">
+            <Icon name="group" />
           </button>
           <button className="btn btn-icon" onClick={onNewChat} title={t('chats.new')} aria-label={t('chats.new')} data-testid="new-chat">
             <Icon name="plus" />

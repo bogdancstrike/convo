@@ -4,6 +4,8 @@ import { Icon } from '../components/Icon';
 import { useConnection, useConversations } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { ChatList } from './ChatList';
+import { GroupInfoDialog } from './GroupInfoDialog';
+import { NewGroupDialog } from './NewGroupDialog';
 import { NewChatDialog } from './NewChatDialog';
 import { SafetyNumberDialog } from './SafetyNumberDialog';
 import { SettingsPane } from './Settings';
@@ -18,7 +20,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
   const connection = useConnection(client);
   const [destination, setDestination] = useState<Destination>('chats');
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<'new-chat' | 'safety' | null>(null);
+  const [dialog, setDialog] = useState<'new-chat' | 'new-group' | 'safety' | 'group-info' | null>(null);
   const active = conversations.find((c) => c.id === activeId) ?? null;
 
   const open = async (accountId: string, username: string) => {
@@ -54,6 +56,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
             activeId={activeId}
             onSelect={setActiveId}
             onNewChat={() => setDialog('new-chat')}
+            onNewGroup={() => setDialog('new-group')}
             onNoteToSelf={() => void open(client.accountId, client.device.username)}
           />
           {active ? (
@@ -62,7 +65,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
               conversation={active}
               connection={connection}
               onBack={() => setActiveId(null)}
-              onVerify={() => setDialog('safety')}
+              onVerify={() => setDialog(active.kind === 'group' ? 'group-info' : 'safety')}
             />
           ) : (
             <section className="thread">
@@ -81,6 +84,17 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
       {dialog === 'new-chat' && (
         <NewChatDialog client={client} onClose={() => setDialog(null)} onPick={(a) => void open(a.accountId, a.username)} />
       )}
+      {dialog === 'new-group' && (
+        <NewGroupDialog
+          client={client}
+          onClose={() => setDialog(null)}
+          onCreated={(c) => {
+            setDialog(null);
+            setActiveId(c.id);
+          }}
+        />
+      )}
+      {dialog === 'group-info' && active && <GroupInfoDialog client={client} conversation={active} onClose={() => setDialog(null)} />}
       {dialog === 'safety' && active && (
         <SafetyNumberDialog client={client} conversation={active} onClose={() => setDialog(null)} />
       )}

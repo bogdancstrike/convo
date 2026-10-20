@@ -503,6 +503,17 @@ blockquote.fmt {
   color: var(--text-secondary);
 }
 
+.bubble .author {
+  font-size: var(--font-meta);
+  font-weight: 700;
+  color: var(--action-primary);
+  margin-bottom: 2px;
+}
+.people-picker {
+  display: grid;
+  gap: var(--space-2);
+}
+
 /* --- attachments --------------------------------------------------------------------- */
 .attachment-image {
   display: block;

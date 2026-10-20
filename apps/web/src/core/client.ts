@@ -20,8 +20,9 @@ import { utf8 } from '../lib/bytes';
 import type { StoreOp } from '../storage/encryptedStore';
 import { downloadAttachment, prepareFile, uploadAttachment } from './attachments';
 import { replenishPreKeys } from './enrollment';
+import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
-import { STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
+import { groupConversationId, groupIdOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { Outbox, type OutboxItem } from './outbox';
 import type { Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
@@ -50,6 +51,8 @@ export interface ClientEvents extends Record<string, unknown> {
   devices: undefined;
   /** This device was revoked; local data has been wiped. */
   revoked: undefined;
+  /** Group membership/roles changed (group ID). */
+  groups: string;
   settings: Settings;
 }
 
@@ -62,6 +65,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   readonly socket: GatewaySocket;
   private readonly mutex = new Mutex();
   private readonly sessions: SessionManager;
+  /** MLS group membership and encryption. */
+  readonly groups: GroupManager;
   private readonly outbox: Outbox;
   private readonly conversationCache = new Map<string, Conversation>();
   private readonly accountCache = new Map<string, Promise<AccountDto | undefined>>();
@@ -80,7 +85,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.currentSettings = settings;
     this.socket = new GatewaySocket(async () => (await api.socketTicket()).ticket);
     this.sessions = new SessionManager(api, signal, device);
-    this.outbox = new Outbox(repos.store, this.sessions, api, this.socket, device.accountId, {
+    this.groups = new GroupManager(api, repos.store, device);
+    this.outbox = new Outbox(repos.store, this.sessions, this.groups, api, this.socket, device.accountId, {
       onAccepted: (item) => this.onOutboxAccepted(item),
       onFailed: (item, reason, error) => this.onOutboxFailed(item, reason, error),
     }, (task) => this.mutex.run(task));
@@ -109,6 +115,30 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.socket.on('directive', (directive) => void this.onDirective(directive));
     this.socket.start();
     this.retryTimer = setInterval(() => void this.outbox.flush(), OUTBOX_RETRY_MS);
+    void this.maintainGroups();
+  }
+
+  /** Keeps MLS KeyPackages stocked and this account's devices in sync across groups. */
+  private async maintainGroups(): Promise<void> {
+    try {
+      await this.mutex.run(() => this.groups.ensureKeyPackages());
+      await this.syncOwnDevicesInGroups();
+    } catch (error) {
+      console.warn('Group maintenance failed', error instanceof Error ? error.message : error);
+    }
+  }
+
+  /** Adds linked own devices to (and removes revoked own devices from) every joined group. */
+  private async syncOwnDevicesInGroups(): Promise<void> {
+    const conversations = [...this.conversationCache.values()].filter((c) => c.kind === 'group' && !c.left);
+    if (conversations.length === 0) return;
+    const roster = await this.api.roster(this.accountId);
+    const active = roster.devices.map((d) => d.deviceId);
+    for (const c of conversations) {
+      await this.mutex
+        .run(() => this.groups.syncOwnDevices(groupIdOf(c.id)!, active))
+        .catch((error) => console.warn('Own-device group sync failed', error instanceof Error ? error.message : error));
+    }
   }
 
   /** Disconnects (tab closing / leadership lost). */
@@ -312,6 +342,52 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emit('messages', target.conversationId);
   }
 
+  // --- groups -----------------------------------------------------------------------------
+
+  /** Creates an MLS group, then shares its encrypted name with the members. */
+  async createGroup(name: string, members: { accountId: string; username: string }[]): Promise<Conversation> {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 128) throw new Error('invalid group name');
+    const record = await this.mutex.run(() => this.groups.create(trimmed, members.map((m) => m.accountId)));
+    members.forEach((m) => this.accountCache.set(m.accountId, Promise.resolve({ accountId: m.accountId, username: m.username })));
+    const conversation = this.newGroupConversation(record.groupId, trimmed);
+    await this.saveConversations([conversation]);
+    await this.shareGroupMeta(record);
+    return conversation;
+  }
+
+  /** Local group record (encrypted name, roles from the server mirror). */
+  groupRecord(conversationId: string): Promise<GroupRecord | undefined> {
+    return this.groups.record(groupIdOf(conversationId) ?? '');
+  }
+
+  /** Display name of an account (cached directory lookup). */
+  async displayName(accountId: string): Promise<string> {
+    if (accountId === this.accountId) return this.device.username;
+    return (await this.lookupAccount(accountId))?.username ?? 'Unknown';
+  }
+
+  /** Adds people to a group (admins/owners). */
+  async addGroupMembers(conversationId: string, accountIds: string[]): Promise<void> {
+    const groupId = groupIdOf(conversationId)!;
+    await this.mutex.run(() => this.groups.addMembers(groupId, accountIds));
+    const record = await this.groups.record(groupId);
+    if (record) await this.shareGroupMeta(record);
+    this.emit('groups', groupId);
+  }
+
+  /** Removes a person from a group (admins/owners). */
+  async removeGroupMember(conversationId: string, accountId: string): Promise<void> {
+    const groupId = groupIdOf(conversationId)!;
+    await this.mutex.run(() => this.groups.removeMember(groupId, accountId));
+    this.emit('groups', groupId);
+  }
+
+  /** Sends the current group metadata so members (especially new ones) learn the name. */
+  private async shareGroupMeta(record: GroupRecord): Promise<void> {
+    await this.enqueue(record.groupId, { v: CONTENT_VERSION, kind: 'groupMeta', groupMeta: { name: record.name, version: record.metaVersion } }, false, undefined, [], true);
+  }
+
   /** Deletes a message on this device only. */
   async deleteLocally(target: ChatMessage): Promise<void> {
     await this.repos.store.commit([{ type: 'deleteMessage', conversationId: target.conversationId, messageKey: `${target.authorId}/${target.id}` }]);
@@ -396,6 +472,19 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const ops: StoreOp[] = [{ type: 'processed', guid: envelope.guid }];
     const changed = new Set<string>();
     let followUps: (() => Promise<void>)[] = [];
+    if (envelope.type.startsWith('MLS_')) {
+      try {
+        followUps = await this.processGroupEnvelope(envelope, ops, changed);
+      } catch (error) {
+        console.warn('Group envelope processing failed', error instanceof Error ? error.message : 'error');
+      }
+      await this.repos.store.commit(ops);
+      this.socket.ack([envelope.guid]);
+      changed.forEach((id) => this.emit('messages', id));
+      this.emitConversations();
+      for (const task of followUps) await task();
+      return;
+    }
     try {
       const { plaintext, ops: protocolOps } = await this.sessions.decrypt(envelope);
       ops.push(...protocolOps);
@@ -479,7 +568,70 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         }
         return followUps;
       }
+      case 'groupMeta':
+        return followUps; // only meaningful inside a group
     }
+  }
+
+  /** MLS envelopes: Welcome (join), commit (membership change), application message. */
+  private async processGroupEnvelope(envelope: EnvelopeDto, ops: StoreOp[], changed: Set<string>): Promise<(() => Promise<void>)[]> {
+    const result = await this.groups.process(envelope);
+    if (!result) return [];
+    ops.push(...result.ops);
+    const conversationId = groupConversationId(result.groupId);
+    const followUps: (() => Promise<void>)[] = [];
+    if (result.joined) {
+      const existing = this.conversationCache.get(conversationId);
+      this.stage(ops, existing ? { ...existing, left: false } : this.newGroupConversation(result.groupId, ''));
+      followUps.push(() => this.refreshGroup(result.groupId));
+    }
+    if (result.removed) {
+      const existing = this.conversationCache.get(conversationId);
+      if (existing) this.stage(ops, { ...existing, left: true });
+    }
+    if (result.changed) followUps.push(() => this.refreshGroup(result.groupId));
+    if (result.application) {
+      const { accountId } = result.application;
+      const content = decodeContent(result.application.plaintext);
+      const conversation = this.conversationCache.get(conversationId) ?? this.newGroupConversation(result.groupId, '');
+      if (!this.conversationCache.has(conversationId)) this.stage(ops, conversation);
+      const direction = accountId === this.accountId ? 'out' : 'in';
+      if (content.kind === 'data') {
+        await this.applyData(conversationId, accountId, direction, content.data, envelope, ops, changed);
+      } else if (content.kind === 'groupMeta') {
+        await this.applyGroupMeta(result.groupId, content.groupMeta, ops);
+      } else if (content.kind === 'unknown') {
+        ops.push(this.repos.putMessage({
+          conversationId, id: envelope.guid, authorId: accountId, direction, sentAt: envelope.serverTimestamp,
+          sort: envelope.serverTimestamp, reactions: {}, unsupported: true,
+        }));
+        changed.add(conversationId);
+      }
+    }
+    return followUps;
+  }
+
+  /** Applies a newer encrypted group name (highest version wins). */
+  private async applyGroupMeta(groupId: string, meta: { name: string; version: number }, ops: StoreOp[]): Promise<void> {
+    const record = await this.groups.record(groupId);
+    if (!record || meta.version <= record.metaVersion) return;
+    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...record, name: meta.name, metaVersion: meta.version } });
+    const conversation = this.conversationCache.get(groupConversationId(groupId));
+    if (conversation) this.stage(ops, { ...conversation, title: meta.name });
+  }
+
+  /** Reloads roles/members from the server ACL mirror after joins and commits. */
+  private async refreshGroup(groupId: string): Promise<void> {
+    const record = await this.groups.refreshRecord(groupId).catch(() => undefined);
+    const conversation = this.conversationCache.get(groupConversationId(groupId));
+    if (record && conversation) {
+      await this.saveConversations([{ ...conversation, title: record.name || conversation.title, left: record.left }]);
+    }
+    this.emit('groups', groupId);
+  }
+
+  private newGroupConversation(groupId: string, name: string): Conversation {
+    return { ...this.newConversation(groupConversationId(groupId), name || 'Group'), kind: 'group' };
   }
 
   /**
@@ -601,14 +753,22 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   // --- outbox integration -----------------------------------------------------------------
 
+  /**
+   * Queues content for a conversation or account. Group conversations (`g:<id>`) become one MLS
+   * application message; direct destinations use Signal fan-out (+ own-device transcript).
+   */
   private async enqueue(
     destination: string,
     content: Content,
     syncTranscript: boolean,
     message?: { conversationId: string; id: string },
     extraOps: StoreOp[] = [],
+    group = false,
   ): Promise<void> {
-    const item = Outbox.create({ destination, content, selfAccountId: this.accountId, syncTranscript, message });
+    const groupId = group ? destination : groupIdOf(destination);
+    const item = groupId
+      ? Outbox.create({ destination: groupId, content, selfAccountId: this.accountId, syncTranscript: false, message, group: true })
+      : Outbox.create({ destination, content, selfAccountId: this.accountId, syncTranscript, message });
     await this.repos.store.commit([...extraOps, Outbox.op(item)]);
     void this.outbox.flush();
   }
@@ -648,8 +808,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         await this.repos.store.commit([this.repos.putDeviceState(this.device)]);
         break;
       }
+      case 'KEYPACKAGES_LOW':
+        await this.mutex.run(() => this.groups.ensureKeyPackages()).catch(() => undefined);
+        break;
       case 'DEVICE_LIST_CHANGED':
         this.emit('devices', undefined);
+        await this.syncOwnDevicesInGroups().catch(() => undefined);
         break;
       case 'REVOKED':
         await this.handleRevoked();

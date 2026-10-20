@@ -79,12 +79,25 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Photos render inline (decrypted in memory), files download on explicit action; expired/offline/integrity states | |
 | ⬜ | Albums (2–10 photos grid), thumbnails/blurhash, voice notes, resumable multipart uploads, offline-queued uploads | FEAT-01/EXT-02 |
 
+## Groups (GRP-01/02/03)
+
+| Status | Item | Notes |
+|---|---|---|
+| ✅ | MLS KeyPackages: upload/status/single-use claim, KEYPACKAGES_LOW, revocation cleanup | |
+| ✅ | Groups module (MLS Delivery Service): create, epoch-CAS ordered commits, idempotency, events, role ACL mirror, fan-out | |
+| ✅ | Browser MLS via `ts-mls` (RFC 9420, X25519/AES-128-GCM/Ed25519) with portable pure-JS crypto provider | interim FND-02 stand-in |
+| ✅ | Authenticated group senders (leaf credential must match server-reported source device) | |
+| ✅ | Create group, encrypted group name, add/remove members (admin/owner), removed-member state | |
+| ✅ | Linked-device sync: own devices added/removed in joined groups on DEVICE_LIST_CHANGED | |
+| ⬜ | Leave (proposal flow), promote/demote/transfer UI, invite links, join requests, bans, pins, timers | GRP-03, EXT-03 |
+| ⬜ | Credential binding to account identity key, reviewed role profile, pending-removal gate | GRP-01 |
+
 ## Delivery & verification
 
 | Status | Item | Notes |
 |---|---|---|
 | ✅ | Root `docker-compose.yaml`: Postgres, Valkey, Keycloak (realm import), SeaweedFS, server, web | |
-| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self, device linking, encrypted photo/file exchange, ciphertext-only object store | 12/12 passing |
+| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self, device linking, encrypted photo/file exchange, ciphertext-only object store, MLS groups | 14/14 passing |
 | ✅ | Shared Java/TypeScript contract vectors for device signatures and enrollment transcripts | `contracts/vectors` |
 
 ## Fixed along the way
@@ -93,6 +106,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   clearing optimistically and restoring only on local failure.
 * Unreadable local keys left an endless spinner — now shows a "set up this browser again" state.
 * Keycloak advertised the nginx-internal port in its endpoints — proxy now forwards `Host:port`.
+* Group reads used row locks inside read-only transactions (PostgreSQL rejects `FOR SHARE`).
+* Firefox rejected MLS commits via WebCrypto X25519 — switched MLS to a portable pure-JS provider.
 
 ## Next up
 
@@ -101,7 +116,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | QR display/scan for linking, persistent own-device security notices | ID-02 |
 | Albums, voice notes, resumable uploads | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
-| Groups (server roster/ACL, ordered group events) and MLS client integration | GRP-01/02/03 |
+| Group leave/roles/invites, communities | GRP-03, COM-01/02 |
 | Durable push/notification intents (outbox table + workers) | MSG-02 |
 | Admin console, audit log, policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |

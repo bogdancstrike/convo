@@ -32,6 +32,14 @@ class GroupRepository {
                 .param("g", groupId).param("e", epoch).update() == 1;
     }
 
+    /** Reads an active group without locking (read-only transactions cannot lock rows). */
+    Optional<GroupRow> find(byte[] groupId) {
+        return jdbc.sql("SELECT group_id, epoch, next_seq, status FROM mls_groups WHERE group_id = :g AND status = 'active'")
+                .param("g", groupId)
+                .query((rs, i) -> new GroupRow(rs.getBytes(1), rs.getLong(2), rs.getLong(3), rs.getString(4)))
+                .optional();
+    }
+
     /** Locks the group row; {@code shared} allows concurrent application messages but blocks commits. */
     Optional<GroupRow> lock(byte[] groupId, boolean shared) {
         return jdbc.sql("SELECT group_id, epoch, next_seq, status FROM mls_groups WHERE group_id = :g AND status = 'active' FOR "

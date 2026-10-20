@@ -16,6 +16,8 @@ docker compose --profile e2e run --rm e2e          # Chromium + Firefox
   mailbox delivery after reconnect, Note to self.
 * `tests/attachments.spec.ts` — FEAT-01: encrypted photo + file exchange (image renders, download is
   byte-identical) and proof that uploaded objects contain no plaintext.
+* `tests/groups.spec.ts` — GRP-02/03: MLS group create, encrypted name, authenticated sender names,
+  admin remove (removed member stops receiving) and add (new member gets name + new messages).
 * `tests/linking.spec.ts` — ID-02: second browser links with matching comparison codes, then
   fan-out reaches both devices and sent messages mirror across own devices.
 

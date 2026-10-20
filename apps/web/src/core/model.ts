@@ -49,9 +49,9 @@ export interface ChatMessage {
 }
 
 export interface Conversation {
-  /** Peer account ID for direct chats; own account ID for Note to self. */
+  /** Peer account ID for direct chats; own account ID for Note to self; `g:<groupId>` for groups. */
   id: string;
-  kind: 'direct' | 'note';
+  kind: 'direct' | 'note' | 'group';
   title: string;
   lastActivity: number;
   preview?: string;
@@ -62,6 +62,18 @@ export interface Conversation {
   draft?: string;
   /** Set when the peer's identity key changed and the user has not acknowledged it. */
   identityChangedAt?: number;
+  /** Groups: this account is no longer a member (removed or left). */
+  left?: boolean;
+}
+
+/** Conversation ID of a group. */
+export function groupConversationId(groupId: string): string {
+  return `g:${groupId}`;
+}
+
+/** Group ID of a group conversation, or undefined for direct chats. */
+export function groupIdOf(conversationId: string): string | undefined {
+  return conversationId.startsWith('g:') ? conversationId.slice(2) : undefined;
 }
 
 /** Device-local preferences (privacy defaults from specs §25.1: receipts/typing off). */

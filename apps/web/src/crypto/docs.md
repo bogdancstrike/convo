@@ -11,6 +11,8 @@ and everything else uses WebCrypto primitives.
 | `content.ts` | E2EE content schema (data, receipts, own-device sync, typing) + validating codec; unknown kinds become placeholders |
 | `padding.ts` | 160-byte bucket padding (specs §5.5) |
 | `attachmentCipher.ts` | Attachment STREAM encryption (AES-256-GCM, 64 KiB chunks, authenticated header/final flag), size-bucket padding, digest-before-decrypt |
+| `mls.ts` | MLS facade over `ts-mls`: signer, KeyPackages (with refs), create/join/commit, application encrypt/decrypt **with authenticated sender**, state (de)serialization |
+| `mlsProvider.ts` | Portable pure-JS MLS crypto provider (noble + noble X25519 HPKE KEM) for identical behaviour in all browsers |
 | `provisioning.ts` | Linking channel: X25519 → HKDF-SHA256 → AES-256-GCM bound to the `ENCLAVE-PROVISION-V1` transcript; 12-digit comparison code |
 
 **Interim decision (FND-02 gate):** the specification targets libsignal (Rust/WASM) with PQXDH.
@@ -18,4 +20,8 @@ Until the browser build of the shared Rust core passes its feasibility gate, the
 the TypeScript Signal implementation (X3DH + Double Ratchet, no Kyber/PQ ratchet). This is
 recorded in `docs/decisions/0001-interim-browser-signal.md` and must be replaced before launch.
 
-Tests: `padding.test.ts`, `content.test.ts`, `signalStore.test.ts`.
+Tests: `padding.test.ts`, `content.test.ts`, `signalStore.test.ts`, `attachmentCipher.test.ts`,
+`provisioning.test.ts`, `mls.test.ts`.
+
+MLS uses `ts-mls` the same way the Signal library is used: an interim FND-02 stand-in for the
+Rust OpenMLS core, with credential binding to the account identity key (GRP-01) still to do.

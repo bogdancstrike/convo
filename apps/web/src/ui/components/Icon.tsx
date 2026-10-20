@@ -11,12 +11,13 @@ const PATHS = {
   shield: 'M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z',
   back: 'M15 5l-7 7 7 7',
   note: 'M6 3h9l4 4v14H6zM14 3v5h5',
+  group: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 19c0-3 3-5 6-5s6 2 6 5M16 5.5a3 3 0 0 1 0 5.5M18 14c2 .6 3 2.3 3 5',
 } as const;
 
 export type IconName = keyof typeof PATHS;
 
 export function Icon({ name, label, size = 22 }: { name: IconName; label?: string; size?: number }) {
-  const stroked = name === 'plus' || name === 'back' || name === 'note';
+  const stroked = name === 'plus' || name === 'back' || name === 'note' || name === 'group';
   return (
     <svg
       viewBox="0 0 24 24"

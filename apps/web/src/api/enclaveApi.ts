@@ -2,7 +2,13 @@ import type { DeviceCredentials, HttpClient } from './http';
 import type {
   AccountDto,
   ClaimResponse,
+  CreateGroupRequest,
   DeviceDto,
+  GroupCommitRequest,
+  GroupDto,
+  GroupMessageRequest,
+  GroupSummaryDto,
+  KeyPackageClaimResponse,
   LinkRegistrationRequest,
   PendingProvisioningDto,
   ProvisioningOpenResponse,
@@ -120,6 +126,40 @@ export class EnclaveApi {
   /** REST fallback for sends; the core prefers the WebSocket. */
   send(request: SendRequestDto): Promise<SendResultDto> {
     return this.signed('PUT', `/v1/messages/${encodeURIComponent(request.destination)}`, request);
+  }
+
+  // --- MLS KeyPackages and groups ----------------------------------------------------------
+
+  uploadKeyPackages(keyPackages: { ref: string; keyPackage: string }[]): Promise<void> {
+    return this.signed('PUT', '/v1/keypackages', { keyPackages });
+  }
+
+  keyPackageStatus(): Promise<{ oneTimePreKeys: number }> {
+    return this.signed('GET', '/v1/keypackages/status');
+  }
+
+  claimKeyPackages(accountIds: string[]): Promise<KeyPackageClaimResponse> {
+    return this.signed('POST', '/v1/keypackages/claim', { accountIds });
+  }
+
+  createGroup(request: CreateGroupRequest): Promise<GroupDto> {
+    return this.signed('POST', '/v1/groups', request);
+  }
+
+  myGroups(): Promise<GroupSummaryDto[]> {
+    return this.signed('GET', '/v1/groups/mine');
+  }
+
+  group(groupId: string): Promise<GroupDto> {
+    return this.signed('GET', `/v1/groups/${groupId}`);
+  }
+
+  groupCommit(groupId: string, request: GroupCommitRequest): Promise<{ epoch: number; seq: number; duplicate: boolean }> {
+    return this.signed('POST', `/v1/groups/${groupId}/commits`, request);
+  }
+
+  groupMessage(groupId: string, request: GroupMessageRequest): Promise<{ ok: boolean; duplicate: boolean }> {
+    return this.signed('PUT', `/v1/groups/${groupId}/messages`, request);
   }
 
   /** Registers an attachment of exactly `size` encrypted bytes; returns a presigned PUT URL. */

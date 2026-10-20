@@ -8,6 +8,7 @@ calls `EnclaveClient` methods and listens to its events; it never touches protoc
 | `bootstrap.ts` | Wires encrypted store, repositories, Signal store and API; creates the client when enrolled |
 | `enrollment.ts` | Shared enrollment: install-key generation, transcript proof, atomic persistence; first-device enrollment with pending-enrollment retry; prekey replenishment |
 | `attachments.ts` | File preparation (canvas re-encode strips EXIF/location), encrypted upload via presigned URL, verified download, safe content types |
+| `groups.ts` | `GroupManager`: MLS signer/KeyPackage stock, create/add/remove/own-device sync commits (local state advances only after DS acceptance), Welcome/commit/application processing with sender-vs-source check |
 | `linking.ts` | Device linking: `LinkRequest` (new device: session, comparison code, polling, registration) and approving-side helpers |
 | `sessions.ts` | Multi-device Signal fan-out (claims, session rebuild on registration change) and decryption; verified-identity enforcement |
 | `outbox.ts` | Durable outbox: `queued → ready → accepted`, same-ciphertext retries, DEVICE_MISMATCH/STALE rebuilds, blocked/failed states |

@@ -171,7 +171,7 @@ class GroupService {
     @Transactional(readOnly = true)
     GroupView get(DeviceAddress caller, byte[] groupId) {
         requireGroupId(groupId);
-        GroupRow group = groups.lock(groupId, true)
+        GroupRow group = groups.find(groupId)
                 .orElseThrow(() -> new EnclaveException(ErrorCode.NOT_GROUP_MEMBER, "not a member"));
         if (!groups.members(groupId).containsKey(caller.accountId())) {
             throw new EnclaveException(ErrorCode.NOT_GROUP_MEMBER, "not a member");

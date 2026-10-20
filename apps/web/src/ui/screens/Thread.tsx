@@ -93,6 +93,11 @@ export function Thread({
             <Icon name="shield" size={18} /> {t('thread.verify')}
           </button>
         )}
+        {conversation.kind === 'group' && (
+          <button className="btn" onClick={onVerify} data-testid="group-info">
+            <Icon name="group" size={18} /> {t('group.info')}
+          </button>
+        )}
         <button className="btn btn-icon" onClick={() => void client.updateConversation(conversation.id, { pinned: !conversation.pinned })}>
           {conversation.pinned ? t('chats.unpin') : t('chats.pin')}
         </button>
@@ -106,6 +111,11 @@ export function Thread({
       {connection !== 'online' && (
         <div className="connection-banner" role="status">
           {connection === 'connecting' ? t('conn.connecting') : t('conn.offline')}
+        </div>
+      )}
+      {conversation.left && (
+        <div className="notice" role="status">
+          <span>{t('group.left')}</span>
         </div>
       )}
       {conversation.identityChangedAt && (
@@ -138,6 +148,7 @@ export function Thread({
             message={m}
             showDay={i === 0 || !sameDay(messages[i - 1]!.sort, m.sort)}
             quotedAuthor={m.quote ? (m.quote.authorId === client.accountId ? client.device.username : conversation.title) : ''}
+            showAuthor={conversation.kind === 'group' && m.direction === 'in' && (i === 0 || messages[i - 1]!.authorId !== m.authorId)}
             onReply={() => setMode({ kind: 'reply', target: m })}
             onEdit={() => setMode({ kind: 'edit', target: m })}
           />
@@ -146,7 +157,7 @@ export function Thread({
       <div className="typing" aria-live="polite">
         {typing ? t('thread.typing', { name: conversation.title }) : ''}
       </div>
-      <Composer
+      {!conversation.left && <Composer
         key={conversation.id}
         client={client}
         conversation={conversation}
@@ -160,7 +171,7 @@ export function Thread({
           setMode(null);
           stickToBottom.current = true;
         }}
-      />
+      />}
     </section>
   );
 }
@@ -170,6 +181,7 @@ function MessageView({
   message: m,
   showDay,
   quotedAuthor,
+  showAuthor,
   onReply,
   onEdit,
 }: {
@@ -177,6 +189,7 @@ function MessageView({
   message: ChatMessage;
   showDay: boolean;
   quotedAuthor: string;
+  showAuthor: boolean;
   onReply: () => void;
   onEdit: () => void;
 }) {
@@ -224,6 +237,7 @@ function MessageView({
           </div>
         )}
         <div className={`bubble${system ? ' system' : ''}`} tabIndex={0}>
+          {showAuthor && <AuthorName client={client} accountId={m.authorId} />}
           {m.quote && !system && (
             <div className="quote">
               <strong>{quotedAuthor}</strong>
@@ -488,4 +502,21 @@ function Composer({
 
 function sameDay(a: number, b: number): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
+/** Sender handle above incoming group messages. */
+function AuthorName({ client, accountId }: { client: EnclaveClient; accountId: string }) {
+  const [name, setName] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    void client.displayName(accountId).then((n) => !cancelled && setName(n));
+    return () => {
+      cancelled = true;
+    };
+  }, [client, accountId]);
+  return (
+    <div className="author" data-testid="message-author">
+      {name}
+    </div>
+  );
 }

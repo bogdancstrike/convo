@@ -89,6 +89,15 @@ export interface SyncMessage {
   read?: { conversationId: string; upTo: number };
 }
 
+/**
+ * End-to-end encrypted group metadata (specs §11 `GroupMetadataUpdate`). Highest version wins;
+ * ties keep the current value.
+ */
+export interface GroupMeta {
+  name: string;
+  version: number;
+}
+
 /** Typing indicator (transient, off by default). */
 export interface TypingMessage {
   action: 'started' | 'stopped';
@@ -99,7 +108,8 @@ export type Content =
   | { v: number; kind: 'data'; data: DataMessage }
   | { v: number; kind: 'receipt'; receipt: ReceiptMessage }
   | { v: number; kind: 'sync'; sync: SyncMessage }
-  | { v: number; kind: 'typing'; typing: TypingMessage };
+  | { v: number; kind: 'typing'; typing: TypingMessage }
+  | { v: number; kind: 'groupMeta'; groupMeta: GroupMeta };
 
 /** Content this client cannot interpret. */
 export interface UnknownContent {
@@ -141,6 +151,16 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       }
       return parsed as unknown as Content;
     case 'typing':
+      return parsed as unknown as Content;
+    case 'groupMeta':
+      if (
+        !isObject(parsed.groupMeta) ||
+        typeof parsed.groupMeta.name !== 'string' ||
+        parsed.groupMeta.name.length > 128 ||
+        typeof parsed.groupMeta.version !== 'number'
+      ) {
+        throw new Error('malformed group metadata');
+      }
       return parsed as unknown as Content;
     default:
       return { v: parsed.v, kind: 'unknown' };

@@ -113,7 +113,10 @@ export interface SendResultDto {
 
 export interface EnvelopeDto {
   guid: string;
-  type: string;
+  type: 'CIPHERTEXT' | 'PREKEY_MESSAGE' | 'MLS_PRIVATE' | 'MLS_COMMIT' | 'MLS_WELCOME' | 'MLS_PROPOSAL' | string;
+  groupId?: string;
+  epoch?: number;
+  groupSeq?: number;
   sourceAccount?: string;
   sourceDevice?: number;
   serverTimestamp: number;
@@ -122,7 +125,7 @@ export interface EnvelopeDto {
   content: string;
 }
 
-export type Directive = 'KEYS_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED';
+export type Directive = 'KEYS_LOW' | 'KEYPACKAGES_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED';
 
 export interface ServerFrame {
   requestId: number;
@@ -164,4 +167,56 @@ export interface PendingProvisioningDto {
 export interface LinkRegistrationRequest extends Omit<PrimaryRegistrationRequest, 'reservationId'> {
   provisioningId: string;
   provisioningCode: string;
+}
+
+export interface KeyPackageClaimResponse {
+  keyPackages: { accountId: string; deviceId: number; keyPackage: string }[];
+  unavailable: { accountId: string; deviceId: number }[];
+}
+
+export type GroupRole = 'owner' | 'admin' | 'member';
+
+export interface DeviceRef {
+  accountId: string;
+  deviceId: number;
+}
+
+export interface GroupDto {
+  groupId: string;
+  epoch: number;
+  members: { accountId: string; role: GroupRole }[];
+  devices: DeviceRef[];
+}
+
+export interface GroupSummaryDto {
+  groupId: string;
+  epoch: number;
+  role: GroupRole;
+  members: number;
+}
+
+export interface CreateGroupRequest {
+  groupId: string;
+  epoch: number;
+  members: string[];
+  devices: DeviceRef[];
+  welcome?: string;
+}
+
+export interface GroupCommitRequest {
+  epoch: number;
+  submissionId: string;
+  commit: string;
+  welcome?: string;
+  addMembers?: string[];
+  removeMembers?: string[];
+  addDevices?: DeviceRef[];
+  removeDevices?: DeviceRef[];
+  roleChanges?: Record<string, GroupRole>;
+}
+
+export interface GroupMessageRequest {
+  epoch: number;
+  submissionId: string;
+  message: string;
 }

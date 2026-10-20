@@ -50,16 +50,30 @@ export async function signIn(page: Page, user: TestUser): Promise<void> {
   await page.locator('#kc-login').click();
 }
 
-/** Signs in through Keycloak and registers this browser as the account's first device. */
+/**
+ * Signs in through Keycloak and registers this browser as the account's first device. Waits until
+ * the device has published its MLS KeyPackages so it can be added to groups immediately.
+ */
 export async function enroll(page: Page, user: TestUser): Promise<void> {
+  const keyPackagesUploaded = page.waitForResponse(
+    (r) => r.url().endsWith('/v1/keypackages') && r.request().method() === 'PUT' && r.ok(),
+    { timeout: 60_000 },
+  );
   await signIn(page, user);
   await expect(page.getByTestId('nav-settings')).toBeVisible({ timeout: 45_000 });
+  await keyPackagesUploaded;
 }
 
 /** Opens a fresh, isolated browser profile with a page. Close it with `page.context().close()`. */
 export async function newPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext();
-  return context.newPage();
+  const page = await context.newPage();
+  // Surface client-side warnings/errors in the test log; they are the first clue on failures.
+  page.on('console', (m) => {
+    if (m.type() === 'warning' || m.type() === 'error') console.log(`[browser ${m.type()}] ${m.text()}`);
+  });
+  page.on('pageerror', (e) => console.log(`[browser pageerror] ${e.message}`));
+  return page;
 }
 
 /** Closes the browser profiles of the given pages (keeps failure snapshots focused). */

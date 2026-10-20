@@ -1,11 +1,12 @@
 import { ApiError, NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import type { GatewaySocket } from '../api/socket';
-import type { SendRequestDto, SendResultDto } from '../api/types';
+import type { GroupMessageRequest, SendRequestDto, SendResultDto } from '../api/types';
 import { CONTENT_VERSION, encodeContent, type Content } from '../crypto/content';
 import { randomBytes, toBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import { RecordNs } from './repositories';
+import type { GroupManager } from './groups';
 import { UntrustedIdentityError, type SessionManager } from './sessions';
 
 /**
@@ -19,18 +20,21 @@ import { UntrustedIdentityError, type SessionManager } from './sessions';
 
 export type OutboxState = 'queued' | 'ready' | 'blocked' | 'failed';
 
-/** One built submission to a single destination account. */
-export interface PreparedSubmission {
-  target: string;
-  request: SendRequestDto;
-  accepted: boolean;
-}
+/** One built submission: per-device Signal ciphertexts for an account, or one MLS message. */
+export type PreparedSubmission =
+  | { target: string; request: SendRequestDto; accepted: boolean; group?: undefined }
+  | { target: string; group: { groupId: string } & GroupMessageRequest; accepted: boolean; request?: undefined };
+
+/** Pseudo-target used for group items. */
+const GROUP_TARGET = 'group';
 
 export interface OutboxItem {
   id: string;
   createdAt: number;
-  /** Peer (or own) account the content is addressed to. */
+  /** Peer (or own) account the content is addressed to; group ID for group items. */
   destination: string;
+  /** Group item: `destination` is an MLS group ID and the content is one MLS application message. */
+  group?: boolean;
   /** Content for the destination's devices. */
   content: Content;
   /** Mirror a `sync.sent` transcript to the sender's other devices. */
@@ -61,6 +65,7 @@ export class Outbox {
   constructor(
     private readonly store: EncryptedStore,
     private readonly sessions: SessionManager,
+    private readonly groups: GroupManager,
     private readonly api: EnclaveApi,
     private readonly socket: GatewaySocket,
     private readonly selfAccountId: string,
@@ -76,14 +81,20 @@ export class Outbox {
     syncTranscript: boolean;
     message?: { conversationId: string; id: string };
     transientTtlSeconds?: number;
+    group?: boolean;
   }): OutboxItem {
     const targets = [];
-    if (params.destination !== params.selfAccountId) targets.push(params.destination);
-    if (params.syncTranscript || params.destination === params.selfAccountId) targets.push(params.selfAccountId);
+    if (params.group) {
+      targets.push(GROUP_TARGET);
+    } else {
+      if (params.destination !== params.selfAccountId) targets.push(params.destination);
+      if (params.syncTranscript || params.destination === params.selfAccountId) targets.push(params.selfAccountId);
+    }
     return {
       id: crypto.randomUUID(),
       createdAt: Date.now(),
       destination: params.destination,
+      group: params.group,
       content: params.content,
       syncTranscript: params.syncTranscript,
       message: params.message,
@@ -127,6 +138,10 @@ export class Outbox {
     try {
       await this.build(item);
       for (const submission of item.submissions.filter((s) => !s.accepted)) {
+        if (submission.group) {
+          if (!(await this.submitGroup(item, submission))) return false;
+          continue;
+        }
         const result = await this.submit(submission.request);
         if (result.ok) {
           submission.accepted = true;
@@ -157,6 +172,18 @@ export class Outbox {
   private async build(item: OutboxItem): Promise<void> {
     while (item.pendingTargets.length > 0) {
       const target = item.pendingTargets[0]!;
+      if (item.group) {
+        const prepared = await this.groups.prepareMessage(item.destination, encodeContent(item.content));
+        item.pendingTargets.shift();
+        item.submissions.push({
+          target,
+          accepted: false,
+          group: { groupId: prepared.groupId, epoch: prepared.epoch, message: prepared.message, submissionId: toBase64Url(randomBytes(16)) },
+        });
+        item.state = 'ready';
+        await this.store.commit([...prepared.ops, Outbox.op(item)]);
+        continue;
+      }
       const content: Content =
         target === item.destination
           ? item.content
@@ -184,6 +211,31 @@ export class Outbox {
       item.state = 'ready';
       await this.store.commit([...fanout.ops, Outbox.op(item)]);
     }
+  }
+
+  /**
+   * Submits a group message. A stale epoch (a commit arrived first) discards the ciphertext and
+   * re-encrypts once the commit was processed.
+   *
+   * @returns false to pause the outbox
+   */
+  private async submitGroup(item: OutboxItem, submission: Extract<PreparedSubmission, { group: object }>): Promise<boolean> {
+    const { groupId, ...request } = submission.group;
+    try {
+      await this.api.groupMessage(groupId, request);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'EPOCH_CONFLICT') {
+        item.submissions = item.submissions.filter((s) => s !== submission);
+        item.pendingTargets = [GROUP_TARGET];
+        item.state = 'queued';
+        await this.store.put(RecordNs.outbox, item.id, item);
+        return false;
+      }
+      throw error;
+    }
+    submission.accepted = true;
+    await this.store.put(RecordNs.outbox, item.id, item);
+    return true;
   }
 
   private async submit(request: SendRequestDto): Promise<SendResultDto> {
@@ -217,6 +269,7 @@ export class Outbox {
     }
     item.attempts += 1;
     if (item.attempts > MAX_ATTEMPTS) throw new ApiError(409, result.errorCode, 'device list did not converge');
+    if (submission.group) throw new ApiError(409, result.errorCode, 'unexpected group rejection');
     await this.sessions.dropSessions(submission.target, [...(result.extraDevices ?? []), ...(result.staleDevices ?? [])]);
     item.submissions = item.submissions.filter((s) => s !== submission);
     item.pendingTargets.unshift(submission.target);
