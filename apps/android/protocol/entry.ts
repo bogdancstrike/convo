@@ -46,6 +46,9 @@ async function startClient() {
   client = await createClient(context); if (!client) { emit('phase', { name: 'welcome' }); return; }
   for (const event of ['messages', 'conversations', 'settings', 'profiles', 'history', 'groups', 'connection', 'devices'] as const) client.on(event, refresh);
   client.on('revoked', () => emit('phase', { name: 'revoked' }));
+  // Calls: ring/accept/decline/end events and history changes go to the native call UI.
+  client.on('call', (event) => emit('call', event));
+  client.on('callLog', () => emit('callLog', {}));
   emit('phase', { name: 'loading' }); await client.start(); accessToken = ''; link = null;
   emit('phase', { name: 'ready' }); await snapshot();
   void client.lastSeenHeartbeat().catch(() => undefined);
@@ -149,6 +152,16 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
       if (args.removePhoto) patch.photo = undefined; return client.updateProfile(patch);
     }
     case 'credentials': return client.credentialStatus();
+    case 'startCall': return client.startCall(String(args.conversationId), Boolean(args.video));
+    case 'answerCall': {
+      const invite = client.pendingInvite(String(args.callId)); if (!invite) throw new Error('call unavailable');
+      return { join: await client.answerCall(invite), key: invite.key, video: invite.video };
+    }
+    case 'declineCall': { const invite = client.pendingInvite(String(args.callId)); if (invite) await client.declineCall(invite, Boolean(args.busy)); return; }
+    case 'missCall': { const invite = client.pendingInvite(String(args.callId)); if (invite) await client.missCall(invite); return; }
+    case 'endCall': return client.endCall(String(args.callId), String(args.conversationId), Boolean(args.answered));
+    case 'callLog': return client.callLog();
+    case 'clearCallLog': return client.clearCallLog();
     case 'privacy': return client.lastSeenPrivacy();
     case 'setPrivacy': return client.setLastSeenPrivacy(Boolean(args.enabled));
     case 'lastSeen': return client.lastSeen(args.id);

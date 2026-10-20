@@ -1,6 +1,7 @@
 # ADR-0006: calls on self-hosted LiveKit with client-side frame encryption
 
-Status: Accepted; web implemented 2026-10-21 (Chromium/Firefox E2E), Android in progress.
+Status: Accepted; implemented 2026-10-21 on web (Chromium/Firefox E2E) and Android
+(livekit-android, emulator ↔ browser verified in both directions with encrypted frames).
 
 ## Context
 

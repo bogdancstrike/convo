@@ -13,6 +13,8 @@ android {
         versionCode = 1
         versionName = "0.1.0-dev"
         manifestPlaceholders["appAuthRedirectScheme"] = "com.convo.android"
+        // Certified targets (docs/mobile.md §9): arm64 phones and x86_64 emulators. Keeps WebRTC native libs small.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -36,6 +38,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.biometric:biometric:1.1.0")
+    // Calls: official LiveKit SDK (Apache-2.0) with E2EE frame cryptors; see ADR-0006.
+    implementation("io.livekit:livekit-android:2.29.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("net.openid:appauth:0.11.1")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.55")
 }

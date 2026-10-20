@@ -25,6 +25,17 @@ import java.util.concurrent.Executors
 
 class MainActivity : FragmentActivity() {
     val locks by lazy { LockManager(this) }
+    val calls by lazy { CallManager(this) }
+    /** Bumped when the shared core reports call-history changes. */
+    var callLogVersion by mutableIntStateOf(0); private set
+    private var callPermissionCallback: ((Boolean) -> Unit)? = null
+    private val callPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        callPermissionCallback?.invoke(result.values.all { it }); callPermissionCallback = null
+    }
+    fun requestCallPermissions(video: Boolean, callback: (Boolean) -> Unit) {
+        callPermissionCallback = callback
+        callPermissions.launch(if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO))
+    }
     private lateinit var bridge: ProtocolBridge
     private lateinit var auth: AuthorizationService
     private val io = Executors.newSingleThreadExecutor()
@@ -111,6 +122,8 @@ class MainActivity : FragmentActivity() {
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
                 "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus() }
+                "call" -> calls.onEvent(value)
+                "callLog" -> callLogVersion++
                 "snapshot" -> { snapshot = value; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
@@ -119,6 +132,8 @@ class MainActivity : FragmentActivity() {
                 AndroidView(factory = { bridge.webView }, modifier = Modifier.size(1.dp))
                 // Content is not composed at all while locked, so nothing flashes on resume.
                 if (locks.appLock && !locks.appUnlocked && phase == "ready") AppLockScreen(this@MainActivity) else ConvoApp(this@MainActivity)
+                // Calls stay above navigation (and the lock screen, so an incoming call can be answered).
+                if (calls.call != null) CallScreen(this@MainActivity)
             }
         } }
     }
@@ -232,7 +247,7 @@ class MainActivity : FragmentActivity() {
             } catch (_: Exception) { runOnUiThread { discovering = false; error = "Could not read contacts. Manual search is still available." } }
         }
     }
-    override fun onDestroy() { bridge.destroy(); auth.dispose(); io.shutdown(); super.onDestroy() }
+    override fun onDestroy() { calls.release(); bridge.destroy(); auth.dispose(); io.shutdown(); super.onDestroy() }
 }
 fun obj(vararg pairs: Pair<String, Any?>) = JSONObject().apply { pairs.forEach { put(it.first, it.second ?: JSONObject.NULL) } }
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }

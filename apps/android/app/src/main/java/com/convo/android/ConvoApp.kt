@@ -111,7 +111,13 @@ import org.json.JSONObject
                 }, actions = {
                     if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { mediaOpen = true }) { Icon(Icons.Outlined.PermMedia, "Media from all chats") }
                     if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" }) { Icon(Icons.Outlined.AddComment, "New chat") }
-                    if (app.route == "thread") { IconButton(onClick = { app.threadSearch = !app.threadSearch }) { Icon(Icons.Outlined.Search, "Search this chat") }; IconButton(onClick = { app.route = "info" }) { Icon(Icons.Outlined.Info, "Conversation info") }; ChatMenu(app) }
+                    if (app.route == "thread") {
+                        val current = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }
+                        if (current != null && current.optString("kind") != "note" && !current.optBoolean("left") && !current.optBoolean("adminOnly")) {
+                            IconButton(onClick = { app.calls.start(current.optString("id"), true) }, enabled = app.calls.call == null) { Icon(Icons.Outlined.Videocam, "Video call") }
+                            IconButton(onClick = { app.calls.start(current.optString("id"), false) }, enabled = app.calls.call == null) { Icon(Icons.Outlined.Call, "Voice call") }
+                        }
+                        IconButton(onClick = { app.threadSearch = !app.threadSearch }) { Icon(Icons.Outlined.Search, "Search this chat") }; IconButton(onClick = { app.route = "info" }) { Icon(Icons.Outlined.Info, "Conversation info") }; ChatMenu(app) }
                 })
             }, bottomBar = {
                 if (app.route == "list") NavigationBar {
@@ -133,7 +139,7 @@ import org.json.JSONObject
                     route == "starred" -> NativeThread(app, starredOnly = true)
                     route == "appearance" -> WallpaperPicker(app, perChat = true)
                     tab == "Settings" -> NativeSettings(app)
-                    tab == "Calls" -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Outlined.Call, null, Modifier.size(56.dp)); Text("Calls", style = MaterialTheme.typography.headlineSmall); Text("To be implemented") }
+                    tab == "Calls" -> CallsTab(app)
                     else -> ChatList(app, tab == "Channels", tab == "Unread")
                 }
                 }

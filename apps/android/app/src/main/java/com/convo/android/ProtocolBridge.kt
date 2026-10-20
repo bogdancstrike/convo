@@ -31,6 +31,32 @@ class DevelopmentTls(private val context: Context) : ConnectionBuilder {
         BuildConfig.DEBUG && developmentEndpoint(Uri.parse(url)) && cert != null && certificate?.encoded.contentEquals(cert.encoded)
     } catch (_: Exception) { false }
 
+    /** Platform trust plus, in debug builds only, the exact development certificate for dev hosts. */
+    fun trustManager(): X509TrustManager {
+        val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        factory.init(null as KeyStore?)
+        val standard = factory.trustManagers.filterIsInstance<X509TrustManager>().first()
+        if (!BuildConfig.DEBUG || certificate == null) return standard
+        return object : X509TrustManager {
+            override fun getAcceptedIssuers() = standard.acceptedIssuers
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = standard.checkClientTrusted(chain, authType)
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                val leaf = chain.firstOrNull()
+                if (!(leaf != null && certificate?.encoded.contentEquals(leaf.encoded) && runCatching { leaf.checkValidity() }.isSuccess)) standard.checkServerTrusted(chain, authType)
+            }
+        }
+    }
+
+    /** OkHttp client for LiveKit signalling with the same trust rules as the rest of the app. */
+    fun okHttp(): okhttp3.OkHttpClient {
+        val manager = trustManager()
+        val context = SSLContext.getInstance("TLS").apply { init(null, arrayOf(manager), null) }
+        val verifier = HttpsURLConnection.getDefaultHostnameVerifier()
+        return okhttp3.OkHttpClient.Builder().sslSocketFactory(context.socketFactory, manager)
+            .hostnameVerifier { name, session -> verifier.verify(name, session) || (BuildConfig.DEBUG && name in hosts && certificate?.encoded.contentEquals((session.peerCertificates.firstOrNull() as? X509Certificate)?.encoded)) }
+            .build()
+    }
+
     override fun openConnection(uri: Uri): HttpURLConnection {
         require(uri.scheme == "https") { "HTTPS required" }
         val connection = java.net.URL(uri.toString()).openConnection() as HttpsURLConnection

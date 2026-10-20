@@ -34,7 +34,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   authorization, per-device LiveKit JWTs), E2EE ring/accept/decline/cancel/end messages with a
   per-call media key, LiveKit frame encryption (no unencrypted fallback), web call screen,
   header call buttons and Calls history. `calls.spec.ts`: voice answer/end + video decline,
-  LiveKit-reported encrypted frames, Chromium and Firefox. Android native calls in progress.
+  LiveKit-reported encrypted frames, Chromium and Firefox. Android: livekit-android 2.29.0 call
+  screen, ringtone/vibration, voice/video buttons, Calls tab; emulator-5554 ↔ Chromium verified
+  both directions (voice and video), both SDKs report encrypted frames, hang-up ends both sides.
 - Passkeys: Settings → Privacy shows IdP passkey status (read-only `convo-credential-status`
   service account, `GET /v1/account/credentials`) and opens the Keycloak Account Console.
   Verified with a real Chromium WebAuthn passkey on `convo.doncea.ro`.
@@ -46,7 +48,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Android voice notes: mic ↔ send composer, pause/resume, 15-min cap, Opus/OGG (AAC fallback
   below Android 10), "Voice message · duration" tiles. Sent and replayed on emulator-5554.
 - Still open: full localization, cross-message viewer navigation,
-  web screen lock, Android calls, remaining UI parity and legacy-origin migration.
+  web screen lock, background call ringing (push), remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)
 
