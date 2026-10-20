@@ -21,6 +21,23 @@ export interface DeviceCredentials {
   key: DeviceKey;
 }
 
+/**
+ * Builds the canonical signed string of a device request (`ENCLAVE-REQ-V1`). Covered by the
+ * shared vector `contracts/vectors/device-auth-v1.json`.
+ */
+export async function canonicalRequest(
+  method: string,
+  pathAndQuery: string,
+  body: Uint8Array<ArrayBuffer>,
+  deviceAddress: string,
+  requestId: string,
+  expiresAtMillis: number,
+): Promise<string> {
+  return ['ENCLAVE-REQ-V1', method, pathAndQuery, toBase64Url(await sha256(body)), deviceAddress, requestId, String(expiresAtMillis)].join(
+    '\n',
+  );
+}
+
 /** Signature lifetime; the server accepts at most 5 minutes. */
 const SIGNATURE_TTL_MS = 60_000;
 
@@ -38,15 +55,7 @@ export class HttpClient {
       const requestId = toBase64Url(randomBytes(18));
       const expires = Date.now() + SIGNATURE_TTL_MS;
       const address = `${device.accountId}.${device.deviceId}`;
-      const canonical = [
-        'ENCLAVE-REQ-V1',
-        method,
-        path,
-        toBase64Url(await sha256(bytes)),
-        address,
-        requestId,
-        String(expires),
-      ].join('\n');
+      const canonical = await canonicalRequest(method, path, bytes, address, requestId, expires);
       const signature = await device.key.sign(utf8(canonical));
       return {
         Authorization: `EnclaveDevice ${address}`,

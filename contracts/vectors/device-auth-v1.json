@@ -1,0 +1,25 @@
+{
+  "profile": "p256-ecdsa-sha256-v1",
+  "signingKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEydL381xjY2JDOEuRo33XxuDCHVYcFUoeIV6zarS4yxz6E8n2BReL9nV5Q8s_RUf66p8ynegVto4nRkxfppj4NQ",
+  "deviceRequest": {
+    "method": "PUT",
+    "pathAndQuery": "/v1/keys?x=a%20b",
+    "body": "eyJzaWduZWRQcmVLZXkiOm51bGwsInByZUtleXMiOltdfQ",
+    "deviceAddress": "3f1c2a7e-6b1d-4c2e-9a55-0d6f3e2b1a90.2",
+    "requestId": "AAECAwQFBgcICQoLDA0ODxAR",
+    "expiresAtMillis": 1792500000000,
+    "canonical": "ENCLAVE-REQ-V1\nPUT\n/v1/keys?x=a%20b\nJywY2tZCn0qU3mRnSlVWsMj60qA1aaUoz7BdKigPIWU\n3f1c2a7e-6b1d-4c2e-9a55-0d6f3e2b1a90.2\nAAECAwQFBgcICQoLDA0ODxAR\n1792500000000",
+    "signature": "cgRIGKT3i86zrpX8OS10gpfc8aQb7NRecpsMlZrbHf4lpCH9mydytGy9Vs9vMkX0CmhIQebIHpBXz_tfKtdjiA"
+  },
+  "enrollment": {
+    "deploymentId": "enclave-dev",
+    "accountId": "3f1c2a7e-6b1d-4c2e-9a55-0d6f3e2b1a90",
+    "deviceId": 1,
+    "reservationId": "7b1e2f40-1111-4a2b-8c3d-1234567890ab",
+    "challenge": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "identityKey": "BQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ",
+    "registrationId": 4242,
+    "canonical": "ENCLAVE-ENROLL-V1\nenclave-dev\n3f1c2a7e-6b1d-4c2e-9a55-0d6f3e2b1a90.1\n7b1e2f40-1111-4a2b-8c3d-1234567890ab\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc\nBQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ\n4242\n4ZugjgoJx9hVqLVayYYL-ZprtqAiaPlbUp3iUXUzZww",
+    "signature": "QrfiVkqXJ5FnecpFpcF8XKO1mMDpUoj3Lgs2JWVPrfI8lwJ666bseu4c3QG7NkKhMq8W7tmXAudirmmNVL6J1g"
+  }
+}
