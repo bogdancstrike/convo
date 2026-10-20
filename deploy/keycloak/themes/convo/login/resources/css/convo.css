@@ -1,0 +1,65 @@
+/* Convo's semantic palette; the stock Keycloak v2 forms retain their authentication behavior. */
+:root {
+  --convo-canvas: #f5f6f7;
+  --convo-panel: #fff;
+  --convo-text: #111b21;
+  --convo-muted: #54656f;
+  --convo-border: #e4e7ea;
+  --convo-action: #18657f;
+  --convo-action-text: #fff;
+  --convo-focus: #2596be;
+}
+:root.pf-v5-theme-dark {
+  --convo-canvas: #161717;
+  --convo-panel: #232626;
+  --convo-text: #e9edef;
+  --convo-muted: #a5a8aa;
+  --convo-border: #2a2c2c;
+  --convo-action: #8bd3e2;
+  --convo-action-text: #0b1a24;
+  --convo-focus: #8bd3e2;
+}
+html, body { min-width: 0; margin: 0; background: var(--convo-canvas); color: var(--convo-text); }
+.login-pf body { background: var(--convo-canvas); font-family: Inter, system-ui, sans-serif; line-height: 1.5; }
+.pf-v5-c-login { min-height: 100dvh; padding: 40px 20px; background: var(--convo-canvas); }
+/* PatternFly adds 98px of inline container padding on desktop. Remove that inherited gutter
+   and use a single column so the card actually occupies its advertised width. */
+.pf-v5-c-login__container { display: flex; flex-direction: column; width: min(100%, 480px); min-width: 0; padding: 0; gap: 28px; margin: auto; }
+#kc-header { width: 100%; padding: 0; margin: 0; }
+#kc-header-wrapper { min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0; margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.7px; text-transform: none; color: var(--convo-text) !important; }
+#kc-header-wrapper::before { content: ''; width: 48px; height: 48px; background: url('../img/convo.svg') center / contain no-repeat; }
+.pf-v5-c-login__main { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--convo-border); border-radius: 20px; background: var(--convo-panel); box-shadow: 0 12px 40px #0f233714; overflow: hidden; }
+.pf-v5-c-login__main-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; border: 0; padding: 32px 32px 16px; gap: 12px 16px; }
+.pf-v5-c-login__main-header-utilities { margin: 0; min-width: 112px; }
+.pf-v5-c-login__main-header-utilities select { min-width: 110px; padding-inline-end: 30px; }
+.pf-v5-c-login__main-body { padding: 12px 32px 32px; }
+#kc-page-title { flex: 1; min-width: 170px; margin: 0; color: var(--convo-text); font-size: 26px; font-weight: 650; letter-spacing: -.6px; line-height: 1.3; overflow-wrap: anywhere; }
+.pf-v5-c-form { gap: 20px; }
+.pf-v5-c-form__label { color: var(--convo-text); font-size: 14px; font-weight: 600; }
+.pf-v5-c-form-control { min-width: 0; min-height: 48px; border: 1px solid var(--convo-border); border-radius: 10px; background: var(--convo-canvas); }
+.pf-v5-c-form-control::after { border: 0; }
+.pf-v5-c-form-control:focus-within { border-color: var(--convo-focus); outline: 2px solid var(--convo-focus); outline-offset: 2px; }
+.pf-v5-c-form-control > input, .pf-v5-c-form-control > select { min-height: 48px; font-size: 16px; padding: 10px 12px; color: var(--convo-text); }
+.pf-v5-c-form-control > input:focus-visible { outline: 0; box-shadow: none; }
+.pf-v5-c-input-group__item { min-width: 0; }
+.pf-v5-c-button { min-height: 48px; border-radius: 10px; font-size: 16px; line-height: 1.4; }
+.pf-v5-c-button.pf-m-primary { background: var(--convo-action); color: var(--convo-action-text); font-weight: 600; }
+.pf-v5-c-button.pf-m-control { min-width: 48px; color: var(--convo-muted); }
+.pf-v5-c-button::after { border-radius: 10px; }
+.pf-v5-c-button:focus-visible, .pf-v5-c-login a:focus-visible { outline: 2px solid var(--convo-focus); outline-offset: 3px; }
+#kc-form-buttons { margin-top: 8px; }
+#kc-login { margin: 8px 0 0; }
+#authenticateWebAuthnButton { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 48px; margin: 16px 0 0; border: 1px solid var(--convo-border); border-radius: 10px; color: var(--convo-text); background: transparent; font-weight: 600; }
+.pf-v5-c-check { min-height: 44px; align-items: center; }
+.pf-v5-c-login__main-footer-band { background: var(--convo-panel); padding: 16px 24px; }
+.pf-v5-c-alert, .kc-feedback-text, #input-error { overflow-wrap: anywhere; }
+.pf-v5-c-login a { color: var(--convo-action); }
+@media (max-width: 480px) {
+  .pf-v5-c-login { justify-content: flex-start; padding: 32px 16px; }
+  .pf-v5-c-login__main-header { padding: 24px 20px 10px; }
+  .pf-v5-c-login__main-body { padding: 12px 20px 24px; }
+  .pf-v5-c-login__container { margin-top: 0; gap: 24px; }
+  #kc-header-wrapper { font-size: 28px; }
+  #kc-page-title { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

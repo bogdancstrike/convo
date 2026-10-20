@@ -93,6 +93,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
       case 'settings':
         return (
           <SettingsNavigation
+            onAllMedia={() => setAllMedia(true)}
             onSignedOut={onSignedOut}
             client={client}
             page={nav.page}
@@ -162,7 +163,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           onOpenConversation={openChat}
         />
       ) : nav.panel === 'calls' ? (<section className="welcome-pane"><div className="welcome-inner"><Icon name="calls" size={64} /><h2>{t('nav.calls')}</h2><p>{t('calls.pending')}</p></div></section>) : nav.panel === 'settings' ? (
-        <section className="settings-workspace"><SettingsPanel client={client} page={nav.page} onNavigate={(page) => navigate({ page })} onBack={() => navigate({ panel: 'chats' })} onSignedOut={onSignedOut} /></section>
+        <section className="settings-workspace"><SettingsPanel onAllMedia={() => setAllMedia(true)} client={client} page={nav.page} onNavigate={(page) => navigate({ page })} onBack={() => navigate({ panel: 'chats' })} onSignedOut={onSignedOut} /></section>
       ) : (
         <WelcomePane
           onAction={(action) => {

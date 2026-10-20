@@ -1,4 +1,4 @@
-# Enclave — Mobile architecture and delivery
+# Convo — Mobile architecture and delivery
 
 | Field | Value |
 |---|---|
@@ -6,6 +6,16 @@
 | Current focus | Android alongside the P0 web client |
 | Client follow-on | iOS after Android/web stabilization; every Android/web feature is launch-required |
 | Related | [UI](UI.md), [Specs](specs.md), [ARF](arf.md), [Tasks](tasks.md), [Sources](sources.md) |
+
+## Running Android development checkpoint
+
+`apps/android` now contains a Kotlin/Compose native presentation client and
+`apps/assets/convo-android-debug.apk` is the installable development artifact. It uses the
+Kotlin alternative below with an explicitly interim bundled headless browser protocol adapter;
+it does not implement the proposed Rust/SQLCipher core or claim production certification.
+Android↔web decryption, process restart/APK replacement and linked-browser history restore have
+been verified on emulator-5554. See [the current client README](../apps/android/README.md) for
+build commands and remaining parity/security work. Planned launch requirements below still apply.
 
 ## 1. Release scope
 

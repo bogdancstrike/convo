@@ -89,7 +89,7 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `access-key`, `secret-key` | `ENCLAVE_ATTACHMENTS_ACCESS_KEY`, `..._SECRET_KEY` | dev values | |
 | `path-style` | | `true` | |
 | `create-bucket` | | `true` | Create at start-up if missing |
-| `max-bytes` | | `110100480` | Encrypted size limit (100 MiB + padding) |
+| `enclave.attachment-policy.max-file-megabytes` | `CONVO_ATTACHMENT_MAX_MB` in Compose | `100` | Plaintext MiB limit, advertised to both clients. Ciphertext overhead is calculated separately. |
 | `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
 | `retention` | | `30d` | Object lifetime |
 | `purge-interval` | | `PT1H` | |
@@ -113,8 +113,16 @@ come from the configured internal JWKS endpoint; the token issuer must match the
 realm URL before being mapped to the stable configured `OIDC_ISSUER` for account lookup. nginx
 replaces incoming forwarding headers, and backend/Keycloak ports are not published.
 
-`CONVO_HTTPS_PORT` defaults to 8443 and `ENCLAVE_HTTP_PORT` to 8088. Certificate generation happens
-only when the persistent certificate/key are missing. The development Keycloak client allows only
+`CONVO_HTTPS_PORT` defaults to 8443, the additional `CONVO_HTTPS_STANDARD_PORT` to 443, and
+`ENCLAVE_HTTP_PORT` to 8088. Keep the two published HTTPS ports distinct.
+`CONVO_HOSTNAME` defaults to
+`convo.doncea.ro`, and `CONVO_SERVER_IP` to `192.168.1.144`. Configure matching hosts entries or
+LAN DNS on client devices. The development certificate includes both hostname and IP; it is
+created when missing and renewed if either SAN changes, preserving the existing private key.
+Refresh the debug APK's exact certificate pin after regenerating the development certificate.
+Keycloak's passwordless RP ID is `convo.doncea.ro`; changing the RP ID requires a deliberate
+realm update and new passkey enrollment, because existing passkeys are bound to their RP ID.
+The development Keycloak client allows only
 its relative `/auth/convo/callback` route through a root URL resolved by Keycloak; no wildcard host
 redirect is enabled.
 

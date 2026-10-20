@@ -17,6 +17,10 @@ test('Settings overview fits the viewport; categories, profile and confirmed log
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByTestId('settings-log-out')).toBeInViewport();
+  await page.getByTestId('settings-card-all-media').click();
+  await expect(page.getByTestId('all-media')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('settings-overview')).toBeVisible();
   const buttons = page.locator('.settings-navigation').getByRole('button');
   await expect(buttons.last()).toHaveText('Log out');
   page.once('dialog', (d) => void d.dismiss()); await page.getByTestId('settings-log-out').click();

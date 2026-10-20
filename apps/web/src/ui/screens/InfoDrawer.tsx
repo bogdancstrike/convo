@@ -2,21 +2,17 @@ import { LastSeen } from '../components/LastSeen';
 import { SharedPreview, ConversationActions } from './ConversationDetails';
 import { Menu } from '../components/Popover';
 import { useProfile } from '../components/ProfileContext';
-import { FingerprintGenerator } from '@privacyresearch/libsignal-protocol-typescript';
+import { safetyNumber } from '../../crypto/safetyNumber';
 import { useCallback, useEffect, useState } from 'react';
 import type { AccountDto, GroupRole } from '../../api/types';
 import type { EnclaveClient } from '../../core/client';
 import { GroupBusyError, MembersUnavailableError } from '../../core/groups';
 import { labelOf, type Conversation } from '../../core/model';
-import { fromBase64Url, toArrayBuffer } from '../../lib/bytes';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { useAccount, useGroupRecord } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel';
-
-/** Safety-number iterations (specs §5.6). */
-const FINGERPRINT_ITERATIONS = 5200;
 
 /**
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
@@ -90,12 +86,7 @@ function SafetyNumber({ client, conversation }: { client: EnclaveClient; convers
       setVerified(keys.verified);
       const keyPair = `${keys.local}/${keys.remote}`;
       if (keyPair === previousKeys) return;
-      const number = await new FingerprintGenerator(FINGERPRINT_ITERATIONS).createFor(
-        client.accountId,
-        toArrayBuffer(fromBase64Url(keys.local)),
-        conversation.id,
-        toArrayBuffer(fromBase64Url(keys.remote)),
-      );
+      const number = safetyNumber(client.accountId, keys.local, conversation.id, keys.remote);
       if (!cancelled && current === generation) {
         previousKeys = keyPair;
         setDigits(number);

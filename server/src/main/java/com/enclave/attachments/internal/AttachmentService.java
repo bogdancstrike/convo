@@ -2,6 +2,7 @@ package com.enclave.attachments.internal;
 
 import com.enclave.contracts.EnclaveException;
 import com.enclave.contracts.ErrorCode;
+import com.enclave.contracts.AttachmentPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -22,12 +23,14 @@ class AttachmentService {
     private final ObjectStore store;
     private final AttachmentsProperties properties;
     private final Clock clock;
+    private final AttachmentPolicy policy;
 
-    AttachmentService(AttachmentRepository attachments, ObjectStore store, AttachmentsProperties properties, Clock clock) {
+    AttachmentService(AttachmentRepository attachments, ObjectStore store, AttachmentsProperties properties, Clock clock, AttachmentPolicy policy) {
         this.attachments = attachments;
         this.store = store;
         this.properties = properties;
         this.clock = clock;
+        this.policy = policy;
     }
 
     /**
@@ -37,7 +40,7 @@ class AttachmentService {
      */
     @Transactional
     UploadForm createUpload(long size, String endpoint) {
-        if (size <= 0 || size > properties.maxBytes()) {
+        if (size <= 0 || size > policy.maxCiphertextBytes()) {
             throw new EnclaveException(ErrorCode.PAYLOAD_TOO_LARGE, "attachment size out of range");
         }
         UUID id = UUID.randomUUID();

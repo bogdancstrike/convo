@@ -52,8 +52,12 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val id = app.active ?: return
     val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == id } ?: return
     val all = app.snapshot.optJSONArray("messages")?.objects().orEmpty()
-    var query by remember(id) { mutableStateOf("") }; var input by remember(id) { mutableStateOf("") }; var quote by remember(id) { mutableStateOf<JSONObject?>(null) }
+    var query by remember(id) { mutableStateOf("") }; var input by remember(id) { mutableStateOf(conversation.optString("draft")) }; var quote by remember(id) { mutableStateOf<JSONObject?>(null) }
     var group by remember(id) { mutableStateOf<JSONObject?>(null) }
+    val currentDraft by rememberUpdatedState(input)
+    LaunchedEffect(input) { kotlinx.coroutines.delay(250); app.call("conversation", obj("id" to id, "patch" to obj("draft" to input))) }
+    DisposableEffect(id) { onDispose { app.call("conversation", obj("id" to id, "patch" to obj("draft" to currentDraft))) } }
+    LaunchedEffect(app.threadSearch) { if (!app.threadSearch) query = "" }
     val own = app.snapshot.optString("accountId"); val kind = conversation.optString("kind")
     LaunchedEffect(id, app.snapshot.optString("connection")) { if (kind == "group") app.call("group", obj("id" to id)) { group = it as? JSONObject } }
     val role = group?.optJSONArray("members")?.objects()?.find { it.optString("accountId") == own }?.optString("role")
@@ -63,7 +67,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     ChatWallpaper(wallpaper, Modifier.fillMaxSize().background(LocalConvoColors.current.wallpaper)) {
         Column(Modifier.fillMaxSize()) {
             if (app.snapshot.optString("connection") != "online") Text("Waiting for connection. Messages will send when you reconnect.", Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(query, { query = it }, placeholder = { Text(if (starredOnly) "Search starred messages" else "Search this chat") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) })
+            if (app.threadSearch) OutlinedTextField(query, { query = it }, placeholder = { Text(if (starredOnly) "Search starred messages" else "Search this chat") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) })
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             LaunchedEffect(messages.size) { if (messages.isNotEmpty()) if (app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }
             LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -89,7 +93,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
-        Card(Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { menu = true }), colors = CardDefaults.cardColors(containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
+        Card(Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (conversation.startsWith("g:") && !outgoing) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { Text(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }

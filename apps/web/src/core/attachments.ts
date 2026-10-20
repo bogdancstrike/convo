@@ -10,7 +10,11 @@ import type { AttachmentPointer } from '../crypto/content';
  */
 
 /** Maximum plaintext attachment size (specs §26.3). */
-export const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+export let MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+export function configureAttachmentLimit(bytes: number): void {
+  if (!Number.isSafeInteger(bytes) || bytes < 1024 || bytes > 1024 * 1024 * 1024) throw new Error('invalid attachment policy');
+  MAX_ATTACHMENT_BYTES = bytes;
+}
 /** Longest image side after re-encoding. */
 const MAX_IMAGE_SIDE = 4096;
 /** Image types re-encoded to drop EXIF/XMP metadata (including location). */
@@ -175,7 +179,7 @@ export async function downloadAttachment(api: EnclaveApi, pointer: AttachmentPoi
   }
   if (!response.ok) throw new AttachmentDownloadError(response.status === 404 ? 'expired' : 'offline');
   try {
-    const plain = await decryptAttachment(new Uint8Array(await response.arrayBuffer()), pointer.key, pointer.digest);
+    const plain = await decryptAttachment(new Uint8Array(await response.arrayBuffer()), pointer.key, pointer.digest, Math.max(MAX_ATTACHMENT_BYTES, 100 * 1024 * 1024));
     if (plain.length !== pointer.size) throw new Error('size mismatch');
     return new Blob([plain], { type: safeContentType(pointer.contentType) });
   } catch {

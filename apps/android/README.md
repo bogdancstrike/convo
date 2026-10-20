@@ -5,7 +5,9 @@ version-pinned web encryption core; it never loads the remote web UI or remote J
 This is an interim interoperability client, not the reviewed native Rust/SQLCipher client
 required by `docs/mobile.md` for production certification.
 
-Default server: `https://192.168.1.144:8443`. Release builds use ordinary platform TLS trust.
+Default server for new installs: `https://convo.doncea.ro:8443`. Add
+`192.168.1.144 convo.doncea.ro` to your device hosts file or LAN DNS. Existing installs retain
+their saved IP origin to preserve device-local encryption keys. Release builds use ordinary platform TLS trust.
 Debug builds additionally trust only the exact development certificate shipped in debug
 resources, and only for the configured development host. No global trust-all manager.
 Android backup is disabled. The development build uses the browser engine's encrypted
@@ -34,7 +36,8 @@ document, and retains both message directions after APK replacement and process 
 No account credentials are included in the source or APK. The debug certificate is public.
 
 Full web/Android parity is the acceptance target, **not the current completion status**.
-Remaining gaps include the global media browser with batch actions, voice-recording UI,
-complete localization, draft persistence, cross-message viewer navigation and exhaustive
+The native global media browser now supports filtering and batch actions, Settings includes All
+Media, drafts persist locally, and profile changes show success feedback. Remaining gaps include
+voice-recording UI, complete localization, cross-message viewer navigation and exhaustive
 visual/accessibility/device testing. iOS has not been implemented. Native background delivery,
 Keystore wrapping and the reviewed Rust/SQLCipher core remain separate security/release gates.

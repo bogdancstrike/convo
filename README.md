@@ -17,7 +17,7 @@ subsequent client target.
 > encrypted 1:1 chats (Signal protocol) and groups (MLS), photos, files, videos and voice notes,
 > reactions, replies, edits, deletes, forwarding, directory search by name/phone, a
 > messenger-style UI in English and Romanian with light/dark themes. Calls, communities, push
-> notifications, administration and the Android app are not built yet. Interim choices (browser
+> notifications and administration are not built yet. A native Android development client and installable APK are available; full web/mobile parity and native security certification remain open. Interim choices (browser
 > crypto libraries, device-auth nonce) are recorded in [docs/decisions](docs/decisions) and
 > [specs §32](docs/specs.md#32-implementation-status-and-recorded-deviations); progress is tracked in
 > [tasks.md](tasks.md).
@@ -43,7 +43,10 @@ docker compose --profile e2e run --rm e2e     # Playwright end-to-end suite (Chr
 | https://localhost:8443/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
 | http://localhost:5050 | pgAdmin (database password `enclave-dev-db`) |
 
-For LAN access open **https://192.168.1.144:8443** (or the server's current IP/hostname).
+For LAN access, add `192.168.1.144 convo.doncea.ro` to each device's hosts file (or LAN DNS)
+and open **https://convo.doncea.ro/** (standard port 443), or **https://convo.doncea.ro:8443**.
+Both HTTPS ports are published. This PC's hosts entry is configured. The IP URL
+`https://192.168.1.144:8443` also works for ordinary sign-in; passkeys require the hostname.
 Accept the self-signed certificate once per device. Plain HTTP on port 8088 shows an HTTPS-required
 page. Development accounts include `bogdan` / `bogdan` and `maria` / `maria`.
 Keycloak, PostgreSQL, attachment storage and the TLS certificate persist in Compose volumes.
@@ -56,16 +59,31 @@ All credentials are development-only. See [docs/development.md](docs/development
 fast iteration and conventions, and [docs/configuration.md](docs/configuration.md) for every
 backend setting.
 
+## Android development build
+
+Install [convo-android-debug.apk](apps/assets/convo-android-debug.apk); its SHA-256 checksum is
+next to it. The default server for new installs is `https://convo.doncea.ro:8443`; existing
+installs preserve their saved address and local keys. Source, build instructions,
+verified interoperability and remaining limitations are in [apps/android/README.md](apps/android/README.md).
+The Compose UI uses the same generated light/dark colors and logo as the browser. This interim
+client bundles the existing encryption core; reviewed native Keystore/SQLCipher storage,
+background delivery, full localization and complete feature/UX parity remain release gates.
+
+Set `CONVO_ATTACHMENT_MAX_MB=100` in `.env` to configure the plaintext attachment limit for
+both clients. The backend separately allows encryption tags and size-bucket padding; attachment
+contents, names and keys remain end-to-end encrypted.
+
 ## What works today
 
 | Area | Highlights |
 |---|---|
 | Identity | Keycloak SSO (PKCE), browser-primary enrollment, device proof-of-possession on every request, transcript-bound device linking with comparison codes, device list/unlink |
 | 1:1 chats | Signal sessions, multi-device fan-out, offline mailbox delivery, delivery/read receipts, typing (opt-in), Note to self |
-| Groups | MLS groups via an ordered Delivery Service, encrypted group names, admin add/remove, authenticated senders |
+| Groups and channels | MLS discussion groups and admin-only encrypted channels, owner/admin/member controls, shared owners, recent-contact picker, review-before-create wizard |
 | Messages | Safe formatting, replies, reactions, edits, delete for everyone / me, forward, star, in-chat search |
-| Media | Encrypted photos (EXIF stripped), files, videos with posters, voice notes, pre-send preview, drag & drop, paste |
+| Media | Encrypted photos (EXIF stripped), files, videos with posters, voice notes, in-app viewer, shared galleries and all-chat search/filter/batch actions |
 | UX | Messenger-style layout, directory search by name/handle/phone, emoji picker, splash with E2EE notice, URL-based navigation (refresh-safe), EN/RO, light/dark with contrast tests |
+| History and recovery | Encrypted account archive, linked-device history restore, saved recovery code plus organization login, last-device logout safeguard |
 | Platform | Spring Modulith backend with verified module boundaries, PostgreSQL mailbox, Valkey hints, SeaweedFS object storage, pgAdmin |
 
 ## Complete launch feature inventory

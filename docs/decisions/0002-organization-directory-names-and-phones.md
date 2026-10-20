@@ -47,3 +47,12 @@ numbers in bounded requests to the organization's directory. Contact names and a
 photos stay on the device. Denial must leave manual directory lookup usable. This supersedes
 the earlier no-bulk-matching UI scope, but does not authorize collecting address books or treating
 an unverified phone claim as proof of identity.
+
+## Product update — 2026-10-20
+
+The user requires an editable phone number at first sign-in, including on web, to support
+phone-agenda discovery. Keycloak's declarative profile now requires it and emits the existing
+phone scope claim. Native discovery remains an explicit permission/action, submits only phone
+numbers in bounded requests, and never uploads contact names or photos. Denying contact access
+retains manual directory search. A supplied directory phone claim is not verified ownership;
+phone verification, enumeration controls and the independent privacy review remain release gates.

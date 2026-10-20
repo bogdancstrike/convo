@@ -19,7 +19,6 @@ import org.springframework.validation.annotation.Validated;
  * @param secretKey secret access key
  * @param pathStyle use path-style URLs ({@code endpoint/bucket/key})
  * @param createBucket create the bucket at start-up when missing (development convenience)
- * @param maxBytes maximum encrypted attachment size (specs §26.3: 100 MiB plus padding)
  * @param uploadUrlTtl presigned upload URL lifetime
  * @param downloadUrlTtl presigned download URL lifetime
  * @param retention object lifetime
@@ -35,7 +34,6 @@ public record AttachmentsProperties(
         @NotBlank @DefaultValue("enclave-dev-secret-change-me") String secretKey,
         @DefaultValue("true") boolean pathStyle,
         @DefaultValue("true") boolean createBucket,
-        @DefaultValue("110100480") @Min(1024) long maxBytes,
         @DefaultValue("15m") @NotNull Duration uploadUrlTtl,
         @DefaultValue("5m") @NotNull Duration downloadUrlTtl,
         @DefaultValue("30d") @NotNull Duration retention) {}

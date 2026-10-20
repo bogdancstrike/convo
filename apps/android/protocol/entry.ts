@@ -1,3 +1,6 @@
+import { safetyNumber } from '../../web/src/crypto/safetyNumber';
+import { loadDeploymentInfo } from '../../web/src/config/deployment';
+import { MAX_ATTACHMENT_BYTES, configureAttachmentLimit } from '../../web/src/core/attachments';
 import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
 import { ApiError } from '../../web/src/api/errors';
@@ -13,6 +16,8 @@ import { fromBase64Url, toBase64Url } from '../../web/src/lib/bytes';
 import type { ChatMessage } from '../../web/src/core/model';
 import type { PrimaryRegistrationRequest, LinkRegistrationRequest } from '../../web/src/api/types';
 import { prepareProfilePhoto } from '../../web/src/core/profile';
+import { filterShared, selectedMessages, sharedEntries, downloadName, type SharedFilter } from '../../web/src/core/sharedMedia';
+import { zipSync } from '../../web/node_modules/fflate/esm/browser';
 
 // Only packaged JavaScript runs here. This bridge never exposes protocol keys to native views.
 declare global { interface Window { NativeConvo: { emit(json: string): void }; ConvoCore: { command(json: string): void } } }
@@ -32,7 +37,7 @@ const publicMessage = (message: ChatMessage) => ({ ...message, attachments: mess
 async function snapshot() {
   if (!client) return;
   emit('snapshot', { accountId: client.accountId, device: client.device, conversations: client.conversations(),
-    settings: client.settings, history: client.historyStatus, connection: client.socket.state,
+    limits: { attachmentMaxBytes: MAX_ATTACHMENT_BYTES }, settings: client.settings, history: client.historyStatus, connection: client.socket.state,
     profiles: Object.fromEntries(client.profiles()), active, messages: active ? (await client.messages(active, 1000)).map(publicMessage) : [] });
 }
 const refresh = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void snapshot().catch(() => undefined), 60); };
@@ -63,6 +68,12 @@ async function target(args: Record<string, any>) {
   const message = (await client.messages(args.conversationId, Number.MAX_SAFE_INTEGER)).find((m) => m.id === args.id && m.authorId === args.authorId);
   if (!message || message.deleted) throw new Error('message unavailable'); return message;
 }
+async function mediaEntries(args: Record<string, any>) {
+  if (!client) throw new Error('not ready');
+  const conversations = client.conversations().filter((c) => !args.conversationId || c.id === args.conversationId);
+  const messages = (await Promise.all(conversations.map((c) => client!.messages(c.id, Number.MAX_SAFE_INTEGER)))).flat();
+  return sharedEntries(messages, conversations);
+}
 async function command(method: string, args: Record<string, any>): Promise<unknown> {
   if (method === 'signIn') {
     emit('diagnostic', { stage: 'enrollment', secure: window.isSecureContext });
@@ -75,6 +86,33 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
   if (method === 'newLink') { clearTimeout(linkTimer); await startLink(); return; }
   if (!client) throw new Error('not ready');
   switch (method) {
+    case 'mediaEntries': {
+      const entries = filterShared(await mediaEntries(args), args.filter as SharedFilter, client.accountId);
+      return { total: entries.length, entries: entries.slice(0, Math.min(Number(args.limit) || 60, 1000)).map((entry) => ({
+        key: entry.key, message: publicMessage(entry.message), conversation: { id: entry.conversation.id, title: entry.conversation.title },
+        attachmentIndex: entry.attachment ? entry.message.attachments!.findIndex((p) => p.attachmentId === entry.attachment!.attachmentId) : -1,
+        link: entry.link, size: entry.size,
+      })) };
+    }
+    case 'mediaAction': {
+      const keys = args.keys as string[];
+      if (!Array.isArray(keys) || !keys.length || keys.length > 100) throw new Error('selection limit');
+      const selected = (await mediaEntries({})).filter((entry) => keys.includes(entry.key));
+      if (selected.length !== new Set(keys).size) throw new Error('selection changed');
+      const originals = [...new Map(selected.map((e) => [`${e.message.conversationId}/${e.message.authorId}/${e.message.id}`, e.message])).values()];
+      if (args.action === 'star') { const value = !originals.every((m) => m.starred); for (const message of originals) await client.setStarred(message, value); }
+      else if (args.action === 'delete') { for (const message of originals) await client.deleteLocally(message); }
+      else if (args.action === 'forward') { for (const message of selectedMessages(selected)) await client.forward(message, String(args.destination)); }
+      else if (args.action === 'download') {
+        // The JSON bridge adds base64 overhead; bound memory on phone before downloading.
+        if (selected.reduce((sum, e) => sum + e.size, 0) > 64 * 1024 * 1024) throw new Error('download limit');
+        const files: Record<string, Uint8Array<ArrayBuffer>> = {};
+        for (const [index, entry] of selected.entries()) files[downloadName(entry.attachment?.fileName ?? 'link.txt', index)] = entry.attachment
+          ? new Uint8Array(await (await client.downloadAttachment(entry.attachment)).arrayBuffer()) : new TextEncoder().encode(entry.link!);
+        return { name: 'convo-media.zip', mime: 'application/zip', data: toBase64Url(zipSync(files, { level: 0 })) };
+      } else throw new Error('unsupported action');
+      return;
+    }
     case 'snapshot': return snapshot();
     case 'open': active = args.id; await client.setActiveConversation(active); await snapshot(); return;
     case 'close': active = null; await client.setActiveConversation(null); await snapshot(); return;
@@ -125,7 +163,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'removeMember': return client.removeGroupMember(args.id, args.member);
     case 'role': return client.changeGroupRole(args.id, args.member, args.role);
     case 'verify': return client.setVerified(args.id, Boolean(args.verified));
-    case 'identity': { const keys = await client.identityKeys(args.id); if (!keys.remote) return { verified: keys.verified }; const { FingerprintGenerator } = await import('@privacyresearch/libsignal-protocol-typescript'); return { verified: keys.verified, digits: await new FingerprintGenerator(5200).createFor(client.accountId, fromBase64Url(keys.local).buffer, args.id, fromBase64Url(keys.remote).buffer) }; }
+    case 'identity': { const keys = await client.identityKeys(args.id); if (!keys.remote) return { verified: keys.verified }; return { verified: keys.verified, digits: safetyNumber(client.accountId, keys.local, args.id, keys.remote) }; }
     case 'discover': {
       // Send only explicit full-number queries, no contact names/photos or persistent uploads.
       const numbers = [...new Set((args.numbers as string[]).filter((n) => /^\+[1-9][0-9]{6,14}$/.test(n)))];
@@ -143,7 +181,10 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
   }
 }
 async function openContext(): Promise<LocalContext> {
-  const store = await EncryptedStore.open(); return { store, repos: new Repositories(store), signal: new SignalStore(store), api: new AndroidApi(new HttpClient()) };
+  const store = await EncryptedStore.open();
+  try { await loadDeploymentInfo(); await store.put('deployment-policy', 'attachment-limit', MAX_ATTACHMENT_BYTES); }
+  catch { configureAttachmentLimit((await store.get<number>('deployment-policy', 'attachment-limit')) ?? 104857600); }
+  return { store, repos: new Repositories(store), signal: new SignalStore(store), api: new AndroidApi(new HttpClient()) };
 }
 window.ConvoCore = { command(json: string) {
   if (json.length > 150 * 1024 * 1024) return;

@@ -100,7 +100,7 @@ export function Composer({
     } catch (e) {
       setError(
         e instanceof AttachmentRejectedError
-          ? t(e.reason === 'too-large' ? 'attachment.tooLarge' : 'attachment.unreadable', { name: e.fileName })
+          ? t(e.reason === 'too-large' ? 'attachment.tooLarge' : 'attachment.unreadable', { name: e.fileName, limit: String(MAX_ATTACHMENT_BYTES / 1048576) })
           : t('attachment.uploadFailed'),
       );
     } finally {
@@ -205,7 +205,7 @@ export function Composer({
           caption={caption}
           busy={!!upload}
           progress={upload ? t('thread.uploading', { done: upload.done, total: upload.total }) : null}
-          error={oversized ? t('attachment.tooLarge', { name: oversized.name }) : error}
+          error={oversized ? t('attachment.tooLarge', { name: oversized.name, limit: String(MAX_ATTACHMENT_BYTES / 1048576) }) : error}
           onCaption={setCaption}
           onRemove={onRemoveFile}
           onAddMore={() => inputs.current.get('document')?.click()}

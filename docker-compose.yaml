@@ -50,6 +50,7 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data/h2
       - ./deploy/keycloak/enclave-realm.json:/opt/keycloak/data/import/enclave-realm.json:ro
+      - ./deploy/keycloak/themes/convo:/opt/keycloak/themes/convo:ro
     healthcheck:
       <<: *healthcheck
       retries: 60
@@ -103,6 +104,7 @@ services:
       ENCLAVE_ATTACHMENTS_ENDPOINT: http://seaweedfs:8333
       ENCLAVE_ATTACHMENTS_ACCESS_KEY: enclave-dev-access
       ENCLAVE_ATTACHMENTS_SECRET_KEY: enclave-dev-secret-change-me
+      ENCLAVE_ATTACHMENT_POLICY_MAX_FILE_MEGABYTES: ${CONVO_ATTACHMENT_MAX_MB:-100}
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
@@ -115,8 +117,11 @@ services:
     ports:
       - "${ENCLAVE_HTTP_PORT:-8088}:80"
       - "${CONVO_HTTPS_PORT:-8443}:443"
+      - "${CONVO_HTTPS_STANDARD_PORT:-443}:443"
     environment:
       CONVO_HTTPS_PORT: ${CONVO_HTTPS_PORT:-8443}
+      CONVO_HOSTNAME: ${CONVO_HOSTNAME:-convo.doncea.ro}
+      CONVO_SERVER_IP: ${CONVO_SERVER_IP:-192.168.1.144}
     volumes:
       - web-tls:/etc/nginx/tls
     depends_on:
@@ -128,9 +133,12 @@ services:
     build: ./tests/e2e
     image: enclave/e2e:dev
     network_mode: host
+    extra_hosts:
+      - "${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_SERVER_IP:-192.168.1.144}"
     environment:
       BASE_URL: ${E2E_BASE_URL:-https://localhost:8443}
       HTTP_PORT: ${ENCLAVE_HTTP_PORT:-8088}
+      HTTPS_PORT: ${CONVO_HTTPS_PORT:-8443}
       CI: "true"
     volumes:
       - ./tests/e2e/test-results:/e2e/test-results

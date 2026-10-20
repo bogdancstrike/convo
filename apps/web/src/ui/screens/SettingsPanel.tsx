@@ -34,12 +34,14 @@ export function SettingsPanel({
   onNavigate,
   onBack,
   onSignedOut,
+  onAllMedia,
 }: {
   client: EnclaveClient;
   page: string | null;
   onNavigate: (page: SettingsPage | null) => void;
   onBack: () => void;
   onSignedOut: () => void;
+  onAllMedia: () => void;
 }) {
   const { t } = useI18n();
   const [settings, setSettings] = useState<SettingsModel>(client.settings);
@@ -97,6 +99,7 @@ export function SettingsPanel({
               </button>
             </li>
           ))}
+          <li><button className="settings-category" onClick={onAllMedia} data-testid="settings-card-all-media"><span className="settings-icon"><Icon name="image" size={22} /></span><span className="settings-row-text"><strong>{t('settings.allMedia')}</strong><span className="muted-text">{t('settings.allMedia.hint')}</span></span><Icon name="next" size={18} /></button></li>
         </ul>
         <div className="settings-home-footer">
           <LogOutButton client={client} onSignedOut={onSignedOut} />
@@ -303,9 +306,9 @@ function LinkRequests({ client }: { client: EnclaveClient }) {
   );
 }
 
-export function SettingsNavigation({ client, page, onNavigate, onBack, onSignedOut }: { client: EnclaveClient; page: string | null; onNavigate: (page: SettingsPage | null) => void; onBack: () => void; onSignedOut: () => void }) {
+export function SettingsNavigation({ client, page, onNavigate, onBack, onSignedOut, onAllMedia }: { client: EnclaveClient; page: string | null; onNavigate: (page: SettingsPage | null) => void; onBack: () => void; onSignedOut: () => void; onAllMedia: () => void }) {
   const { t } = useI18n();
   return <><header className="panel-header"><button className="icon-btn back-button" onClick={onBack} aria-label={t('thread.back')}><Icon name="back" /></button><h2>{t('settings.title')}</h2></header>
     <div className="panel-body settings-body settings-navigation"><button className="settings-row" onClick={() => onNavigate(null)}><Avatar id={client.accountId} name={labelOf(client.device)} size={48} /><span className="settings-row-text">{labelOf(client.device)}<span className="muted-text">{t('settings.overview')}</span></span></button>
-    <ul className="list">{SETTINGS_PAGES.map((p) => <li key={p.page}><button className="settings-row" aria-current={page === p.page ? 'page' : undefined} onClick={() => onNavigate(p.page)} data-testid={`settings-${p.page}`}><span className="settings-icon"><Icon name={p.icon} size={20} /></span><span className="settings-row-text">{t(p.title)}<span className="muted-text">{t(p.hint)}</span></span></button></li>)}</ul><div className="settings-logout-row"><LogOutButton client={client} onSignedOut={onSignedOut} testId="settings-log-out" /></div></div></>;
+    <ul className="list">{SETTINGS_PAGES.map((p) => <li key={p.page}><button className="settings-row" aria-current={page === p.page ? 'page' : undefined} onClick={() => onNavigate(p.page)} data-testid={`settings-${p.page}`}><span className="settings-icon"><Icon name={p.icon} size={20} /></span><span className="settings-row-text">{t(p.title)}<span className="muted-text">{t(p.hint)}</span></span></button></li>)}<li><button className="settings-row" onClick={onAllMedia} data-testid="settings-all-media"><span className="settings-icon"><Icon name="image" size={20} /></span><span className="settings-row-text">{t('settings.allMedia')}<span className="muted-text">{t('settings.allMedia.hint')}</span></span></button></li></ul><div className="settings-logout-row"><LogOutButton client={client} onSignedOut={onSignedOut} testId="settings-log-out" /></div></div></>;
 }

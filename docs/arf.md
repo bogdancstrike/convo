@@ -1,15 +1,32 @@
-# Enclave — Architecture Reference File (ARF)
+# Convo — Architecture Reference File (ARF)
 
 > Current launch contract: ADR-025 and specs §0/§31 supersede historical feature staging; ADR-026 defines the single Spring Modulith runtime.
 
 | Field | Value |
 |---|---|
 | Document | Architecture reference: structure, trust model, threat model, deployment, operations, architecture decision records |
-| Status | Draft v1.4 (repository layout updated 2026-10-20); v1.3 — complete Android/web launch scope, Spring Modulith, not implemented |
-| Updated | 2026-10-17 |
+| Status | Implementation checkpoint 2026-10-20; Spring Modulith and web/native Android development clients exist; full launch scope remains unqualified |
+| Updated | 2026-10-20 |
 | Related | [Specs](specs.md), [UI](UI.md), [Mobile](mobile.md), [Tasks](tasks.md), [Sources](sources.md), [Diagram catalogue](diagrams/README.md) |
 
 ---
+
+## Current implementation boundary
+
+The running system is Docker Compose/nginx → one Spring Modulith server → PostgreSQL, Valkey
+and SeaweedFS, with persistent Keycloak identity. nginx serves HTTPS on 8443, preserves the
+request origin for public authentication/file endpoints, and gives HTTP visitors an explicit
+HTTPS screen. Browser and native Compose Android presentations share the current TypeScript
+Signal/MLS/account-history protocol implementation. Android hosts only the packaged protocol
+runtime, never a remotely loaded web UI or remote script. Its debug TLS exception trusts the
+exact development certificate for the configured IP/port; release trust remains the platform's.
+The proposed reviewed Rust/native encrypted store is still a release gate. See the implementation
+ADRs and `apps/android/README.md`; historical diagrams below describe the target where noted.
+
+The account archive and recovery mechanism store ciphertext, while authentication remains
+separate in Keycloak. Account recovery requires the saved code plus IdP access; password reset
+alone cannot decrypt the account. Existing old-origin browser keys and different historical IdP
+subjects cannot safely be merged by matching usernames.
 
 ## 1. Architectural drivers
 

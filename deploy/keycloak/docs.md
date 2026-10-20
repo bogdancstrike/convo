@@ -1,17 +1,30 @@
 # `deploy/keycloak` — development identity provider
 
-`enclave-realm.json` is imported by the Keycloak container on first start (`--import-realm`).
+`enclave-realm.json` is imported only on the first start of a new Keycloak volume
+(`--import-realm`). Existing realms require explicit admin updates; never delete the volume
+just to apply configuration, because changing user subjects breaks account identity continuity.
 
-* Realm `enclave`, public PKCE client `enclave-web` (S256, no implicit/direct grants) with redirect
-  URIs for the compose stack (`http://localhost:8088`) and Vite dev server (`:5173`).
-* TOTP policy per specs §4.1.1 (6 digits, 30 s, SHA-1 for authenticator compatibility, one step
-  look-ahead, no code reuse); passwordless WebAuthn requires user verification.
-* Declarative user profile adds an admin-managed `phoneNumber` attribute; the `phone` client scope
-  maps it to the `phone_number` claim that feeds the organization directory (ADR-0002).
-* **Test-only users** `alice`, `bob`, `carol` with passwords `<name>-dev-password` and phones `+40 721 000 001/2/3`. Never use this
-  file outside local development; production realms come from the customer IdP configuration.
+- Realm `enclave`, Convo branding, public S256 PKCE clients `enclave-web` and `convo-android`.
+  Web redirects use only the relative `/auth/convo/callback` route; Android uses the registered
+  `com.convo.android:/oauth2redirect` callback. Implicit and direct password grants are disabled.
+- nginx exposes Keycloak on the app's HTTPS origin under `/auth`. Keycloak resolves the public
+  host dynamically from nginx's overwritten forwarding headers; its internal port is not published.
+  The historical canonical backend issuer stays unchanged for stable account lookup.
+- Local development hostname: `convo.doncea.ro`, mapped to `192.168.1.144` in hosts files or LAN DNS.
+  Use `https://convo.doncea.ro` or `https://convo.doncea.ro:8443` for passwordless sign-in. The passwordless WebAuthn RP ID is
+  `convo.doncea.ro`, user verification and resident credentials are required, and passkeys are enabled.
+  IP-based ordinary sign-in remains available, but cannot use a domain-bound passkey.
+- Optional `WebAuthn Register Passwordless` action is enabled, so users can enroll a passkey after
+  their initial sign-in through Keycloak Account Console → Account security → Signing in.
+- TOTP: six digits, 30 seconds, SHA-1 for authenticator compatibility, one-step look-ahead,
+  and no code reuse. Fingerprints/device PINs are verified by the OS, never stored in Keycloak.
+- Declarative profile requires an editable `phoneNumber` for users, including the first-login
+  update-profile form. Its `html5-tel` annotation requests a telephone keyboard on phones.
+  The `phone` scope maps it to `phone_number`; this claim does not prove phone ownership.
+- `themes/convo/login` inherits stock `keycloak.v2` authentication forms. Its responsive styling
+  uses Convo colors, logo, 48px controls, 16px text fields, light/dark and reduced-motion support.
+- Development users: `alice`, `bob`, `carol` use `<name>-dev-password`; `bogdan`/`bogdan` and
+  `maria`/`maria` are also included. These seeded credentials are for local development only.
 
-Keycloak runs behind nginx at `/auth` (`KC_HTTP_RELATIVE_PATH=/auth`) so the issuer is
-`http://localhost:8088/auth/realms/enclave`, same-origin with the web app.
-
-The dev realm is branded Convo and includes bogdan/bogdan and maria/maria. Keycloak resolves public hosts dynamically from nginx. Relative redirects are restricted to the app callback under `/auth`; the H2 development database persists in a Compose volume.
+The H2 development database persists in a Compose volume. Production uses a supported database,
+customer-managed identities, trusted TLS certificates, and separately reviewed realm policies.

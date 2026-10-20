@@ -2,6 +2,8 @@ import type { MessageKey } from './en';
 
 /** Romanian UI catalog. Every key of the English catalog must be present (type-checked). */
 export const ro: Record<MessageKey, string> = {
+  "settings.allMedia": "Toate fișierele media",
+  "settings.allMedia.hint": "Fotografii, videoclipuri, documente și linkuri din toate conversațiile",
   "gallery.title": "Media",
   "gallery.allChats": "Media din toate conversațiile",
   "gallery.filters": "Filtrează și sortează",
@@ -245,7 +247,7 @@ export const ro: Record<MessageKey, string> = {
   'attachment.expired': 'Acest fișier a expirat sau nu mai este disponibil.',
   'attachment.offline': 'Nu se poate descărca acum. Verifică conexiunea.',
   'attachment.integrity': 'Acest fișier nu a trecut verificarea de integritate și nu a fost deschis.',
-  'attachment.tooLarge': '{name} depășește limita de 100 MB.',
+  'attachment.tooLarge': '{name} depășește limita de {limit} MB.',
   'attachment.unreadable': '{name} nu a putut fi citit.',
   'attachment.uploadFailed': 'Încărcarea a eșuat. Fișierele sunt încă selectate; încearcă din nou.',
   'group.new': 'Grup nou',

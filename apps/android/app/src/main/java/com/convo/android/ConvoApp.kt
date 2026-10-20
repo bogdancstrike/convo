@@ -55,7 +55,10 @@ import org.json.JSONObject
     }
 }
 @Composable fun ConvoApp(app: MainActivity) {
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(app.notice) { app.notice?.let { message -> snackbar.showSnackbar(message, duration = SnackbarDuration.Short); if (app.notice == message) app.notice = null } }
     BackHandler(app.phase == "ready" && (app.route != "list" || app.selectedTab != "Chats")) { app.back() }
+    var mediaOpen by remember { mutableStateOf(false) }
     var serverEdit by remember { mutableStateOf(false) }; var server by remember { mutableStateOf(app.serverAddress()) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (app.phase != "ready") {
@@ -99,20 +102,21 @@ import org.json.JSONObject
                 app.route != "list" -> app.route.replaceFirstChar { it.uppercase() }
                 else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
             }
-            Scaffold(topBar = {
+            Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = {
                 TopAppBar(title = { Column {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { if (app.route == "list" && app.selectedTab == "Chats") Image(androidx.compose.ui.res.painterResource(R.drawable.convo_logo), null, Modifier.size(30.dp)); Text(title, maxLines = 1, style = MaterialTheme.typography.titleLarge) }
                     if (app.route == "thread") LastSeenLabel(app, app.active ?: "")
                 } }, navigationIcon = {
                     if (app.route != "list") IconButton(onClick = app::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
                 }, actions = {
-                    if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels")) IconButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" }) { Icon(Icons.Outlined.AddComment, "New chat") }
-                    if (app.route == "thread") { IconButton(onClick = { app.route = "info" }) { Icon(Icons.Outlined.Info, "Conversation info") }; ChatMenu(app) }
+                    if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { mediaOpen = true }) { Icon(Icons.Outlined.PermMedia, "Media from all chats") }
+                    if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" }) { Icon(Icons.Outlined.AddComment, "New chat") }
+                    if (app.route == "thread") { IconButton(onClick = { app.threadSearch = !app.threadSearch }) { Icon(Icons.Outlined.Search, "Search this chat") }; IconButton(onClick = { app.route = "info" }) { Icon(Icons.Outlined.Info, "Conversation info") }; ChatMenu(app) }
                 })
             }, bottomBar = {
                 if (app.route == "list") NavigationBar {
-                    listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Calls" to Icons.Outlined.Call, "Channels" to Icons.Outlined.Campaign, "Settings" to Icons.Outlined.Settings).forEach { (label, icon) ->
-                        NavigationBarItem(app.selectedTab == label, onClick = { app.selectedTab = label; app.route = "list" }, icon = { Icon(icon, label) }, label = { Text(label) })
+                    listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Channels" to Icons.Outlined.Campaign, "Unread" to Icons.Outlined.MarkChatUnread, "Calls" to Icons.Outlined.Call, "Settings" to Icons.Outlined.AccountCircle).forEach { (label, icon) ->
+                        NavigationBarItem(app.selectedTab == label && !mediaOpen, onClick = { if (label == "Media") mediaOpen = true else { app.selectedTab = label; app.route = "list" } }, icon = { if (label == "Settings") PersonAvatar(app, app.snapshot.optString("accountId"), app.snapshot.optJSONObject("device")?.label() ?: "You", 24) else Icon(icon, label) }, label = { Text(if (label == "Settings") "Profile" else label) })
                     }
                 }
             }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) {
@@ -123,16 +127,18 @@ import org.json.JSONObject
                     route == "thread" -> NativeThread(app)
                     route == "info" -> ConversationInfo(app)
                     route.startsWith("contact:") -> ContactInfo(app, route.substringAfter(':'))
-                    route == "media" -> SharedMedia(app)
+                    route == "all-media" -> MediaBrowser(app) { app.route = "list" }
+                    route == "media" -> MediaBrowser(app, app.active) { app.route = "info" }
                     route == "starred" -> NativeThread(app, starredOnly = true)
                     route == "appearance" -> WallpaperPicker(app, perChat = true)
                     tab == "Settings" -> NativeSettings(app)
                     tab == "Calls" -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Outlined.Call, null, Modifier.size(56.dp)); Text("Calls", style = MaterialTheme.typography.headlineSmall); Text("To be implemented") }
-                    else -> ChatList(app, tab == "Channels")
+                    else -> ChatList(app, tab == "Channels", tab == "Unread")
                 }
                 }
             } }
         }
+        if (mediaOpen && app.phase == "ready") MediaBrowser(app) { mediaOpen = false }
         app.error?.let { message -> AlertDialog(onDismissRequest = { app.error = null }, title = { Text("Convo") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { app.error = null }) { Text("OK") } }) }
         if (serverEdit) AlertDialog(onDismissRequest = { serverEdit = false }, title = { Text("Server address") }, text = { OutlinedTextField(server, { server = it }, label = { Text("HTTPS address") }) }, confirmButton = { TextButton(onClick = { serverEdit = false; app.setServer(server) }) { Text("Save") } }, dismissButton = { TextButton(onClick = { serverEdit = false }) { Text("Cancel") } })
     }
@@ -152,10 +158,10 @@ import org.json.JSONObject
 @Composable fun ActionRow(label: String, hint: String? = null, icon: ImageVector = Icons.Outlined.ChevronRight, danger: Boolean = false, onClick: () -> Unit) {
     ListItem(headlineContent = { Text(label, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }, supportingContent = hint?.let { { Text(it) } }, leadingContent = { Icon(icon, null, tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }, modifier = Modifier.clickable(onClick = onClick).heightIn(min = 64.dp))
 }
-@Composable fun ChatList(app: MainActivity, channels: Boolean) {
+@Composable fun ChatList(app: MainActivity, channels: Boolean, unreadOnly: Boolean = false) {
     var query by remember { mutableStateOf("") }; var matches by remember { mutableStateOf(emptyList<String>()) }; var archived by remember { mutableStateOf(false) }
     LaunchedEffect(query) { if (query.isBlank()) matches = emptyList() else { kotlinx.coroutines.delay(200); app.call("search", obj("query" to query)) { result -> matches = (result as? JSONArray)?.objects()?.map { it.optString("conversationId") } ?: emptyList() } } }
-    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { it.optBoolean("adminOnly") == channels && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
+    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { (if (unreadOnly) it.optInt("unread") > 0 else it.optBoolean("adminOnly") == channels) && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
     Column {
         OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth().padding(12.dp), singleLine = true, placeholder = { Text("Search or start a new chat") }, leadingIcon = { Icon(Icons.Outlined.Search, null) })
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -173,13 +179,13 @@ import org.json.JSONObject
                 ConversationQuickMenu(app, c)
             }
         }
-        if (conversations.isEmpty()) item { Text(if (channels) "Create a channel to share announcements." else "Start a conversation with someone in your organization.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (conversations.isEmpty()) item { Text(if (unreadOnly) "You’re all caught up. New unread messages will appear here." else if (channels) "Create a channel to share announcements." else "Start a conversation with someone in your organization.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
 @Composable fun LastSeenLabel(app: MainActivity, id: String) {
     var at by remember(id) { mutableStateOf("") }
-    LaunchedEffect(id) { if (id.startsWith("g:")) return@LaunchedEffect; while (true) { app.call("lastSeen", obj("id" to id)) { value -> at = (value as? JSONObject)?.optString("at")?.takeUnless { it == "null" } ?: "" }; kotlinx.coroutines.delay(10000) } }
+    LaunchedEffect(id) { if (id.startsWith("g:")) return@LaunchedEffect; while (true) { app.call("lastSeen", obj("id" to id), quiet = true) { value -> at = (value as? JSONObject)?.optString("at")?.takeUnless { it == "null" } ?: "" }; kotlinx.coroutines.delay(10000) } }
     val seen = try { java.time.Instant.parse(at).atZone(java.time.ZoneId.systemDefault()) } catch (_: Exception) { null }
     if (seen != null) Text(if (seen.toLocalDate() == java.time.LocalDate.now()) "Last seen today: ${seen.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}" else "Last seen on ${seen.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))}", style = MaterialTheme.typography.bodySmall)
 }

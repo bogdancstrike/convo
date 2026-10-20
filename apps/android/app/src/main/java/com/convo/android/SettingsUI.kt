@@ -23,6 +23,7 @@ import org.json.JSONObject
             "list" -> {
                 item { val device = app.snapshot.optJSONObject("device") ?: JSONObject(); Row(Modifier.fillMaxWidth().clickable { app.route = "profile" }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { PersonAvatar(app, app.snapshot.optString("accountId"), device.label(), 64); Column(Modifier.padding(start = 16.dp)) { Text(device.label(), style = MaterialTheme.typography.titleLarge); Text("@${device.optString("username")}") } } }
                 items(listOf("Your profile" to "profile", "History and recovery" to "recovery", "Chats" to "chats", "Privacy" to "privacy", "Devices" to "devices")) { (label, route) -> Card { ActionRow(label, icon = when(route) { "profile" -> Icons.Outlined.AccountCircle; "chats" -> Icons.Outlined.Palette; "devices" -> Icons.Outlined.Devices; "privacy" -> Icons.Outlined.Lock; else -> Icons.Outlined.Shield }) { app.route = route } } }
+                item { ActionRow("All Media", "Photos, videos, documents and links from all chats", Icons.Outlined.PermMedia) { app.route = "all-media" } }
                 item { ActionRow("Log out", icon = Icons.Outlined.Logout, danger = true) { logout = true } }
             }
             "profile" -> item { ProfileEditor(app) }
@@ -51,12 +52,12 @@ import org.json.JSONObject
     var remove by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PersonAvatar(app, id, app.snapshot.optJSONObject("device")?.label() ?: "You", 96)
-        Row { Button(onClick = { app.pickFile({ data, _, mime -> app.call("profile", obj("patch" to obj("photo" to data), "mime" to mime)) }, "image/*") }) { Text(if (profile?.has("photo") == true) "Change photo" else "Upload photo") }; if (profile?.has("photo") == true) TextButton({ remove = true }) { Text("Remove photo", color = MaterialTheme.colorScheme.error) } }
+        Row { Button(onClick = { app.pickFile({ data, _, mime -> app.call("profile", obj("patch" to obj("photo" to data), "mime" to mime), success = "Photo updated") }, "image/*") }) { Text(if (profile?.has("photo") == true) "Change photo" else "Upload photo") }; if (profile?.has("photo") == true) TextButton({ remove = true }) { Text("Remove photo", color = MaterialTheme.colorScheme.error) } }
         Text("Your photo and status are shared end-to-end encrypted with people you chat with.")
         OutlinedTextField(status, { status = it.take(280) }, label = { Text("Status") }, supportingText = { Text("${status.length}/280") }, modifier = Modifier.fillMaxWidth())
-        Row { Button(onClick = { app.call("profile", obj("patch" to obj("status" to status.trim()))) }) { Text("Save") }; TextButton({ status = ""; app.call("profile", obj("patch" to obj("status" to ""))) }) { Text("Clear status") } }
+        Row { Button(onClick = { app.call("profile", obj("patch" to obj("status" to status.trim())), success = "Saved") }) { Text("Save") }; TextButton({ status = ""; app.call("profile", obj("patch" to obj("status" to "")), success = "Status removed") }) { Text("Clear status") } }
     }
-    if (remove) Confirm("Remove profile photo?", "Your contacts will see your initials.", "Remove", { remove = false }) { remove = false; app.call("profile", obj("patch" to JSONObject(), "removePhoto" to true)) }
+    if (remove) Confirm("Remove profile photo?", "Your contacts will see your initials.", "Remove", { remove = false }) { remove = false; app.call("profile", obj("patch" to JSONObject(), "removePhoto" to true), success = "Photo removed") }
 }
 @Composable fun RecoveryEditor(app: MainActivity) {
     var configured by remember { mutableStateOf(false) }; var code by remember { mutableStateOf("") }; var replace by remember { mutableStateOf(false) }

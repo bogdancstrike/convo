@@ -6,6 +6,25 @@ file tracks what is actually built, verified, and what is still missing.
 
 Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
+## Active checkpoint — 2026-10-20
+
+- Native Compose Android client and APK are implemented and committed; Android↔web encrypted
+  exchange, trusted linking/history restore, and update/process-restart persistence are verified
+  on emulator-5554. Full parity, physical devices, native storage certification and iOS remain open.
+- Native global Media gallery/filter/batch actions, Settings All Media, requested five footer tabs,
+  shared web light/dark tokens, success feedback and encrypted drafts are now implemented.
+- Backend advertises/enforces a configurable 100 MiB attachment policy; clients apply its plaintext
+  limit before reading files. Encryption tags/padding have a separate bounded ciphertext allowance.
+- `convo.doncea.ro` is mapped locally to `192.168.1.144`; HTTPS exposes both 443 and 8443, with a
+  matching self-signed SAN certificate. Keycloak uses this domain as the passwordless RP ID.
+  WebAuthn registration followed by a genuine passwordless assertion is E2E verified in Chromium.
+- Responsive Convo Keycloak login theme and editable required telephone input are implemented.
+  Web Settings no longer exposes a separate Security category; confirmed red Log out remains.
+- Shared safety-number display preserves existing pinned-library bytes and avoids Firefox's
+  slow timer-per-digest path. Compatibility and focused Firefox UX tests pass.
+- Still open: edit policy/revision receipts, auto-download/gallery preferences, passkey Settings
+  entry and native app/conversation locks, remaining UI parity and legacy-origin migration.
+
 ## Foundations (FND)
 
 | Status | Item | Task | Notes |
@@ -65,7 +84,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | `POST /v1/devices/link`: Keycloak token **and** approving-device code required; IK must match account | |
 | ✅ | X25519 → HKDF → AES-GCM channel bound to `ENCLAVE-PROVISION-V1` transcript (AAD) | WebCrypto X25519 |
 | ✅ | 12-digit comparison code on both screens; approve/decline in Settings | QR scan alternative pending |
-| ✅ | Shared enrollment completion path (primary + linked), linked devices get future messages only | history transfer pending (EXT-02) |
+| ✅ | Shared enrollment completion path (primary + linked), linked devices restore the account encrypted archive | legacy old-origin migration pending |
 | 🟡 | Own-device notices on link (`DEVICE_LIST_CHANGED` directive refreshes device list) | persistent security notice UI pending |
 
 ## Attachments (FEAT-01)
@@ -132,8 +151,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Message menu (react, reply, copy, forward, star, edit, delete), emoji picker, attach menu | |
 | ✅ | Voice notes (mic ↔ send), video with posters, pre-send media preview | |
 | ✅ | Directory search by name/handle/phone (ADR-0002), pgAdmin | |
-| ⬜ | Global search across message text in "Search or start a new chat" | next |
-| ⬜ | LAN access: HTTPS (secure context needed for WebCrypto), dynamic Keycloak hostname, per-host presigning | next |
+| ✅ | Global search across decrypted message text and attachment names | UX E2E |
+| ✅ | LAN HTTPS, dynamic Keycloak hostname and request-origin file links | hostname/IP E2E |
 | 🟡 | Firefox e2e: intermittent enroll wait timeout (KeyPackage upload response) | investigate |
 
 ## Convo LAN and account continuity — 2026-10-20
@@ -146,7 +165,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Channels backed by groups with admin-only posting; Calls rail placeholder | Backend role-denial test and Chromium owner/member journey |
 | ✅ | Durable encrypted account archive, atomic local journaling, idempotent append, stable pagination and device restoration | Chromium restores historical sent/received/self messages with original browser closed |
 | ✅ | Recovery code with separately derived wrapping/authorization keys; same-identity recovery and lost-device revocation | Chromium wrong-code rejection and fresh-browser recovery, device count 1 |
-| 🟡 | Expanded Settings, encrypted profile photo/status, wallpaper previews and guarded Log out | Implemented; dedicated profile/wallpaper/logout E2E journey pending |
+| ✅ | Expanded Settings, encrypted profile photo/status, wallpaper previews and guarded Log out | Dedicated Chromium/Firefox settings journey passed |
 | ✅ | Keycloak data persists across container replacement; bogdan/bogdan and maria/maria created | Running realm checked after restart |
 
 Validation checkpoint: backend tests/module boundaries passed, web type checks and 117 unit tests

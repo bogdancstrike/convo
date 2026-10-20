@@ -5,7 +5,8 @@ test('HTTP explains HTTPS, forwarding headers cannot change the sign-in origin',
   const http = new URL(baseURL!); http.protocol = 'http:'; http.port = process.env.HTTP_PORT ?? '8088';
   await page.goto(http.href);
   await expect(page.getByRole('heading', { name: 'HTTPS required' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open Convo securely' })).toHaveAttribute('href', new URL('/', baseURL).href);
+  const secure = new URL('/', baseURL); secure.port = process.env.HTTPS_PORT ?? '8443';
+  await expect(page.getByRole('link', { name: 'Open Convo securely' })).toHaveAttribute('href', secure.href);
   const response = await request.get('/v1/deployment-info', { headers: { Forwarded: 'host=evil.example;proto=http', 'X-Forwarded-Host': 'evil.example', 'X-Forwarded-Proto': 'http', 'X-Forwarded-Port': '9999' } });
   expect((await response.json()).oidc.issuer).toBe(`${baseURL}/auth/realms/enclave`);
 });

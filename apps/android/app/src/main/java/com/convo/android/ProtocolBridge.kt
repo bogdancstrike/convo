@@ -16,7 +16,8 @@ import net.openid.appauth.connectivity.ConnectionBuilder
 
 /** Exact development certificate trust; no trust-all verifier and no release override. */
 class DevelopmentTls(private val context: Context) : ConnectionBuilder {
-    private val host = "192.168.1.144"
+    private val hosts = setOf("192.168.1.144", "convo.doncea.ro")
+    private fun developmentEndpoint(uri: Uri) = uri.scheme == "https" && uri.host in hosts && uri.port in setOf(-1, 443, 8443)
     private val certificate: X509Certificate? by lazy {
         if (!BuildConfig.DEBUG) null else {
             val id = context.resources.getIdentifier("convo_dev", "raw", context.packageName)
@@ -27,15 +28,14 @@ class DevelopmentTls(private val context: Context) : ConnectionBuilder {
     }
     fun accepts(url: String, cert: X509Certificate?): Boolean = try {
         certificate?.checkValidity(); cert?.checkValidity()
-        BuildConfig.DEBUG && Uri.parse(url).scheme == "https" && Uri.parse(url).host == host &&
-            Uri.parse(url).port == 8443 && cert != null && certificate?.encoded.contentEquals(cert.encoded)
+        BuildConfig.DEBUG && developmentEndpoint(Uri.parse(url)) && cert != null && certificate?.encoded.contentEquals(cert.encoded)
     } catch (_: Exception) { false }
 
     override fun openConnection(uri: Uri): HttpURLConnection {
         require(uri.scheme == "https") { "HTTPS required" }
         val connection = java.net.URL(uri.toString()).openConnection() as HttpsURLConnection
         connection.connectTimeout = 15000; connection.readTimeout = 15000
-        if (BuildConfig.DEBUG && uri.host == host && uri.port == 8443 && certificate != null) {
+        if (BuildConfig.DEBUG && developmentEndpoint(uri) && certificate != null) {
             val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
             factory.init(null as KeyStore?)
             val standard = factory.trustManagers.filterIsInstance<X509TrustManager>().first()
@@ -49,7 +49,7 @@ class DevelopmentTls(private val context: Context) : ConnectionBuilder {
             connection.sslSocketFactory = SSLContext.getInstance("TLS").apply { init(null, arrayOf(manager), null) }.socketFactory
             val verifier = HttpsURLConnection.getDefaultHostnameVerifier()
             connection.hostnameVerifier = HostnameVerifier { name, session ->
-                verifier.verify(name, session) || (name == host && accepts(uri.toString(), session.peerCertificates.firstOrNull() as? X509Certificate))
+                verifier.verify(name, session) || (name in hosts && accepts(uri.toString(), session.peerCertificates.firstOrNull() as? X509Certificate))
             }
         }
         return connection

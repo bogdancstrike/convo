@@ -1,6 +1,7 @@
 package com.enclave.platform.web;
 
 import com.enclave.contracts.DeploymentProperties;
+import com.enclave.contracts.AttachmentPolicy;
 import com.enclave.platform.security.SecurityProperties;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,17 +19,19 @@ class DeploymentInfoController {
 
     private final DeploymentProperties deployment;
     private final SecurityProperties security;
+    private final AttachmentPolicy attachments;
 
-    DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security) {
+    DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security, AttachmentPolicy attachments) {
         this.deployment = deployment;
         this.security = security;
+        this.attachments = attachments;
     }
 
     @GetMapping("/v1/deployment-info")
     DeploymentInfo info() {
         String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
         return new DeploymentInfo(deployment.id(), deployment.displayName(), API_VERSIONS,
-                new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()));
+                new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()), new Limits(attachments.maxFileBytes()));
     }
 
     /**
@@ -37,7 +40,8 @@ class DeploymentInfoController {
      * @param apiVersions supported API versions
      * @param oidc OIDC client settings for the web app
      */
-    record DeploymentInfo(String deploymentId, String displayName, List<String> apiVersions, OidcInfo oidc) {}
+    record DeploymentInfo(String deploymentId, String displayName, List<String> apiVersions, OidcInfo oidc, Limits limits) {}
+    record Limits(long attachmentMaxBytes) {}
 
     /**
      * @param issuer OIDC issuer URL

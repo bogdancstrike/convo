@@ -1,5 +1,7 @@
 /** English UI catalog (source of truth for keys). */
 export const en = {
+  "settings.allMedia": "All Media",
+  "settings.allMedia.hint": "Photos, videos, documents and links from all chats",
   "gallery.title": "Media",
   "gallery.allChats": "Media from all chats",
   "gallery.filters": "Filter and sort",
@@ -243,7 +245,7 @@ export const en = {
   'attachment.expired': 'This file has expired or is no longer available.',
   'attachment.offline': 'Can’t download right now. Check your connection.',
   'attachment.integrity': 'This file failed its integrity check and was not opened.',
-  'attachment.tooLarge': '{name} is larger than the 100 MB limit.',
+  'attachment.tooLarge': '{name} is larger than the {limit} MB limit.',
   'attachment.unreadable': '{name} could not be read.',
   'attachment.uploadFailed': 'Upload failed. Your files are still selected; try again.',
   'group.new': 'New group',

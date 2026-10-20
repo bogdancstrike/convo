@@ -1,3 +1,4 @@
+import { configureAttachmentLimit } from '../core/attachments';
 /**
  * Runtime deployment configuration. The web build is deployment-independent: everything specific
  * to an installation is read from the public `GET /v1/deployment-info` endpoint at start-up.
@@ -11,6 +12,7 @@ export interface DeploymentInfo {
   apiVersions: string[];
   /** OIDC settings for the public PKCE client. */
   oidc: { issuer: string; clientId: string };
+  limits?: { attachmentMaxBytes: number };
 }
 
 /** API version implemented by this client. */
@@ -28,6 +30,7 @@ export async function loadDeploymentInfo(signal?: AbortSignal): Promise<Deployme
   if (!info.apiVersions.includes(CLIENT_API_VERSION)) {
     throw new UpdateRequiredError();
   }
+  configureAttachmentLimit(info.limits?.attachmentMaxBytes ?? 100 * 1024 * 1024);
   return info;
 }
 

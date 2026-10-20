@@ -1,13 +1,54 @@
-# Enclave — Delivery tasks and acceptance plan
+# Convo — Delivery tasks and acceptance plan
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.3, 2026-10-17; no implementation task is complete |
+| Status | Active implementation, 2026-10-20; full release gates remain open |
 | Goal | Deliver every advertised feature at Android/web launch; iOS is a separate client target |
-| Architecture | Spring Modulith, verified feature-module boundaries, PostgreSQL mailbox/outbox, Signal direct sessions, MLS groups, Flutter Android, React web, shared Rust protocol core subject to feasibility gates |
+| Architecture | Spring Modulith, verified feature-module boundaries, PostgreSQL mailbox/outbox, Signal direct sessions, MLS groups, Compose Android development client, React web, shared Rust/native storage still subject to feasibility gates |
 | Related | [Specs](specs.md), [ARF](arf.md), [UI](UI.md), [Mobile](mobile.md), [Sources](sources.md) |
 
 This is a product delivery backlog. Implementation progress against these task IDs is tracked in the repository root [`tasks.md`](../tasks.md); checkboxes here close only when the full acceptance evidence exists. Each task names planned artifacts, dependencies, and measurable acceptance. Split a task into reviewable implementation issues when its interfaces are agreed; keep its ID in commits/issues and release evidence. All checkboxes remain open until the acceptance evidence exists. Implementation may use the available executing-plans workflow, but this document does not authorize unrelated deployment or messaging actions.
+
+## Current implementation checkpoint — 2026-10-20
+
+The following scoped work exists in the running development stack. This does not close the
+broader launch tasks, independent security review or complete Android/web parity gate.
+
+- [x] Convo branding; Docker Compose LAN HTTPS on 8443; HTTP HTTPS-required screen; dynamic
+  Keycloak/request origin; persistent Keycloak/database/certificate volumes; mandatory editable
+  first-login phone number; development Bogdan/Maria accounts.
+- [x] Locally decrypted all-history chat search; chat list action arrow; compact anchored menus;
+  contextual Escape navigation; viewport-fitting Settings overview; profile picture/status;
+  four background previews; animations with disable control; minute-precision opt-in last seen.
+- [x] Encrypted channels, dedicated navigation and role-based posting; reviewed group/channel
+  wizard; spacious participants, contact pages/groups in common, shared owners and member menus.
+- [x] Sent/received/seen indicators and per-recipient group read/delivery details; external-link
+  confirmation with destination preview and user preference; in-chat image/video viewer.
+- [x] Web global Media gallery: Media/Docs/Links, caption/filename/link search, sender/sort
+  filters and bounded selected download/forward/star/local-delete actions.
+- [x] Encrypted account history/recovery and last-device logout safeguard. Linked browser restore
+  and loss-of-all-devices recovery are E2E tested. Delayed archive records cannot resurrect a
+  locally deleted message. Legacy old-origin/old-Keycloak-subject migration remains outstanding.
+- [x] Native Android source and APK committed on master (`89ef009`); PKCE enrollment and Android↔web
+  decryption verified through adb on emulator-5554. APK replacement/process restart preserve both
+  message directions. A new browser linked from Android restores that account's earlier history.
+- [ ] Complete native/web feature, button, layout, motion, localization and accessibility parity;
+  remaining native group/channel/media operations and physical-device acceptance. All-media entry,
+  requested footer, Save feedback, update/restart history and process-recreation download are adb verified.
+- [ ] Implement/test backend-configured attachment policy end to end (default 100 MiB).
+- [ ] Implement/test matching edit windows and revision-aware receipts across backend/web/Android.
+- [ ] Add All Media to Settings and media auto-download/gallery-saving preferences on both clients.
+- [x] Mobile-friendly Keycloak theme; full-width desktop/phone layout in both themes; hostname/TLS
+  on ports 443/8443 for `convo.doncea.ro`; real WebAuthn registration and passwordless assertion.
+- [ ] Expose passkey enrollment/management after sign-in directly from Convo Settings.
+- [ ] Native app lock and hidden conversation locks using system biometric/PIN, gated by confirmed Keycloak passwordless enrollment; never store fingerprints/PINs in Convo.
+- [ ] Reviewed native core/Keystore/SQLCipher, lifecycle/background delivery, physical device
+  certification and iOS. Calls remain an explicitly requested placeholder.
+
+Validation checkpoint: 123 web unit tests and backend tests passed before `89ef009`. A subsequent
+full LAN Chromium/Firefox suite passed 39/40 tests; the remaining Firefox safety-number test
+exposed slow timer-based hashing in the pinned library. A byte-compatible faster display-only
+hash adapter passes its compatibility test and focused Firefox UX checks. Do not report a clean full-suite run until that regression passes.
 
 ## 1. Release sequence and critical path
 
