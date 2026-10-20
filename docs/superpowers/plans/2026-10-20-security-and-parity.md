@@ -71,7 +71,12 @@ conversation-lock work.
   plaintext via Android MediaStore. Explain that other apps with gallery access can read copies.
 - Exclude locked conversations from auto-saving and global search/media until authenticated.
 
-## Passkeys, app lock, conversation lock (new user request; not yet implemented)
+## Passkeys, app lock, conversation lock (implemented 2026-10-21)
+
+Done: read-only credential-status service account and endpoint, web/Android Manage passkeys,
+Android BiometricPrompt app lock and chat locks with list/search/media/gallery exclusion.
+Remaining: web screen lock, physical-device biometric checks.
+
 
 - Keycloak owns passwordless enrollment; Android owns fingerprint/device PIN. Never obtain/store
   biometric templates or a device PIN in Keycloak/Convo. System-browser SSO remains in AppAuth.

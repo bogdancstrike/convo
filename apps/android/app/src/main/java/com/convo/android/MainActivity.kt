@@ -8,7 +8,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
@@ -23,7 +23,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    val locks by lazy { LockManager(this) }
     private lateinit var bridge: ProtocolBridge
     private lateinit var auth: AuthorizationService
     private val io = Executors.newSingleThreadExecutor()
@@ -106,12 +107,16 @@ class MainActivity : ComponentActivity() {
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
-                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code") }
+                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus() }
                 "snapshot" -> { snapshot = value; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
         setContent { ConvoTheme(snapshot.optJSONObject("settings")?.optString("theme") ?: "system") {
-            Box { AndroidView(factory = { bridge.webView }, modifier = Modifier.size(1.dp)); ConvoApp(this@MainActivity) }
+            Box {
+                AndroidView(factory = { bridge.webView }, modifier = Modifier.size(1.dp))
+                // Content is not composed at all while locked, so nothing flashes on resume.
+                if (locks.appLock && !locks.appUnlocked && phase == "ready") AppLockScreen(this@MainActivity) else ConvoApp(this@MainActivity)
+            }
         } }
     }
     fun call(method: String, args: JSONObject = JSONObject(), success: String? = null, quiet: Boolean = false, then: (Any?) -> Unit = {}) {
@@ -143,7 +148,25 @@ class MainActivity : ComponentActivity() {
         getPreferences(MODE_PRIVATE).edit().putString("server", value.trim().trimEnd('/')).apply(); recreate()
     }
     fun serverAddress() = server
-    fun openChat(id: String) { threadSearch = false; active = id; route = "thread"; selectedTab = "Chats"; call("open", obj("id" to id)) }
+    fun openChat(id: String) {
+        if (locks.locked(id) && locks.unlockedChat != id) { locks.authenticate("Open locked chat", "Confirm it’s you") { locks.unlockedChat = id; openChat(id) }; return }
+        threadSearch = false; active = id; route = "thread"; selectedTab = "Chats"; call("open", obj("id" to id))
+    }
+    /** Keycloak Account Console (passkeys, authenticator apps) in a Custom Tab; never inside Convo. */
+    fun openAccountSecurity() {
+        val uri = Uri.parse("$server/auth/realms/enclave/account/account-security/signing-in")
+        try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
+        catch (_: Exception) { error = "No browser is available to open your account settings." }
+    }
+    override fun onStop() { super.onStop(); locks.onBackground() }
+    override fun onResume() { super.onResume(); if (phase == "ready") refreshCredentialStatus() }
+    /** Updates lock eligibility. An unavailable IdP answer keeps the last confirmed value. */
+    fun refreshCredentialStatus(done: (String) -> Unit = {}) = call("credentials", quiet = true) { value ->
+        val status = value as? JSONObject
+        val state = when { status == null || status.optString("state") != "available" -> "unavailable"; status.optBoolean("passkey") -> "true"; else -> "false" }
+        if (state != "unavailable") locks.passkey = state == "true"
+        done(state)
+    }
     fun back() {
         when {
             route == "thread" && threadSearch -> threadSearch = false
@@ -151,7 +174,7 @@ class MainActivity : ComponentActivity() {
             route.startsWith("contact:") -> route = "info"
             route in listOf("media", "starred", "appearance", "members") -> route = "info"
             route == "info" -> route = "thread"
-            route == "thread" -> { active = null; route = "list"; call("close") }
+            route == "thread" -> { active = null; route = "list"; locks.unlockedChat = null; call("close") }
             selectedTab == "Settings" && route != "list" -> route = "list"
             else -> { route = "list"; selectedTab = "Chats" }
         }
@@ -176,7 +199,7 @@ class MainActivity : ComponentActivity() {
     private val gallery by lazy { GallerySaver(this) }
     /** Exports a received photo/video once, only when Save to gallery is on (never own media). */
     fun saveReceivedMedia(message: JSONObject, pointer: JSONObject, data: String) {
-        if (message.optString("authorId") == snapshot.optString("accountId")) return
+        if (message.optString("authorId") == snapshot.optString("accountId") || locks.locked(message.optString("conversationId"))) return
         if (snapshot.optJSONObject("settings")?.optBoolean("saveToGallery") != true) return
         io.execute { try { gallery.saveOnce(pointer.optString("attachmentId"), pointer.optString("fileName").ifBlank { "convo-media" }, pointer.optString("contentType"), decode(data)) } catch (_: Exception) { } }
     }

@@ -35,6 +35,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.browser:browser:1.8.0")
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("net.openid:appauth:0.11.1")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.55")
 }

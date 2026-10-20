@@ -71,7 +71,9 @@ async function target(args: Record<string, any>) {
 }
 async function mediaEntries(args: Record<string, any>) {
   if (!client) throw new Error('not ready');
-  const conversations = client.conversations().filter((c) => !args.conversationId || c.id === args.conversationId);
+  // Native chat locks are device-local: locked chats never appear in global media.
+  const excluded = new Set(Array.isArray(args.exclude) ? args.exclude.map(String) : []);
+  const conversations = client.conversations().filter((c) => (!args.conversationId || c.id === args.conversationId) && !excluded.has(c.id));
   const messages = (await Promise.all(conversations.map((c) => client!.messages(c.id, Number.MAX_SAFE_INTEGER)))).flat();
   return sharedEntries(messages, conversations);
 }
@@ -146,6 +148,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
       if (patch.photo && typeof patch.photo === 'string') { const bytes = fromBase64Url(patch.photo); patch.photo = await prepareProfilePhoto(new File([bytes], 'profile', { type: args.mime })); }
       if (args.removePhoto) patch.photo = undefined; return client.updateProfile(patch);
     }
+    case 'credentials': return client.credentialStatus();
     case 'privacy': return client.lastSeenPrivacy();
     case 'setPrivacy': return client.setLastSeenPrivacy(Boolean(args.enabled));
     case 'lastSeen': return client.lastSeen(args.id);

@@ -124,6 +124,7 @@ import org.json.JSONObject
                 when {
                     route == "new" -> ContactsPicker(app, onPick = { account -> app.call("newChat", obj("id" to account.optString("accountId"))) { data -> (data as? JSONObject)?.optString("id")?.let(app::openChat) } })
                     route == "new-group" || route == "new-channel" -> GroupWizard(app, route == "new-channel")
+                    (route == "thread" || route == "info" || route == "media" || route == "starred") && app.locks.locked(app.active) && app.locks.unlockedChat != app.active -> LockedChatGate(app, app.active!!)
                     route == "thread" -> NativeThread(app)
                     route == "info" -> ConversationInfo(app)
                     route.startsWith("contact:") -> ContactInfo(app, route.substringAfter(':'))
@@ -160,15 +161,21 @@ import org.json.JSONObject
 }
 @Composable fun ChatList(app: MainActivity, channels: Boolean, unreadOnly: Boolean = false) {
     var query by remember { mutableStateOf("") }; var matches by remember { mutableStateOf(emptyList<String>()) }; var archived by remember { mutableStateOf(false) }
-    LaunchedEffect(query) { if (query.isBlank()) matches = emptyList() else { kotlinx.coroutines.delay(200); app.call("search", obj("query" to query)) { result -> matches = (result as? JSONArray)?.objects()?.map { it.optString("conversationId") } ?: emptyList() } } }
-    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { (if (unreadOnly) it.optInt("unread") > 0 else it.optBoolean("adminOnly") == channels) && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
+    // Locked chats are listed only after authenticating, never in ordinary lists or search.
+    var showLocked by remember { mutableStateOf(false) }
+    val locked = app.locks.lockedChats
+    LaunchedEffect(query) { if (query.isBlank()) matches = emptyList() else { kotlinx.coroutines.delay(200); app.call("search", obj("query" to query)) { result -> matches = (result as? JSONArray)?.objects()?.map { it.optString("conversationId") }?.filter { it !in app.locks.lockedChats } ?: emptyList() } } }
+    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { (it.optString("id") in locked) == showLocked }.filter { showLocked || (if (unreadOnly) it.optInt("unread") > 0 else it.optBoolean("adminOnly") == channels) && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
     Column {
         OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth().padding(12.dp), singleLine = true, placeholder = { Text("Search or start a new chat") }, leadingIcon = { Icon(Icons.Outlined.Search, null) })
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(!archived, { archived = false }, label = { Text("All") }); FilterChip(archived, { archived = true }, label = { Text("Archived") })
+            FilterChip(!archived && !showLocked, { archived = false; showLocked = false }, label = { Text("All") }); FilterChip(archived && !showLocked, { archived = true; showLocked = false }, label = { Text("Archived") })
+            if (locked.isNotEmpty()) FilterChip(showLocked, { if (showLocked) showLocked = false else app.locks.authenticate("Show locked chats", "Confirm it’s you") { showLocked = true } },
+                label = { Text("Locked chats") }, leadingIcon = { Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp)) })
         }
+        LaunchedEffect(app.locks.appUnlocked) { if (!app.locks.appUnlocked) showLocked = false }
         LazyColumn { items(conversations, key = { it.optString("id") }) { c ->
-            Row(Modifier.fillMaxWidth().clickable { app.openChat(c.optString("id")) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { if (showLocked) app.locks.unlockedChat = c.optString("id"); app.openChat(c.optString("id")) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 PersonAvatar(app, c.optString("id"), c.optString("title"), group = c.optString("kind") == "group")
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), fontWeight = FontWeight.SemiBold)
@@ -204,6 +211,10 @@ import org.json.JSONObject
 @Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
+    val chatLocked = app.locks.locked(c.optString("id"))
+    if (chatLocked || app.locks.passkey == true) DropdownMenuItem(text = { Text(if (chatLocked) "Unlock chat" else "Lock chat") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) }, onClick = {
+        close(); app.locks.setChatLocked(c.optString("id"), !chatLocked) { app.notice = if (chatLocked) "Chat unlocked" else "Chat locked"; if (!chatLocked && app.route != "list") app.back() }
+    })
     DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })
     DropdownMenuItem(text = { Text("Delete chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "deleteChat" })
     if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })

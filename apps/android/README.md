@@ -39,7 +39,8 @@ Full web/Android parity is the acceptance target, **not the current completion s
 The native global media browser now supports filtering and batch actions, Settings includes All
 Media, drafts persist locally, profile changes show success feedback, Storage and data offers
 per-network media auto-download and an opt-in Save to gallery (MediaStore, Android 10+), and Edit
-follows the shared 15-minute / 30-day channel window. Remaining gaps include
+follows the shared 15-minute / 30-day channel window. Privacy shows passkey status and offers an
+app lock and per-chat locks (BiometricPrompt with screen-lock fallback) once a passkey exists. Remaining gaps include
 voice-recording UI, complete localization, cross-message viewer navigation and exhaustive
 visual/accessibility/device testing. iOS has not been implemented. Native background delivery,
 Keystore wrapping and the reviewed Rust/SQLCipher core remain separate security/release gates.

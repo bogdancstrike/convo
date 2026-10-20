@@ -83,6 +83,8 @@ import org.json.JSONObject
     var lastSeen by remember { mutableStateOf(false) }; var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { app.call("privacy") { lastSeen = (it as? JSONObject)?.optBoolean("shareLastSeen") ?: false; loaded = true } }
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        LockSettings(app)
+        HorizontalDivider()
         PrivacySwitch("Share last seen", "Allow signed-in people in your organization to see when you last used Convo. Hidden by default; applies to all your devices.", lastSeen, loaded) { value -> app.call("setPrivacy", obj("enabled" to value)) { lastSeen = value } }
         listOf(Triple("confirmExternalLinks", "Confirm before opening links", "Show the destination before leaving Convo."), Triple("readReceipts", "Send read receipts", "Off by default. Delivery status is always shown."), Triple("typingIndicators", "Typing indicators", "Off by default. Direct chats only.")).forEach { (key, title, hint) -> PrivacySwitch(title, hint, settings.optBoolean(key)) { app.call("settings", obj("patch" to obj(key to it))) } }
     }

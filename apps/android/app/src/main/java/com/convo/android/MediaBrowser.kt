@@ -54,7 +54,7 @@ import org.json.JSONObject
     LaunchedEffect(tab, query, sender, sort) { selected = emptySet(); limit = 60 }
     LaunchedEffect(tab, query, sender, sort, limit, refresh, app.snapshot) {
         kotlinx.coroutines.delay(150)
-        app.call("mediaEntries", obj("conversationId" to conversation, "limit" to limit, "filter" to obj("tab" to tab, "query" to query, "sender" to sender, "sort" to sort))) { value ->
+        app.call("mediaEntries", obj("conversationId" to conversation, "exclude" to org.json.JSONArray(app.locks.lockedChats.filter { it != conversation }), "limit" to limit, "filter" to obj("tab" to tab, "query" to query, "sender" to sender, "sort" to sort))) { value ->
             loading = false; failed = value == null
             (value as? JSONObject)?.let { result -> entries = result.optJSONArray("entries")?.objects().orEmpty(); total = result.optInt("total"); selected = selected.intersect(entries.map { it.optString("key") }.toSet()) }
         }
