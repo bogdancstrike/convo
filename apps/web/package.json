@@ -7,25 +7,29 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@noble/curves": "2.0.1",
+    "@noble/hashes": "2.0.1",
     "@privacyresearch/libsignal-protocol-typescript": "0.0.16",
     "idb": "8.0.3",
     "oidc-client-ts": "3.3.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "ts-mls": "1.6.4"
   },
   "devDependencies": {
+    "@types/node": "22.18.12",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
-    "@vitejs/plugin-react": "5.1.0",
+    "@vitejs/plugin-react": "5.2.0",
     "fake-indexeddb": "6.2.4",
     "typescript": "5.9.3",
-    "vite": "7.1.12",
-    "vitest": "3.2.4"
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
   }
 }
