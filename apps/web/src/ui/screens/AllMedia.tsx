@@ -66,7 +66,7 @@ export function AllMedia({ client, onClose }: { client: EnclaveClient; onClose: 
             if (!selecting || (e.target as Element).closest('label')) return; e.preventDefault(); e.stopPropagation(); toggle(entry.key);
           }}>
             {selecting && <label className="gallery-checkbox"><input type="checkbox" checked={selected.has(entry.key)} onChange={() => toggle(entry.key)} aria-label={t('gallery.selectItem', { name: entry.attachment?.fileName ?? entry.link ?? '' })} /></label>}
-            {entry.attachment ? <AttachmentView client={client} pointer={entry.attachment} /> : <ExternalLink href={entry.link!} className="shared-link"><Icon name="next" /><span>{entry.link}</span></ExternalLink>}
+            {entry.attachment ? <AttachmentView client={client} pointer={entry.attachment} authorId={entry.message.authorId} /> : <ExternalLink href={entry.link!} className="shared-link"><Icon name="next" /><span>{entry.link}</span></ExternalLink>}
             <EntryLabel client={client} entry={entry} />
           </article>)}</div>}
         {entries.length > limit && <button className="btn" onClick={() => setLimit((n) => n + 60)}>{t('shared.more')}</button>}

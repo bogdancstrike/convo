@@ -51,7 +51,7 @@ export function SharedContent({ client, conversationId, tab, onTab, onBack }: {
           <div className={tab === 'media' ? 'media-grid' : 'shared-items'}>
             {visible.map((m) => <div className="shared-item" key={`${m.authorId}/${m.id}`} title={date(m.sentAt)}>
               {tab === 'links' ? linksIn(m.body ?? '').map((url) => <ExternalLink key={url} href={url} className="shared-link"><Icon name="next" size={20} /><span>{url}</span></ExternalLink>) :
-                m.attachments?.filter((a) => tab === 'media' ? isInlineImage(a) || isVideo(a) || isAudio(a) : !isInlineImage(a) && !isVideo(a) && !isAudio(a)).map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} />)}
+                m.attachments?.filter((a) => tab === 'media' ? isInlineImage(a) || isVideo(a) || isAudio(a) : !isInlineImage(a) && !isVideo(a) && !isAudio(a)).map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}
             </div>)}
           </div>
         </section> : null;

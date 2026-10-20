@@ -38,19 +38,26 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     val video = mime.startsWith("video/")
     var bitmap by remember(pointer.optString("attachmentId")) { mutableStateOf<ImageBitmap?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(pointer.optString("attachmentId")) {
+    var requested by remember(pointer.optString("attachmentId")) { mutableStateOf(false) }
+    val own = message.optString("authorId") == app.snapshot.optString("accountId")
+    val load = requested || MediaPolicy.automatic(app, pointer, own)
+    LaunchedEffect(pointer.optString("attachmentId"), load) {
         if (video && pointer.optString("thumbnail").isNotBlank()) {
             bitmap = withContext(Dispatchers.IO) { mediaBitmap(app.decode(pointer.optString("thumbnail")), 800) }
-        } else if (image) app.call("download", message.targetArgs(conversation).put("index", index)) { result ->
+        } else if (image && load && bitmap == null) app.call("download", message.targetArgs(conversation).put("index", index)) { result ->
             val data = (result as? JSONObject)?.optString("data")
             if (data == null) failed = true
-            else app.decodeImage(data) { bitmap = it; failed = it == null }
+            else { app.decodeImage(data) { bitmap = it; failed = it == null }; app.saveReceivedMedia(message, pointer, data) }
         }
     }
     if (image || video) {
-        Box(Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (video) "Play $name" else "View $name", onClick = open), contentAlignment = Alignment.Center) {
+        val manual = image && !load && bitmap == null
+        Box(Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (manual) "Download $name" else if (video) "Play $name" else "View $name", onClick = { if (manual) requested = true else open() }), contentAlignment = Alignment.Center) {
             bitmap?.let { Image(it, name, Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 300.dp), contentScale = ContentScale.Fit) }
             if (video) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) { Icon(Icons.Outlined.PlayArrow, "Play $name", Modifier.padding(12.dp).size(32.dp)) }
+            else if (manual) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Download, null); Text(formatSize(pointer.optLong("size")), Modifier.padding(start = 6.dp)) }
+            }
             else if (bitmap == null) {
                 if (failed) Text("Tap to retry", Modifier.padding(20.dp)) else CircularProgressIndicator(Modifier.size(28.dp))
             }

@@ -22,7 +22,7 @@ import org.json.JSONObject
         when (page) {
             "list" -> {
                 item { val device = app.snapshot.optJSONObject("device") ?: JSONObject(); Row(Modifier.fillMaxWidth().clickable { app.route = "profile" }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { PersonAvatar(app, app.snapshot.optString("accountId"), device.label(), 64); Column(Modifier.padding(start = 16.dp)) { Text(device.label(), style = MaterialTheme.typography.titleLarge); Text("@${device.optString("username")}") } } }
-                items(listOf("Your profile" to "profile", "History and recovery" to "recovery", "Chats" to "chats", "Privacy" to "privacy", "Devices" to "devices")) { (label, route) -> Card { ActionRow(label, icon = when(route) { "profile" -> Icons.Outlined.AccountCircle; "chats" -> Icons.Outlined.Palette; "devices" -> Icons.Outlined.Devices; "privacy" -> Icons.Outlined.Lock; else -> Icons.Outlined.Shield }) { app.route = route } } }
+                items(listOf("Your profile" to "profile", "History and recovery" to "recovery", "Chats" to "chats", "Storage and data" to "storage", "Privacy" to "privacy", "Devices" to "devices")) { (label, route) -> Card { ActionRow(label, icon = when(route) { "profile" -> Icons.Outlined.AccountCircle; "chats" -> Icons.Outlined.Palette; "devices" -> Icons.Outlined.Devices; "privacy" -> Icons.Outlined.Lock; "storage" -> Icons.Outlined.DataUsage; else -> Icons.Outlined.Shield }) { app.route = route } } }
                 item { ActionRow("All Media", "Photos, videos, documents and links from all chats", Icons.Outlined.PermMedia) { app.route = "all-media" } }
                 item { ActionRow("Log out", icon = Icons.Outlined.Logout, danger = true) { logout = true } }
             }
@@ -34,6 +34,7 @@ import org.json.JSONObject
                 item { Text("Theme"); Row { listOf("system", "light", "dark").forEach { value -> FilterChip(settings.optString("theme") == value, { app.call("settings", obj("patch" to obj("theme" to value))) }, label = { Text(value.replaceFirstChar { it.uppercase() }) }, modifier = Modifier.padding(end = 8.dp)) } } }
                 item { Text("Language"); Row { listOf("en" to "English", "ro" to "Română").forEach { (key, label) -> FilterChip(settings.optString("locale") == key, { app.call("settings", obj("patch" to obj("locale" to key))) }, label = { Text(label) }, modifier = Modifier.padding(end = 8.dp)) } } }
             }
+            "storage" -> item { StorageEditor(app, settings) }
             "privacy" -> item { PrivacyEditor(app, settings) }
             "devices" -> item { DevicesEditor(app) }
             "security" -> {

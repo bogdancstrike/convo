@@ -173,6 +173,13 @@ class MainActivity : ComponentActivity() {
     fun decodeImage(data: String, result: (androidx.compose.ui.graphics.ImageBitmap?) -> Unit) {
         io.execute { val bitmap = try { mediaBitmap(decode(data)) } catch (_: Exception) { null }; runOnUiThread { result(bitmap) } }
     }
+    private val gallery by lazy { GallerySaver(this) }
+    /** Exports a received photo/video once, only when Save to gallery is on (never own media). */
+    fun saveReceivedMedia(message: JSONObject, pointer: JSONObject, data: String) {
+        if (message.optString("authorId") == snapshot.optString("accountId")) return
+        if (snapshot.optJSONObject("settings")?.optBoolean("saveToGallery") != true) return
+        io.execute { try { gallery.saveOnce(pointer.optString("attachmentId"), pointer.optString("fileName").ifBlank { "convo-media" }, pointer.optString("contentType"), decode(data)) } catch (_: Exception) { } }
+    }
     fun requestContacts() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) discoverContacts()
         else contactsPermission.launch(Manifest.permission.READ_CONTACTS)

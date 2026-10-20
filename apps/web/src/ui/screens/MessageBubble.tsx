@@ -116,7 +116,7 @@ export function MessageBubble({
             t('thread.undecryptable')
           ) : (
             <>
-              {m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} />)}
+              {m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}
               {m.body && (
                 <span data-testid="message-body">
                   <FormattedText text={m.body} highlight={highlight} />

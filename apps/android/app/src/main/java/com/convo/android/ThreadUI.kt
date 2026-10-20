@@ -161,7 +161,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
 @Composable fun AttachmentDialog(app: MainActivity, message: JSONObject, conversation: String, initial: Int, close: () -> Unit) {
     var index by remember { mutableIntStateOf(initial) }; val attachments = message.optJSONArray("attachments")?.objects().orEmpty(); val pointer = attachments.getOrNull(index) ?: return
     var loaded by remember(index) { mutableStateOf<JSONObject?>(null) }; var zoom by remember { mutableStateOf(false) }
-    LaunchedEffect(index) { app.call("download", message.targetArgs(conversation).put("index", index)) { loaded = it as? JSONObject } }
+    LaunchedEffect(index) { app.call("download", message.targetArgs(conversation).put("index", index)) { loaded = it as? JSONObject; loaded?.optString("data")?.takeIf { d -> d.isNotEmpty() }?.let { d -> app.saveReceivedMedia(message, pointer, d) } } }
     val bytes = remember(loaded) { loaded?.optString("data")?.let { app.decode(it) } }
     val mime = pointer.optString("contentType"); val video = mime.startsWith("video/"); val audio = mime.startsWith("audio/")
     val bitmap = remember(bytes) { if (mime in listOf("image/jpeg", "image/png", "image/webp") && bytes != null) mediaBitmap(bytes) else null }

@@ -4,6 +4,7 @@ import type { DeviceDto } from '../../api/types';
 import type { EnclaveClient } from '../../core/client';
 import type { IncomingLinkRequest } from '../../core/linking';
 import { labelOf, type Settings as SettingsModel } from '../../core/model';
+import { MEDIA_KINDS, type MediaKind } from '../../core/mediaPolicy';
 import { Avatar } from '../components/Avatar';
 import { useProfile } from '../components/ProfileContext';
 import { Segmented, Switch } from '../components/Controls';
@@ -13,12 +14,13 @@ import type { MessageKey } from '../i18n/en';
 
 const LINK_POLL_MS = 3000;
 
-export type SettingsPage = 'profile' | 'chats' | 'privacy' | 'devices' | 'security' | 'recovery';
+export type SettingsPage = 'profile' | 'chats' | 'storage' | 'privacy' | 'devices' | 'security' | 'recovery';
 
 export const SETTINGS_PAGES: { page: SettingsPage; icon: IconName; title: MessageKey; hint: MessageKey }[] = [
   { page: 'profile', icon: 'camera', title: 'profile.title', hint: 'profile.hint' },
   { page: 'recovery', icon: 'shield', title: 'recovery.title', hint: 'recovery.hint' },
   { page: 'chats', icon: 'palette', title: 'settings.chats', hint: 'settings.chats.hint' },
+  { page: 'storage', icon: 'download', title: 'settings.storage', hint: 'settings.storage.hint' },
   { page: 'privacy', icon: 'lock', title: 'settings.privacy', hint: 'settings.privacy.hint' },
   { page: 'devices', icon: 'devices', title: 'settings.devices', hint: 'settings.devices.hint' },
 ];
@@ -66,6 +68,7 @@ export function SettingsPanel({
           {current.page === 'profile' && <ProfileSettings client={client} />}
           {current.page === 'recovery' && <RecoverySettings client={client} />}
           {current.page === 'chats' && <ChatsPage settings={settings} update={update} />}
+          {current.page === 'storage' && <StoragePage settings={settings} update={update} />}
           {current.page === 'privacy' && <PrivacyPage client={client} settings={settings} update={update} />}
           {current.page === 'devices' && <DevicesPage client={client} />}
           {current.page === 'security' && <SecurityPage client={client} onSignedOut={onSignedOut} />}
@@ -116,6 +119,27 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
       {title && <h3>{title}</h3>}
       {children}
     </section>
+  );
+}
+
+/**
+ * Media auto-download. Browsers cannot tell roaming apart and never save files automatically, so
+ * one switch per media kind applies to Wi-Fi and other networks; Android offers per-network rules.
+ */
+function StoragePage({ settings, update }: { settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
+  const { t } = useI18n();
+  const enabled = (kind: MediaKind) => settings.autoDownload.wifi.includes(kind);
+  const toggle = (kind: MediaKind, on: boolean) => {
+    const next = (list: MediaKind[]) => MEDIA_KINDS.filter((k) => (k === kind ? on : list.includes(k)));
+    update({ autoDownload: { ...settings.autoDownload, wifi: next(settings.autoDownload.wifi), cellular: next(settings.autoDownload.cellular) } });
+  };
+  return (
+    <Card title={t('settings.autoDownload')}>
+      <p className="muted-text">{t('settings.autoDownload.help')}</p>
+      {MEDIA_KINDS.map((kind) => (
+        <Switch key={kind} checked={enabled(kind)} onChange={(on) => toggle(kind, on)} label={t(`media.kind.${kind}`)} testId={`auto-download-${kind}`} />
+      ))}
+    </Card>
   );
 }
 

@@ -99,7 +99,7 @@ import org.json.JSONObject
                 app.route == "new" -> "New chat"
                 app.route == "new-group" -> "New group"
                 app.route == "new-channel" -> "New channel"
-                app.route != "list" -> app.route.replaceFirstChar { it.uppercase() }
+                app.route != "list" -> when (app.route) { "storage" -> "Storage and data"; "recovery" -> "History and recovery"; "profile" -> "Your profile"; "all-media" -> "All Media"; else -> app.route.replaceFirstChar { it.uppercase() } }
                 else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
             }
             Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = {

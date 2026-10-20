@@ -27,7 +27,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   tests, Chromium/Firefox `edit-policy.spec.ts`, Android edit/"edited" checked on emulator-5554.
 - Profile photo/status saves are serialized with their broadcasts; oversized attachments disable
   Send before upload (`attachment-policy.spec.ts`). Full suite: 46 passed, 2 skipped.
-- Still open: auto-download/gallery preferences, passkey Settings
+- Media auto-download (Storage and data) on web and Android, Android Save to gallery via
+  MediaStore. `auto-download.spec.ts` (Chromium/Firefox); emulator: manual photo download and
+  Pictures/Convo export verified.
+- Calls (when started) will integrate existing open-source media servers (e.g. LiveKit + coturn)
+  deployed in docker-compose rather than custom media infrastructure.
+- Still open: passkey Settings
   entry and native app/conversation locks, remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)

@@ -55,7 +55,13 @@ re-read receipts, archive merge, preview update, web + Android UI and unit/E2E t
   ownership, direct/group/channel, stale grants, replay, out-of-order edits/receipts, archive merge,
   multiple devices, offline retry and native/web editing.
 
-## Media preferences (new user request; not yet implemented)
+## Media preferences (implemented 2026-10-20)
+
+Done: shared `mediaPolicy.ts` (device-local per-network rules, own media always shown, 16 MiB
+prefetch cap), web Storage and data page, Android per-network checkboxes, network detection and
+MediaStore Save to gallery (Android 10+, once per attachment). Locked-chat exclusion follows the
+conversation-lock work.
+
 
 - All Media Settings row on both clients opens the same gallery (implemented, verification pending).
 - Add image/video auto-download controls; phone Wi-Fi/mobile/roaming controls plus an independent

@@ -37,7 +37,9 @@ No account credentials are included in the source or APK. The debug certificate 
 
 Full web/Android parity is the acceptance target, **not the current completion status**.
 The native global media browser now supports filtering and batch actions, Settings includes All
-Media, drafts persist locally, and profile changes show success feedback. Remaining gaps include
+Media, drafts persist locally, profile changes show success feedback, Storage and data offers
+per-network media auto-download and an opt-in Save to gallery (MediaStore, Android 10+), and Edit
+follows the shared 15-minute / 30-day channel window. Remaining gaps include
 voice-recording UI, complete localization, cross-message viewer navigation and exhaustive
 visual/accessibility/device testing. iOS has not been implemented. Native background delivery,
 Keystore wrapping and the reviewed Rust/SQLCipher core remain separate security/release gates.

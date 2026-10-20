@@ -1,3 +1,4 @@
+import { DEFAULT_AUTO_DOWNLOAD, type AutoDownloadSettings } from './mediaPolicy';
 import type { AttachmentPointer, Quote } from '../crypto/content';
 
 /**
@@ -114,6 +115,10 @@ export interface Settings {
   confirmExternalLinks: boolean;
   animations: boolean;
   wallpaper: 'dots' | 'plain' | 'ocean' | 'botanical';
+  /** Media fetched and decrypted automatically, per network (see mediaPolicy.ts). */
+  autoDownload: AutoDownloadSettings;
+  /** Android only: export received photos/videos to the shared gallery (plaintext copies). */
+  saveToGallery: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -125,6 +130,8 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmExternalLinks: true,
   animations: true,
   wallpaper: 'dots',
+  autoDownload: DEFAULT_AUTO_DOWNLOAD,
+  saveToGallery: false,
 };
 
 /** Persistent identity of this enrolled device. */

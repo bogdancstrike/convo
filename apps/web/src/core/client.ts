@@ -28,6 +28,7 @@ import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
 import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
+import { sanitizeAutoDownload } from './mediaPolicy';
 import { Outbox, type OutboxItem } from './outbox';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
@@ -584,6 +585,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   async updateSettings(patch: Partial<Settings>): Promise<void> {
+    if ('autoDownload' in patch) {
+      const autoDownload = sanitizeAutoDownload(patch.autoDownload);
+      if (!autoDownload) throw new Error('invalid auto-download settings');
+      patch = { ...patch, autoDownload };
+    }
+    if ('saveToGallery' in patch && typeof patch.saveToGallery !== 'boolean') throw new Error('invalid gallery setting');
     this.currentSettings = { ...this.currentSettings, ...patch };
     await this.repos.store.commit([this.repos.putSettings(this.currentSettings)]);
     this.emit('settings', this.currentSettings);

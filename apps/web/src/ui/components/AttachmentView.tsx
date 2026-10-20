@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AttachmentDownloadError, isAudio, isInlineImage, isVideo } from '../../core/attachments';
 import type { EnclaveClient } from '../../core/client';
 import type { AttachmentPointer } from '../../crypto/content';
+import { browserNetwork, shouldAutoDownload } from '../../core/mediaPolicy';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration } from '../useVoiceRecorder';
 import { Icon } from './Icon';
@@ -9,9 +10,10 @@ import { useMediaViewer } from './MediaViewer';
 import { decryptMediaUrl as decryptToUrl } from './mediaUrls';
 
 /**
- * Renders one encrypted attachment. Images are downloaded, digest-verified and decrypted on
- * display; other files decrypt only on an explicit Download action (UI.md §5.3). Decrypted data
- * lives in memory as object URLs for this page session only — never in persistent caches.
+ * Renders one encrypted attachment. Media allowed by the auto-download preferences is
+ * downloaded, digest-verified and decrypted on display; everything else waits for a tap. Files are
+ * saved to disk only on an explicit Download action (UI.md §5.3). Decrypted data lives in memory as
+ * object URLs for this page session only — never in persistent caches.
  */
 export function formatBytes(size: number, locale: string): string {
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -24,8 +26,18 @@ export function formatBytes(size: number, locale: string): string {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(value)} ${units[unit]}`;
 }
 
-export function AttachmentView({ client, pointer }: { client: EnclaveClient; pointer: AttachmentPointer }) {
+/** Re-evaluates the auto-download rule when preferences change. Own media always loads. */
+function useAutoDownload(client: EnclaveClient, pointer: AttachmentPointer, own: boolean): boolean {
+  const [settings, setSettings] = useState(client.settings);
+  useEffect(() => client.on('settings', setSettings), [client]);
+  return shouldAutoDownload(settings.autoDownload, pointer, browserNetwork(), own);
+}
+
+export function AttachmentView({ client, pointer, authorId }: { client: EnclaveClient; pointer: AttachmentPointer; authorId?: string }) {
   const { t, locale } = useI18n();
+  const automatic = useAutoDownload(client, pointer, authorId === client.accountId);
+  const [requested, setRequested] = useState(false);
+  const load = automatic || requested;
   const [url, setUrl] = useState<string | null>(null);
   const openMedia = useMediaViewer();
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +46,12 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
   const audio = isAudio(pointer);
 
   useEffect(() => {
-    if (!(image || audio) || url) return undefined;
+    // Videos and documents are only prefetched into the in-memory cache, never saved.
+    if (automatic && !(image || audio)) void decryptToUrl(client, pointer).catch(() => undefined);
+  }, [client, pointer, automatic, image, audio]);
+
+  useEffect(() => {
+    if (!(image || audio) || url || !load) return undefined;
     let cancelled = false;
     decryptToUrl(client, pointer)
       .then((u) => !cancelled && setUrl(u))
@@ -42,7 +59,7 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
     return () => {
       cancelled = true;
     };
-  }, [client, pointer, image, audio, url]);
+  }, [client, pointer, image, audio, url, load]);
 
   const save = async () => {
     setBusy(true);
@@ -62,9 +79,18 @@ export function AttachmentView({ client, pointer }: { client: EnclaveClient; poi
   };
 
   const name = pointer.fileName ?? (image ? t('attachment.photo') : t('attachment.file'));
-  if (audio && !error) return <AudioPlayer url={url} pointer={pointer} />;
+  if (audio && !error) return <AudioPlayer url={url} pointer={pointer} onRequest={load ? undefined : () => setRequested(true)} />;
   if (isVideo(pointer) && !error) return <VideoView pointer={pointer} />;
   if (image && !error) {
+    if (!load && !url) {
+      return (
+        <button type="button" className="attachment-image placeholder manual" onClick={() => setRequested(true)} data-testid="attachment-image-download"
+          aria-label={`${t('attachment.download')} ${name} · ${formatBytes(pointer.size, locale)}`}
+          style={{ aspectRatio: pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '4 / 3' }}>
+          <span className="manual-download"><Icon name="download" size={22} /><span>{formatBytes(pointer.size, locale)}</span></span>
+        </button>
+      );
+    }
     return url ? (
       <button type="button" onClick={() => openMedia(pointer)} aria-label={name} className="attachment-image" data-testid="attachment-image">
         <img src={url} alt={name} width={pointer.width} height={pointer.height} />
@@ -102,16 +128,18 @@ function reasonOf(error: unknown): 'expired' | 'offline' | 'integrity' {
 }
 
 /** Inline player for voice notes and audio files (decrypted into a session object URL). */
-function AudioPlayer({ url, pointer }: { url: string | null; pointer: AttachmentPointer }) {
+function AudioPlayer({ url, pointer, onRequest }: { url: string | null; pointer: AttachmentPointer; onRequest?: () => void }) {
   const { t } = useI18n();
   const audio = useRef<HTMLAudioElement>(null);
+  // A tap on a not-yet-downloaded voice note downloads it, then starts playback.
+  const playWhenReady = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(pointer.durationMs ?? 0);
 
   const toggle = () => {
     const el = audio.current;
-    if (!el) return;
+    if (!el) { if (onRequest) { playWhenReady.current = true; onRequest(); } return; }
     if (el.paused) void el.play();
     else el.pause();
   };
@@ -130,10 +158,13 @@ function AudioPlayer({ url, pointer }: { url: string | null; pointer: Attachment
             setPosition(0);
           }}
           onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime * 1000)}
-          onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setDuration(e.currentTarget.duration * 1000)}
+          onLoadedMetadata={(e) => {
+            if (Number.isFinite(e.currentTarget.duration)) setDuration(e.currentTarget.duration * 1000);
+            if (playWhenReady.current) { playWhenReady.current = false; void e.currentTarget.play().catch(() => undefined); }
+          }}
         />
       )}
-      <button className="icon-btn" onClick={toggle} disabled={!url} aria-label={playing ? t('composer.pause') : t('msg.play')}>
+      <button className="icon-btn" onClick={toggle} disabled={!url && !onRequest} data-testid="audio-play" aria-label={playing ? t('composer.pause') : t('msg.play')}>
         <Icon name={playing ? 'pause' : 'play'} filled={!playing} />
       </button>
       <input
