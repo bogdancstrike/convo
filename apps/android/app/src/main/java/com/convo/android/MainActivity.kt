@@ -58,6 +58,9 @@ class MainActivity : FragmentActivity() {
             else call("signIn", obj("token" to token.accessToken))
         } }
     }
+    private var micCallback: ((Boolean) -> Unit)? = null
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> micCallback?.invoke(granted); micCallback = null }
+    fun requestMicrophone(callback: (Boolean) -> Unit) { micCallback = callback; micPermission.launch(Manifest.permission.RECORD_AUDIO) }
     private val contactsPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) discoverContacts() else error = "Contacts permission was not granted. Search by name or phone number instead."
     }

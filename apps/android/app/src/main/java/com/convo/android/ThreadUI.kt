@@ -78,10 +78,15 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 if (readOnly) Text(if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
                 else Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                     quote?.let { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("Reply: ${it.optString("excerpt")}", Modifier.weight(1f), maxLines = 2); IconButton({ quote = null }) { Icon(Icons.Outlined.Close, "Cancel reply") } } }
+                    var voice by remember(id) { mutableStateOf(false) }
                     Row(Modifier.fillMaxWidth().padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file") }
-                        OutlinedTextField(input, { input = it }, placeholder = { Text("Type a message") }, modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(24.dp))
-                        IconButton(onClick = { if (input.isNotBlank()) app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote)) { if (it != null) { input = ""; quote = null } } }, enabled = input.isNotBlank()) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
+                        if (!voice) {
+                            IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file") }
+                            OutlinedTextField(input, { input = it }, placeholder = { Text("Type a message") }, modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(24.dp))
+                        } else Spacer(Modifier.weight(1f))
+                        // One VoiceComposer instance for the whole recording (recomposition must not cancel it).
+                        if (voice || input.isBlank()) VoiceComposer(app, id) { voice = it }
+                        else IconButton(onClick = { app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote)) { if (it != null) { input = ""; quote = null } } }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
                     }
                 }
             }

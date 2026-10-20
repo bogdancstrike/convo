@@ -40,7 +40,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   list, search, global media, forwarding and gallery saving; grants end on background / leaving
   the chat. Emulator: cancel keeps locks off, PIN unlock, lock screen before content on resume,
   APK replacement keeps locks.
-- Still open: Android voice recorder UI, full localization, cross-message viewer navigation,
+- Android voice notes: mic ↔ send composer, pause/resume, 15-min cap, Opus/OGG (AAC fallback
+  below Android 10), "Voice message · duration" tiles. Sent and replayed on emulator-5554.
+- Still open: full localization, cross-message viewer navigation,
   web screen lock, Calls, remaining UI parity and legacy-origin migration.
 
 ## Foundations (FND)
