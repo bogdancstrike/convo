@@ -18,6 +18,7 @@ docker compose down -v              # stop and delete all data
 |---|---|
 | http://localhost:8088 | Web app (nginx; proxies `/v1` → server, `/auth` → Keycloak) |
 | http://localhost:8088/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
+| http://localhost:5050 | pgAdmin (database "Enclave (dev)" pre-registered; password `enclave-dev-db`) |
 | localhost:5433 | PostgreSQL (`enclave` / `enclave-dev-db`) |
 
 All credentials above are development-only; override them via `.env` (see `.env.example`).
@@ -35,6 +36,16 @@ cd apps/web && npm ci && npm test && npm run typecheck
 docker compose up -d --build
 docker compose --profile e2e run --rm e2e
 ```
+
+## Redeploying after changes
+
+```bash
+docker compose up -d --build server web      # rebuild and restart backend + web
+```
+
+Flyway migrations run automatically on server start. Realm changes in
+`deploy/keycloak/enclave-realm.json` are imported only into a *fresh* Keycloak; to keep existing
+users, apply them to the running realm through the admin API/console instead of recreating it.
 
 ## Fast iteration
 
@@ -57,6 +68,8 @@ docker compose --profile e2e run --rm e2e
 
 ## Conventions
 
+* UI changes: keep colours in `apps/web/src/ui/theme/tokens.ts` (contrast-tested), strings in both
+  `en.ts` and `ro.ts`, and follow the patterns in UI.md §3.1 / ADR-0003.
 * Conventional commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`) referencing task
   IDs from `docs/tasks.md` where relevant.
 * Every package/folder has a `docs.md` describing its role, contents and architectural position;

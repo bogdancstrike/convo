@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1.3, 2026-10-17 |
+| Status | Draft v1.4, 2026-10-20 — visual system and web interaction patterns updated (ADR-0003) |
 | First delivery | Android and web, equal product priority |
 | Later | iOS after Android/web stabilization; desktop packaging optional |
 | Related | [Specs](specs.md), [ARF](arf.md), [Mobile](mobile.md), [Tasks](tasks.md) |
@@ -35,7 +35,7 @@ Android and web implement the same message, identity, group-role, and sync seman
 | Settings | Avatar/menu entry | Sidebar/footer entry | Profile, appearance, notifications, privacy, devices, storage, connectivity/help |
 | Administration | Separate authorized web origin | Separate app | Users/guests/devices, policy, health, audit; no chat-content browser |
 
-Directory search matches permitted organization handles. Display name/avatar is decrypted only where the viewer has the profile key; otherwise show the handle and an initial-based fallback. Never imply an encrypted display name is server-searchable.
+Directory search matches permitted organization handles, **IdP-provided display names and phone numbers** ([ADR-0002](decisions/0002-organization-directory-names-and-phones.md)). Profile data that is end-to-end encrypted (custom display name, photo) is decrypted only where the viewer has the profile key and is never server-searchable; otherwise show the organization name or handle and an initial-based fallback.
 
 ### 2.1 Responsive layouts
 
@@ -66,23 +66,68 @@ Security and connectivity notices belong near the thread/header they affect. Per
 
 ## 3. Visual system
 
-Use a warm neutral surface, deep teal primary actions, readable typography, and restrained motion. Avoid visual noise behind message text. These are starting tokens to verify against actual rendered contrast, not a claim that every possible pair meets accessibility requirements.
+> Updated 2026-10-20 by [ADR-0003](decisions/0003-messenger-ux-and-brand.md). The implementation
+> source of truth is `apps/web/src/ui/theme/tokens.ts`; `contrast.test.ts` enforces the pairs below.
 
-| Semantic token | Light | Dark | Use |
+**Brand palette:** Deep Navy `#17324D`, Ocean Blue `#2596BE`, Soft Cyan `#8BD3E2`, Warm Amber
+`#F2B66D`, Ice White `#F4F8FA`. The interface itself is **neutral grey**, as in current
+messengers; the palette supplies accents. Ocean Blue is never body text on light surfaces (3.4:1).
+
+| Semantic role | Light | Dark | Use |
 |---|---|---|---|
-| `surface.canvas` | `#F6F8F7` | `#101918` | Application background |
-| `surface.panel` | `#FFFFFF` | `#182422` | Lists, composer, dialogs |
-| `text.primary` | `#162622` | `#ECF3F0` | Body and headings |
-| `text.secondary` | `#4F625B` | `#B1C3BB` | Metadata and helper text |
-| `action.primary` | `#086B58` | `#78D9BD` | Primary action; use tested contrasting text |
-| `message.outgoing` | `#DDF3E9` | `#214A3D` | Own message background |
-| `message.incoming` | `#FFFFFF` | `#22302C` | Other message background |
-| `state.danger` | `#B42318` | `#FFB4AB` | Destructive/error state plus label/icon |
-| `focus.ring` | `#185ADB` | `#A6C8FF` | Keyboard focus, independently visible from selection |
+| `canvas` / `panel` | `#F5F6F7` / `#FFFFFF` | `#161717` / `#161717` | App background / lists, composer |
+| `panelRaised` | `#FFFFFF` | `#232626` | Menus, popovers, incoming bubbles (dark) |
+| `rail` | `#F0F2F5` | `#1D1F1F` | Navigation rail |
+| `textPrimary` / `textSecondary` | `#111B21` / `#54656F` | `#E9EDEF` / `#A5A8AA` | Body / metadata |
+| `actionFill` + `actionText` | `#18657F` + white | `#8BD3E2` + `#0B1A24` | Buttons, FABs, badges |
+| `accent` / `accentText` | `#2596BE` / `#18657F` | `#8BD3E2` / `#8BD3E2` | Focus, highlights / accent text |
+| `bubbleOut` / `bubbleIn` | `#DCEEF3` / `#FFFFFF` | `#134F64` / `#232626` | Own / others' messages |
+| `warning` (bg / text) | `#FCEBD3` / `#6B4310` | `#3A2F1C` / `#F2B66D` | Notices, encryption banner |
+| `danger` | `#B42318` | `#FF8A8A` | Destructive actions plus label/icon |
 
-System fonts are the baseline; optional Inter/Noto fonts must be bundled and served on-prem. Body text is 16 px on web and scales with Android font settings. Metadata is at least 12 px; never hide delivery meaning in tiny timestamp icons. Use a 4/8 px spacing scale, 12–16 px message radius, 8–12 px control radius, and low-elevation panels. Android touch targets ≥ 48 dp; web actionable targets ≥ 44 CSS px where possible and at least WCAG minimum sizing/spacing.
+Typography: **Inter Variable**, bundled with the app (no external font requests), 15 px body;
+metadata ≥ 12 px. Group sender names use 8 per-mode name colours, each ≥ 4.5:1 on incoming
+bubbles. Spacing 4/8 px scale; radii 8 (bubbles), 12 (rows, menus), 18 (cards, dialogs); targets
+≥ 40–44 CSS px. Motion 160 ms, disabled under `prefers-reduced-motion`. Avatars are initials on
+contrast-checked grounds (≥ 4.5:1 with white).
 
-Motion normally lasts 120–200 ms and respects reduced-motion/system animation settings. Sending progress uses calm inline feedback; errors never shake the whole screen. Avatars have accessible names, stable fallback colors, and status conveyed with text where needed.
+Delivery state is shown as ticks (clock = waiting/sending, ✓ sent, ✓✓ delivered, accent ✓✓ read)
+**with** the §5.2 words as accessible text and tooltip; failures show visible words and Retry.
+
+### 3.1 Messenger interaction patterns (web)
+
+* **Splash:** logo, product name and "End-to-end encrypted" for at least 1 s; a progress bar
+  covers configuration → encrypted storage → keys → connection → first mailbox drain (bounded wait
+  when offline).
+* **Navigation rail:** Chats (unread badge), Settings, own avatar. Navigation lives in the URL
+  (`#/chat/<id>[/info]`, `#/new`, `#/new-group`, `#/settings[/<page>]`) so refresh and Back
+  restore the same view.
+* **Chat list:** "Search or start a new chat", chips All / Unread / Groups, Archived entry, rows with
+  avatar, time, preview ("You:" / sender in groups), unread badge, mute and pin icons.
+* **Home pane** (no chat open): product card plus quick actions — Send document, New chat, New
+  group, Note to self, Link a device.
+* **New chat panel:** New group, Note to self, directory search by **name, @handle or phone**
+  ([ADR-0002](decisions/0002-organization-directory-names-and-phones.md)).
+* **Group wizard:** step 1 pick members (chips + search), step 2 group subject → create.
+* **Conversation:** header (avatar, name, subtitle = members / handle · phone / typing), search
+  in conversation, ⋮ menu (info, search, mute 8 h / 1 week / always, pin, archive, close, clear,
+  delete); patterned wallpaper; tailed bubbles with inline time and ticks; group sender names and
+  avatars.
+* **Message menu** (hover chevron, right-click, long-press, keyboard Enter/ContextMenu): quick
+  reactions + full picker, Message info, Reply, Copy, React, Forward (one destination, marked
+  "Forwarded"), Star (private), Edit (own, 24 h), Delete (for everyone / for me).
+* **Composer:** floating pill with Attach menu (Document, Photos & videos, Camera, Audio), emoji
+  picker (searchable, categories, recents, glyph-support probe), auto-growing input, and a
+  microphone that becomes Send once there is text; recording bar with cancel, timer, pause, send.
+* **Media preview:** selected images/videos/files open a full-pane preview with thumbnails, remove,
+  add more and caption; nothing is encrypted or uploaded before Send.
+* **Video:** poster (encrypted inside the message) with duration; the video is downloaded,
+  verified and decrypted only on play (MP4, WebM, Ogg, QuickTime where the browser supports it).
+* **Info drawer:** contact (handle, phone, safety number with verify) or group (members, roles,
+  admin add/remove).
+* **Settings:** profile card and categories — Chats (theme segmented control, language, Enter to
+  send), Privacy (switches), Linked devices (link requests with comparison code, unlink),
+  Security (browser trust, sign out and wipe).
 
 ## 4. Onboarding, identity, and devices
 

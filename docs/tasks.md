@@ -7,7 +7,7 @@
 | Architecture | Spring Modulith, verified feature-module boundaries, PostgreSQL mailbox/outbox, Signal direct sessions, MLS groups, Flutter Android, React web, shared Rust protocol core subject to feasibility gates |
 | Related | [Specs](specs.md), [ARF](arf.md), [UI](UI.md), [Mobile](mobile.md), [Sources](sources.md) |
 
-This is a product delivery backlog, not a claim that the named files or build commands already exist. Each task names planned artifacts, dependencies, and measurable acceptance. Split a task into reviewable implementation issues when its interfaces are agreed; keep its ID in commits/issues and release evidence. All checkboxes remain open until the acceptance evidence exists. Implementation may use the available executing-plans workflow, but this document does not authorize unrelated deployment or messaging actions.
+This is a product delivery backlog. Implementation progress against these task IDs is tracked in the repository root [`tasks.md`](../tasks.md); checkboxes here close only when the full acceptance evidence exists. Each task names planned artifacts, dependencies, and measurable acceptance. Split a task into reviewable implementation issues when its interfaces are agreed; keep its ID in commits/issues and release evidence. All checkboxes remain open until the acceptance evidence exists. Implementation may use the available executing-plans workflow, but this document does not authorize unrelated deployment or messaging actions.
 
 ## 1. Release sequence and critical path
 

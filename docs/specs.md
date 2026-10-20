@@ -4,7 +4,7 @@
 |---|---|
 | Document | Technical specification |
 | Status | Draft v1.3 — complete Android/web launch scope and verification contract |
-| Updated | 2026-10-17 |
+| Updated | 2026-10-20 (implementation status §32) |
 | Related | [Architecture](arf.md), [UI](UI.md), [Mobile](mobile.md), [Tasks](tasks.md), [Sources](sources.md), [Diagrams](diagrams/README.md) |
 | Normative language | MUST, SHOULD, MAY as in RFC 2119 |
 
@@ -830,7 +830,7 @@ All endpoints under `/v1`, JSON (keys as base64url) except where noted. Auth: `D
 | DELETE | `/devices/{deviceId}` | D | Unlink own device (cannot delete self via this route; use `/devices/self`). |
 | DELETE | `/devices/self` | D | Unregister this device. |
 | GET | `/accounts/{accountId}/devices` | D | Device IDs + registration IDs of another account (for fan-out). |
-| GET | `/directory/search?q=` | D | Org directory search; returns `account_id`, username, encrypted profile pointer. |
+| GET | `/directory/search?q=` | D | Org directory search by handle prefix, IdP display name or phone digits (≥ 4); returns `account_id`, username, organization display name and phone (ADR-0002), encrypted profile pointer. |
 | PUT | `/profile` | D | Upload encrypted profile blob + versioned profile key commitment. |
 | GET | `/profile/{accountId}/{version}` | D | Fetch encrypted profile. |
 | PUT | `/accounts/me/unidentified-access-key` | D | Upload UAK for sealed sender. |
@@ -1996,3 +1996,24 @@ Feature tests cover enabled and disabled policy, permitted and forbidden roles, 
 | AC-PLAT-02 — Android lifecycle/distribution | E/P/X/L: full catalogue on named minimum/current OS and representative OEM physical devices; reboot/Doze/force-stop/lock/low-memory/keystore loss, signed MDM/offline install/update, picker/media/call permissions. | No protocol rollback/duplicate business effect, backup exclusion and safe recovery; actual notification limits documented. All feature UX/assistive paths certified, signature/update trust enforced and denied permission never blocks unrelated chat. |
 | AC-PLAT-03 — iOS client follow-on gate | C/E/P/X: repeat applicable catalogue on physical iOS plus reboot-before-unlock, Keychain/App Group app/NSE contention, APNs rotation, PushKit/CallKit, SSID local push, VoiceOver and ReplayKit. | Same feature/security contracts, signed entitlement/distribution and exact network/OS limits proven. Extensions fail safely under contention/time/memory; no claim of guaranteed air-gap background wake. This gates the iOS client release, not Android/web. |
 | AC-PLAT-04 — native desktop follow-on gate | C/E/P/X: repeat applicable catalogue in signed native package; test OS keystore/lock, update/private CA, local data/backup paths, capture permissions and malicious web navigation/IPC. | Explicit desktop trust boundary, signed updates and no plaintext IPC/backup leak; complete applicable features and accessible controls certified separately from browser mode. This gates desktop packaging, not Android/web. |
+
+
+---
+
+## 32. Implementation status and recorded deviations
+
+This section links the specification to the running implementation. It does not relax any launch
+gate: every deviation below is either an interim stand-in that must be replaced before GA, or a
+recorded product decision. Progress per task lives in the repository root `tasks.md`.
+
+| Area | Implemented | Deviation / interim status | Record |
+|---|---|---|---|
+| Backend runtime | Spring Boot 4.1 + Spring Modulith 2.1, modules `identity`, `messaging`, `groups`, `attachments`, `platform`, shared `contracts`; boundaries verified in CI | Modules are packages of one Gradle project (not separate Gradle modules) | ARF §11 |
+| Device authentication (§4.2) | ECDSA P-256 proof-of-possession on every device request; shared Java/TS vectors | Single-use **client-chosen** request ID + ≤ 5 min expiry instead of a server-issued nonce | PRIV-02 follow-up |
+| 1:1 encryption (§5) | Signal sessions in the browser, multi-device fan-out, DEVICE_MISMATCH/STALE handling, idempotent submissions | TypeScript Signal library (X3DH, no PQXDH/Kyber) until the Rust/WASM core passes FND-02 | [ADR-0001](decisions/0001-interim-browser-signal.md) |
+| Groups (§6) | MLS (RFC 9420) via `ts-mls`, DS with epoch CAS, ACL mirror, Welcome/commit/application fan-out, authenticated senders | No credential binding to the account IK, no reviewed role profile / pending-removal gate yet | GRP-01 |
+| Linking (§4.4) | Transcript-bound X25519/HKDF/AES-GCM ProvisionMessage, single-use codes, comparison code | Approve-from-list with code comparison; QR scan not yet | ID-02 |
+| Attachments (§7) | Client STREAM/AES-GCM, padding, digest-first verification, presigned SeaweedFS URLs, EXIF stripping, video posters, voice notes | Single-part uploads only (multipart pending) | FEAT-01 |
+| Directory (§12.1) | Search by handle, IdP display name, phone | Server stores IdP name/phone (not E2EE profile data) | [ADR-0002](decisions/0002-organization-directory-names-and-phones.md) |
+| UI (UI.md) | Messenger-style web client, brand palette, EN/RO, light/dark | Visual system and patterns updated | [ADR-0003](decisions/0003-messenger-ux-and-brand.md) |
+| Not started | Calls, communities, push intents/notifications, admin console, audit, policies, history transfer, backups, federation, PQ MLS, Android client | — | `tasks.md` |

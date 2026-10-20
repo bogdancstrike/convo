@@ -1,18 +1,63 @@
-# Convo
+<p align="center">
+  <img src="docs/assets/logo-wordmark.svg" alt="Enclave" width="300">
+</p>
 
-### Private conversations. Your infrastructure. Your rules.
+<p align="center"><strong>Private conversations. Your infrastructure. Your rules.</strong></p>
 
-Convo is a planned on-prem messaging platform for organizations that want a friendly, feature-rich chat experience while keeping message content, storage, identity, and media infrastructure under their own control.
+Convo (working platform name **Enclave**) is an on-prem messaging platform for organizations that
+want a friendly, feature-rich chat experience while keeping message content, storage, identity and
+media infrastructure under their own control. Message content is end-to-end encrypted on the
+devices; the servers only relay ciphertext.
 
-**Every feature below is required at launch on Android and web.** iOS remains a subsequent client target under the current platform scope; it is not a reason to defer Android/web features.
+**Every feature in the launch inventory is required at launch on Android and web.** iOS remains a
+subsequent client target.
 
-> **Project status:** early implementation. A secure walking slice runs today: organization sign-in, browser-primary enrollment, and end-to-end encrypted 1:1 messaging (with delivery receipts, reactions, edits and deletes) between web clients through the Spring Modulith backend. Progress is tracked in [tasks.md](tasks.md); most of the launch inventory below is still to be built. The documents use **Enclave** as the working platform name.
+> **Project status — early implementation.** A working web client and backend run today via
+> `docker compose`: organization sign-in, browser enrollment and device linking, end-to-end
+> encrypted 1:1 chats (Signal protocol) and groups (MLS), photos, files, videos and voice notes,
+> reactions, replies, edits, deletes, forwarding, directory search by name/phone, a
+> messenger-style UI in English and Romanian with light/dark themes. Calls, communities, push
+> notifications, administration and the Android app are not built yet. Interim choices (browser
+> crypto libraries, device-auth nonce) are recorded in [docs/decisions](docs/decisions) and
+> [specs §32](docs/specs.md#32-implementation-status-and-recorded-deviations); progress is tracked in
+> [tasks.md](tasks.md).
 
-[Specification](docs/specs.md) · [Architecture](docs/arf.md) · [UI](docs/UI.md) · [Mobile](docs/mobile.md) · [Delivery tasks](docs/tasks.md) · [Diagrams](docs/diagrams/README.md)
+[Specification](docs/specs.md) · [Architecture](docs/arf.md) · [UI](docs/UI.md) · [Mobile](docs/mobile.md) · [Delivery tasks](docs/tasks.md) · [Progress](tasks.md) · [Decisions](docs/decisions) · [Diagrams](docs/diagrams/README.md)
 
-## What we're building
+<p align="center">
+  <img src="docs/screenshots/direct-chat.png" alt="Direct chat" width="49%">
+  <img src="docs/screenshots/dark-group.png" alt="Group chat in dark mode" width="49%">
+</p>
 
-A secure everyday messenger that feels approachable to employees and manageable for IT. Sign in with your organization, find a colleague, chat, share photos or voice notes, join a community, and make a call—without requiring a phone number or uploading a personal address book.
+## Run it locally
+
+```bash
+docker compose up -d --build                  # postgres, valkey, keycloak, seaweedfs, pgadmin, server, web
+open http://localhost:8088                    # sign in as alice / alice-dev-password (also bob, carol)
+docker compose --profile e2e run --rm e2e     # Playwright end-to-end suite (Chromium + Firefox)
+```
+
+| URL | What |
+|---|---|
+| http://localhost:8088 | Enclave web app |
+| http://localhost:8088/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
+| http://localhost:5050 | pgAdmin (database password `enclave-dev-db`) |
+
+All credentials are development-only. See [docs/development.md](docs/development.md) for tests,
+fast iteration and conventions, and [docs/configuration.md](docs/configuration.md) for every
+backend setting.
+
+## What works today
+
+| Area | Highlights |
+|---|---|
+| Identity | Keycloak SSO (PKCE), browser-primary enrollment, device proof-of-possession on every request, transcript-bound device linking with comparison codes, device list/unlink |
+| 1:1 chats | Signal sessions, multi-device fan-out, offline mailbox delivery, delivery/read receipts, typing (opt-in), Note to self |
+| Groups | MLS groups via an ordered Delivery Service, encrypted group names, admin add/remove, authenticated senders |
+| Messages | Safe formatting, replies, reactions, edits, delete for everyone / me, forward, star, in-chat search |
+| Media | Encrypted photos (EXIF stripped), files, videos with posters, voice notes, pre-send preview, drag & drop, paste |
+| UX | Messenger-style layout, directory search by name/handle/phone, emoji picker, splash with E2EE notice, URL-based navigation (refresh-safe), EN/RO, light/dark with contrast tests |
+| Platform | Spring Modulith backend with verified module boundaries, PostgreSQL mailbox, Valkey hints, SeaweedFS object storage, pgAdmin |
 
 ## Complete launch feature inventory
 
@@ -192,17 +237,9 @@ This sequence describes internal development milestones, not partial public rele
 | [docs/tasks.md](docs/tasks.md) | Workstreams, planned artifacts, prerequisites, and measurable acceptance criteria |
 | [docs/diagrams/README.md](docs/diagrams/README.md) | Six original diagrams, their revision notes, and maintained Mermaid sources |
 | [docs/sources.md](docs/sources.md) | Primary technical references, assumptions, and external-conversation access status |
-
-### Run it locally
-
-```bash
-docker compose up -d --build          # full stack: postgres, valkey, keycloak, seaweedfs, server, web
-open http://localhost:8088            # sign in as alice / alice-dev-password (also bob, carol)
-docker compose --profile e2e run --rm e2e   # Playwright end-to-end suite (Chromium + Firefox)
-```
-
-See [docs/development.md](docs/development.md) for tests, fast iteration and conventions, and
-[docs/configuration.md](docs/configuration.md) for every backend setting.
+| [docs/decisions/](docs/decisions) | Implementation ADRs: interim browser crypto, directory names/phones, messenger UX and brand |
+| [docs/development.md](docs/development.md), [docs/configuration.md](docs/configuration.md) | Developer setup, tests, conventions; every backend setting |
+| [tasks.md](tasks.md) | Implementation progress against the task IDs |
 
 ## Working on Convo
 

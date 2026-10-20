@@ -120,3 +120,18 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Durable push/notification intents (outbox table + workers) | MSG-02 |
 | Admin console, audit log, policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
+
+## Web UX refresh (ADR-0003) — 2026-10-20
+
+| Status | Item | Notes |
+|---|---|---|
+| ✅ | Logo/wordmark (`docs/assets`), splash with E2EE notice + progress (≥ 1 s) | |
+| ✅ | Neutral messenger theme with brand accents, contrast tests, Inter bundled | |
+| ✅ | Rail, chat list filters, new chat / group wizard / settings panels, info drawer, home quick actions | |
+| ✅ | URL navigation (refresh/back restore view) | |
+| ✅ | Message menu (react, reply, copy, forward, star, edit, delete), emoji picker, attach menu | |
+| ✅ | Voice notes (mic ↔ send), video with posters, pre-send media preview | |
+| ✅ | Directory search by name/handle/phone (ADR-0002), pgAdmin | |
+| ⬜ | Global search across message text in "Search or start a new chat" | next |
+| ⬜ | LAN access: HTTPS (secure context needed for WebCrypto), dynamic Keycloak hostname, per-host presigning | next |
+| 🟡 | Firefox e2e: intermittent enroll wait timeout (KeyPackage upload response) | investigate |

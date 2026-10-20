@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Document | Architecture reference: structure, trust model, threat model, deployment, operations, architecture decision records |
-| Status | Draft v1.3 — complete Android/web launch scope, Spring Modulith, not implemented |
+| Status | Draft v1.4 (repository layout updated 2026-10-20); v1.3 — complete Android/web launch scope, Spring Modulith, not implemented |
 | Updated | 2026-10-17 |
 | Related | [Specs](specs.md), [UI](UI.md), [Mobile](mobile.md), [Tasks](tasks.md), [Sources](sources.md), [Diagram catalogue](diagrams/README.md) |
 
@@ -396,32 +396,34 @@ Group call capacity rule of thumb for LiveKit: plan ~150–250 published video t
 
 ## 11. Repository layout
 
+Current layout (2026-10-20). Planned components that do not exist yet are marked *(planned)*.
+
 ```
-enclave/
-├── core/                       # Rust workspace
-│   ├── enclave-core/           # public API for clients (frb annotations)
-│   ├── enclave-proto/          # prost-generated protobufs
-│   ├── enclave-store/          # native SQLCipher / browser encrypted-record adapters, migrations
-│   ├── enclave-direct/         # libsignal integration
-│   ├── enclave-group/          # OpenMLS integration
-│   ├── enclave-sim/            # multi-device protocol simulator
-│   └── fuzz/
-├── server/                     # Gradle multi-module (see §3.1)
+convo-chat/
+├── server/                     # Spring Boot / Spring Modulith backend (single Gradle project)
+│   └── src/main/java/com/enclave/
+│       ├── contracts/          # shared kernel: IDs, error codes, base64url, deployment props
+│       ├── identity/           # accounts, devices, enrollment, linking, prekeys, KeyPackages, directory
+│       ├── messaging/          # submissions, mailboxes, WebSocket gateway, Valkey hints, DeliveryApi
+│       ├── groups/             # MLS Delivery Service: ordered commits, ACL mirror, fan-out
+│       ├── attachments/        # presigned S3 (SeaweedFS) uploads/downloads, retention
+│       └── platform/           # security chains, problem details, deployment info
 ├── apps/
-│   ├── enclave_app/            # Flutter Android first; iOS target later
-│   ├── web/                    # React/TypeScript, browser core worker adapter
-│   ├── ios_extensions/         # iOS client: NSE / Local Push / ReplayKit (Swift)
-│   ├── android_native/         # ConnectionService, foreground services (Kotlin)
-│   └── admin_console/          # React/TypeScript, separate origin/auth context
-├── proto/                      # .proto sources (single source of truth)
-├── deploy/                     # Helm, ArgoCD, air-gap bundle
-├── tools/
-│   ├── loadtest/               # Python asyncio clients, Gatling
-│   └── ops/                    # Python admin/provisioning scripts
-└── docs/
-    ├── specs.md  arf.md  UI.md  mobile.md  tasks.md  sources.md
-    └── diagrams/               # original PNGs + maintained Mermaid sources
+│   ├── web/                    # React + TypeScript client (crypto, storage, core, ui) + nginx origin
+│   ├── enclave_app/            # Flutter Android (planned)
+│   └── admin_console/          # React admin app on a separate origin (planned)
+├── contracts/vectors/          # shared Java/TypeScript test vectors
+├── core/                       # Rust protocol core: libsignal/OpenMLS, stores, simulator (planned, FND-02)
+├── deploy/                     # Keycloak realm, SeaweedFS and pgAdmin dev config; Helm/air-gap (planned)
+├── tests/e2e/                  # Playwright suite against docker-compose (Chromium + Firefox)
+├── docs/                       # specs, ARF, UI, mobile, tasks, sources, decisions/, assets/, diagrams/
+├── docker-compose.yaml         # complete local stack
+└── tasks.md                    # implementation progress log
 ```
+
+Every source package/folder carries a `docs.md` describing its role, contents and architectural
+position. Spring Modulith modules are top-level packages; module internals live in `internal/`
+and are verified by `ModularityTests`.
 
 ---
 

@@ -47,7 +47,12 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `max-prekeys-per-upload` | `200` | |
 | `max-stored-prekeys` | `1000` | Per device |
 | `username-claim` | `preferred_username` | OIDC claim used for handles |
+| `display-name-claim` | `name` | OIDC claim with the organization display name (ADR-0002) |
+| `phone-claim` | `phone_number` | OIDC claim with the organization phone (ADR-0002) |
+| `min-phone-digits` | `4` | Minimum digits before a phone search runs |
 | `directory-page-size` | `20` | |
+| `key-packages.low-watermark` | `10` | `KEYPACKAGES_LOW` threshold |
+| `key-packages.max-per-upload` / `max-stored` / `max-bytes` / `max-accounts-per-claim` | `100` / `200` / `8192` / `100` | MLS KeyPackage limits |
 | `device-auth.max-signature-lifetime` | `5m` | Max signed-request validity |
 | `device-auth.clock-skew` | `30s` | |
 | `device-auth.purge-interval` | `PT1H` | Replay-cache cleanup |
@@ -88,3 +93,14 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
 | `retention` | | `30d` | Object lifetime |
 | `purge-interval` | | `PT1H` | |
+
+## `enclave.groups.*` (`GroupsProperties`)
+
+| Key | Default | Notes |
+|---|---|---|
+| `max-members` | `1000` | Member accounts per group |
+| `max-devices` | `5000` | MLS leaves per group |
+| `max-message-bytes` | `262144` | Application message size |
+| `max-handshake-bytes` | `1048576` | Commit/Welcome size |
+| `submission-retention` | `31d` | Idempotency records |
+| `purge-interval` | `PT1H` | |
