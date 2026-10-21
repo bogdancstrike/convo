@@ -2432,3 +2432,12 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .community-member-picker label { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); cursor: pointer; color: var(--c-text); }
 .community-member-picker label[data-selected="true"] { background: color-mix(in srgb, var(--c-accent) 8%, transparent); }
 .community-card-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.feature-intro { max-width: 560px; text-align: center; gap: var(--space-3); }
+.feature-intro-icon { display: grid; place-items: center; width: 104px; height: 104px; border-radius: 50%; background: color-mix(in srgb, var(--c-accent) 14%, transparent); color: var(--c-accent-text); }
+.feature-intro h2 { margin: 0; }
+.feature-intro-body { margin: 0; color: var(--c-text-secondary); }
+.feature-intro-uses { width: 100%; text-align: left; padding: var(--space-3) var(--space-4); border: 1px solid var(--c-border); border-radius: var(--radius-lg, 16px); }
+.feature-intro-uses h3 { margin: 0 0 var(--space-2); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-secondary); }
+.feature-intro-uses ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.feature-intro-uses li { display: flex; gap: var(--space-2); align-items: flex-start; }
+.feature-intro-uses li svg { color: var(--c-accent-text); flex: none; margin-top: 3px; }

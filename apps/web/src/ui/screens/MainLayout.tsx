@@ -26,7 +26,7 @@ import { NewChatPanel } from './NewChatPanel';
 import { NewGroupPanel } from './NewGroupPanel';
 import { SettingsPanel, SettingsNavigation } from './SettingsPanel';
 import { Thread } from './Thread';
-import { WelcomePane } from './WelcomePane';
+import { FeatureIntro, WelcomePane } from './WelcomePane';
 
 /**
  * Application shell (UI.md §2.2): navigation rail · side panel (chats, new chat, group wizard,
@@ -186,7 +186,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           onClose={() => navigate({ chat: null, info: false })}
           onOpenConversation={openChat}
         />
-      ) : nav.panel === 'calls' ? (<section className="welcome-pane"><div className="welcome-inner"><Icon name="calls" size={64} /><h2>{t('nav.calls')}</h2><p>{t('calls.welcome')}</p></div></section>) : nav.panel === 'settings' ? (
+      ) : nav.panel === 'calls' || nav.panel === 'channels' || nav.panel === 'communities' ? (<FeatureIntro feature={nav.panel} />) : nav.panel === 'settings' ? (
         <section className="settings-workspace"><SettingsPanel onAllMedia={() => setAllMedia(true)} client={client} page={nav.page} onNavigate={(page) => navigate({ page })} onBack={() => navigate({ panel: 'chats' })} onSignedOut={onSignedOut} /></section>
       ) : (
         <WelcomePane

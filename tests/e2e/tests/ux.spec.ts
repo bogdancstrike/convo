@@ -60,7 +60,13 @@ test('global message search, quick chat actions, calls and beside-message menu',
   await page.getByTestId('nav-calls').click();
   // Calls panel: device-local history (empty for a new account) and the E2EE note.
   await expect(page.getByRole('heading', { name: 'No calls yet' })).toBeVisible();
-  await expect(page.getByText('Voice and video calls are end-to-end encrypted.')).toBeVisible();
+  // The main pane explains each section: what it is and when to use it.
+  await expect(page.getByTestId('intro-calls')).toContainText('Use it when');
+  await expect(page.getByTestId('intro-calls')).toContainText('end-to-end encrypted');
+  await page.getByTestId('nav-channels').click();
+  await expect(page.getByTestId('intro-channels')).toContainText('only owners and admins post');
+  await page.getByTestId('nav-communities').click();
+  await expect(page.getByTestId('intro-communities')).toContainText('announcement feed for everyone');
   await closeAll(page, other);
 });
 
