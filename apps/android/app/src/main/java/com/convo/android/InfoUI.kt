@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +24,11 @@ import org.json.JSONObject
     var roleConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     LaunchedEffect(id) { if (isGroup) while (true) { app.call("group", obj("id" to id)) { group = it as? JSONObject }; kotlinx.coroutines.delay(3000) } }
     val members = group?.optJSONArray("members")?.objects().orEmpty()
+    var memberQuery by remember(id) { mutableStateOf("") }; var adminsOnly by remember(id) { mutableStateOf(false) }
+    var memberNames by remember(id) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(id, members.size) { if (id.startsWith("g:")) app.call("memberLabels", obj("id" to id), quiet = true) { v -> memberNames = (v as? org.json.JSONArray)?.objects().orEmpty().associate { it.optString("accountId") to it.optString("label") } } }
+    val shownMembers = members.filter { m -> (!adminsOnly || m.optString("role") != "member") &&
+        fold(memberNames[m.optString("accountId")] ?: if (m.optString("accountId") == app.snapshot.optString("accountId")) "You" else "").let { name -> fold(memberQuery).split(Regex("\\s+")).filter { it.isNotBlank() }.all { name.contains(it) } } }
     val me = app.snapshot.optString("accountId"); val myRole = members.find { it.optString("accountId") == me }?.optString("role")
     val canManage = myRole in listOf("owner", "admin") && !c.optBoolean("left") && group?.optBoolean("needsJoin") != true
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -57,9 +64,20 @@ import org.json.JSONObject
         item { var export by remember { mutableStateOf(false) }; ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }; if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) } }
         if (isGroup) {
             item { Text("${members.size} participants", style = MaterialTheme.typography.titleMedium) }
+            // Member search (specs §30.8): local roster, case/diacritic-insensitive; Admins includes owners.
+            item {
+                if (members.size > 1) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(memberQuery, { memberQuery = it }, placeholder = { Text("Search members") }, singleLine = true, leadingIcon = { Icon(Icons.Outlined.Search, null) }, modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(!adminsOnly, { adminsOnly = false }, label = { Text("All") }); FilterChip(adminsOnly, { adminsOnly = true }, label = { Text("Admins") })
+                    }
+                    RawText(tr("{shown} of {total} members").replace("{shown}", "${shownMembers.size}").replace("{total}", "${members.size}"), style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+                }
+            }
             if (canManage) item { InviteSection(app, id) }
             if (canManage) item { ActionRow("Add participant", icon = Icons.Outlined.PersonAdd) { adding = true } }
-            items(members, key = { it.optString("accountId") }) { member ->
+            items(shownMembers, key = { it.optString("accountId") }) { member ->
                 val accountId = member.optString("accountId"); var account by remember(accountId) { mutableStateOf<JSONObject?>(null) }; var menu by remember { mutableStateOf(false) }
                 LaunchedEffect(accountId) { app.call("account", obj("id" to accountId)) { account = it as? JSONObject } }
                 val name = account?.label() ?: "…"; val role = member.optString("role")
@@ -160,3 +178,6 @@ import org.json.JSONObject
         }
     }
 }
+
+/** Case- and diacritic-insensitive search key (Romanian comma/cedilla forms included). */
+fun fold(value: String): String = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").lowercase(java.util.Locale.forLanguageTag("ro"))

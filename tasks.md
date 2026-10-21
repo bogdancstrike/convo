@@ -127,6 +127,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
   rules; emulator-verified save → welcome card).
+- Member search & groups in common (specs §30.8): group info has a local roster search
+  (case/Romanian-diacritic-insensitive), All/Admins filters (owners included) and an accessible
+  "N of M members" count on web and Android; direct-chat info on web also lists groups in common
+  (local intersection, nothing uploaded). `member-search.spec.ts` (Chromium/Firefox), `text.test.ts`,
+  Android emulator check.
 - Scoped admin roles (ADM-01, AC-ADM-01/03): helpdesk / org admin / security / auditor realm
   roles with a least-privilege permission matrix enforced per endpoint; denied sensitive attempts
   audited; console shows only permitted tabs/actions (`/v1/admin/me`); accountable audit export

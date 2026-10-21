@@ -213,7 +213,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           void client.account(contactId).then((account) => account && client.openConversation(account).then((c) => openChat(c.id)));
         }} />;
         return <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false, page: null })}
-          onShared={() => navigate({ page: 'media' })} onPage={onPage} onContact={(id) => navigate({ page: `contact:${id}` })} />;
+          onShared={() => navigate({ page: 'media' })} onPage={onPage} onContact={(id) => navigate({ page: `contact:${id}` })} onOpenChat={openChat} />;
       })()}
     </div>{allMedia && <AllMedia client={client} onClose={() => setAllMedia(false)} />}<JoinLinkHandler client={client} /></MediaViewerProvider></LinkPreferences></ProfilesProvider>
   );

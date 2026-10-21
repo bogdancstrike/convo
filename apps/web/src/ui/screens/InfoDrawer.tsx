@@ -1,3 +1,4 @@
+import { matches } from '../../lib/text';
 import { InviteSection } from './InviteSection';
 import { LastSeen } from '../components/LastSeen';
 import { SharedPreview, ConversationActions } from './ConversationDetails';
@@ -19,7 +20,7 @@ import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
  * group details with members, roles and admin add/remove.
  */
-export function InfoDrawer({ client, conversation, onClose, onShared, onPage, onContact }: { client: EnclaveClient; conversation: Conversation; onClose: () => void; onShared: () => void; onPage: (page: string) => void; onContact: (accountId: string) => void }) {
+export function InfoDrawer({ client, conversation, onClose, onShared, onPage, onContact, onOpenChat }: { client: EnclaveClient; conversation: Conversation; onClose: () => void; onShared: () => void; onPage: (page: string) => void; onContact: (accountId: string) => void; onOpenChat?: (id: string) => void }) {
   const { t } = useI18n();
   const group = conversation.kind === 'group';
   return (
@@ -32,6 +33,7 @@ export function InfoDrawer({ client, conversation, onClose, onShared, onPage, on
       </header>
       <div className="panel-body">
         {group ? <GroupInfo client={client} conversation={conversation} onContact={onContact} /> : <ContactInfo client={client} conversation={conversation} />}
+        {conversation.kind === 'direct' && onOpenChat && <CommonGroups client={client} accountId={conversation.id} onOpen={onOpenChat} />}
         <SharedPreview client={client} conversation={conversation} onOpen={onShared} />
         <ConversationActions client={client} conversation={conversation} onClose={onClose} onPage={onPage} />
       </div>
@@ -185,6 +187,10 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
   }, [load]);
 
   const myRole = members.find((m) => m.accountId === client.accountId)?.role ?? 'member';
+  // Member search (specs §30.8): local roster only, diacritic/case-insensitive; Admins includes owners.
+  const [memberQuery, setMemberQuery] = useState('');
+  const [adminsOnly, setAdminsOnly] = useState(false);
+  const shown = members.filter((m) => (!adminsOnly || m.role !== 'member') && matches(memberQuery, m.label, m.username));
   const canManage = myRole !== 'member' && !conversation.left && !record?.needsJoin;
 
   const run = async (task: () => Promise<void>) => {
@@ -257,8 +263,22 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
             </ul>
           </div>
         )}
+        {members.length > 1 && (
+          <div className="member-search">
+            <label className="search">
+              <Icon name="search" size={16} />
+              <input type="search" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder={t('group.searchMembers')}
+                aria-label={t('group.searchMembers')} data-testid="member-search" />
+            </label>
+            <div className="chips" role="group" aria-label={t('group.memberFilter')}>
+              <button className="chip" aria-pressed={!adminsOnly} onClick={() => setAdminsOnly(false)} data-testid="member-filter-all">{t('group.filterAll')}</button>
+              <button className="chip" aria-pressed={adminsOnly} onClick={() => setAdminsOnly(true)} data-testid="member-filter-admins">{t('group.filterAdmins')}</button>
+            </div>
+            <p className="muted-text" role="status" aria-live="polite" data-testid="member-count">{t('group.shownCount', { shown: shown.length, total: members.length })}</p>
+          </div>
+        )}
         <ul className="list" data-testid="group-members">
-          {members.map((m) => (
+          {shown.map((m) => (
             <li key={m.accountId} className="member-row" data-testid={`member-${m.username}`}>
               <Avatar id={m.accountId} name={m.avatarName} size={40} />
               <button className="name" onClick={() => onContact(m.accountId)} data-testid={`contact-${m.username}`}>
@@ -281,5 +301,29 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
         {error && <p role="alert" className="failed">{error}</p>}
       </section>
     </>
+  );
+}
+
+/**
+ * Groups in common (specs §30.8): local intersection of this account's active groups and their
+ * rosters; nothing is uploaded and groups this device cannot see are never enumerated.
+ */
+export function CommonGroups({ client, accountId, onOpen }: { client: EnclaveClient; accountId: string; onOpen: (id: string) => void }) {
+  const { t } = useI18n();
+  const [common, setCommon] = useState<Conversation[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(client.conversations().filter((c) => c.kind === 'group' && !c.left).map(async (c) => {
+      const record = await client.groupRecord(c.id);
+      return record?.members.some((m) => m.accountId === accountId) && record.members.some((m) => m.accountId === client.accountId) ? c : null;
+    })).then((groups) => { if (!cancelled) setCommon(groups.filter((c): c is Conversation => Boolean(c))); });
+    return () => { cancelled = true; };
+  }, [client, accountId]);
+  return (
+    <section className="drawer-section" data-testid="common-groups">
+      <h4>{t('info.commonGroups', { count: common.length })}</h4>
+      {common.map((group) => <button className="settings-row" key={group.id} onClick={() => onOpen(group.id)} data-testid="common-group">
+        <Avatar id={group.id} name={group.title} size={40} group /><span className="settings-row-text">{group.title}</span><Icon name="next" size={18} /></button>)}
+    </section>
   );
 }

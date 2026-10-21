@@ -2374,3 +2374,6 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .welcome-checklist .chip.required { border-color: var(--c-accent); color: var(--c-accent-text); }
 .welcome-collapsed { display: grid; gap: var(--space-1); padding: 0 var(--space-4); }
 .onboarding-editor textarea { font: inherit; padding: var(--space-2); border: 1px solid var(--c-border); border-radius: var(--radius-md); background: var(--c-canvas); color: var(--c-text-primary); }
+
+/* Member search (specs §30.8) */
+.member-search { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); }
