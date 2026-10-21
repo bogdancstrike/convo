@@ -532,6 +532,8 @@ export const ro: Record<MessageKey, string> = {
   'security.deviceAdded': 'Securitate: un dispozitiv nou a fost conectat la cont — {device}. Dacă nu ai fost tu, deconectează-l din Setări → Dispozitive.',
   'security.deviceRemoved': 'Securitate: {device} a fost eliminat din cont.',
   'link.qr': 'Cod QR cu codul de comparare. Scanează-l din Convo pe telefon sau compară cifrele de mai jos.',
+  'album.label': 'Album cu {count} elemente',
+  'thread.unreadDividerOne': '1 mesaj necitit',
   'settings.chats.hint': 'Temă, limbă, Enter pentru trimitere',
   'settings.privacy.hint': 'Autentificare fără parolă, conversații blocate, confirmări',
   'settings.devices.hint': 'Dispozitive conectate și cereri de conectare',

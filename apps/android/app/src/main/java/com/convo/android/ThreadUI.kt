@@ -107,7 +107,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 item { Text("Your personal messages are end-to-end encrypted", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(messages, key = { "${it.optString("authorId")}/${it.optString("id")}" }) { message ->
                     if (anchor == "${message.optString("authorId")}/${message.optString("id")}") Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
-                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface) { RawText(tr("{count} unread messages").replace("{count}", "$unreadAtOpen"), Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium) }
+                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface) { RawText((if (unreadAtOpen == 1) tr("1 unread message") else tr("{count} unread messages").replace("{count}", "$unreadAtOpen")), Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium) }
                     }
                     MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }) }
             }
@@ -170,8 +170,11 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
                     if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty())
-                    message.optJSONArray("attachments")?.objects()?.forEachIndexed { index, a ->
-                        AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
+                    val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
+                    val visual = attachments.withIndex().filter { (_, a) -> a.optString("contentType").let { it.startsWith("image/") || it.startsWith("video/") } }.map { it.index to it.value }
+                    if (visual.size >= 2) AlbumGrid(app, message, conversation, visual) { selectedAttachment = it }
+                    attachments.forEachIndexed { index, a ->
+                        if (visual.size < 2 || visual.none { it.first == index }) AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
                     }
                 }
                 message.optJSONObject("reactions")?.let { reactions -> if (reactions.length() > 0) Text(reactions.keys().asSequence().joinToString("  ") { "${it} ${reactions.optJSONArray(it)?.length() ?: 0}" }) }

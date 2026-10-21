@@ -114,6 +114,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   E2E decodes it with jsQR and matches the digits; Android trusted devices scan it (ZXing) to
   pick the matching request, still confirming before approval. Real camera scan needs a
   physical device.
+- Photo albums (FEAT-01): 2+ photos/videos in one message show as a 2-column grid of up to four
+  tiles with "+N"; the viewer pages through all. Web (`albums.spec.ts`) and Android (emulator:
+  5-photo album, viewer at 4 / 5). Singular "1 unread message" divider on both clients.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -188,7 +191,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Image re-encode strips EXIF/location; safe download content types (no active content) | |
 | ✅ | Composer: file picker, drag & drop, paste, size limit feedback, upload progress, captions | |
 | ✅ | Photos render inline (decrypted in memory), files download on explicit action; expired/offline/integrity states | |
-| ⬜ | Albums (2–10 photos grid), thumbnails/blurhash, voice notes, resumable multipart uploads, offline-queued uploads | FEAT-01/EXT-02 |
+| 🟡 | Albums (2–10 photos grid) and voice notes done; thumbnails/blurhash, resumable multipart and offline-queued uploads pending | FEAT-01/EXT-02 |
 
 ## Groups (GRP-01/02/03)
 

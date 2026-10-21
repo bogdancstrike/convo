@@ -31,7 +31,7 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     }
 } catch (_: Exception) { null }
 
-@Composable fun AttachmentTile(app: MainActivity, message: JSONObject, conversation: String, index: Int, pointer: JSONObject, open: () -> Unit) {
+@Composable fun AttachmentTile(app: MainActivity, message: JSONObject, conversation: String, index: Int, pointer: JSONObject, compact: Boolean = false, open: () -> Unit) {
     val mime = pointer.optString("contentType")
     val name = if (pointer.optBoolean("voiceNote")) "Voice message" else pointer.optString("fileName").ifBlank { "Attachment" }
     val image = mime in listOf("image/jpeg", "image/png", "image/webp")
@@ -52,11 +52,11 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     }
     if (image || video) {
         val manual = image && !load && bitmap == null
-        Box(Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (manual) "Download $name" else if (video) "Play $name" else "View $name", onClick = { if (manual) requested = true else open() }), contentAlignment = Alignment.Center) {
-            bitmap?.let { Image(it, name, Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 300.dp), contentScale = ContentScale.Fit) }
+        Box((if (compact) Modifier.size(128.dp) else Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp)).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (manual) "Download $name" else if (video) "Play $name" else "View $name", onClick = { if (manual) requested = true else open() }), contentAlignment = Alignment.Center) {
+            bitmap?.let { Image(it, name, if (compact) Modifier.fillMaxSize() else Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 300.dp), contentScale = if (compact) ContentScale.Crop else ContentScale.Fit) }
             if (video) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) { Icon(Icons.Outlined.PlayArrow, "Play $name", Modifier.padding(12.dp).size(32.dp)) }
             else if (manual) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) {
-                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Download, null); Text(formatSize(pointer.optLong("size")), Modifier.padding(start = 6.dp)) }
+                Row(Modifier.padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Download, null); if (!compact) Text(formatSize(pointer.optLong("size")), Modifier.padding(start = 6.dp)) }
             }
             else if (bitmap == null) {
                 if (failed) Text("Tap to retry", Modifier.padding(20.dp)) else CircularProgressIndicator(Modifier.size(28.dp))
@@ -85,4 +85,20 @@ fun formatSize(size: Long): String = when { size >= 1024 * 1024 -> "%.1f MB".for
             Text("Check the address before continuing. Only open links you trust.", style = MaterialTheme.typography.bodySmall)
             Text("You can turn this confirmation off in Settings → Privacy.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }, confirmButton = { Button(open) { Text("Open link") } }, dismissButton = { TextButton(close) { Text("Cancel") } })
+}
+
+/** Two or more photos/videos in one message: a 2-column album of up to four tiles, "+N" on the last. */
+@Composable fun AlbumGrid(app: MainActivity, message: JSONObject, conversation: String, visual: List<Pair<Int, JSONObject>>, open: (Int) -> Unit) {
+    val shown = visual.take(4); val extra = visual.size - shown.size
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        shown.chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            row.forEach { (index, pointer) -> Box {
+                AttachmentTile(app, message, conversation, index, pointer, compact = true) { open(index) }
+                // The "+N" overlay replaces the last tile's own controls; tapping opens the viewer.
+                if (shown.indexOfFirst { it.first == index } == 3 && extra > 0) Box(Modifier.size(128.dp).background(androidx.compose.ui.graphics.Color(0xFF2A3942)).clickable { open(index) }, contentAlignment = Alignment.Center) {
+                    Text("+$extra", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.headlineSmall)
+                }
+            } }
+        } }
+    }
 }

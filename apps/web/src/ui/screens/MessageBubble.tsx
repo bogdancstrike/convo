@@ -1,3 +1,4 @@
+import { isInlineImage } from '../../core/attachments';
 import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
@@ -124,7 +125,7 @@ export function MessageBubble({
             t('thread.undecryptable')
           ) : (
             <>
-              {m.attachments?.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}
+              <Attachments client={client} message={m} />
               {m.body && (
                 <span data-testid="message-body">
                   <FormattedText text={m.body} highlight={highlight} mentions={mentionLabels} />
@@ -376,4 +377,31 @@ function dayLabel(ms: number, today: string, yesterday: string, date: (ms: numbe
 /** DOM id of a message row (pinned banner and search jump to it). */
 export function messageAnchor(authorId: string, id: string): string {
   return `msg-${authorId}-${id}`.replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+/**
+ * Attachments of one message. Two or more photos/videos form an album grid (FEAT-01): up to four
+ * square tiles, the fourth showing "+N" for the rest; any tile opens the shared viewer, which
+ * pages through every item. Documents and audio keep their own rows below the album.
+ */
+function Attachments({ client, message: m }: { client: EnclaveClient; message: ChatMessage }) {
+  const { t } = useI18n();
+  const all = m.attachments ?? [];
+  const visual = all.filter((a) => isInlineImage(a) || a.contentType.startsWith('video/'));
+  if (visual.length < 2) return <>{all.map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}</>;
+  const shown = visual.slice(0, 4);
+  const extra = visual.length - shown.length;
+  return (
+    <>
+      <div className={`album n${shown.length}`} data-testid="album" aria-label={t('album.label', { count: visual.length })}>
+        {shown.map((a, i) => (
+          <div className="album-tile" key={a.attachmentId}>
+            <AttachmentView client={client} pointer={a} authorId={m.authorId} />
+            {i === 3 && extra > 0 && <span className="album-more" aria-hidden="true" data-testid="album-more">+{extra}</span>}
+          </div>
+        ))}
+      </div>
+      {all.filter((a) => !visual.includes(a)).map((a) => <AttachmentView key={a.attachmentId} client={client} pointer={a} authorId={m.authorId} />)}
+    </>
+  );
 }

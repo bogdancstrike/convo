@@ -30,6 +30,7 @@ object Strings {
         " End-to-end encrypted" to " Criptat integral",
         " Securing call…" to " Se securizează apelul…",
         "Accept" to "Răspunde",
+        "1 unread message" to "1 mesaj necitit",
         " Scan QR code" to " Scanează codul QR", "QR code with the comparison code" to "Cod QR cu codul de comparare", "Scan the QR code shown on the new device" to "Scanează codul QR afișat pe dispozitivul nou", "No pending link request matches this QR code." to "Nicio cerere de conectare nu corespunde acestui cod QR.",
         "Security: a new device was linked to your account — {device}. If this wasn’t you, unlink it in Settings → Devices." to "Securitate: un dispozitiv nou a fost conectat la cont — {device}. Dacă nu ai fost tu, deconectează-l din Setări → Dispozitive.",
         "Security: {device} was removed from your account." to "Securitate: {device} a fost eliminat din cont.",

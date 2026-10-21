@@ -287,7 +287,7 @@ export function Thread({
         {shown.map((m, i) => {
           const prev = shown[i - 1];
           const newDay = !prev || new Date(prev.sort).toDateString() !== new Date(m.sort).toDateString();
-          const divider = !search && firstUnread === `${m.authorId}/${m.id}` ? <div className="unread-divider" data-testid="unread-divider" key="unread-divider">{t('thread.unreadDivider', { count: unreadAtOpen })}</div> : null;
+          const divider = !search && firstUnread === `${m.authorId}/${m.id}` ? <div className="unread-divider" data-testid="unread-divider" key="unread-divider">{unreadAtOpen === 1 ? t('thread.unreadDividerOne') : t('thread.unreadDivider', { count: unreadAtOpen })}</div> : null;
           if (divider) return [divider, m.notice ? <TimerNotice key={`${m.authorId}/${m.id}`} client={client} message={m} showDay={newDay} /> : renderBubble(m, i, newDay)];
           if (m.notice) return <TimerNotice key={`${m.authorId}/${m.id}`} client={client} message={m} showDay={newDay} />;
           return renderBubble(m, i, newDay);
