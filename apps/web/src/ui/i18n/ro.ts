@@ -345,6 +345,8 @@ export const ro: Record<MessageKey, string> = {
   'snooze.failed': 'Amânarea nu a reușit. Încearcă din nou.',
   'snooze.confirm': 'Amână',
   'snooze.active': 'Amânat',
+  'thread.anchorGone': 'Poziția anterioară de citire nu mai este disponibilă (mesajul a expirat sau a fost șters).',
+  'thread.returnPosition': 'Înapoi unde erai',
   'error.unreachable': 'Serverul organizației nu poate fi contactat. Verifică conexiunea și încearcă din nou.',
   'nav.chats': 'Conversații',
   'nav.settings': 'Setări',

@@ -127,6 +127,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
   rules; emulator-verified save → welcome card).
+- Reading position (specs §30.8 unread catch-up): device-local anchor (message + offset) in the
+  encrypted store, never journaled/synced; restored when a chat opens without new unread, across
+  reload; "Back to where you were" after jumping to the latest; expired/deleted anchors fall back
+  with an explanation. `reading-position.spec.ts` (Chromium/Firefox).
 - Timed conversation snoozing (specs §30.8, FR-NOTIF-01): presets This evening / Tomorrow
   morning / 1 h / 4 h / custom, exact time + time zone shown before confirming; an overlay on the
   mute/mentions mode (which resumes); alerts paused, messages still arrive and count; End snooze;

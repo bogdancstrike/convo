@@ -343,6 +343,8 @@ export const en = {
   'snooze.failed': 'Couldn’t snooze. Try again.',
   'snooze.confirm': 'Snooze',
   'snooze.active': 'Snoozed',
+  'thread.anchorGone': 'Your previous reading position is no longer available (the message expired or was deleted).',
+  'thread.returnPosition': 'Back to where you were',
   'error.unreachable': 'Can’t reach your organization’s server. Check your connection and try again.',
   'nav.chats': 'Chats',
   'nav.settings': 'Settings',

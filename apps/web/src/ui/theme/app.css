@@ -2387,3 +2387,7 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .group-description { white-space: pre-wrap; margin: 0; }
 .group-about-form { display: grid; gap: var(--space-2); }
 .group-about-form textarea { font: inherit; padding: var(--space-2); border: 1px solid var(--c-border); border-radius: var(--radius-md); background: var(--c-canvas); color: var(--c-text-primary); }
+
+/* Reading position (specs §30.8) */
+.return-position { position: absolute; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 4; box-shadow: var(--shadow-sm); background: var(--c-panel-raised); }
+.anchor-note { display: flex; align-items: center; gap: var(--space-2); margin: 0 var(--space-4); padding: var(--space-1) var(--space-3); border-radius: var(--radius-md); background: var(--c-panel-raised); font-size: 0.85rem; }

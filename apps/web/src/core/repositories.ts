@@ -21,6 +21,8 @@ export const RecordNs = {
   callLog: 'call-log',
   /** Private community onboarding progress per root group (`OnboardingProgress`). */
   onboarding: 'onboarding',
+  /** Device-local reading position per conversation (not synced; specs §30.8 catch-up). */
+  anchors: 'anchors',
   /** Reviewer only: rules acknowledgements per root group (current version only). */
   rulesAcks: 'rules-acks',
 } as const;

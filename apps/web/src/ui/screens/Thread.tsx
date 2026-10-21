@@ -17,7 +17,7 @@ import { useI18n } from '../i18n/i18n';
 import { fold } from './ChatListPanel';
 import { Composer, type ComposerMode } from './Composer';
 import { ForwardDialog } from './ForwardDialog';
-import { MessageBubble, MessageInfoDialog } from './MessageBubble';
+import { MessageBubble, MessageInfoDialog, messageAnchor } from './MessageBubble';
 
 
 
@@ -116,6 +116,32 @@ export function Thread({
   }
   const firstUnread = anchor.current;
   const positioned = useRef(false);
+  // Device-local reading position (specs §30.8): restored when the chat opens without new unread
+  // messages; "Back to where you were" after jumping to the latest message.
+  const [savedAnchor, setSavedAnchor] = useState<{ key: string; offset: number } | null | undefined>(undefined);
+  const [anchorGone, setAnchorGone] = useState(false);
+  const [returnTo, setReturnTo] = useState<{ key: string; offset: number } | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => { void client.readingAnchor(conversation.id).then((a) => setSavedAnchor(a ?? null)).catch(() => setSavedAnchor(null)); }, [client, conversation.id]);
+  useEffect(() => () => clearTimeout(saveTimer.current), []);
+  const topAnchor = (): { key: string; offset: number } | null => {
+    const list = listRef.current; if (!list) return null;
+    const top = list.getBoundingClientRect().top;
+    for (const row of list.querySelectorAll<HTMLElement>('[data-testid="message"][data-key]')) {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom > top + 4) return { key: row.dataset.key!, offset: Math.round(rect.top - top) };
+    }
+    return null;
+  };
+  const scrollToAnchor = (anchorValue: { key: string; offset: number }): boolean => {
+    const list = listRef.current;
+    const [author, id] = anchorValue.key.split('/');
+    const row = list && author && id ? list.querySelector<HTMLElement>(`#${messageAnchor(author, id)}`) : null;
+    if (!list || !row) return false;
+    stickToBottom.current = false; setAtBottom(false);
+    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - anchorValue.offset;
+    return true;
+  };
   const [atBottom, setAtBottom] = useState(true);
   const [newBelow, setNewBelow] = useState(0);
   const seen = useRef(shown.length);
@@ -129,11 +155,17 @@ export function Thread({
       const divider = list.querySelector<HTMLElement>('[data-testid="unread-divider"]');
       if (divider) { positioned.current = true; stickToBottom.current = false; setAtBottom(false); divider.scrollIntoView({ block: 'start' }); return; }
     }
+    if (!positioned.current && !firstUnread && savedAnchor !== undefined && shown.length) {
+      positioned.current = true;
+      if (savedAnchor && !scrollToAnchor(savedAnchor)) setAnchorGone(true); // expired/deleted: stay at the latest
+      if (savedAnchor) return;
+    }
     if (grew > 0 && !stickToBottom.current) setNewBelow((n) => n + grew);
     if (stickToBottom.current) list.scrollTop = list.scrollHeight;
-  }, [shown, typing, search, firstUnread]);
+  }, [shown, typing, search, firstUnread, savedAnchor]); // eslint-disable-line react-hooks/exhaustive-deps
   const jumpToLatest = () => {
     const list = listRef.current; if (!list) return;
+    setReturnTo(topAnchor());
     stickToBottom.current = true; setAtBottom(true); setNewBelow(0);
     list.scrollTo({ top: list.scrollHeight, behavior: client.settings.animations ? 'smooth' : 'auto' });
   };
@@ -279,6 +311,10 @@ export function Thread({
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
           setAtBottom(stickToBottom.current);
           if (stickToBottom.current) setNewBelow(0);
+          if (!search && positioned.current !== false) {
+            clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => void client.setReadingAnchor(conversation.id, stickToBottom.current ? null : topAnchor()), 400);
+          }
         }}
       >
         <div className="e2ee-banner">
@@ -293,6 +329,11 @@ export function Thread({
           return renderBubble(m, i, newDay);
         })}
       </div>
+      {anchorGone && <p className="anchor-note" role="status" data-testid="anchor-gone">{t('thread.anchorGone')}<button className="icon-btn" onClick={() => setAnchorGone(false)} aria-label={t('info.close')}><Icon name="close" size={14} /></button></p>}
+      {returnTo && atBottom && !search && (
+        <button className="btn return-position" onClick={() => { if (!scrollToAnchor(returnTo)) setAnchorGone(true); setReturnTo(null); }} data-testid="return-position">
+          <Icon name="back" size={16} /> {t('thread.returnPosition')}</button>
+      )}
       {!atBottom && !search && (
         <button className="jump-latest" onClick={jumpToLatest} aria-label={t('thread.jumpLatest')} data-testid="jump-latest">
           <Icon name="chevronDown" size={20} />{newBelow > 0 && <span className="badge" data-testid="jump-latest-count">{newBelow}</span>}

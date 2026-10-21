@@ -1539,6 +1539,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     return manager(authorId) && request.reviewers.every(manager) && !request.audience.includes(authorId);
   }
 
+  // --- reading position (specs §30.8 unread catch-up) ---------------------------------------
+
+  /** Device-local reading anchor: a message (`author/id`) and its offset from the list top. */
+  readingAnchor(conversationId: string): Promise<{ key: string; offset: number } | undefined> {
+    return this.repos.store.get(RecordNs.anchors, conversationId);
+  }
+
+  /** Saves (or clears with `null`) the anchor; never journaled, synced or sent to peers. */
+  async setReadingAnchor(conversationId: string, anchor: { key: string; offset: number } | null): Promise<void> {
+    await this.repos.store.commit([anchor ? { type: 'put', ns: RecordNs.anchors, id: conversationId, value: anchor } : { type: 'delete', ns: RecordNs.anchors, id: conversationId }], false);
+  }
+
   // --- snoozing (specs §30.8) ---------------------------------------------------------------
 
   /**
