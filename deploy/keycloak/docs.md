@@ -10,9 +10,10 @@ just to apply configuration, because changing user subjects breaks account ident
 - nginx exposes Keycloak on the app's HTTPS origin under `/auth`. Keycloak resolves the public
   host dynamically from nginx's overwritten forwarding headers; its internal port is not published.
   The historical canonical backend issuer stays unchanged for stable account lookup.
-- Local development hostname: `convo.doncea.ro`, mapped to `192.168.1.144` in hosts files or LAN DNS.
-  Use `https://convo.doncea.ro` or `https://convo.doncea.ro:8443` for passwordless sign-in. The passwordless WebAuthn RP ID is
-  `convo.doncea.ro`, user verification and resident credentials are required, and passkeys are enabled.
+- Deployment hostname: `convo.doncik.ro` (`CONVO_HOSTNAME`). The setup job sets the realm's
+  passwordless WebAuthn RP ID to it on every run; user verification and resident credentials are
+  required, and passkeys are enabled. Local Compose: point the hostname at the Docker host in the
+  hosts file or LAN DNS.
   IP-based ordinary sign-in remains available, but cannot use a domain-bound passkey.
 - Optional `WebAuthn Register Passwordless` action is enabled, so users can enroll a passkey after
   their initial sign-in through Keycloak Account Console → Account security → Signing in.

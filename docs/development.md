@@ -83,7 +83,8 @@ users, apply them to the running realm through the admin API/console instead of 
 
 ## LAN, history and recovery
 
-Open `https://192.168.1.144:8443` by default; hostnames and other IPs work without rebuilding.
+Open `https://localhost:8443` (or `https://convo.doncik.ro:8443` with a hosts entry pointing at this host).
+Set `CONVO_SERVER_IP` (LAN address for call media) in `.env`; nothing in the repo hard-codes it.
 `CONVO_HTTPS_PORT` changes HTTPS; `ENCLAVE_HTTP_PORT` changes the HTTP help-page port.
 The generated certificate is in the `web-tls` volume; Keycloak's dev database is in `keycloak-data`.
 Never change the canonical `OIDC_ISSUER` or deployment ID on an enrolled installation.
@@ -101,5 +102,5 @@ not copied between devices; a fresh device must join the group for future traffi
 Run E2E against the LAN address as well:
 
 ```bash
-docker compose --profile e2e run --rm -e BASE_URL=https://192.168.1.144:8443 e2e
+docker compose --profile e2e run --rm -e BASE_URL=https://convo.doncik.ro:8443 e2e
 ```

@@ -221,7 +221,7 @@
     }
   ],
   "loginTheme": "convo",
-  "webAuthnPolicyPasswordlessRpId": "convo.doncea.ro",
+  "webAuthnPolicyPasswordlessRpId": "convo.doncik.ro",
   "roles": {
     "realm": [
       {

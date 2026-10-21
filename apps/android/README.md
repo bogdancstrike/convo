@@ -5,9 +5,9 @@ version-pinned web encryption core; it never loads the remote web UI or remote J
 This is an interim interoperability client, not the reviewed native Rust/SQLCipher client
 required by `docs/mobile.md` for production certification.
 
-Default server for new installs: `https://convo.doncea.ro:8443`. Add
-`192.168.1.144 convo.doncea.ro` to your device hosts file or LAN DNS. Existing installs retain
-their saved IP origin to preserve device-local encryption keys. Release builds use ordinary platform TLS trust.
+Default server for new installs: `https://convo.doncik.ro` (the homelab deployment, publicly
+trusted certificate via Cloudflare). Another server can be entered on the sign-in screen. Existing
+installs retain their saved origin to preserve device-local encryption keys. Release builds use ordinary platform TLS trust.
 Debug builds additionally trust only the exact development certificate shipped in debug
 resources, and only for the configured development host. No global trust-all manager.
 Android backup is disabled. The development build uses the browser engine's encrypted

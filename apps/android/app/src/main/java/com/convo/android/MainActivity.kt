@@ -57,7 +57,7 @@ class MainActivity : FragmentActivity() {
     // DocumentPicker may outlive this activity/process. Keep one pending export in private,
     // backup-excluded storage until its result returns; never create a silent empty download.
     private val pendingExport get() = java.io.File(noBackupFilesDir, "convo-pending-export")
-    private val server get() = getPreferences(MODE_PRIVATE).getString("server", "https://convo.doncea.ro:8443")!!.trimEnd('/')
+    private val server get() = getPreferences(MODE_PRIVATE).getString("server", DEFAULT_SERVER)!!.trimEnd('/')
 
     private val authLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
@@ -121,11 +121,8 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         // Opened from a ringing call notification: show over the lock screen like a call app.
         if (intent?.getBooleanExtra(CallWake.EXTRA_RING, false) == true && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) { setShowWhenLocked(true); setTurnScreenOn(true) }
-        // Keep the old IndexedDB origin for existing installs; changing it would hide their keys.
-        if (!getPreferences(MODE_PRIVATE).contains("server")) {
-            val legacy = java.io.File(applicationInfo.dataDir, "app_webview").exists()
-            getPreferences(MODE_PRIVATE).edit().putString("server", if (legacy) "https://192.168.1.144:8443" else "https://convo.doncea.ro:8443").apply()
-        }
+        // Pin the server for this install (existing installs keep theirs: the IndexedDB origin holds their keys).
+        if (!getPreferences(MODE_PRIVATE).contains("server")) getPreferences(MODE_PRIVATE).edit().putString("server", DEFAULT_SERVER).apply()
         cacheDir.listFiles()?.filter { it.name.startsWith("convo-preview-") }?.forEach { it.delete() }
         if (!BuildConfig.DEBUG || android.os.Build.HARDWARE != "ranchu") window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         MessageNotifications.createChannel(this)
@@ -174,7 +171,7 @@ class MainActivity : FragmentActivity() {
     }
     fun setServer(value: String) {
         val uri = Uri.parse(value.trim())
-        if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null || uri.query != null || (!uri.path.isNullOrBlank() && uri.path != "/")) { error = "Enter an HTTPS server address, such as https://192.168.1.144:8443"; return }
+        if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null || uri.query != null || (!uri.path.isNullOrBlank() && uri.path != "/")) { error = "Enter an HTTPS server address, such as https://convo.doncik.ro"; return }
         if (snapshot.has("accountId")) { error = "Log out before changing the server."; return }
         getPreferences(MODE_PRIVATE).edit().putString("server", value.trim().trimEnd('/')).apply(); recreate()
     }
@@ -325,3 +322,6 @@ class MainActivity : FragmentActivity() {
 }
 fun obj(vararg pairs: Pair<String, Any?>) = JSONObject().apply { pairs.forEach { put(it.first, it.second ?: JSONObject.NULL) } }
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
+
+/** Default Convo deployment for new installs (changeable on the sign-in screen). */
+const val DEFAULT_SERVER = "https://convo.doncik.ro"

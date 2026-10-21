@@ -50,7 +50,7 @@ test('Convo login fits a phone and keeps mandatory phone controls usable', async
 });
 
 test('hostname supports a real WebAuthn registration and passwordless sign-in', async ({ browser, browserName, request, baseURL }) => {
-  test.skip(browserName !== 'chromium' || new URL(baseURL!).hostname !== 'convo.doncea.ro', 'Requires hostname and Chromium virtual authenticator');
+  test.skip(browserName !== 'chromium' || new URL(baseURL!).hostname !== 'convo.doncik.ro', 'Requires hostname and Chromium virtual authenticator');
   const user = await createUser(request, 'passkey', { requiredActions: ['webauthn-register-passwordless'] });
   const page = await newPage(browser);
   const cdp = await page.context().newCDPSession(page);
@@ -65,7 +65,7 @@ test('hostname supports a real WebAuthn registration and passwordless sign-in', 
   await page.locator('#registerWebAuthn').click();
   await expect(page.getByTestId('nav-settings')).toBeVisible({ timeout: 45000 });
   const { credentials } = await cdp.send('WebAuthn.getCredentials', { authenticatorId });
-  expect(credentials).toHaveLength(1); expect(credentials[0].rpId).toBe('convo.doncea.ro');
+  expect(credentials).toHaveLength(1); expect(credentials[0].rpId).toBe('convo.doncik.ro');
   // Convo learns only that a passkey exists (read-only service account), which gates native locks.
   await page.getByTestId('nav-settings').click();
   await page.getByTestId('settings-card-privacy').click();

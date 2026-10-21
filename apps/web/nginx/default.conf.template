@@ -6,22 +6,20 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    listen 443 ssl;
-    ssl_certificate /etc/nginx/tls/server.crt;
-    ssl_certificate_key /etc/nginx/tls/server.key;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    error_page 497 =200 /https-required.html;
+    # Generated at start (20-convo-config.sh): TLS on 443 (Compose) or plain HTTP behind an ingress
+    # that terminates TLS (Kubernetes, CONVO_TLS=off); also sets $convo_proto.
+    include /etc/nginx/convo/listen.conf;
     server_name _;
     server_tokens off;
     root /usr/share/nginx/html;
     client_max_body_size 2m;
-    # Re-resolve service names (Docker DNS) so a recreated container is reached without restarting
+    # Re-resolve service names (container DNS) so a recreated container is reached without restarting
     # nginx; upstreams are set through variables below for that reason.
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    include /etc/nginx/convo/resolver.conf;
 
     # Backend API
     location /v1/ws {
-        set $upstream_server http://server:8080;
+        set $upstream_server http://${UPSTREAM_SERVER};
         proxy_pass $upstream_server;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -31,14 +29,14 @@ server {
         proxy_set_header Forwarded "";
         proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port "";
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $convo_proto;
         proxy_read_timeout 120s;
         proxy_send_timeout 120s;
     }
 
     # LiveKit signalling (calls). Media is UDP to CONVO_SERVER_IP, end-to-end encrypted.
     location /rtc {
-        set $upstream_livekit http://livekit:7880;
+        set $upstream_livekit http://${UPSTREAM_LIVEKIT};
         proxy_pass $upstream_livekit;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -50,14 +48,14 @@ server {
     }
 
     location /v1/ {
-        set $upstream_server http://server:8080;
+        set $upstream_server http://${UPSTREAM_SERVER};
         proxy_pass $upstream_server;
         proxy_set_header Host $http_host;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Forwarded "";
         proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port "";
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $convo_proto;
         add_header Cache-Control "no-store" always;
         add_header X-Content-Type-Options "nosniff" always;
     }
@@ -65,7 +63,7 @@ server {
     # Encrypted attachment objects (presigned S3 URLs). Host is preserved because it is part of
     # the SigV4 signature; bodies are streamed, never buffered to disk.
     location /enclave-attachments/ {
-        set $upstream_seaweedfs http://seaweedfs:8333;
+        set $upstream_seaweedfs http://${UPSTREAM_S3};
         proxy_pass $upstream_seaweedfs;
         proxy_set_header Host $http_host;
         client_max_body_size 110m;
@@ -110,14 +108,14 @@ server {
 
     # Organization identity provider
     location /auth/ {
-        set $upstream_keycloak http://keycloak:8080;
+        set $upstream_keycloak http://${UPSTREAM_KEYCLOAK};
         proxy_pass $upstream_keycloak;
         proxy_set_header Host $http_host;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Forwarded "";
         proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port "";
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $convo_proto;
         proxy_buffer_size 128k;
         proxy_buffers 4 256k;
         proxy_busy_buffers_size 256k;
@@ -143,7 +141,8 @@ server {
     }
 }
 
-# Plain HTTP deliberately serves an explanation before any crypto or sign-in is attempted.
+# Plain HTTP deliberately serves an explanation before any crypto or sign-in is attempted
+# (direct TLS mode; behind an ingress the ingress owns port 80).
 server {
     listen 80;
     server_name _;

@@ -23,8 +23,8 @@ E2EE or losing existing account data. Existing master checkpoint: 89ef009.
   encrypted-size allowance for authenticated tags/size buckets; boundary tests pass.
 - [x] Byte-compatible display fingerprint using pinned Noble SHA-512 instead of the old library's
   timer-per-digest loop. 5200-round compatibility test passes; failing Firefox UX test now passes.
-- [x] Local /etc/hosts maps convo.doncea.ro to 192.168.1.144. TLS SAN now includes hostname/IP;
-  Keycloak passkey RP ID is convo.doncea.ro. New certificate copied into debug APK trust resource.
+- [x] Local /etc/hosts maps convo.doncik.ro to the LAN host. TLS SAN now includes hostname/IP;
+  Keycloak passkey RP ID is convo.doncik.ro. New certificate copied into debug APK trust resource.
 - [x] Keycloak responsive theme built on stock keycloak.v2 forms; larger controls, Convo branding,
   light/dark colors, mandatory phone input uses a telephone keyboard.
 - [x] Finish hostname browser suite, native gallery/save/restart checks and commit/push updated APK.

@@ -69,6 +69,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+      CONVO_HOSTNAME: ${CONVO_HOSTNAME:-convo.doncik.ro}
       # Comma-separated Keycloak usernames that get the convo-admin role (development convenience).
       ADMIN_USERNAMES: ${CONVO_ADMIN_USERNAMES:-bogdan}
     volumes:
@@ -129,7 +130,7 @@ services:
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
       ENCLAVE_ADMIN_CHECKPOINT_FILE: /var/lib/convo/audit/checkpoints.log
       ENCLAVE_PUSH_ENABLED: "true"
-      ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_NTFY_PORT:-8091},http://${CONVO_SERVER_IP:-192.168.1.144}:${CONVO_NTFY_PORT:-8091}
+      ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncik.ro}:${CONVO_NTFY_PORT:-8091}
       ENCLAVE_PUSH_INTERNAL_ORIGIN: http://ntfy:80
       ENCLAVE_CALLS_ENABLED: "true"
       ENCLAVE_CALLS_LIVEKIT_URL: http://livekit:7880
@@ -154,9 +155,9 @@ services:
           port_range_start: 50000
           port_range_end: 50100
           use_external_ip: false
-          node_ip: ${CONVO_SERVER_IP:-192.168.1.144}
+          node_ip: ${CONVO_SERVER_IP:?set CONVO_SERVER_IP in .env (this host's LAN address, used for call media)}
           turn_servers:
-            - host: ${CONVO_SERVER_IP:-192.168.1.144}
+            - host: ${CONVO_SERVER_IP:?set CONVO_SERVER_IP in .env}
               port: 3478
               protocol: udp
               username: convo
@@ -176,7 +177,7 @@ services:
     image: binwiederhier/ntfy:v2.28.0
     command: ["serve"]
     environment:
-      NTFY_BASE_URL: http://${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_NTFY_PORT:-8091}
+      NTFY_BASE_URL: http://${CONVO_HOSTNAME:-convo.doncik.ro}:${CONVO_NTFY_PORT:-8091}
       NTFY_BEHIND_PROXY: "false"
       NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
       NTFY_CACHE_DURATION: 12h
@@ -191,7 +192,7 @@ services:
     command:
       - -n
       - --listening-port=3478
-      - --external-ip=${CONVO_SERVER_IP:-192.168.1.144}
+      - --external-ip=${CONVO_SERVER_IP:?set CONVO_SERVER_IP in .env}
       - --realm=convo
       - --lt-cred-mech
       - --user=convo:${CONVO_TURN_PASSWORD:-convo-dev-turn-change-me}
@@ -217,8 +218,8 @@ services:
       - "${CONVO_HTTPS_STANDARD_PORT:-443}:443"
     environment:
       CONVO_HTTPS_PORT: ${CONVO_HTTPS_PORT:-8443}
-      CONVO_HOSTNAME: ${CONVO_HOSTNAME:-convo.doncea.ro}
-      CONVO_SERVER_IP: ${CONVO_SERVER_IP:-192.168.1.144}
+      CONVO_HOSTNAME: ${CONVO_HOSTNAME:-convo.doncik.ro}
+      CONVO_SERVER_IP: ${CONVO_SERVER_IP:-}
     volumes:
       - web-tls:/etc/nginx/tls
     depends_on:
@@ -232,7 +233,8 @@ services:
     image: enclave/e2e:dev
     network_mode: host
     extra_hosts:
-      - "${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_SERVER_IP:-192.168.1.144}"
+      # The deployment hostname resolves to this Docker host (no fixed address in the repo).
+      - "${CONVO_HOSTNAME:-convo.doncik.ro}:host-gateway"
     environment:
       BASE_URL: ${E2E_BASE_URL:-https://localhost:8443}
       HTTP_PORT: ${ENCLAVE_HTTP_PORT:-8088}

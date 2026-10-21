@@ -16,7 +16,8 @@ import net.openid.appauth.connectivity.ConnectionBuilder
 
 /** Exact development certificate trust; no trust-all verifier and no release override. */
 class DevelopmentTls(private val context: Context) : ConnectionBuilder {
-    private val hosts = setOf("192.168.1.144", "convo.doncea.ro")
+    /** Debug builds pin the development certificate for the deployment hostname only. */
+    private val hosts = setOf(android.net.Uri.parse(DEFAULT_SERVER).host!!)
     private fun developmentEndpoint(uri: Uri) = uri.scheme == "https" && uri.host in hosts && uri.port in setOf(-1, 443, 8443)
     private val certificate: X509Certificate? by lazy {
         if (!BuildConfig.DEBUG) null else {

@@ -15,7 +15,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   shared web light/dark tokens, success feedback and encrypted drafts are now implemented.
 - Backend advertises/enforces a configurable 100 MiB attachment policy; clients apply its plaintext
   limit before reading files. Encryption tags/padding have a separate bounded ciphertext allowance.
-- `convo.doncea.ro` is mapped locally to `192.168.1.144`; HTTPS exposes both 443 and 8443, with a
+- `convo.doncik.ro` is mapped locally to `the LAN host`; HTTPS exposes both 443 and 8443, with a
   matching self-signed SAN certificate. Keycloak uses this domain as the passwordless RP ID.
   WebAuthn registration followed by a genuine passwordless assertion is E2E verified in Chromium.
 - Responsive Convo Keycloak login theme and editable required telephone input are implemented.
@@ -41,7 +41,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Chromium and Firefox.
 - Passkeys: Settings → Privacy shows IdP passkey status (read-only `convo-credential-status`
   service account, `GET /v1/account/credentials`) and opens the Keycloak Account Console.
-  Verified with a real Chromium WebAuthn passkey on `convo.doncea.ro`.
+  Verified with a real Chromium WebAuthn passkey on `convo.doncik.ro`.
 - Android Privacy: passkey status, Manage passkeys (Custom Tab), BiometricPrompt app lock and
   per-chat locks, enabled only after the IdP confirms a passkey. Locked chats are hidden from the
   list, search, global media, forwarding and gallery saving; grants end on background / leaving
@@ -54,7 +54,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   group, Note to self, channel) can require authentication to open from the chat list's ⋮ menu
   (replaces the arrow), the chat menu and chat info. Web verifies with the passkey (WebAuthn user
   verification); Android with fingerprint/face/screen lock. `chat-lock.spec.ts` (Chromium virtual
-  authenticator on convo.doncea.ro); emulator: ⋮ lock and info-page unlock verified.
+  authenticator on convo.doncik.ro); emulator: ⋮ lock and info-page unlock verified.
 - Android media viewer pages through every photo/video of the chat (Previous/Next and swipe),
   like the web viewer; documents/audio open alone. Verified on emulator-5554.
 - Full regression 2026-10-21: 54 passed, 4 skipped (hostname-only passkey specs); the stale

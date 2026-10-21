@@ -6,7 +6,7 @@ import { closeAll, createUser, enroll, newPage, send } from './support';
  * deployment hostname (the passkey RP ID) and Chromium's virtual authenticator.
  */
 test('turn on passwordless in Settings, then lock and unlock a chat with the passkey', async ({ browser, browserName, request, baseURL }) => {
-  test.skip(browserName !== 'chromium' || new URL(baseURL!).hostname !== 'convo.doncea.ro', 'Requires hostname and Chromium virtual authenticator');
+  test.skip(browserName !== 'chromium' || new URL(baseURL!).hostname !== 'convo.doncik.ro', 'Requires hostname and Chromium virtual authenticator');
   const user = await createUser(request, 'locker');
   const page = await newPage(browser);
   try {

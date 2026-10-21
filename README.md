@@ -43,10 +43,11 @@ docker compose --profile e2e run --rm e2e     # Playwright end-to-end suite (Chr
 | https://localhost:8443/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
 | http://localhost:5050 | pgAdmin (database password `enclave-dev-db`) |
 
-For LAN access, add `192.168.1.144 convo.doncea.ro` to each device's hosts file (or LAN DNS)
-and open **https://convo.doncea.ro/** (standard port 443), or **https://convo.doncea.ro:8443**.
-Both HTTPS ports are published. This PC's hosts entry is configured. The IP URL
-`https://192.168.1.144:8443` also works for ordinary sign-in; passkeys require the hostname.
+The deployment hostname is **convo.doncik.ro** (production: the homelab Kubernetes charts, see
+[deploy/k8s.md](deploy/k8s.md)). For local Compose, set `CONVO_SERVER_IP` (this host's LAN
+address, used for call media) in `.env`, and point `convo.doncik.ro` at this host in the hosts file
+or LAN DNS of the devices you test with; then open **https://convo.doncik.ro/** or `:8443`.
+`https://localhost:8443` works for ordinary sign-in; passkeys require the hostname.
 Accept the self-signed certificate once per device. Plain HTTP on port 8088 shows an HTTPS-required
 page. Development accounts include `bogdan` / `bogdan` and `maria` / `maria`.
 Keycloak, PostgreSQL, attachment storage and the TLS certificate persist in Compose volumes.
@@ -62,7 +63,7 @@ backend setting.
 ## Android development build
 
 Install [convo-android-debug.apk](apps/assets/convo-android-debug.apk); its SHA-256 checksum is
-next to it. The default server for new installs is `https://convo.doncea.ro:8443`; existing
+next to it. The default server for new installs is `https://convo.doncik.ro`; existing
 installs preserve their saved address and local keys. Source, build instructions,
 verified interoperability and remaining limitations are in [apps/android/README.md](apps/android/README.md).
 The Compose UI uses the same generated light/dark colors and logo as the browser. This interim

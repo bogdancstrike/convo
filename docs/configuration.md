@@ -130,11 +130,15 @@ replaces incoming forwarding headers, and backend/Keycloak ports are not publish
 `CONVO_HTTPS_PORT` defaults to 8443, the additional `CONVO_HTTPS_STANDARD_PORT` to 443, and
 `ENCLAVE_HTTP_PORT` to 8088. Keep the two published HTTPS ports distinct.
 `CONVO_HOSTNAME` defaults to
-`convo.doncea.ro`, and `CONVO_SERVER_IP` to `192.168.1.144`. Configure matching hosts entries or
-LAN DNS on client devices. The development certificate includes both hostname and IP; it is
-created when missing and renewed if either SAN changes, preserving the existing private key.
+`convo.doncik.ro`. `CONVO_SERVER_IP` has no default and must be set in `.env`: it is this host's LAN
+address, advertised by LiveKit/coturn for call media and added to the development certificate.
+The repository contains no fixed addresses. The development certificate covers localhost, the
+hostname and the optional IP; it is renewed if a SAN changes, preserving the private key.
+The web image renders its nginx site at start (`20-convo-config.sh`): `UPSTREAM_SERVER`,
+`UPSTREAM_KEYCLOAK`, `UPSTREAM_LIVEKIT`, `UPSTREAM_S3` (Compose service names by default) and
+`CONVO_TLS=off` for plain HTTP on `CONVO_HTTP_LISTEN` (8080) behind a TLS-terminating ingress.
 Refresh the debug APK's exact certificate pin after regenerating the development certificate.
-Keycloak's passwordless RP ID is `convo.doncea.ro`; changing the RP ID requires a deliberate
+Keycloak's passwordless RP ID is `convo.doncik.ro`; changing the RP ID requires a deliberate
 realm update and new passkey enrollment, because existing passkeys are bound to their RP ID.
 The development Keycloak client allows only
 its relative `/auth/convo/callback` route through a root URL resolved by Keycloak; no wildcard host

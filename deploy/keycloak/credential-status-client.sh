@@ -7,13 +7,18 @@ set -euo pipefail
 : "${REALM:=enclave}"
 : "${CLIENT_ID:=convo-credential-status}"
 kcadm=/opt/keycloak/bin/kcadm.sh
+"$kcadm" config credentials --config /tmp/kcadm.config --server "$KEYCLOAK_URL" --realm master \
+  --user "$KEYCLOAK_ADMIN" --password "$KEYCLOAK_ADMIN_PASSWORD" >/dev/null
+k() { "$kcadm" "$@" --config /tmp/kcadm.config; }
+# Passkeys are bound to the deployment hostname (WebAuthn RP ID); keep the realm in step with it.
+if [[ -n "${CONVO_HOSTNAME:-}" ]]; then
+  k update "realms/$REALM" -s "webAuthnPolicyPasswordlessRpId=$CONVO_HOSTNAME" -s "webAuthnPolicyRpId=$CONVO_HOSTNAME"
+  echo "Passkey RP ID set to $CONVO_HOSTNAME"
+fi
 if [[ -z "${CLIENT_SECRET:-}" ]]; then
   echo "CONVO_CREDENTIAL_STATUS_SECRET is not set; passkey status stays unavailable." >&2
   exit 0
 fi
-"$kcadm" config credentials --config /tmp/kcadm.config --server "$KEYCLOAK_URL" --realm master \
-  --user "$KEYCLOAK_ADMIN" --password "$KEYCLOAK_ADMIN_PASSWORD" >/dev/null
-k() { "$kcadm" "$@" --config /tmp/kcadm.config; }
 id=$(k get clients -r "$REALM" -q clientId="$CLIENT_ID" --fields id --format csv --noquotes | head -n1)
 settings=(-s enabled=true -s publicClient=false -s serviceAccountsEnabled=true -s standardFlowEnabled=false
   -s directAccessGrantsEnabled=false -s implicitFlowEnabled=false -s clientAuthenticatorType=client-secret

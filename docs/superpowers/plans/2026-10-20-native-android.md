@@ -1,6 +1,6 @@
 # Native Android implementation plan
 
-Goal: Install a native Convo Android app against https://192.168.1.144:8443, reuse the existing encrypted account protocol without a wire fork, and validate Android↔web messaging on the running emulator. Keep web/mobile features and visual tokens aligned. Put the APK in apps/assets.
+Goal: Install a native Convo Android app against https://convo.doncik.ro:8443, reuse the existing encrypted account protocol without a wire fork, and validate Android↔web messaging on the running emulator. Keep web/mobile features and visual tokens aligned. Put the APK in apps/assets.
 
 The mobile specification's shared Rust/Flutter core is not implemented in this repository. Use the documented Kotlin/Compose alternative for Android presentation, with a bundled headless browser protocol adapter as an explicitly interim feasibility bridge. The UI must be native Compose, not a website wrapper. Keep encryption keys and protocol state inside the adapter; expose only presentation models and commands. Replace this bridge with the reviewed native shared core before production certification. iOS follows Android and requires macOS signing/device verification.
 

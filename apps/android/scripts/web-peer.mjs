@@ -1,7 +1,7 @@
 import { chromium } from '/e2e/node_modules/playwright/index.mjs';
 import { readFile, writeFile, access } from 'node:fs/promises';
 const accounts = JSON.parse(await readFile('/run/accounts.json', 'utf8'));
-const origin = 'https://192.168.1.144:8443';
+const origin = process.env.CONVO_ORIGIN ?? 'https://convo.doncik.ro';
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: origin });
 const peer = await context.newPage();

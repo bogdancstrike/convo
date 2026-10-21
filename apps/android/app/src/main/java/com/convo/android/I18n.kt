@@ -172,7 +172,7 @@ object Strings {
         "End call" to "Închide apelul",
         "End-to-end encrypted" to "Criptat integral",
         "Ended" to "Încheiat",
-        "Enter an HTTPS server address, such as https://192.168.1.144:8443" to "Introdu o adresă HTTPS de server, de exemplu https://192.168.1.144:8443",
+        "Enter an HTTPS server address, such as https://convo.doncik.ro" to "Introdu o adresă HTTPS de server, de exemplu https://convo.doncik.ro",
         "Everyone in this group can send messages." to "Toți membrii grupului pot trimite mesaje.",
         "Export" to "Exportă",
         "Export chat" to "Exportă conversația",

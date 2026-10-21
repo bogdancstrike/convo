@@ -39,7 +39,7 @@ broader launch tasks, independent security review or complete Android/web parity
 - [ ] Implement/test matching edit windows and revision-aware receipts across backend/web/Android.
 - [ ] Add All Media to Settings and media auto-download/gallery-saving preferences on both clients.
 - [x] Mobile-friendly Keycloak theme; full-width desktop/phone layout in both themes; hostname/TLS
-  on ports 443/8443 for `convo.doncea.ro`; real WebAuthn registration and passwordless assertion.
+  on ports 443/8443 for `convo.doncik.ro`; real WebAuthn registration and passwordless assertion.
 - [ ] Expose passkey enrollment/management after sign-in directly from Convo Settings.
 - [ ] Native app lock and hidden conversation locks using system biometric/PIN, gated by confirmed Keycloak passwordless enrollment; never store fingerprints/PINs in Convo.
 - [ ] Reviewed native core/Keystore/SQLCipher, lifecycle/background delivery, physical device

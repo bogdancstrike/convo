@@ -1,0 +1,31 @@
+#!/bin/sh
+# Renders the nginx site for this environment (no addresses are baked into the image):
+#   CONVO_TLS=on  (default, Compose): TLS on 443 with the self-signed development certificate.
+#   CONVO_TLS=off (Kubernetes): plain HTTP on CONVO_HTTP_LISTEN behind an ingress that terminates
+#                 TLS; the original scheme is taken from the ingress' X-Forwarded-Proto.
+# Upstreams default to the Compose service names; Kubernetes sets cluster DNS names.
+set -eu
+mkdir -p /etc/nginx/convo
+: "${UPSTREAM_SERVER:=server:8080}" "${UPSTREAM_KEYCLOAK:=keycloak:8080}" "${UPSTREAM_LIVEKIT:=livekit:7880}" "${UPSTREAM_S3:=seaweedfs:8333}"
+export UPSTREAM_SERVER UPSTREAM_KEYCLOAK UPSTREAM_LIVEKIT UPSTREAM_S3
+if [ "${CONVO_TLS:-on}" = "off" ]; then
+  cat > /etc/nginx/convo/listen.conf <<CONF
+listen ${CONVO_HTTP_LISTEN:-8080};
+set \$convo_proto \$http_x_forwarded_proto;
+CONF
+else
+  cat > /etc/nginx/convo/listen.conf <<'CONF'
+listen 443 ssl;
+ssl_certificate /etc/nginx/tls/server.crt;
+ssl_certificate_key /etc/nginx/tls/server.key;
+ssl_protocols TLSv1.2 TLSv1.3;
+error_page 497 =200 /https-required.html;
+set $convo_proto $scheme;
+CONF
+fi
+# Re-resolve upstream names through the container's own DNS server (Docker or cluster DNS).
+dns=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
+case "$dns" in *:*) dns="[$dns]" ;; esac
+echo "resolver ${dns:-127.0.0.11} valid=10s ipv6=off;" > /etc/nginx/convo/resolver.conf
+envsubst '${UPSTREAM_SERVER} ${UPSTREAM_KEYCLOAK} ${UPSTREAM_LIVEKIT} ${UPSTREAM_S3}' \
+  < /etc/nginx/convo/default.conf.template > /etc/nginx/conf.d/default.conf
