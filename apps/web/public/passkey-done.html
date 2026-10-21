@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Passkey ready · Convo</title>
+<title>Passkeys · Convo</title>
 <style>
   :root { color-scheme: light dark; --bg: #f4f6f8; --panel: #fff; --text: #111b21; --muted: #54656f; }
   @media (prefers-color-scheme: dark) { :root { --bg: #0b141a; --panel: #1f2c34; --text: #e9edef; --muted: #aebac1; } }
@@ -13,13 +13,30 @@
   img { width: 56px; height: 56px; }
   h1 { font-size: 1.375rem; margin: 16px 0 8px; }
   p { color: var(--muted); margin: 0; }
+  [hidden] { display: none; }
 </style>
 </head>
 <body>
 <main>
   <img src="/logo.svg" alt="">
-  <h1>Your passkey is ready</h1>
-  <p>Close this tab and return to Convo. Settings now shows passwordless sign-in as on, and you can require it to open individual chats.</p>
+  <!-- Keycloak reports the outcome in kc_action_status; passkey-done.js shows the matching text. -->
+  <section data-status="success" data-kind="add" hidden>
+    <h1>Your passkey is ready</h1>
+    <p>Close this tab and return to Convo. Settings now shows passwordless sign-in as on, and you can require it to open the app or individual chats.</p>
+  </section>
+  <section data-status="success" data-kind="remove" hidden>
+    <h1>Passkey removed</h1>
+    <p>Close this tab and return to Convo. If it was your last passkey, app and chat locks stay on until you turn them off; add a passkey again to change them later.</p>
+  </section>
+  <section data-status="cancelled" hidden>
+    <h1>Nothing was changed</h1>
+    <p>You cancelled before finishing. Close this tab and return to Convo.</p>
+  </section>
+  <section data-status="error">
+    <h1>That did not finish</h1>
+    <p>Your passkeys were not changed. Close this tab and try again from Convo’s Settings. If it keeps failing, contact your administrator.</p>
+  </section>
 </main>
+<script src="/passkey-done.js"></script>
 </body>
 </html>

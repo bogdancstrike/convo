@@ -1237,9 +1237,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   lastSeenPrivacy() { return this.api.lastSeenPrivacy(); }
   /** Passkey/OTP registration at the IdP; network or IdP failures surface as `unavailable`. */
-  async credentialStatus(): Promise<CredentialStatusDto> {
+  async credentialStatus(refresh = false): Promise<CredentialStatusDto> {
     let status: CredentialStatusDto;
-    try { status = await this.api.accountCredentials(); } catch { status = { state: 'unavailable', passkey: false, otp: false }; }
+    try { status = await this.api.accountCredentials(refresh); } catch { status = { state: 'unavailable', passkey: false, otp: false }; }
     // An outage keeps the last confirmed answer, so lock options never flicker away.
     if (status.state === 'available' && status.passkey !== this.passkeyEnrolled) { this.passkeyEnrolled = status.passkey; this.emit('credentials', status.passkey); }
     return status;

@@ -138,7 +138,9 @@ hostname and the optional IP; it is renewed if a SAN changes, preserving the pri
 The web image renders its nginx site at start (`20-convo-config.sh`): `UPSTREAM_SERVER`,
 `UPSTREAM_KEYCLOAK`, `UPSTREAM_LIVEKIT`, `UPSTREAM_S3` (Compose service names by default) and
 `CONVO_TLS=off` for plain HTTP on `CONVO_HTTP_LISTEN` (8080) behind a TLS-terminating ingress, and
-`CONVO_KEYCLOAK_ADMIN=off` to hide Keycloak's admin console on the public origin. The server reads
+`CONVO_KEYCLOAK_ADMIN=off` to hide Keycloak's admin console on the public origin, and
+`CONVO_KEYCLOAK_ACCOUNT=off` to hide its account console (Settings manages passkeys through Keycloak
+actions: `webauthn-register-passwordless` and `delete_credential:<id>`). The server reads
 `VALKEY_PASSWORD` and `VALKEY_DATABASE` for a shared Redis/Valkey.
 Refresh the debug APK's exact certificate pin after regenerating the development certificate.
 Keycloak's passwordless RP ID is `convo.doncik.ro`; changing the RP ID requires a deliberate

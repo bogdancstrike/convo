@@ -63,6 +63,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   (replaces the arrow), the chat menu and chat info. Web verifies with the passkey (WebAuthn user
   verification); Android with fingerprint/face/screen lock. `chat-lock.spec.ts` (Chromium virtual
   authenticator on convo.doncik.ro); emulator: ⋮ lock and info-page unlock verified.
+  2026-10-21: production fix — the imported realm lacked the passkey required action (Keycloak
+  returned `kc_action_status=error` while the page claimed success); setup now registers required
+  actions, the result page reads the real status, and Settings lists/adds/removes passkeys via
+  Keycloak actions instead of the account console (hidden in production).
 - Android media viewer pages through every photo/video of the chat (Previous/Next and swipe),
   like the web viewer; documents/audio open alone. Verified on emulator-5554.
 - Full regression 2026-10-21: 54 passed, 4 skipped (hostname-only passkey specs); the stale

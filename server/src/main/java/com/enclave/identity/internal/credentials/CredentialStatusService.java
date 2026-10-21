@@ -45,15 +45,25 @@ public class CredentialStatusService {
      * @param state {@code available} when the IdP answered
      * @param passkey a passwordless passkey is registered
      * @param otp an authenticator-app (TOTP) credential is registered
+     * @param passkeys the account's own passkeys (for managing them inside Convo)
      */
-    public record CredentialStatus(String state, boolean passkey, boolean otp) {
-        public static CredentialStatus unavailable() { return new CredentialStatus("unavailable", false, false); }
+    public record CredentialStatus(String state, boolean passkey, boolean otp, List<Passkey> passkeys) {
+        public static CredentialStatus unavailable() { return new CredentialStatus("unavailable", false, false, List.of()); }
     }
+
+    /**
+     * One registered passkey, shown only to its owner.
+     *
+     * @param id IdP credential ID (used for Keycloak's {@code delete_credential:<id>} action)
+     * @param label name the user gave it at registration (may be empty)
+     * @param createdAt registration time, epoch milliseconds (0 when unknown)
+     */
+    public record Passkey(String id, String label, long createdAt) {}
 
     private record Cached(CredentialStatus status, Instant until) {}
     private record Token(String value, Instant until) {}
     record TokenResponse(String access_token, long expires_in) {}
-    record Credential(String type) {}
+    record Credential(String id, String type, String userLabel, Long createdDate) {}
 
     @Autowired
     public CredentialStatusService(CredentialStatusProperties properties, AccountRepository accounts) {
@@ -77,11 +87,19 @@ public class CredentialStatusService {
      * @param accountId authenticated account
      * @return the account's registered credential types, or {@code unavailable}
      */
-    public CredentialStatus status(UUID accountId) {
+    public CredentialStatus status(UUID accountId) { return status(accountId, false); }
+
+    /**
+     * @param accountId authenticated account
+     * @param refresh skip the cache (right after the user added or removed a passkey)
+     * @return the account's registered credentials, or {@code unavailable}
+     */
+    public CredentialStatus status(UUID accountId, boolean refresh) {
         if (!properties.enabled() || properties.clientSecret().isBlank()) return CredentialStatus.unavailable();
         Instant now = clock.instant();
-        Cached cached = cache.get(accountId);
+        Cached cached = refresh ? null : cache.get(accountId);
         if (cached != null && cached.until().isAfter(now)) return cached.status();
+        if (refresh) cache.remove(accountId);
         CredentialStatus status = lookup(accountId);
         // Only a confirmed passkey is cached: "none yet" changes right after set-up from Settings.
         if (status.state().equals("available") && status.passkey()) {
@@ -99,8 +117,12 @@ public class CredentialStatusService {
                     .pathSegment("admin", "realms", properties.realm(), "users", subject, "credentials").build().encode().toUri();
             List<Credential> credentials = http.get().uri(uri).headers((h) -> h.setBearerAuth(accessToken()))
                     .retrieve().body(new org.springframework.core.ParameterizedTypeReference<List<Credential>>() {});
-            Set<String> types = credentials == null ? Set.of() : credentials.stream().map(Credential::type).collect(Collectors.toSet());
-            return new CredentialStatus("available", types.contains(PASSKEY_TYPE), types.contains(OTP_TYPE));
+            List<Credential> all = credentials == null ? List.of() : credentials;
+            Set<String> types = all.stream().map(Credential::type).collect(Collectors.toSet());
+            List<Passkey> passkeys = all.stream().filter(c -> PASSKEY_TYPE.equals(c.type()) && c.id() != null)
+                    .map(c -> new Passkey(c.id(), c.userLabel() == null ? "" : c.userLabel(), c.createdDate() == null ? 0 : c.createdDate()))
+                    .sorted(java.util.Comparator.comparingLong(Passkey::createdAt)).toList();
+            return new CredentialStatus("available", types.contains(PASSKEY_TYPE), types.contains(OTP_TYPE), passkeys);
         } catch (RuntimeException e) {
             token = null; // a rotated secret or revoked token must not stick
             log.warn("Credential status lookup unavailable ({})", e.getClass().getSimpleName());

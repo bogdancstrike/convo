@@ -29,3 +29,13 @@ just to apply configuration, because changing user subjects breaks account ident
 
 The H2 development database persists in a Compose volume. Production uses a supported database,
 customer-managed identities, trusted TLS certificates, and separately reviewed realm policies.
+- Required actions: the realm JSON lists every action Convo relies on, and the setup script
+  registers and enables any that are missing on an existing realm (`UPDATE_PROFILE`,
+  `UPDATE_PASSWORD`, `CONFIGURE_TOTP`, `webauthn-register`, `webauthn-register-passwordless`,
+  `delete_credential`, …). A realm import registers only the actions its JSON lists; without
+  `webauthn-register-passwordless` Keycloak answers the Settings passkey action with
+  `kc_action_status=error`.
+- Passkeys are managed inside Convo Settings: the server lists the account's own passkeys (read-only
+  service account) and the clients open Keycloak's `webauthn-register-passwordless` and
+  `delete_credential:<id>` actions; `/auth/convo/passkey-done` shows the real outcome
+  (`kc_action_status`). Production hides the account console (`CONVO_KEYCLOAK_ACCOUNT=off`).

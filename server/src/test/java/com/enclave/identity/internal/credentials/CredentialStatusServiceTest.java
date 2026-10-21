@@ -45,8 +45,9 @@ class CredentialStatusServiceTest {
         server.expect(ExpectedCount.once(), requestTo(TOKEN_URL)).andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{\"access_token\":\"t\",\"expires_in\":300}", MediaType.APPLICATION_JSON));
         server.expect(ExpectedCount.once(), requestTo(CREDENTIALS_URL)).andExpect(header("Authorization", "Bearer t"))
-                .andRespond(withSuccess("[{\"type\":\"password\"},{\"type\":\"webauthn-passwordless\"},{\"type\":\"otp\"}]", MediaType.APPLICATION_JSON));
-        assertThat(service.status(ACCOUNT)).isEqualTo(new CredentialStatusService.CredentialStatus("available", true, true));
+                .andRespond(withSuccess("[{\"type\":\"password\"},{\"id\":\"c1\",\"type\":\"webauthn-passwordless\",\"userLabel\":\"Pixel\",\"createdDate\":1000},{\"type\":\"otp\"}]", MediaType.APPLICATION_JSON));
+        assertThat(service.status(ACCOUNT)).isEqualTo(new CredentialStatusService.CredentialStatus("available", true, true,
+                java.util.List.of(new CredentialStatusService.Passkey("c1", "Pixel", 1000))));
         assertThat(service.status(ACCOUNT).passkey()).isTrue();
         server.verify();
     }
@@ -55,7 +56,7 @@ class CredentialStatusServiceTest {
         var service = service(true);
         server.expect(requestTo(TOKEN_URL)).andRespond(withSuccess("{\"access_token\":\"t\",\"expires_in\":300}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(CREDENTIALS_URL)).andRespond(withSuccess("[{\"type\":\"password\"}]", MediaType.APPLICATION_JSON));
-        assertThat(service.status(ACCOUNT)).isEqualTo(new CredentialStatusService.CredentialStatus("available", false, false));
+        assertThat(service.status(ACCOUNT)).isEqualTo(new CredentialStatusService.CredentialStatus("available", false, false, java.util.List.of()));
         // Not cached: a passkey registered a moment later is seen on the next request.
         server.verify(); server.reset();
         server.expect(requestTo(CREDENTIALS_URL)).andRespond(withSuccess("[{\"type\":\"webauthn-passwordless\"}]", MediaType.APPLICATION_JSON));

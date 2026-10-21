@@ -193,32 +193,30 @@ class MainActivity : FragmentActivity() {
         if (locks.locked(id) && locks.unlockedChat != id) { locks.authenticate("Open locked chat", "Confirm it’s you") { locks.unlockedChat = id; openChat(id) }; return }
         threadSearch = false; active = id; route = "thread"; selectedTab = "Chats"; call("open", obj("id" to id))
     }
-    /** Keycloak Account Console (passkeys, authenticator apps) in a Custom Tab; never inside Convo. */
-    fun openAccountSecurity() {
-        val uri = Uri.parse("$server/auth/realms/enclave/account/account-security/signing-in")
-        try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
-        catch (_: Exception) { error = "No browser is available to open your account settings." }
-    }
     /**
-     * Keycloak's passkey-registration action (kc_action) in a Custom Tab; it returns to the static
-     * "passkey ready" page. A throwaway PKCE challenge satisfies the client policy; the code is unused.
+     * Keycloak's passkey actions (kc_action) in a Custom Tab with Convo's sign-in theme: register a
+     * passkey, or remove one after Keycloak's own confirmation. They return to the static result
+     * page (the `state` prefix tells it which). A throwaway PKCE challenge satisfies the client
+     * policy; the code is unused. Convo itself never holds rights to change credentials.
      */
-    fun openPasskeySetup() {
+    fun openPasskeySetup() = openKeycloakAction("webauthn-register-passwordless", "add")
+    fun openPasskeyRemoval(credentialId: String) = openKeycloakAction("delete_credential:$credentialId", "remove")
+    private fun openKeycloakAction(action: String, kind: String) {
         val random = java.security.SecureRandom()
         fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
         val verifier = ByteArray(32).also(random::nextBytes)
         val uri = Uri.parse("$server/auth/realms/enclave/protocol/openid-connect/auth").buildUpon()
             .appendQueryParameter("client_id", "enclave-web").appendQueryParameter("redirect_uri", "$server/auth/convo/passkey-done")
             .appendQueryParameter("response_type", "code").appendQueryParameter("scope", "openid")
-            .appendQueryParameter("kc_action", "webauthn-register-passwordless")
-            .appendQueryParameter("state", b64(ByteArray(16).also(random::nextBytes)))
+            .appendQueryParameter("kc_action", action)
+            .appendQueryParameter("state", "$kind." + b64(ByteArray(16).also(random::nextBytes)))
             .appendQueryParameter("code_challenge", b64(java.security.MessageDigest.getInstance("SHA-256").digest(verifier)))
             .appendQueryParameter("code_challenge_method", "S256").build()
         try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
-        catch (_: Exception) { error = "No browser is available to set up a passkey." }
+        catch (_: Exception) { error = "No browser is available to manage passkeys." }
     }
     override fun onStop() { super.onStop(); isInForeground = false; PushRegistration.appVisible = false; locks.onBackground() }
-    override fun onResume() { super.onResume(); if (phase == "ready") { refreshCredentialStatus(); syncPush() } }
+    override fun onResume() { super.onResume(); if (phase == "ready") { refreshCredentialStatus(refresh = true); syncPush() } }
     var isInForeground = false; private set
     /** Device-local opt-in for [ConnectionService]. */
     var stayConnected: Boolean
@@ -247,12 +245,19 @@ class MainActivity : FragmentActivity() {
         notificationCallback = callback; notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
     /** Updates lock eligibility. An unavailable IdP answer keeps the last confirmed value. */
-    fun refreshCredentialStatus(done: (String) -> Unit = {}) = call("credentials", quiet = true) { value ->
+    fun refreshCredentialStatus(refresh: Boolean = false, done: (String) -> Unit = {}) = call("credentials", obj("refresh" to refresh), quiet = true) { value ->
         val status = value as? JSONObject
         val state = when { status == null || status.optString("state") != "available" -> "unavailable"; status.optBoolean("passkey") -> "true"; else -> "false" }
-        if (state != "unavailable") locks.passkey = state == "true"
+        if (state != "unavailable") {
+            locks.passkey = state == "true"
+            passkeys = status!!.optJSONArray("passkeys")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
+        }
+        credentialState = state
         done(state)
     }
+    /** The account's passkeys as last reported by the IdP (name, date added, credential ID). */
+    var passkeys by mutableStateOf<List<JSONObject>>(emptyList()); private set
+    var credentialState by mutableStateOf("loading"); private set
     fun back() {
         when {
             route == "thread" && threadSearch -> threadSearch = false

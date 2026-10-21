@@ -16,7 +16,8 @@ class CredentialStatusController {
     CredentialStatusController(CredentialStatusService service) { this.service = service; }
 
     @GetMapping("/v1/account/credentials")
-    ResponseEntity<CredentialStatus> credentials(@AuthenticationPrincipal AuthenticatedDevice me) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.status(me.accountId()));
+    ResponseEntity<CredentialStatus> credentials(@AuthenticationPrincipal AuthenticatedDevice me,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean refresh) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.status(me.accountId(), refresh));
     }
 }

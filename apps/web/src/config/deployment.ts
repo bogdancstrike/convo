@@ -45,28 +45,33 @@ export function deploymentInfo(): DeploymentInfo | null { return current; }
 
 /**
  * Keycloak application-initiated action that registers a passwordless passkey, then returns to a
- * static "passkey ready" page. A throwaway PKCE challenge satisfies the client policy; the returned
- * code is never exchanged.
+ * static result page. A throwaway PKCE challenge satisfies the client policy; the returned code is
+ * never exchanged.
  */
-export async function passkeySetupUrl(info: DeploymentInfo | null = current, origin = window.location.origin): Promise<string | null> {
+export function passkeySetupUrl(info: DeploymentInfo | null = current, origin = window.location.origin): Promise<string | null> {
+  return keycloakActionUrl('webauthn-register-passwordless', 'add', info, origin);
+}
+
+/**
+ * Keycloak's own confirmation for removing one passkey (`delete_credential:<id>`), so Convo never
+ * needs credential-management rights and users never see the IdP's account console.
+ */
+export function passkeyRemoveUrl(credentialId: string, info: DeploymentInfo | null = current, origin = window.location.origin): Promise<string | null> {
+  return keycloakActionUrl(`delete_credential:${credentialId}`, 'remove', info, origin);
+}
+
+/** The result page tells adding and removing apart by this `state` prefix. */
+async function keycloakActionUrl(action: string, kind: 'add' | 'remove', info: DeploymentInfo | null, origin: string): Promise<string | null> {
   if (!info) return null;
   const verifier = crypto.getRandomValues(new Uint8Array(32));
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', verifier));
   const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const params = new URLSearchParams({
     client_id: info.oidc.clientId, redirect_uri: `${origin}/auth/convo/passkey-done`, response_type: 'code', scope: 'openid',
-    kc_action: 'webauthn-register-passwordless', state: b64(crypto.getRandomValues(new Uint8Array(16))),
+    kc_action: action, state: `${kind}.${b64(crypto.getRandomValues(new Uint8Array(16)))}`,
     code_challenge: b64(digest), code_challenge_method: 'S256',
   });
   return `${info.oidc.issuer.replace(/\/$/, '')}/protocol/openid-connect/auth?${params}`;
-}
-
-/**
- * Keycloak Account Console page where users add or remove passkeys and authenticator apps.
- * Convo never handles those credentials itself.
- */
-export function accountSecurityUrl(info: DeploymentInfo | null = current): string | null {
-  return info ? `${info.oidc.issuer.replace(/\/$/, '')}/account/account-security/signing-in` : null;
 }
 
 /** Thrown when the server no longer supports this client version. */

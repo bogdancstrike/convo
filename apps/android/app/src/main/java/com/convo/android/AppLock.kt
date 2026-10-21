@@ -10,6 +10,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -108,19 +109,31 @@ class LockManager(private val activity: FragmentActivity) {
 
 /** Passkey status from the IdP plus the lock switches it gates. */
 @Composable fun LockSettings(app: MainActivity) {
-    var state by remember { mutableStateOf("loading") }
-    LaunchedEffect(Unit) { app.refreshCredentialStatus { state = it } }
+    LaunchedEffect(Unit) { app.refreshCredentialStatus(refresh = true) }
+    val state = app.credentialState
     val locks = app.locks
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Passkeys", style = MaterialTheme.typography.titleMedium)
-        Text("Sign in without a password. Passkeys are managed by your organization’s sign-in service; Convo never sees them. A passkey is required to turn on app and chat locks.",
+        Text("Sign in without a password using your fingerprint, face or screen lock. Passkeys live with your organization’s sign-in service; Convo never sees them. A passkey is required to turn on app and chat locks.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(when (state) { "loading" -> "Checking…"; "true" -> "Passkey set up"; "false" -> "No passkey yet"; else -> "Status unavailable right now" })
+        if (state == "true") app.passkeys.forEach { p ->
+            val created = p.optLong("createdAt", 0L)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Key, null, Modifier.size(20.dp))
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    RawText(p.optString("label").ifBlank { tr("Passkey") })
+                    if (created > 0) RawText(tr("Added {date}").replace("{date}", java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(created))),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton({ app.openPasskeyRemoval(p.optString("id")) }) { Text("Remove") }
+            }
+        }
         if (state == "false") {
             Text("Turn on passwordless sign-in to create a passkey with your organization’s sign-in service. Return here when it’s done.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button({ app.openPasskeySetup() }) { Text("Turn on passwordless sign-in") }
         }
-        OutlinedButton({ app.openAccountSecurity() }) { Text("Manage passkeys") }
+        if (state == "true") OutlinedButton({ app.openPasskeySetup() }) { Text("Add another passkey") }
         PrivacySwitch("App lock", when {
             locks.appLock -> "Convo asks for your fingerprint or screen lock each time you open it."
             locks.passkey == true -> "Require your fingerprint or screen lock to open Convo."

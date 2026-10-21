@@ -239,7 +239,12 @@ export interface CredentialStatusDto {
   state: 'available' | 'unavailable';
   passkey: boolean;
   otp: boolean;
+  /** The account's own passkeys (absent from older servers). */
+  passkeys?: PasskeyDto[];
 }
+
+/** One of the account's passkeys: the IdP credential ID, the name given at registration, epoch ms. */
+export interface PasskeyDto { id: string; label: string; createdAt: number }
 
 /** Community reference (COM-01): IDs and role only; the name is E2EE in the root group. */
 export interface CommunityDto { communityId: string; rootGroupId: string; role: GroupRole; version: number }

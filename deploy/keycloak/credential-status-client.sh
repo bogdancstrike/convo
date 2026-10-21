@@ -15,6 +15,19 @@ if [[ -n "${CONVO_HOSTNAME:-}" ]]; then
   k update "realms/$REALM" -s "webAuthnPolicyPasswordlessRpId=$CONVO_HOSTNAME" -s "webAuthnPolicyRpId=$CONVO_HOSTNAME"
   echo "Passkey RP ID set to $CONVO_HOSTNAME"
 fi
+# Required actions Convo relies on (passkey registration from Settings, profile/phone, OTP,
+# password changes). A realm import registers only the actions its JSON lists, so make sure each
+# one exists and is enabled, also on realms imported before the list was complete.
+for action in UPDATE_PROFILE UPDATE_PASSWORD CONFIGURE_TOTP webauthn-register webauthn-register-passwordless \
+              VERIFY_PROFILE delete_credential CONFIGURE_RECOVERY_AUTHN_CODES update_user_locale; do
+  if ! k get "authentication/required-actions/$action" -r "$REALM" >/dev/null 2>&1; then
+    name=$(k get authentication/unregistered-required-actions -r "$REALM" --format csv --noquotes --fields providerId,name | awk -F, -v id="$action" '$1 == id { print $2 }')
+    if [[ -n "$name" ]]; then
+      k create authentication/register-required-action -r "$REALM" -s "providerId=$action" -s "name=$name" >/dev/null && echo "Registered required action $action"
+    fi
+  fi
+  k update "authentication/required-actions/$action" -r "$REALM" -s enabled=true >/dev/null 2>&1 || echo "Required action $action unavailable" >&2
+done
 if [[ -z "${CLIENT_SECRET:-}" ]]; then
   echo "CONVO_CREDENTIAL_STATUS_SECRET is not set; passkey status stays unavailable." >&2
   exit 0

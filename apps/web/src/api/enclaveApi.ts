@@ -116,7 +116,7 @@ export class EnclaveApi {
   joinCall(callId: string): Promise<CallJoin> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/join`); }
   endCall(callId: string): Promise<void> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/end`); }
   /** Own sign-in credential types at the IdP (passkey/OTP) for lock gating; `unavailable` on IdP errors. */
-  accountCredentials(): Promise<CredentialStatusDto> { return this.signed('GET', '/v1/account/credentials'); }
+  accountCredentials(refresh = false): Promise<CredentialStatusDto> { return this.signed('GET', `/v1/account/credentials${refresh ? '?refresh=true' : ''}`); }
   // --- communities (COM-01) ---
   createCommunity(rootGroupId: string): Promise<CommunityDto> { return this.signed('POST', '/v1/communities', { rootGroupId }); }
   myCommunities(): Promise<CommunityDto[]> { return this.signed('GET', '/v1/communities/mine'); }

@@ -172,7 +172,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
       if (patch.photo && typeof patch.photo === 'string') { const bytes = fromBase64Url(patch.photo); patch.photo = await prepareProfilePhoto(new File([bytes], 'profile', { type: args.mime })); }
       if (args.removePhoto) patch.photo = undefined; return client.updateProfile(patch);
     }
-    case 'credentials': return client.credentialStatus();
+    case 'credentials': return client.credentialStatus(args.refresh === true);
     case 'pin': return client.setPinned(await target(args), Boolean(args.pinned));
     case 'canPin': return client.canPin(String(args.id));
     case 'createInvite': return client.createInviteLink(String(args.id));

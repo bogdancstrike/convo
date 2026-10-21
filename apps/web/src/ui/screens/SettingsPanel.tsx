@@ -5,7 +5,7 @@ import type { EnclaveClient } from '../../core/client';
 import type { IncomingLinkRequest } from '../../core/linking';
 import { labelOf, type Settings as SettingsModel } from '../../core/model';
 import { MEDIA_KINDS, type MediaKind } from '../../core/mediaPolicy';
-import { accountSecurityUrl, passkeySetupUrl } from '../../config/deployment';
+import { passkeyRemoveUrl, passkeySetupUrl } from '../../config/deployment';
 import { useChatLocks } from '../chatLocks';
 import type { CredentialStatusDto } from '../../api/types';
 import { Avatar } from '../components/Avatar';
@@ -334,25 +334,31 @@ function StorageLockCard({ client }: { client: EnclaveClient }) {
 }
 
 /**
- * Passkeys are enrolled and removed in the trusted Keycloak Account Console (new tab); Convo only
- * shows whether one exists. The Android app uses this to unlock app and chat locks.
+ * Passkeys are created and removed by Keycloak's own actions (a new tab with Convo's sign-in theme,
+ * where the browser talks to the authenticator); Convo lists the account's passkeys and never
+ * holds rights to change them. A passkey gates app and chat locks.
  */
 function PasskeyCard({ client }: { client: EnclaveClient }) {
-  const { t } = useI18n();
+  const { t, date } = useI18n();
   const [status, setStatus] = useState<CredentialStatusDto | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const load = () => void client.credentialStatus().then((s) => !cancelled && setStatus(s));
-    load();
-    // Re-check when the user returns from the Account Console tab.
-    const onFocus = () => document.visibilityState === 'visible' && load();
+    const load = (refresh: boolean) => void client.credentialStatus(refresh).then((s) => !cancelled && setStatus(s));
+    // Fresh from the IdP whenever Settings opens: a passkey may have been added or removed elsewhere.
+    load(true);
+    // Re-check (bypassing the server cache) when the user returns from the sign-in service tab.
+    const onFocus = () => document.visibilityState === 'visible' && load(true);
     document.addEventListener('visibilitychange', onFocus);
     return () => { cancelled = true; document.removeEventListener('visibilitychange', onFocus); };
   }, [client]);
-  const url = accountSecurityUrl();
-  // Prepared ahead so the link opens synchronously on click (no popup blocking).
+  // Prepared ahead so the links open synchronously on click (no popup blocking).
   const [setupUrl, setSetupUrl] = useState<string | null>(null);
-  useEffect(() => { void passkeySetupUrl().then(setSetupUrl); }, [status]);
+  const [removeUrls, setRemoveUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    void passkeySetupUrl().then(setSetupUrl);
+    void Promise.all((status?.passkeys ?? []).map(async (p) => [p.id, await passkeyRemoveUrl(p.id)] as const))
+      .then((entries) => setRemoveUrls(Object.fromEntries(entries.filter((e): e is readonly [string, string] => !!e[1]))));
+  }, [status]);
   const label = !status ? t('passkeys.checking') : status.state === 'unavailable' ? t('passkeys.unavailable') : status.passkey ? t('passkeys.enrolled') : t('passkeys.none');
   return (
     <Card title={t('passkeys.title')}>
@@ -360,13 +366,24 @@ function PasskeyCard({ client }: { client: EnclaveClient }) {
       <p data-testid="passkey-status" data-state={status ? (status.state === 'unavailable' ? 'unavailable' : String(status.passkey)) : 'loading'}>
         <Icon name={status?.passkey ? 'check' : 'shield'} size={18} /> {label}
       </p>
-      {status?.state === 'available' && !status.passkey && setupUrl && (
+      {status?.state === 'available' && !!status.passkeys?.length && (
+        <ul className="passkey-list" data-testid="passkey-list">
+          {status.passkeys.map((p) => (
+            <li key={p.id} data-testid="passkey-item">
+              <Icon name="shield" size={18} />
+              <span className="passkey-name">{p.label || t('passkeys.unnamed')}
+                {p.createdAt > 0 && <small className="muted-text">{t('passkeys.added', { date: date(p.createdAt) })}</small>}</span>
+              {removeUrls[p.id] && <a className="btn btn-ghost" href={removeUrls[p.id]} target="_blank" rel="noopener noreferrer" data-testid="remove-passkey">{t('passkeys.remove')}</a>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {status?.state === 'available' && setupUrl && (
         <>
-          <p className="muted-text">{t('passkeys.setupHelp')}</p>
-          <a className="btn btn-primary" href={setupUrl} target="_blank" rel="noopener noreferrer" data-testid="setup-passkey">{t('passkeys.setup')}</a>
+          {!status.passkey && <p className="muted-text">{t('passkeys.setupHelp')}</p>}
+          <a className={status.passkey ? 'btn' : 'btn btn-primary'} href={setupUrl} target="_blank" rel="noopener noreferrer" data-testid="setup-passkey">{status.passkey ? t('passkeys.addAnother') : t('passkeys.setup')}</a>
         </>
       )}
-      {url && <a className="btn" href={url} target="_blank" rel="noopener noreferrer" data-testid="manage-passkeys">{t('passkeys.manage')}</a>}
       <AppLockSettings client={client} />
     </Card>
   );

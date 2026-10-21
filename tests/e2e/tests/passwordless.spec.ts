@@ -80,3 +80,14 @@ test('hostname supports a real WebAuthn registration and passwordless sign-in', 
   expect(assertions, 'The second sign-in used the passkey, not an existing SSO session').toBeGreaterThan(0);
   await closeAll(page);
 });
+
+test('the passkey setup page reports what Keycloak actually did', async ({ browser }) => {
+  const page = await newPage(browser);
+  for (const [status, heading] of [['success', 'Your passkey is ready'], ['cancelled', 'Nothing was changed'],
+    ['error', 'That did not finish'], ['', 'That did not finish']] as const) {
+    await page.goto(`/auth/convo/passkey-done${status ? `?kc_action_status=${status}` : ''}`);
+    await expect(page.getByRole('heading', { level: 1 }).filter({ visible: true })).toHaveText(heading);
+    await expect(page.getByRole('heading', { level: 1 }).filter({ visible: true })).toHaveCount(1);
+  }
+  await closeAll(page);
+});

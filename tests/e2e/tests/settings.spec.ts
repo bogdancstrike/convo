@@ -118,7 +118,7 @@ test('external links ask for confirmation unless the user turns it off', async (
   await closeAll(page);
 });
 
-test('passkey status is read from the identity provider and links to its account console', async ({ browser, request }) => {
+test('passkey status is read from the identity provider; no link to its account console', async ({ browser, request }) => {
   const user = await createUser(request, 'nopasskey');
   const page = await newPage(browser);
   try {
@@ -127,7 +127,7 @@ test('passkey status is read from the identity provider and links to its account
     await page.getByTestId('settings-card-privacy').click();
     await expect(page.getByTestId('passkey-status')).toHaveAttribute('data-state', 'false');
     await expect(page.getByTestId('passkey-status')).toContainText('No passkey yet');
-    await expect(page.getByTestId('manage-passkeys')).toHaveAttribute('href', /\/auth\/realms\/enclave\/account\/account-security\/signing-in$/);
-    await expect(page.getByTestId('manage-passkeys')).toHaveAttribute('target', '_blank');
+    await expect(page.getByTestId('setup-passkey')).toHaveAttribute('href', /kc_action=webauthn-register-passwordless/);
+    await expect(page.locator('a[href*="/account"]')).toHaveCount(0);
   } finally { await closeAll(page); }
 });

@@ -4,6 +4,7 @@
 #   CONVO_TLS=off (Kubernetes): plain HTTP on CONVO_HTTP_LISTEN behind an ingress that terminates
 #                 TLS; the original scheme is taken from the ingress' X-Forwarded-Proto.
 #   CONVO_KEYCLOAK_ADMIN=off hides Keycloak's admin console and master realm (public deployments).
+#   CONVO_KEYCLOAK_ACCOUNT=off hides Keycloak's account console (Convo manages passkeys itself).
 # Upstreams default to the Compose service names; Kubernetes sets fully qualified cluster names
 # (nginx's resolver does not apply resolv.conf search domains).
 set -eu
@@ -32,6 +33,11 @@ location ^~ /auth/realms/master/ { return 404; }
 CONF
 else
   : > /etc/nginx/convo/keycloak-admin.conf
+fi
+# CONVO_KEYCLOAK_ACCOUNT=off hides Keycloak's account console: Convo manages passkeys through
+# Keycloak actions with its own sign-in theme, and the console shows sessions, apps and profile.
+if [ "${CONVO_KEYCLOAK_ACCOUNT:-on}" = "off" ]; then
+  echo 'location ~ ^/auth/realms/[^/]+/account(/|$) { return 404; }' >> /etc/nginx/convo/keycloak-admin.conf
 fi
 # Re-resolve upstream names through the container's own DNS server (Docker or cluster DNS).
 dns=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)

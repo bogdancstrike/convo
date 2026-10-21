@@ -34,6 +34,8 @@ test('turn on passwordless in Settings, then lock and unlock a chat with the pas
     await page.getByTestId('nav-settings').click();
     await page.getByTestId('settings-card-privacy').click();
     await expect(page.getByTestId('passkey-status')).toHaveAttribute('data-state', 'true');
+    await expect(page.getByTestId('passkey-item')).toHaveCount(1);
+    await expect(page.getByTestId('setup-passkey')).toHaveText('Add another passkey');
 
     // Note to self with a secret, then lock it from the chat list's ⋮ menu.
     await page.getByTestId('nav-chats').click();
@@ -95,5 +97,18 @@ test('turn on passwordless in Settings, then lock and unlock a chat with the pas
     await page.getByTestId('settings-card-privacy').click();
     await page.getByTestId('toggle-app-lock').click();
     await expect(page.getByTestId('toggle-app-lock')).toHaveAttribute('aria-checked', 'false');
+
+    // Removing the passkey goes through Keycloak's own confirmation (no account console).
+    const remove = await page.getByTestId('remove-passkey').getAttribute('href');
+    expect(remove).toMatch(/kc_action=delete_credential%3A/);
+    await page.goto(remove!);
+    await page.locator('#kc-accept').click();
+    await expect(page.getByRole('heading', { name: 'Passkey removed' })).toBeVisible();
+    await page.goto('/');
+    await expect(page.getByTestId('nav-settings')).toBeVisible({ timeout: 45_000 });
+    await page.getByTestId('nav-settings').click();
+    await page.getByTestId('settings-card-privacy').click();
+    await expect(page.getByTestId('passkey-status')).toHaveAttribute('data-state', 'false');
+    await expect(page.getByTestId('passkey-item')).toHaveCount(0);
   } finally { await closeAll(page); }
 });
