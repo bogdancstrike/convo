@@ -13,6 +13,7 @@ import { useProfile } from '../components/ProfileContext';
 import { Segmented, Switch } from '../components/Controls';
 import { Icon, type IconName } from '../components/Icon';
 import { useI18n } from '../i18n/i18n';
+import { MIN_PASSPHRASE, WrongPassphraseError } from '../../storage/encryptedStore';
 import type { MessageKey } from '../i18n/en';
 
 const LINK_POLL_MS = 3000;
@@ -249,7 +250,78 @@ function PrivacyPage({ client, settings, update }: { client: EnclaveClient; sett
         testId="toggle-typing"
       />
     </Card>
+    <StorageLockCard client={client} />
     </>
+  );
+}
+
+/**
+ * Browser passphrase lock (WEB-01): wraps this browser's storage keys with a passphrase; Convo
+ * locks on start and after inactivity. Distinct from sign-in, recovery code and passkey locks.
+ */
+function StorageLockCard({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  const store = client.localStore;
+  const [enabled, setEnabled] = useState(store.passphraseEnabled);
+  const [idle, setIdle] = useState(store.idleMinutes);
+  const [mode, setMode] = useState<'none' | 'enable' | 'change' | 'remove'>('none');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reset = () => { setMode('none'); setCurrent(''); setNext(''); setRepeat(''); setError(null); };
+  const submit = async () => {
+    if (mode !== 'remove' && [...next].length < MIN_PASSPHRASE) { setError(t('storeLock.minLength', { count: MIN_PASSPHRASE })); return; }
+    if (mode !== 'remove' && next !== repeat) { setError(t('storeLock.mismatch')); return; }
+    setBusy(true); setError(null);
+    try {
+      if (mode === 'enable') await store.enablePassphrase(next, 5);
+      else if (mode === 'change') await store.changePassphrase(current, next);
+      else await store.disablePassphrase(current);
+      setEnabled(store.passphraseEnabled); setIdle(store.idleMinutes); reset();
+    } catch (e) {
+      setError(e instanceof WrongPassphraseError ? t('storeLock.wrong') : t('storeLock.failed'));
+    } finally { setBusy(false); }
+  };
+  const field = (label: MessageKey, value: string, set: (v: string) => void, testId: string, autoComplete: string) => (
+    <label className="field"><span>{t(label)}</span>
+      <input type="password" value={value} onChange={(e) => set(e.target.value)} autoComplete={autoComplete} data-testid={testId} disabled={busy} /></label>
+  );
+  return (
+    <Card title={t('storeLock.setting')}>
+      <p className="muted-text">{t('storeLock.settingHelp')}</p>
+      {enabled && <p data-testid="storage-lock-status"><Icon name="lock" size={18} /> {t('storeLock.on')}</p>}
+      {mode === 'none' ? (
+        <div className="lock-actions">
+          {!enabled && <button className="btn btn-primary" onClick={() => setMode('enable')} data-testid="storage-lock-enable">{t('storeLock.enable')}</button>}
+          {enabled && <>
+            <button className="btn btn-primary" onClick={() => window.dispatchEvent(new Event('convo:lock'))} data-testid="storage-lock-now">{t('storeLock.lockNow')}</button>
+            <button className="btn btn-ghost" onClick={() => setMode('change')} data-testid="storage-lock-change">{t('storeLock.change')}</button>
+            <button className="btn btn-ghost" onClick={() => setMode('remove')} data-testid="storage-lock-remove">{t('storeLock.remove')}</button>
+          </>}
+        </div>
+      ) : (
+        <form className="lock-form" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+          {mode !== 'enable' && field('storeLock.current', current, setCurrent, 'storage-lock-current', 'current-password')}
+          {mode !== 'remove' && field('storeLock.new', next, setNext, 'storage-lock-new', 'new-password')}
+          {mode !== 'remove' && field('storeLock.repeat', repeat, setRepeat, 'storage-lock-repeat', 'new-password')}
+          {mode !== 'remove' && <p className="muted-text">{t('storeLock.minLength', { count: MIN_PASSPHRASE })}</p>}
+          {busy && mode === 'enable' && <p aria-live="polite">{t('storeLock.working')}</p>}
+          {error && <p role="alert" className="failed" data-testid="storage-lock-error">{error}</p>}
+          <div className="lock-actions">
+            <button className="btn btn-primary" type="submit" disabled={busy} data-testid="storage-lock-save">{mode === 'remove' ? t('storeLock.remove') : t('storeLock.save')}</button>
+            <button className="btn btn-ghost" type="button" onClick={reset} disabled={busy}>{t('storeLock.cancel')}</button>
+          </div>
+        </form>
+      )}
+      {enabled && mode === 'none' && (
+        <Segmented label={t('storeLock.after')} value={String(idle)} testId="storage-lock-after"
+          onChange={(v) => void store.setIdleMinutes(Number(v)).then(() => setIdle(store.idleMinutes))}
+          options={[{ value: '1', label: t('appLock.minutes', { count: 1 }) }, { value: '5', label: t('appLock.minutes', { count: 5 }) },
+            { value: '15', label: t('appLock.minutes', { count: 15 }) }, { value: '60', label: t('appLock.minutes', { count: 60 }) }, { value: '0', label: t('storeLock.manual') }]} />
+      )}
+    </Card>
   );
 }
 

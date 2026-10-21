@@ -100,6 +100,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Failed wakes are retried with backoff (verified by stopping ntfy during a send); vanished
   endpoints are forgotten and re-registered by the app. FCM (Google devices without a
   distributor) remains open.
+- Browser passphrase lock (WEB-01): Settings → Privacy → Browser passphrase wraps the storage
+  keys with Argon2id (64 MiB, t=3; `hash-wasm`); first activation re-seals the whole local store
+  and adds an outer pseudonym layer. Locked start shows only the unlock screen (wrong passphrase,
+  "forgot" → set up again); "Lock now" and auto-lock after 1/5/15/60 min (default 5) reload to drop
+  keys from memory; change/remove. Verified `storage-lock.spec.ts` (Chromium/Firefox, repeated).
+  Not covered: WebAuthn-PRF unlock, closing already-shown system notifications on lock.
 - Group call key rotation (ADR-0006): whenever someone leaves a group call the smallest remaining
   identity sends an MLS-encrypted `rekey` (generation → key index), web and Android; members
   removed from / leaving the group are kicked from open call rooms by the server (LiveKit
@@ -194,7 +200,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Status | Item | Notes |
 |---|---|---|
-| ✅ | Encrypted IndexedDB store (AES-GCM records, HMAC key pseudonyms, atomic batches) | passphrase lock pending |
+| ✅ | Encrypted IndexedDB store (AES-GCM records, HMAC key pseudonyms, atomic batches) and Argon2id passphrase lock | WebAuthn-PRF unlock optional |
 | ✅ | Content schema + padding + unknown-content placeholders | |
 | ✅ | Signed HTTP client, resilient WebSocket (tickets, ping, jittered reconnect, 4401) | |
 | ✅ | Browser-primary enrollment with pending-enrollment persistence and idempotent retry | |
@@ -266,7 +272,6 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Passphrase lock for browser storage | WEB-01 |
 | Group leave/roles/invites, communities | GRP-03, COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |

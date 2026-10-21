@@ -11,7 +11,14 @@ import { fromUtf8, toBase64Url, utf8 } from '../lib/bytes';
  *   uses to persist decrypt + ratchet advance + message + processed marker atomically before ack.
  *
  * Browser trust note (UI.md §8, specs §28): a non-extractable key stops casual copying of the
- * database but not same-origin script compromise. Passphrase wrapping is tracked in tasks.md.
+ * database but not same-origin script compromise.
+ *
+ * Optional passphrase lock (WEB-01, specs §28): the record key and an outer pseudonym key are
+ * wrapped with a key derived by Argon2id from the passphrase and are not stored usably on disk;
+ * opening then needs the passphrase. Pseudonyms become `HMAC(outer, HMAC(inner, …))`, so the
+ * legacy inner key left on disk cannot link IDs by itself. The device request-signing key is a
+ * non-extractable WebCrypto key and stays unwrapped: it authenticates to the server (revocable)
+ * but decrypts nothing.
  */
 
 const DB_VERSION = 1;
@@ -37,8 +44,34 @@ interface ProcessedRow {
   at: number;
 }
 
+/** Passphrase lock parameters and the wrapped key material (meta `lock`). */
+export interface LockRecord {
+  v: 1;
+  kdf: { alg: 'argon2id'; salt: Uint8Array<ArrayBuffer>; memoryKiB: number; iterations: number; parallelism: number };
+  iv: Uint8Array<ArrayBuffer>;
+  /** AES-GCM(KEK, sealKey raw ‖ outerKey raw). */
+  wrapped: ArrayBuffer;
+  /** Auto-lock after this many minutes without interaction (0 = only manually). */
+  idleMinutes: number;
+}
+
+/** The store is passphrase-locked; open it with {@link EncryptedStore.open}'s passphrase. */
+export class StoreLockedError extends Error {
+  constructor() { super('store locked'); this.name = 'StoreLockedError'; }
+}
+
+/** The passphrase did not unwrap the keys. */
+export class WrongPassphraseError extends Error {
+  constructor() { super('wrong passphrase'); this.name = 'WrongPassphraseError'; }
+}
+
+/** Argon2id cost (specs §21.3: m = 64 MiB, t = 3). Tests may lower it. */
+export const DEFAULT_KDF = { memoryKiB: 64 * 1024, iterations: 3, parallelism: 1 };
+/** Minimum passphrase length enforced by the store (the UI explains it). */
+export const MIN_PASSPHRASE = 10;
+
 interface EnclaveDb extends DBSchema {
-  meta: { key: string; value: CryptoKey | CryptoKeyPair };
+  meta: { key: string; value: CryptoKey | CryptoKeyPair | LockRecord };
   records: { key: string; value: RecordRow; indexes: { ns: string } };
   messages: { key: string; value: MessageRow; indexes: { conv_sort: [string, number] } };
   processed: { key: string; value: ProcessedRow; indexes: { at: number } };
@@ -75,24 +108,42 @@ export class EncryptedStore {
 
   private constructor(
     private readonly db: IDBPDatabase<EnclaveDb>,
-    private readonly sealKey: CryptoKey,
+    private sealKey: CryptoKey,
     private readonly nameKey: CryptoKey,
+    /** Outer pseudonym layer (present once a passphrase was ever set). */
+    private outerKey: CryptoKey | undefined,
+    private lock: LockRecord | undefined,
   ) {}
+
+  /** Serializes writes with re-keying (one writer tab is ensured by the leader lock). */
+  private writes: Promise<unknown> = Promise.resolve();
+
+  /** Whether this store is protected by a passphrase. */
+  get passphraseEnabled(): boolean { return !!this.lock; }
+  /** Auto-lock delay in minutes (0 = manual only); meaningful when a passphrase is set. */
+  get idleMinutes(): number { return this.lock?.idleMinutes ?? 0; }
+
+  /** True when the database exists and is passphrase-locked (no keys needed to ask). */
+  static async isLocked(name = 'enclave'): Promise<boolean> {
+    const db = await openDB<EnclaveDb>(name, DB_VERSION, { upgrade: createSchema });
+    try { return !!(await db.get('meta', 'lock')); } finally { db.close(); }
+  }
 
   /**
    * Opens (or creates) the local database and its keys.
    *
    * @param name database name; tests use unique names
    */
-  static async open(name = 'enclave'): Promise<EncryptedStore> {
-    const db = await openDB<EnclaveDb>(name, DB_VERSION, {
-      upgrade(database) {
-        database.createObjectStore('meta');
-        database.createObjectStore('records', { keyPath: 'key' }).createIndex('ns', 'ns');
-        database.createObjectStore('messages', { keyPath: 'key' }).createIndex('conv_sort', ['conv', 'sort']);
-        database.createObjectStore('processed', { keyPath: 'guid' }).createIndex('at', 'at');
-      },
-    });
+  static async open(name = 'enclave', passphrase?: string): Promise<EncryptedStore> {
+    const db = await openDB<EnclaveDb>(name, DB_VERSION, { upgrade: createSchema });
+    const nameKeyStored = (await db.get('meta', 'nameKey')) as CryptoKey | undefined;
+    const lock = (await db.get('meta', 'lock')) as LockRecord | undefined;
+    if (lock) {
+      if (passphrase === undefined) { db.close(); throw new StoreLockedError(); }
+      let keys: { seal: CryptoKey; outer: CryptoKey };
+      try { keys = await unwrapKeys(lock, passphrase, false); } catch (e) { db.close(); throw e; }
+      return new EncryptedStore(db, keys.seal, nameKeyStored!, keys.outer, lock);
+    }
     const sealKey =
       ((await db.get('meta', 'sealKey')) as CryptoKey | undefined) ??
       (await persistKey(db, 'sealKey', () =>
@@ -103,7 +154,99 @@ export class EncryptedStore {
       (await persistKey(db, 'nameKey', () =>
         crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign']),
       ));
-    return new EncryptedStore(db, sealKey, nameKey);
+    return new EncryptedStore(db, sealKey, nameKey, (await db.get('meta', 'outerKey')) as CryptoKey | undefined, undefined);
+  }
+
+  /**
+   * Protects the store with a passphrase. The first time, the record key cannot be wrapped (it was
+   * created non-extractable), so every record and message is re-encrypted under new keys in one
+   * transaction; afterwards the keys are kept wrappable and changes are cheap.
+   */
+  async enablePassphrase(passphrase: string, idleMinutes = 5, kdf = DEFAULT_KDF): Promise<void> {
+    checkPassphrase(passphrase);
+    if (this.lock) throw new Error('passphrase already set');
+    await this.exclusive(async () => {
+      const seal = this.sealKey.extractable && this.outerKey?.extractable ? this.sealKey : undefined;
+      if (seal && this.outerKey) {
+        const lock = await wrapKeys(seal, this.outerKey, passphrase, idleMinutes, kdf);
+        const tx = this.db.transaction('meta', 'readwrite');
+        await Promise.all([tx.store.put(lock, 'lock'), tx.store.delete('sealKey'), tx.store.delete('outerKey'), tx.done]);
+        this.lock = lock;
+        return;
+      }
+      await this.rekey(passphrase, idleMinutes, kdf);
+    });
+  }
+
+  /** Replaces the passphrase (needs the current one). */
+  async changePassphrase(current: string, next: string): Promise<void> {
+    checkPassphrase(next);
+    if (!this.lock) throw new Error('no passphrase set');
+    const lock = this.lock;
+    await this.exclusive(async () => {
+      const keys = await unwrapKeys(lock, current, true);
+      const replaced = await wrapKeys(keys.seal, keys.outer, next, lock.idleMinutes, lock.kdf);
+      await this.db.put('meta', replaced, 'lock');
+      this.lock = replaced;
+    });
+  }
+
+  /** Removes the passphrase: the keys are stored on this device again (needs the current one). */
+  async disablePassphrase(current: string): Promise<void> {
+    if (!this.lock) return;
+    const lock = this.lock;
+    await this.exclusive(async () => {
+      const keys = await unwrapKeys(lock, current, true);
+      const tx = this.db.transaction('meta', 'readwrite');
+      await Promise.all([tx.store.put(keys.seal, 'sealKey'), tx.store.put(keys.outer, 'outerKey'), tx.store.delete('lock'), tx.done]);
+      this.lock = undefined;
+      this.sealKey = keys.seal;
+      this.outerKey = keys.outer;
+    });
+  }
+
+  /** Changes the auto-lock delay (stored with the lock parameters). */
+  async setIdleMinutes(minutes: number): Promise<void> {
+    if (!this.lock || !Number.isInteger(minutes) || minutes < 0 || minutes > 24 * 60) throw new Error('invalid auto-lock');
+    const lock = { ...this.lock, idleMinutes: minutes };
+    await this.db.put('meta', lock, 'lock');
+    this.lock = lock;
+  }
+
+  /** One-time migration to wrappable keys: re-seal every value and add the outer name layer. */
+  private async rekey(passphrase: string, idleMinutes: number, kdf: typeof DEFAULT_KDF): Promise<void> {
+    const seal = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    const outer = await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']);
+    const lock = await wrapKeys(seal, outer, passphrase, idleMinutes, kdf);
+    // Read everything first: an IndexedDB transaction cannot span WebCrypto awaits.
+    const records = await this.db.getAll('records');
+    const messages = await this.db.getAll('messages');
+    const rename = async (key: string) => this.outerKey ? key : toBase64Url(await crypto.subtle.sign('HMAC', outer, utf8(key)));
+    const reseal = async <T extends SealedValue>(row: T) => {
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: row.iv }, this.sealKey, row.ct);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      return { iv, ct: await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, seal, plain) };
+    };
+    if (this.outerKey) throw new Error('unexpected outer key without extractable record key');
+    const newRecords = await Promise.all(records.map(async (r) => ({ ...r, key: await rename(r.key), ...(await reseal(r)) })));
+    const newMessages = await Promise.all(messages.map(async (m) => ({ ...m, key: await rename(m.key), conv: await rename(m.conv), ...(await reseal(m)) })));
+    const tx = this.db.transaction(['meta', 'records', 'messages'], 'readwrite');
+    const writes: Promise<unknown>[] = [tx.objectStore('records').clear(), tx.objectStore('messages').clear()];
+    for (const r of newRecords) writes.push(tx.objectStore('records').put(r));
+    for (const m of newMessages) writes.push(tx.objectStore('messages').put(m));
+    writes.push(tx.objectStore('meta').put(lock, 'lock'), tx.objectStore('meta').delete('sealKey'), tx.objectStore('meta').delete('outerKey'));
+    await Promise.all([...writes, tx.done]);
+    // Continue with non-extractable copies in memory.
+    const fresh = await unwrapKeys(lock, passphrase, false);
+    this.sealKey = fresh.seal;
+    this.outerKey = fresh.outer;
+    this.lock = lock;
+  }
+
+  private exclusive<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.writes.then(work, work);
+    this.writes = run.catch(() => undefined);
+    return run;
   }
 
   /** Reads a structured-cloneable key (e.g. a non-extractable device signing key pair). */
@@ -196,6 +339,10 @@ export class EncryptedStore {
    * auto-commits as soon as it awaits non-IndexedDB work.
    */
   async commit(ops: StoreOp[], journal = true): Promise<void> {
+    return this.exclusive(() => this.commitNow(ops, journal));
+  }
+
+  private async commitNow(ops: StoreOp[], journal: boolean): Promise<void> {
     if (journal && this.journal) ops = [...ops, ...await this.journal(ops)];
     if (ops.length === 0) return;
     const prepared = await Promise.all(ops.map((op) => this.prepare(op)));
@@ -270,8 +417,8 @@ export class EncryptedStore {
 
   /** Domain-separated HMAC pseudonym of a key. */
   private async name(domain: string, value: string): Promise<string> {
-    const mac = await crypto.subtle.sign('HMAC', this.nameKey, utf8(`enclave-store-v1\u0000${domain}\u0000${value}`));
-    return toBase64Url(mac);
+    const inner = toBase64Url(await crypto.subtle.sign('HMAC', this.nameKey, utf8(`enclave-store-v1\u0000${domain}\u0000${value}`)));
+    return this.outerKey ? toBase64Url(await crypto.subtle.sign('HMAC', this.outerKey, utf8(inner))) : inner;
   }
 
   private async seal(value: unknown): Promise<SealedValue> {
@@ -284,6 +431,53 @@ export class EncryptedStore {
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: row.iv }, this.sealKey, row.ct);
     return JSON.parse(fromUtf8(plain)) as T;
   }
+}
+
+function createSchema(database: IDBPDatabase<EnclaveDb>): void {
+  database.createObjectStore('meta');
+  database.createObjectStore('records', { keyPath: 'key' }).createIndex('ns', 'ns');
+  database.createObjectStore('messages', { keyPath: 'key' }).createIndex('conv_sort', ['conv', 'sort']);
+  database.createObjectStore('processed', { keyPath: 'guid' }).createIndex('at', 'at');
+}
+
+function checkPassphrase(passphrase: string): void {
+  if ([...passphrase].length < MIN_PASSPHRASE) throw new Error('passphrase too short');
+}
+
+/** Argon2id → AES-256-GCM key-encryption key (never stored). */
+async function deriveKek(passphrase: string, kdf: LockRecord['kdf']): Promise<CryptoKey> {
+  const { argon2id } = await import('hash-wasm');
+  const raw = await argon2id({ password: passphrase.normalize('NFC'), salt: kdf.salt, memorySize: kdf.memoryKiB, iterations: kdf.iterations,
+    parallelism: kdf.parallelism, hashLength: 32, outputType: 'binary' });
+  return crypto.subtle.importKey('raw', raw as Uint8Array<ArrayBuffer>, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+async function wrapKeys(seal: CryptoKey, outer: CryptoKey, passphrase: string, idleMinutes: number, kdf: typeof DEFAULT_KDF): Promise<LockRecord> {
+  const params = { alg: 'argon2id' as const, salt: crypto.getRandomValues(new Uint8Array(16)), ...kdf };
+  const kek = await deriveKek(passphrase, params);
+  const material = new Uint8Array(64);
+  material.set(new Uint8Array(await crypto.subtle.exportKey('raw', seal)), 0);
+  material.set(new Uint8Array(await crypto.subtle.exportKey('raw', outer)), 32);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const wrapped = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: utf8('convo-store-lock-v1') }, kek, material);
+  material.fill(0);
+  return { v: 1, kdf: params, iv, wrapped, idleMinutes };
+}
+
+async function unwrapKeys(lock: LockRecord, passphrase: string, extractable: boolean): Promise<{ seal: CryptoKey; outer: CryptoKey }> {
+  const kek = await deriveKek(passphrase, lock.kdf);
+  let material: Uint8Array<ArrayBuffer>;
+  try {
+    material = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: lock.iv, additionalData: utf8('convo-store-lock-v1') }, kek, lock.wrapped));
+  } catch {
+    throw new WrongPassphraseError();
+  }
+  try {
+    return {
+      seal: await crypto.subtle.importKey('raw', material.slice(0, 32), 'AES-GCM', extractable, ['encrypt', 'decrypt']),
+      outer: await crypto.subtle.importKey('raw', material.slice(32), { name: 'HMAC', hash: 'SHA-256' }, extractable, ['sign']),
+    };
+  } finally { material.fill(0); }
 }
 
 async function persistKey(

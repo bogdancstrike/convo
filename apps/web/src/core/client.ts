@@ -22,7 +22,7 @@ import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
 import { Mutex } from '../lib/mutex';
 import { utf8, fromBase64Url, toBase64Url } from '../lib/bytes';
-import type { StoreOp } from '../storage/encryptedStore';
+import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import { downloadAttachment, prepareFile, uploadAttachment, type PreparedFile, type UploadResume } from './attachments';
 import { replenishPreKeys } from './enrollment';
 import { GroupManager, type GroupRecord } from './groups';
@@ -96,6 +96,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private currentSettings: Settings;
   private hasSynced = false;
+
+  /** The encrypted local store (browser passphrase lock settings). */
+  get localStore(): EncryptedStore { return this.repos.store; }
 
   constructor(
     readonly device: DeviceState,

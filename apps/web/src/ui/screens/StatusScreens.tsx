@@ -148,3 +148,40 @@ export function StorageLostScreen({ onReset }: { onReset: () => void }) {
     </Screen>
   );
 }
+
+/**
+ * Browser passphrase lock (WEB-01): nothing is decrypted until the passphrase unwraps the storage
+ * keys. A forgotten passphrase can only be answered by setting the browser up again.
+ */
+export function StorageUnlockScreen({ onUnlock, onReset }: { onUnlock: (passphrase: string) => Promise<boolean>; onReset: () => void }) {
+  const { t } = useI18n();
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [wrong, setWrong] = useState(false);
+  const [forgot, setForgot] = useState(false);
+  return (
+    <Screen title={t('storeLock.title')}>
+      <form className="lock-form" data-testid="storage-locked" onSubmit={(e) => {
+        e.preventDefault();
+        if (!value || busy) return;
+        setBusy(true); setWrong(false);
+        void onUnlock(value).then((ok) => { setBusy(false); if (!ok) { setWrong(true); setValue(''); } });
+      }}>
+        <p>{t('storeLock.body')}</p>
+        <label className="field">
+          <span>{t('storeLock.passphrase')}</span>
+          <input type="password" autoComplete="current-password" autoFocus value={value} onChange={(e) => setValue(e.target.value)}
+            aria-invalid={wrong} aria-describedby={wrong ? 'unlock-error' : undefined} data-testid="storage-passphrase" />
+        </label>
+        {wrong && <p id="unlock-error" role="alert" className="failed" data-testid="storage-wrong">{t('storeLock.wrong')}</p>}
+        <button className="btn btn-primary" type="submit" disabled={busy || !value} data-testid="storage-unlock">{busy ? t('storeLock.unlocking') : t('storeLock.unlock')}</button>
+      </form>
+      {!forgot ? <button className="btn btn-ghost" onClick={() => setForgot(true)} data-testid="storage-forgot">{t('storeLock.forgot')}</button> : (
+        <div className="lock-form">
+          <p className="muted-text">{t('storeLock.forgotBody')}</p>
+          <button className="btn btn-danger" onClick={onReset} data-testid="storage-reset">{t('storage.reset')}</button>
+        </div>
+      )}
+    </Screen>
+  );
+}

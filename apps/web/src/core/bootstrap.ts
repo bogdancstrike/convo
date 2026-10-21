@@ -17,9 +17,13 @@ export interface LocalContext {
   api: EnclaveApi;
 }
 
-/** Opens local storage and creates the API facade. */
-export async function openLocalContext(): Promise<LocalContext> {
-  const store = await EncryptedStore.open();
+/**
+ * Opens local storage and creates the API facade.
+ *
+ * @param passphrase needed when the browser passphrase lock is on ({@link StoreLockedError} otherwise)
+ */
+export async function openLocalContext(passphrase?: string): Promise<LocalContext> {
+  const store = await EncryptedStore.open(undefined, passphrase);
   return { store, repos: new Repositories(store), signal: new SignalStore(store), api: new EnclaveApi(new HttpClient()) };
 }
 

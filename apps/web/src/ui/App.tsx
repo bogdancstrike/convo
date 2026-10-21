@@ -20,11 +20,13 @@ import {
   RevokedScreen,
   SplashScreen,
   StorageLostScreen,
+  StorageUnlockScreen,
   UnreachableScreen,
   UpdateRequiredScreen,
   WelcomeScreen,
 } from './screens/StatusScreens';
 import { applyTheme } from './theme/tokens';
+import { StoreLockedError, WrongPassphraseError } from '../storage/encryptedStore';
 
 /** The splash stays at least this long so the encryption promise is readable. */
 const MIN_SPLASH_MS = 1000;
@@ -48,6 +50,7 @@ type Phase =
   | { name: 'otherTab' }
   | { name: 'revoked' }
   | { name: 'storageLost' }
+  | { name: 'storageLocked' }
   | { name: 'ready'; client: EnclaveClient };
 
 export function App() {
@@ -152,27 +155,11 @@ export function App() {
     void startClient();
   }, [startClient]);
 
-  const boot = useCallback(async () => {
-    bootStarted.current = Date.now();
-    progress(0.1, 'splash.config');
-    try {
-      info.current = await loadDeploymentInfo();
-    } catch (error) {
-      await leaveSplash(error instanceof UpdateRequiredError ? { name: 'update' } : { name: 'unreachable' });
-      return;
-    }
-    auth.current = new OrganizationAuth(info.current);
-    progress(0.25, 'splash.storage');
-    try {
-      context.current = await openLocalContext();
-    } catch (error) {
-      console.warn('Local storage unavailable', error instanceof Error ? error.name : error);
-      await leaveSplash({ name: 'storageLost' });
-      return;
-    }
-    if (auth.current.isCallback()) {
+  /** Continues start-up once local storage is open (directly, or after the passphrase). */
+  const afterStorage = useCallback(async () => {
+    if (auth.current!.isCallback()) {
       try {
-        await auth.current.completeSignIn();
+        await auth.current!.completeSignIn();
       } catch {
         setPhase({ name: 'welcome' }); // stale/cancelled IdP redirect: start over safely
         return;
@@ -188,6 +175,69 @@ export function App() {
       await leaveSplash({ name: 'storageLost' });
     }
   }, [enroll, leaveSplash, startClient]);
+
+  const boot = useCallback(async () => {
+    bootStarted.current = Date.now();
+    progress(0.1, 'splash.config');
+    try {
+      info.current = await loadDeploymentInfo();
+    } catch (error) {
+      await leaveSplash(error instanceof UpdateRequiredError ? { name: 'update' } : { name: 'unreachable' });
+      return;
+    }
+    auth.current = new OrganizationAuth(info.current);
+    progress(0.25, 'splash.storage');
+    try {
+      context.current = await openLocalContext();
+    } catch (error) {
+      if (error instanceof StoreLockedError) { await leaveSplash({ name: 'storageLocked' }); return; }
+      console.warn('Local storage unavailable', error instanceof Error ? error.name : error);
+      await leaveSplash({ name: 'storageLost' });
+      return;
+    }
+    await afterStorage();
+  }, [afterStorage, leaveSplash]);
+
+
+  /** Browser passphrase lock: unwraps the storage keys, then continues start-up. */
+  const unlockStorage = useCallback(async (passphrase: string): Promise<boolean> => {
+    try {
+      context.current = await openLocalContext(passphrase);
+    } catch (error) {
+      if (error instanceof WrongPassphraseError) return false;
+      setPhase({ name: 'storageLost' });
+      return true;
+    }
+    bootStarted.current = Date.now();
+    progress(0.35, 'splash.storage');
+    await afterStorage();
+    return true;
+  }, [afterStorage]);
+
+  /** Locking = reloading: every key and decrypted message in memory is dropped. */
+  const lockStorage = useCallback(() => {
+    leader.current.release();
+    window.location.reload();
+  }, []);
+
+  // Auto-lock after inactivity while a passphrase protects this browser (specs §28: default 5 min).
+  useEffect(() => {
+    if (phase.name !== 'ready') return;
+    let last = Date.now();
+    const touch = () => { last = Date.now(); };
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    window.addEventListener('convo:lock', lockStorage);
+    const timer = setInterval(() => {
+      const store = context.current?.store;
+      if (store?.passphraseEnabled && store.idleMinutes > 0 && Date.now() - last > store.idleMinutes * 60_000) lockStorage();
+    }, 10_000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, touch));
+      window.removeEventListener('convo:lock', lockStorage);
+      clearInterval(timer);
+    };
+  }, [phase.name, lockStorage]);
 
   useEffect(() => {
     void boot();
@@ -243,6 +293,8 @@ export function App() {
             return <RevokedScreen onContinue={restart} />;
           case 'storageLost':
             return <StorageLostScreen onReset={() => void resetLocalData()} />;
+          case 'storageLocked':
+            return <StorageUnlockScreen onUnlock={unlockStorage} onReset={() => void resetLocalData()} />;
           case 'ready':
             return <CallProvider client={phase.client}><ChatLockProvider client={phase.client}><MainLayout client={phase.client} onSignedOut={restart} /></ChatLockProvider></CallProvider>;
         }
