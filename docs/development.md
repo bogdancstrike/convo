@@ -103,4 +103,6 @@ Run E2E against the LAN address as well:
 
 ```bash
 docker compose --profile e2e run --rm -e BASE_URL=https://convo.doncik.ro:8443 e2e
+# hostname-only specs (passkeys): chat-lock, passkey-edge-cases, passwordless; config checks: identity-config
+# production smoke tests after a deploy: see deploy/k8s.md (tests/e2e/smoke)
 ```

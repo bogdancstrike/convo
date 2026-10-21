@@ -61,6 +61,16 @@ Uploaded message history is encrypted under the account key and restores on link
 Create and save a recovery code in **Settings → History and recovery** before losing all devices.
 Recovery requires organization sign-in plus this code; a password reset alone cannot decrypt history.
 
+### Passwordless sign-in and locks
+
+Settings → Privacy → **Turn on passwordless sign-in** creates a passkey (fingerprint, face or screen
+lock) with Convo's sign-in service; the same card lists your passkeys, adds another and removes
+one. With a passkey you can sign in without a password, lock the whole app (asked each time it
+opens) and require authentication to open individual chats (⋮ on a chat, or chat info). A passkey
+is not a recovery code: only the recovery code can decrypt uploaded history after losing every
+device. How it is configured and tested, including the production smoke tests that verify it after
+every deploy: [docs/SECURITY.md](docs/SECURITY.md).
+
 All credentials are development-only. See [docs/development.md](docs/development.md) for tests,
 fast iteration and conventions, and [docs/configuration.md](docs/configuration.md) for every
 backend setting.
@@ -279,6 +289,8 @@ This sequence describes internal development milestones, not partial public rele
 | [docs/sources.md](docs/sources.md) | Primary technical references, assumptions, and external-conversation access status |
 | [docs/decisions/](docs/decisions) | Implementation ADRs: interim browser crypto, directory names/phones, messenger UX and brand |
 | [docs/development.md](docs/development.md), [docs/configuration.md](docs/configuration.md) | Developer setup, tests, conventions; every backend setting |
+| [docs/SECURITY.md](docs/SECURITY.md) | Passwordless/passkey configuration and flows, device authentication, admin roles, public surface, security tests |
+| [deploy/k8s.md](deploy/k8s.md) | Kubernetes deployment, release procedure and production smoke tests |
 | [tasks.md](tasks.md) | Implementation progress against the task IDs |
 
 ## Working on Convo

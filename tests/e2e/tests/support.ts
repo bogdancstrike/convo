@@ -20,13 +20,18 @@ export interface TestUser {
 const random = () => Math.random().toString(36).slice(2, 7);
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Creates a unique realm user, e.g. `ana-k3j9x` named "Ana K3j9x" with a unique phone number. */
-export async function createUser(request: APIRequestContext, prefix: string, options: { omitPhone?: boolean; requiredActions?: string[]; realmRoles?: string[] } = {}): Promise<TestUser> {
+/** Keycloak master-realm admin token (development credentials) for admin API checks. */
+export async function adminToken(request: APIRequestContext): Promise<string> {
   const tokenResponse = await request.post('/auth/realms/master/protocol/openid-connect/token', {
     form: { grant_type: 'password', client_id: 'admin-cli', username: ADMIN_USER, password: ADMIN_PASSWORD },
   });
   expect(tokenResponse.ok(), 'Keycloak admin token').toBeTruthy();
-  const { access_token: token } = (await tokenResponse.json()) as { access_token: string };
+  return ((await tokenResponse.json()) as { access_token: string }).access_token;
+}
+
+/** Creates a unique realm user, e.g. `ana-k3j9x` named "Ana K3j9x" with a unique phone number. */
+export async function createUser(request: APIRequestContext, prefix: string, options: { omitPhone?: boolean; requiredActions?: string[]; realmRoles?: string[] } = {}): Promise<TestUser> {
+  const token = await adminToken(request);
   const suffix = random();
   const user: TestUser = {
     username: `${prefix}-${suffix}`,
