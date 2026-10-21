@@ -206,6 +206,19 @@ export class EnclaveApi {
   attachmentUploadForm(size: number): Promise<{ attachmentId: string; uploadUrl: string; expiresAt: string }> {
     return this.signed('POST', '/v1/attachments/upload-form', { size });
   }
+  /** Resumable upload (FEAT-01): the secret is required for every later step. */
+  attachmentMultipart(size: number): Promise<{ attachmentId: string; uploadSecret: string; partSize: number; partCount: number; expiresAt: string }> {
+    return this.signed('POST', '/v1/attachments/multipart', { size });
+  }
+  attachmentParts(attachmentId: string, uploadSecret: string, partNumbers: number[]): Promise<{ partNumber: number; url: string }[]> {
+    return this.signed('POST', `/v1/attachments/${encodeURIComponent(attachmentId)}/multipart/parts`, { uploadSecret, partNumbers });
+  }
+  attachmentUploadedParts(attachmentId: string, uploadSecret: string): Promise<{ uploadedParts: number[] }> {
+    return this.signed('POST', `/v1/attachments/${encodeURIComponent(attachmentId)}/multipart/status`, { uploadSecret });
+  }
+  attachmentComplete(attachmentId: string, uploadSecret: string): Promise<void> {
+    return this.signed('POST', `/v1/attachments/${encodeURIComponent(attachmentId)}/multipart/complete`, { uploadSecret });
+  }
 
   /** Presigned GET URL for an attachment. */
   attachmentDownload(attachmentId: string): Promise<{ downloadUrl: string; expiresAt: string }> {

@@ -100,6 +100,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Failed wakes are retried with backoff (verified by stopping ntfy during a send); vanished
   endpoints are forgotten and re-registered by the app. FCM (Google devices without a
   distributor) remains open.
+- Resumable uploads (FEAT-01): ciphertext above 8 MiB goes up as S3 multipart parts (V20) gated by
+  a per-upload secret; parts are retried, and an interrupted upload is queued with its key/nonce
+  seed + session so the resume re-creates identical ciphertext and sends only missing parts.
+  Verified (`offline-upload.spec.ts`, Chromium/Firefox): 20 MiB file, part 3 cut → queued →
+  resumed without re-sending parts 1–2 → recipient download byte-identical. Unit tests on both sides.
 - Batch selection (FEAT-02): select up to 100 messages to copy, star, forward to one chat or
   delete for me (confirmed, partial outcomes reported). Web (`selection.spec.ts`) and Android
   (message menu → Select); emulator verified.
@@ -217,7 +222,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Image re-encode strips EXIF/location; safe download content types (no active content) | |
 | ✅ | Composer: file picker, drag & drop, paste, size limit feedback, upload progress, captions | |
 | ✅ | Photos render inline (decrypted in memory), files download on explicit action; expired/offline/integrity states | |
-| 🟡 | Albums, voice notes, encrypted thumbnails and offline-queued uploads done; resumable multipart uploads pending | FEAT-01/EXT-02 |
+| ✅ | Albums, voice notes, encrypted thumbnails, offline-queued and resumable multipart uploads | FEAT-01/EXT-02 |
 
 ## Groups (GRP-01/02/03)
 
@@ -253,7 +258,6 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Albums, voice notes, resumable uploads | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
 | Group leave/roles/invites, communities | GRP-03, COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |

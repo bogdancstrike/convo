@@ -86,6 +86,50 @@ class ObjectStore implements DisposableBean {
         }
     }
 
+    /** One uploaded multipart part as reported by the store. */
+    record Part(int number, String etag, long size) {}
+
+    /** Starts a multipart upload; returns its upload ID. */
+    String createMultipart(String key) {
+        return client.createMultipartUpload(b -> b.bucket(properties.bucket()).key(key).contentType("application/octet-stream")).uploadId();
+    }
+
+    /** @return presigned UploadPart URL bound to the exact part length */
+    String presignPart(String key, String uploadId, int partNumber, long size, Duration ttl, String endpoint) {
+        var part = software.amazon.awssdk.services.s3.model.UploadPartRequest.builder().bucket(properties.bucket()).key(key)
+                .uploadId(uploadId).partNumber(partNumber).contentLength(size).build();
+        try (var signer = presigner(endpoint)) {
+            return signer.presignUploadPart(r -> r.signatureDuration(ttl).uploadPartRequest(part)).url().toString();
+        }
+    }
+
+    /** Lists uploaded parts (all pages). */
+    java.util.List<Part> listParts(String key, String uploadId) {
+        java.util.List<Part> parts = new java.util.ArrayList<>();
+        Integer marker = null;
+        while (true) {
+            Integer from = marker;
+            var page = client.listParts(b -> { b.bucket(properties.bucket()).key(key).uploadId(uploadId); if (from != null) b.partNumberMarker(from); });
+            page.parts().forEach(p -> parts.add(new Part(p.partNumber(), p.eTag(), p.size())));
+            if (!Boolean.TRUE.equals(page.isTruncated())) return parts;
+            marker = page.nextPartNumberMarker();
+        }
+    }
+
+    void completeMultipart(String key, String uploadId, java.util.List<Part> parts) {
+        var completed = parts.stream().map(p -> software.amazon.awssdk.services.s3.model.CompletedPart.builder().partNumber(p.number()).eTag(p.etag()).build()).toList();
+        client.completeMultipartUpload(b -> b.bucket(properties.bucket()).key(key).uploadId(uploadId).multipartUpload(m -> m.parts(completed)));
+    }
+
+    /** Aborts a multipart upload; an unknown upload is not an error. */
+    void abortMultipart(String key, String uploadId) {
+        try {
+            client.abortMultipartUpload(b -> b.bucket(properties.bucket()).key(key).uploadId(uploadId));
+        } catch (software.amazon.awssdk.services.s3.model.NoSuchUploadException e) {
+            // already gone
+        }
+    }
+
     /** @return presigned GET URL */
     String presignDownload(String key, Duration ttl, String endpoint) {
         GetObjectRequest get = GetObjectRequest.builder().bucket(properties.bucket()).key(key).build();

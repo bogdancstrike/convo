@@ -22,6 +22,8 @@ import org.springframework.validation.annotation.Validated;
  * @param uploadUrlTtl presigned upload URL lifetime
  * @param downloadUrlTtl presigned download URL lifetime
  * @param retention object lifetime
+ * @param partSize multipart (resumable) upload part size; S3 requires at least 5 MiB
+ * @param multipartTtl incomplete multipart uploads are aborted after this long
  */
 @Validated
 @ConfigurationProperties("enclave.attachments")
@@ -36,4 +38,6 @@ public record AttachmentsProperties(
         @DefaultValue("true") boolean createBucket,
         @DefaultValue("15m") @NotNull Duration uploadUrlTtl,
         @DefaultValue("5m") @NotNull Duration downloadUrlTtl,
-        @DefaultValue("30d") @NotNull Duration retention) {}
+        @DefaultValue("30d") @NotNull Duration retention,
+        @DefaultValue("8388608") @jakarta.validation.constraints.Min(5 * 1024 * 1024) long partSize,
+        @DefaultValue("24h") @NotNull Duration multipartTtl) {}

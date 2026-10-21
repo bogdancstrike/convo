@@ -89,6 +89,7 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `access-key`, `secret-key` | `ENCLAVE_ATTACHMENTS_ACCESS_KEY`, `..._SECRET_KEY` | dev values | |
 | `path-style` | | `true` | |
 | `create-bucket` | | `true` | Create at start-up if missing |
+| `part-size` / `multipart-ttl` | `ENCLAVE_ATTACHMENTS_PART_SIZE` / `..._MULTIPART_TTL` | `8388608` (8 MiB, min 5 MiB) / `24h` | Resumable uploads: part size, and when unfinished uploads are aborted. Clients use multipart above 8 MiB of ciphertext. |
 | `enclave.attachment-policy.max-file-megabytes` | `CONVO_ATTACHMENT_MAX_MB` in Compose | `100` | Plaintext MiB limit, advertised to both clients. Ciphertext overhead is calculated separately. |
 | `enclave.message-policy.edit-window` | `ENCLAVE_MESSAGE_POLICY_EDIT_WINDOW` | `15m` | How long authors may edit text in chats, groups and Note to self. Advertised in `/v1/deployment-info`; receivers enforce it against server timestamps. |
 | `enclave.message-policy.channel-edit-window` | `ENCLAVE_MESSAGE_POLICY_CHANNEL_EDIT_WINDOW` | `30d` | Edit window for channel posts. |

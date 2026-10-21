@@ -23,7 +23,7 @@ import { Emitter } from '../lib/emitter';
 import { Mutex } from '../lib/mutex';
 import { utf8, fromBase64Url, toBase64Url } from '../lib/bytes';
 import type { StoreOp } from '../storage/encryptedStore';
-import { downloadAttachment, prepareFile, uploadAttachment, type PreparedFile } from './attachments';
+import { downloadAttachment, prepareFile, uploadAttachment, type PreparedFile, type UploadResume } from './attachments';
 import { replenishPreKeys } from './enrollment';
 import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
@@ -368,14 +368,16 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const prepared: PreparedFile[] = [];
     for (const file of files) prepared.push(await prepareFile(file));
     const pointers: AttachmentPointer[] = [];
+    const resumes: (UploadResume | undefined)[] = [];
     try {
-      for (const file of prepared) {
-        pointers.push(await uploadAttachment(this.api, file));
+      for (const [i, file] of prepared.entries()) {
+        pointers.push(await uploadAttachment(this.api, file, {}, { onResume: (r) => { resumes[i] = r; } }));
         onProgress?.(pointers.length);
       }
     } catch (error) {
       if (!(error instanceof NetworkError)) throw error;
-      await this.queueUpload({ conversationId, caption, files: prepared }); // offline: send when back online
+      // Offline: send when back online, keeping finished files and resumable progress.
+      await this.queueUpload({ conversationId, caption, files: prepared, pointers, resumes });
       return;
     }
     await this.sendMessage(conversationId, { body: caption, attachments: pointers });
@@ -386,10 +388,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * a "waiting to upload" placeholder that already has the final message ID, so the eventual send
    * replaces it and can never duplicate it.
    */
-  private async queueUpload(upload: { conversationId: string; caption: string; files: PreparedFile[]; voice?: { durationMs: number } }): Promise<void> {
+  private async queueUpload(upload: { conversationId: string; caption: string; files: PreparedFile[]; voice?: { durationMs: number };
+    pointers?: AttachmentPointer[]; resumes?: (UploadResume | undefined)[] }): Promise<void> {
     // File bytes are stored as base64url: the encrypted store serializes values as JSON.
     const entry: PendingUpload = { conversationId: upload.conversationId, caption: upload.caption, voice: upload.voice, id: newMessageId(), createdAt: Date.now(),
-      files: upload.files.map((f) => ({ ...f, data: toBase64Url(f.data) })) };
+      files: upload.files.map((f, i) => ({ ...f, data: toBase64Url(f.data), pointer: upload.pointers?.[i], resume: upload.resumes?.[i] })) };
     const placeholder: ChatMessage = { conversationId: upload.conversationId, id: entry.id, authorId: this.accountId, direction: 'out',
       body: upload.caption.trim() || undefined, sentAt: entry.createdAt, sort: entry.createdAt, status: 'queued', reactions: {},
       pendingFiles: upload.files.map((f) => ({ name: f.fileName, size: f.data.byteLength, contentType: f.contentType })) };
@@ -408,7 +411,19 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       for (const entry of pending) {
         const pointers: AttachmentPointer[] = [];
         try {
-          for (const file of entry.files) pointers.push(await uploadAttachment(this.api, { ...file, data: fromBase64Url(file.data) as Uint8Array<ArrayBuffer> }, entry.voice ? { voiceNote: true, durationMs: entry.voice.durationMs } : {}));
+          for (const file of entry.files) {
+            if (file.pointer) { pointers.push(file.pointer); continue; }
+            // Progress is saved as it happens so a later attempt resumes instead of restarting.
+            const save = async (changes: Partial<PendingUpload['files'][number]>) => {
+              Object.assign(file, changes);
+              await this.repos.store.put(RecordNs.pendingUploads, entry.id, entry);
+            };
+            const { pointer: _p, resume, ...prepared } = file;
+            const pointer = await uploadAttachment(this.api, { ...prepared, data: fromBase64Url(file.data) as Uint8Array<ArrayBuffer> },
+              entry.voice ? { voiceNote: true, durationMs: entry.voice.durationMs } : {}, { resume, onResume: (r) => save({ resume: r }) });
+            await save({ pointer, resume: undefined });
+            pointers.push(pointer);
+          }
         } catch (error) {
           if (error instanceof NetworkError) return;
           // A permanent failure (e.g. policy limit) leaves a failed placeholder instead of retrying forever.
@@ -1681,7 +1696,7 @@ interface PendingUpload {
   id: string;
   conversationId: string;
   caption: string;
-  files: (Omit<PreparedFile, 'data'> & { data: string })[];
+  files: (Omit<PreparedFile, 'data'> & { data: string; pointer?: AttachmentPointer; resume?: UploadResume })[];
   voice?: { durationMs: number };
   createdAt: number;
 }

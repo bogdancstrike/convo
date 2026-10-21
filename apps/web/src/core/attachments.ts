@@ -1,7 +1,8 @@
 import { NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
-import { decryptAttachment, encryptAttachment } from '../crypto/attachmentCipher';
-import { toBase64Url } from '../lib/bytes';
+import { ApiError } from '../api/errors';
+import { decryptAttachment, encryptAttachment, type AttachmentSeed, type EncryptedAttachment } from '../crypto/attachmentCipher';
+import { sha256, toBase64Url } from '../lib/bytes';
 import type { AttachmentPointer } from '../crypto/content';
 
 /**
@@ -131,29 +132,57 @@ async function reencodeImage(file: File, contentType: string, fileName: string):
   return { data: new Uint8Array(await blob.arrayBuffer()), contentType: outType, fileName: name, width, height, thumbnail };
 }
 
+/** Encrypted blobs above this size are uploaded in resumable parts (FEAT-01). */
+export const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
+const PART_ATTEMPTS = 3;
+const PART_BATCH = 16;
+
+/**
+ * Progress of a resumable upload, persisted with an offline-queued file so a later attempt (even
+ * after a restart) re-creates the identical ciphertext and uploads only the missing parts. Holds
+ * the attachment key: keep it only in the encrypted local store.
+ */
+export interface UploadResume {
+  seed: AttachmentSeed;
+  /** SHA-256 of the plaintext the seed belongs to (never reuse the seed for other bytes). */
+  plaintextDigest: string;
+  attachmentId: string;
+  uploadSecret: string;
+  partSize: number;
+  partCount: number;
+}
+
+/** Options for {@link uploadAttachment}. */
+export interface UploadOptions {
+  /** Saved progress from an earlier attempt. */
+  resume?: UploadResume;
+  /** Called whenever there is progress worth saving (before any part is sent). */
+  onResume?: (resume: UploadResume) => Promise<void> | void;
+  /** Fraction of the encrypted bytes stored so far (0–1). */
+  onProgress?: (fraction: number) => void;
+}
+
 /** Encrypts and uploads a prepared file; returns the pointer to embed in E2EE content. */
 export async function uploadAttachment(
   api: EnclaveApi,
   file: PreparedFile,
   extra: Pick<AttachmentPointer, 'voiceNote' | 'durationMs'> = {},
+  options: UploadOptions = {},
 ): Promise<AttachmentPointer> {
-  const encrypted = await encryptAttachment(file.data);
-  const form = await api.attachmentUploadForm(encrypted.blob.length);
-  let response: Response;
-  try {
-    response = await fetch(form.uploadUrl, {
-      method: 'PUT',
-      body: encrypted.blob,
-      headers: { 'Content-Type': 'application/octet-stream' },
-      credentials: 'omit',
-      cache: 'no-store',
-    });
-  } catch (error) {
-    throw new NetworkError(error);
+  const plaintextDigest = toBase64Url(await sha256(file.data));
+  const resume = options.resume?.plaintextDigest === plaintextDigest ? options.resume : undefined;
+  let encrypted = await encryptAttachment(file.data, resume?.seed);
+  let attachmentId: string;
+  if (encrypted.blob.length > MULTIPART_THRESHOLD) {
+    ({ attachmentId, encrypted } = await uploadParts(api, file.data, encrypted, plaintextDigest, resume, options));
+  } else {
+    const form = await api.attachmentUploadForm(encrypted.blob.length);
+    await put(form.uploadUrl, encrypted.blob);
+    attachmentId = form.attachmentId;
   }
-  if (!response.ok) throw new Error(`upload failed: ${response.status}`);
+  options.onProgress?.(1);
   return {
-    attachmentId: form.attachmentId,
+    attachmentId,
     key: encrypted.key,
     digest: encrypted.digest,
     size: file.data.length,
@@ -165,6 +194,62 @@ export async function uploadAttachment(
     thumbnail: file.thumbnail,
     ...extra,
   };
+}
+
+/** One PUT of ciphertext to a presigned URL; network failures become {@link NetworkError}. */
+async function put(url: string, body: Uint8Array<ArrayBuffer>): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(url, { method: 'PUT', body, headers: { 'Content-Type': 'application/octet-stream' }, credentials: 'omit', cache: 'no-store' });
+  } catch (error) {
+    throw new NetworkError(error);
+  }
+  if (response.status >= 500 || response.status === 429) throw new NetworkError(new Error(`storage unavailable: ${response.status}`));
+  if (!response.ok) throw new Error(`upload failed: ${response.status}`);
+}
+
+/**
+ * Multipart upload: starts (or resumes) a session, uploads the parts the server does not have yet
+ * (each retried briefly), then completes. A session the server no longer knows (expired) is
+ * restarted from scratch with a fresh key.
+ */
+async function uploadParts(api: EnclaveApi, plaintext: Uint8Array<ArrayBuffer>, encrypted: EncryptedAttachment, plaintextDigest: string,
+  resume: UploadResume | undefined, options: UploadOptions): Promise<{ attachmentId: string; encrypted: EncryptedAttachment }> {
+  let session = resume;
+  let uploaded = new Set<number>();
+  if (session) {
+    try {
+      uploaded = new Set((await api.attachmentUploadedParts(session.attachmentId, session.uploadSecret)).uploadedParts);
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 404)) throw error;
+      // Expired or completed elsewhere: start over with a fresh key (never reuse the old seed).
+      return uploadParts(api, plaintext, await encryptAttachment(plaintext), plaintextDigest, undefined, options);
+    }
+  }
+  if (!session) {
+    const form = await api.attachmentMultipart(encrypted.blob.length);
+    session = { seed: encrypted.seed, plaintextDigest, attachmentId: form.attachmentId, uploadSecret: form.uploadSecret, partSize: form.partSize, partCount: form.partCount };
+    await options.onResume?.(session);
+  }
+  const { attachmentId, uploadSecret, partSize, partCount } = session;
+  const missing = Array.from({ length: partCount }, (_, i) => i + 1).filter((n) => !uploaded.has(n));
+  let done = partCount - missing.length;
+  options.onProgress?.(done / partCount);
+  for (let i = 0; i < missing.length; i += PART_BATCH) {
+    const urls = await api.attachmentParts(attachmentId, uploadSecret, missing.slice(i, i + PART_BATCH));
+    for (const { partNumber, url } of urls) {
+      const body = encrypted.blob.subarray((partNumber - 1) * partSize, Math.min(encrypted.blob.length, partNumber * partSize));
+      for (let attempt = 1; ; attempt++) {
+        try { await put(url, body.slice()); break; } catch (error) {
+          if (!(error instanceof NetworkError) || attempt >= PART_ATTEMPTS) throw error;
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+        }
+      }
+      options.onProgress?.(++done / partCount);
+    }
+  }
+  await api.attachmentComplete(attachmentId, uploadSecret);
+  return { attachmentId, encrypted };
 }
 
 /** Download failure reasons shown to the user (UI.md §5.3). */

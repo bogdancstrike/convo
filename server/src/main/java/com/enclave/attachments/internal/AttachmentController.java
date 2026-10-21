@@ -1,6 +1,8 @@
 package com.enclave.attachments.internal;
 
 import java.util.UUID;
+import java.util.Map;
+import java.util.List;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +36,35 @@ class AttachmentController {
     AttachmentService.UploadForm uploadForm(@RequestBody UploadRequest body) {
         return attachments.createUpload(body.size(), publicEndpoint());
     }
+
+    /** Starts a resumable (multipart) upload. */
+    @PostMapping("/v1/attachments/multipart")
+    @ResponseStatus(HttpStatus.CREATED)
+    AttachmentService.MultipartForm multipart(@RequestBody UploadRequest body) {
+        return attachments.createMultipart(body.size());
+    }
+
+    /** Presigned URLs for specific parts. */
+    @PostMapping("/v1/attachments/{attachmentId}/multipart/parts")
+    List<AttachmentService.PartUrl> parts(@PathVariable UUID attachmentId, @RequestBody PartsRequest body) {
+        return attachments.presignParts(attachmentId, body.uploadSecret(), body.partNumbers(), publicEndpoint());
+    }
+
+    /** Parts already stored (resume). */
+    @PostMapping("/v1/attachments/{attachmentId}/multipart/status")
+    Map<String, List<Integer>> status(@PathVariable UUID attachmentId, @RequestBody SecretRequest body) {
+        return Map.of("uploadedParts", attachments.uploadedParts(attachmentId, body.uploadSecret()));
+    }
+
+    @PostMapping("/v1/attachments/{attachmentId}/multipart/complete")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void complete(@PathVariable UUID attachmentId, @RequestBody SecretRequest body) {
+        attachments.completeMultipart(attachmentId, body.uploadSecret());
+    }
+
+    record PartsRequest(String uploadSecret, List<Integer> partNumbers) {}
+
+    record SecretRequest(String uploadSecret) {}
 
     /** Returns a short-lived presigned download URL. */
     @GetMapping("/v1/attachments/{attachmentId}")

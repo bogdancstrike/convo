@@ -34,7 +34,16 @@ export interface EncryptedAttachment {
   key: string;
   /** SHA-256 of `blob`, base64url. */
   digest: string;
+  /** Key and nonce prefix; re-encrypting the same plaintext with them yields the same blob. */
+  seed: AttachmentSeed;
 }
+
+/**
+ * Key material that makes encryption reproducible for resumable uploads. Reuse it only for the
+ * identical plaintext (callers check a plaintext digest): different plaintext under the same seed
+ * would reuse nonces.
+ */
+export interface AttachmentSeed { key: string; prefix: string }
 
 /** Padded ciphertext size bucket: `max(541, ceil(1.05^ceil(log_1.05(size))))`. */
 export function paddedSize(size: number): number {
@@ -54,11 +63,12 @@ function nonce(prefix: Uint8Array, index: number, last: boolean): Uint8Array<Arr
   return n;
 }
 
-/** Encrypts plaintext with a fresh key. */
-export async function encryptAttachment(plaintext: Uint8Array<ArrayBuffer>): Promise<EncryptedAttachment> {
-  const rawKey = crypto.getRandomValues(new Uint8Array(32));
+/** Encrypts plaintext with a fresh key, or reproducibly with `seed` (same plaintext only). */
+export async function encryptAttachment(plaintext: Uint8Array<ArrayBuffer>, seed?: AttachmentSeed): Promise<EncryptedAttachment> {
+  const rawKey = seed ? fromBase64Url(seed.key) as Uint8Array<ArrayBuffer> : crypto.getRandomValues(new Uint8Array(32));
+  const prefix = seed ? fromBase64Url(seed.prefix) as Uint8Array<ArrayBuffer> : crypto.getRandomValues(new Uint8Array(PREFIX_SIZE));
+  if (rawKey.length !== 32 || prefix.length !== PREFIX_SIZE) throw new Error('invalid attachment seed');
   const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt']);
-  const prefix = crypto.getRandomValues(new Uint8Array(PREFIX_SIZE));
   const header = new Uint8Array(HEADER_SIZE);
   const view = new DataView(header.buffer);
   header[0] = VERSION;
@@ -78,7 +88,7 @@ export async function encryptAttachment(plaintext: Uint8Array<ArrayBuffer>): Pro
     blob.set(sealed, offset);
     offset += sealed.length;
   }
-  return { blob, key: toBase64Url(rawKey), digest: toBase64Url(await sha256(blob)) };
+  return { blob, key: toBase64Url(rawKey), digest: toBase64Url(await sha256(blob)), seed: { key: toBase64Url(rawKey), prefix: toBase64Url(prefix) } };
 }
 
 /** Why a downloaded attachment was rejected (UI.md §5.3 distinguishes failure reasons). */
