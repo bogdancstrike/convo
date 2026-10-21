@@ -53,6 +53,8 @@ class GroupDeliveryService implements DeliveryApi {
                     envelope.groupSeq() == 0 ? null : envelope.groupSeq()));
         }
         events.publishEvent(new EnvelopesStored(List.copyOf(recipients), envelope.urgent()));
+        // Application messages count as the sender's activity; commits/welcomes are protocol upkeep.
+        if (envelope.kind() == GroupEnvelope.Kind.PRIVATE) events.publishEvent(new com.enclave.messaging.SenderActivity(envelope.source().accountId()));
     }
 
     @Override

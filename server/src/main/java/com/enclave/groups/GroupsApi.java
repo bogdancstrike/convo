@@ -45,4 +45,14 @@ public interface GroupsApi {
         public boolean isManager(UUID account) { String r = roles.get(account); return "owner".equals(r) || "admin".equals(r); }
         public boolean isOwner(UUID account) { return "owner".equals(roles.get(account)); }
     }
+
+    /**
+     * Totals for operators (counts only).
+     *
+     * @param groups active discussion groups
+     * @param channels active admin-only groups (channels, community announcement feeds)
+     */
+    record Counts(long groups, long channels) {}
+
+    Counts counts();
 }

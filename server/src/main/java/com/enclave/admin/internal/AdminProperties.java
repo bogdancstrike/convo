@@ -16,6 +16,8 @@ import org.springframework.validation.annotation.Validated;
  *     audit chain head; empty disables checkpointing
  * @param checkpointInterval how often a new head is written when the chain grew
  * @param stepUpMaxAge sensitive actions require an IdP sign-in (token {@code auth_time}) at most this old
+ * @param activity day-granular activity counts for the dashboard
+ * @param idp sign-in account management at the identity provider
  */
 @Validated
 @ConfigurationProperties("enclave.admin")
@@ -24,7 +26,25 @@ public record AdminProperties(
         @DefaultValue @jakarta.validation.Valid Roles roles,
         @DefaultValue("") String checkpointFile,
         @DefaultValue("15m") @NotNull Duration checkpointInterval,
-        @DefaultValue("10m") @NotNull Duration stepUpMaxAge) {
+        @DefaultValue("10m") @NotNull Duration stepUpMaxAge,
+        @DefaultValue @jakarta.validation.Valid Activity activity,
+        @DefaultValue @jakarta.validation.Valid Idp idp) {
+
+    /**
+     * @param enabled record encrypted items sent per account and day (counts only)
+     * @param retention how long daily counts are kept
+     */
+    public record Activity(@DefaultValue("true") boolean enabled, @DefaultValue("90d") @NotNull Duration retention) {}
+
+    /**
+     * @param adminUrl Keycloak base URL including its relative path (e.g. {@code http://keycloak:8080/auth})
+     * @param realm the Convo realm
+     * @param clientId confidential client with realm-management manage-users/view-users only
+     * @param clientSecret its secret (environment only); empty disables account management
+     * @param timeout HTTP timeout per IdP call
+     */
+    public record Idp(@DefaultValue("http://localhost:8180/auth") java.net.URI adminUrl, @DefaultValue("enclave") String realm,
+            @DefaultValue("convo-admin-ops") String clientId, @DefaultValue("") String clientSecret, @DefaultValue("5s") @NotNull Duration timeout) {}
 
     /**
      * @param helpdesk device/status support: read accounts and devices, revoke a device

@@ -21,7 +21,9 @@ class StepUpTest {
     private final Instant now = Instant.parse("2026-10-21T12:00:00Z");
     private final AdminActions actions = mock(AdminActions.class);
     private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"),
-            "", Duration.ofMinutes(15), Duration.ofMinutes(10));
+            "", Duration.ofMinutes(15), Duration.ofMinutes(10),
+            new AdminProperties.Activity(true, Duration.ofDays(90)),
+            new AdminProperties.Idp(java.net.URI.create("http://kc/auth"), "enclave", "convo-admin-ops", "", Duration.ofSeconds(5)));
     private final AdminController controller = new AdminController(mock(IdentityAdminApi.class), mock(AuditLog.class), actions, mock(AuditCheckpoints.class),
             properties, Clock.fixed(now, ZoneOffset.UTC), new AdminPermissions(properties),
             mock(com.enclave.push.PushApi.class));

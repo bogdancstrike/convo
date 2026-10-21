@@ -187,4 +187,10 @@ class GroupRepository {
     int purgeSubmissions() {
         return jdbc.sql("DELETE FROM mls_group_submissions WHERE expires_at < now()").update();
     }
+
+    /** Active groups and channels (counts only). */
+    com.enclave.groups.GroupsApi.Counts counts() {
+        return jdbc.sql("SELECT count(*) FILTER (WHERE NOT admin_only) AS g, count(*) FILTER (WHERE admin_only) AS c FROM mls_groups WHERE status = 'active'")
+                .query((rs, i) -> new com.enclave.groups.GroupsApi.Counts(rs.getLong("g"), rs.getLong("c"))).single();
+    }
 }

@@ -18,8 +18,26 @@ public interface IdentityAdminApi {
      * @param displayName IdP display name, may be {@code null}
      * @param status {@code active} or {@code disabled}
      * @param activeDevices number of non-revoked devices
+     * @param createdAt first sign-in (account creation)
+     * @param lastSeenDay most recent day any of its devices was active (day granularity), may be {@code null}
      */
-    record AccountSummary(UUID accountId, String username, String displayName, String status, int activeDevices) {}
+    record AccountSummary(UUID accountId, String username, String displayName, String status, int activeDevices,
+            Instant createdAt, LocalDate lastSeenDay) {}
+
+    /**
+     * Directory totals (counts only).
+     *
+     * @param accounts all accounts
+     * @param disabled disabled accounts
+     * @param devices active (non-revoked) devices
+     * @param seenToday accounts with a device active today
+     * @param seen7d accounts with a device active in the last 7 days
+     * @param seen30d accounts with a device active in the last 30 days
+     */
+    record DirectoryStats(long accounts, long disabled, long devices, long seenToday, long seen7d, long seen30d) {}
+
+    /** A count for one day. */
+    record DayCount(LocalDate day, long count) {}
 
     /**
      * @param deviceId per-account device number
@@ -45,4 +63,28 @@ public interface IdentityAdminApi {
 
     /** Revokes one device (same effects as a user unlinking it). */
     void revokeDevice(UUID accountId, int deviceId, String reason);
+
+    DirectoryStats directoryStats(LocalDate today);
+
+    /** Accounts created per day since {@code from} (days without any are omitted). */
+    List<DayCount> newAccountsPerDay(LocalDate from);
+
+    /** Active accounts seen least recently first (never-seen first): candidates for follow-up. */
+    List<AccountSummary> leastRecentlySeen(int limit);
+
+    /** Accounts by ID (unknown IDs are skipped). */
+    List<AccountSummary> accounts(java.util.Collection<UUID> accountIds);
+
+    /** Convo accounts for IdP subjects (accounts are created on first sign-in). */
+    java.util.Map<String, UUID> accountsBySubject(java.util.Collection<String> subjects);
+
+    /** The IdP subject of an account. */
+    Optional<String> subject(UUID accountId);
+
+    /**
+     * Deletes the account's server-side recovery registration (wrapped history key + authorization
+     * hash), so a lost or leaked recovery kit no longer works. The user's devices keep working and
+     * the app asks for a new recovery code. Returns whether one existed.
+     */
+    boolean revokeRecovery(UUID accountId);
 }

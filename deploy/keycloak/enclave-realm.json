@@ -45,8 +45,7 @@
       "frontchannelLogout": true,
       "redirectUris": [
         "/convo/callback",
-        "/convo/passkey-done",
-        "/convo/admin"
+        "/convo/passkey-done"
       ],
       "webOrigins": [
         "+"

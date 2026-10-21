@@ -16,6 +16,9 @@ class GroupsApiAdapter implements GroupsApi {
     GroupsApiAdapter(GroupRepository groups, InviteService invites, GroupService service) { this.groups = groups; this.invites = invites; this.service = service; }
 
     @Override
+    public Counts counts() { return groups.counts(); }
+
+    @Override
     public RemovalOutcome removeOnBehalf(byte[] groupId, UUID accountId) { return service.removeOnBehalf(groupId, accountId); }
 
     @Override

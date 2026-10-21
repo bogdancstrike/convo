@@ -69,6 +69,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+      ADMIN_OPS_SECRET: ${CONVO_ADMIN_OPS_SECRET:-}
       CONVO_HOSTNAME: ${CONVO_HOSTNAME:-convo.doncik.ro}
       # Comma-separated Keycloak usernames that get the convo-admin role (development convenience).
       ADMIN_USERNAMES: ${CONVO_ADMIN_USERNAMES:-bogdan}
@@ -128,6 +129,8 @@ services:
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ENABLED: "true"
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ADMIN_URL: http://keycloak:8080/auth
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+      ENCLAVE_ADMIN_IDP_ADMIN_URL: http://keycloak:8080/auth
+      ENCLAVE_ADMIN_IDP_CLIENT_SECRET: ${CONVO_ADMIN_OPS_SECRET:-}
       ENCLAVE_ADMIN_CHECKPOINT_FILE: /var/lib/convo/audit/checkpoints.log
       ENCLAVE_PUSH_ENABLED: "true"
       ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncik.ro}:${CONVO_NTFY_PORT:-8091}

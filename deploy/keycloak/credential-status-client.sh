@@ -32,22 +32,22 @@ for action in UPDATE_PROFILE UPDATE_PASSWORD CONFIGURE_TOTP webauthn-register we
 done
 if [[ -z "${CLIENT_SECRET:-}" ]]; then
   echo "CONVO_CREDENTIAL_STATUS_SECRET is not set; passkey status stays unavailable." >&2
-  exit 0
-fi
-id=$(k get clients -r "$REALM" -q clientId="$CLIENT_ID" --fields id --format csv --noquotes | head -n1)
-settings=(-s enabled=true -s publicClient=false -s serviceAccountsEnabled=true -s standardFlowEnabled=false
-  -s directAccessGrantsEnabled=false -s implicitFlowEnabled=false -s clientAuthenticatorType=client-secret
-  -s "secret=$CLIENT_SECRET" -s 'description=Convo server: read-only credential types for app-lock gating')
-if [[ -z "$id" ]]; then
-  k create clients -r "$REALM" -s "clientId=$CLIENT_ID" "${settings[@]}" >/dev/null
-  echo "Created $CLIENT_ID"
 else
-  k update "clients/$id" -r "$REALM" "${settings[@]}"
-  echo "Updated $CLIENT_ID"
+  id=$(k get clients -r "$REALM" -q clientId="$CLIENT_ID" --fields id --format csv --noquotes | head -n1)
+  settings=(-s enabled=true -s publicClient=false -s serviceAccountsEnabled=true -s standardFlowEnabled=false
+    -s directAccessGrantsEnabled=false -s implicitFlowEnabled=false -s clientAuthenticatorType=client-secret
+    -s "secret=$CLIENT_SECRET" -s 'description=Convo server: read-only credential types for app-lock gating')
+  if [[ -z "$id" ]]; then
+    k create clients -r "$REALM" -s "clientId=$CLIENT_ID" "${settings[@]}" >/dev/null
+    echo "Created $CLIENT_ID"
+  else
+    k update "clients/$id" -r "$REALM" "${settings[@]}"
+    echo "Updated $CLIENT_ID"
+  fi
+  # Least privilege: view-users only (no manage-users / realm-admin).
+  k add-roles -r "$REALM" --uusername "service-account-$CLIENT_ID" --cclientid realm-management --rolename view-users
+  echo "Granted realm-management/view-users"
 fi
-# Least privilege: view-users only (no manage-users / realm-admin).
-k add-roles -r "$REALM" --uusername "service-account-$CLIENT_ID" --cclientid realm-management --rolename view-users
-echo "Granted realm-management/view-users"
 # Organization administrators (ADM-01): realm role checked by /v1/admin/**.
 if ! k get roles/convo-admin -r "$REALM" >/dev/null 2>&1; then
   k create roles -r "$REALM" -s name=convo-admin -s 'description=Convo organization administrator (admin console)' >/dev/null
@@ -69,6 +69,35 @@ fi
 # Passkey set-up from Convo Settings (Keycloak application-initiated action) returns to this page.
 web=$(k get clients -r "$REALM" -q clientId=enclave-web --fields id --format csv --noquotes | head -n1)
 if [[ -n "$web" ]]; then
-  k update "clients/$web" -r "$REALM" -s 'redirectUris=["/convo/callback","/convo/passkey-done","/convo/admin"]'
-  echo "enclave-web redirect URIs include /convo/passkey-done"
+  k update "clients/$web" -r "$REALM" -s 'redirectUris=["/convo/callback","/convo/passkey-done"]'
+  echo "enclave-web redirect URIs: /convo/callback, /convo/passkey-done"
+fi
+# Admin console (separate origin, e.g. convo-admin.doncik.ro): public PKCE client whose only
+# redirect is the console's callback, resolved on whichever origin proxies /auth.
+admin_client=$(k get clients -r "$REALM" -q clientId=convo-admin --fields id --format csv --noquotes | head -n1)
+admin_settings=(-s enabled=true -s publicClient=true -s standardFlowEnabled=true -s directAccessGrantsEnabled=false -s implicitFlowEnabled=false
+  -s serviceAccountsEnabled=false -s 'rootUrl=${authBaseUrl}' -s 'redirectUris=["/convo/admin"]' -s 'webOrigins=["+"]'
+  -s 'attributes."pkce.code.challenge.method"=S256' -s 'attributes."post.logout.redirect.uris"=/*' -s 'description=Convo admin console')
+if [[ -z "$admin_client" ]]; then
+  k create clients -r "$REALM" -s clientId=convo-admin "${admin_settings[@]}" >/dev/null && echo "Created convo-admin"
+else
+  k update "clients/$admin_client" -r "$REALM" "${admin_settings[@]}" && echo "Updated convo-admin"
+fi
+# Sign-in account management for the admin API: confidential service account limited to users.
+if [[ -n "${ADMIN_OPS_SECRET:-}" ]]; then
+  ops=$(k get clients -r "$REALM" -q clientId=convo-admin-ops --fields id --format csv --noquotes | head -n1)
+  ops_settings=(-s enabled=true -s publicClient=false -s serviceAccountsEnabled=true -s standardFlowEnabled=false
+    -s directAccessGrantsEnabled=false -s implicitFlowEnabled=false -s clientAuthenticatorType=client-secret
+    -s "secret=$ADMIN_OPS_SECRET" -s 'description=Convo server: sign-in account management for the admin console')
+  if [[ -z "$ops" ]]; then
+    k create clients -r "$REALM" -s clientId=convo-admin-ops "${ops_settings[@]}" >/dev/null && echo "Created convo-admin-ops"
+  else
+    k update "clients/$ops" -r "$REALM" "${ops_settings[@]}" && echo "Updated convo-admin-ops"
+  fi
+  for role in manage-users view-users view-realm; do
+    k add-roles -r "$REALM" --uusername service-account-convo-admin-ops --cclientid realm-management --rolename "$role"
+  done
+  echo "Granted realm-management/manage-users, view-users, view-realm to convo-admin-ops"
+else
+  echo "CONVO_ADMIN_OPS_SECRET is not set; sign-in account management stays unavailable." >&2
 fi

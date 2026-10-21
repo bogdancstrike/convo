@@ -22,7 +22,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 /** AC-ADM-01: each scoped role gets exactly its duties; denied sensitive attempts are audited. */
 class AdminPermissionsTest {
     private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"),
-            "", Duration.ofMinutes(15), Duration.ofMinutes(10));
+            "", Duration.ofMinutes(15), Duration.ofMinutes(10),
+            new AdminProperties.Activity(true, Duration.ofDays(90)),
+            new AdminProperties.Idp(java.net.URI.create("http://kc/auth"), "enclave", "convo-admin-ops", "", Duration.ofSeconds(5)));
     private final AdminPermissions permissions = new AdminPermissions(properties);
     private final IdentityAdminApi identity = mock(IdentityAdminApi.class);
     private final AuditLog audit = mock(AuditLog.class);
@@ -35,11 +37,13 @@ class AdminPermissionsTest {
     }
 
     @Test void rolesMapToLeastPrivilege() {
-        assertThat(permissions.of(token("convo-helpdesk"))).containsExactlyInAnyOrder(ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, HEALTH_READ);
-        assertThat(permissions.of(token("convo-org-admin"))).containsExactlyInAnyOrder(ACCOUNTS_READ, ACCOUNT_STATUS, HEALTH_READ);
-        assertThat(permissions.of(token("convo-auditor"))).containsExactlyInAnyOrder(AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT);
+        assertThat(permissions.of(token("convo-helpdesk"))).containsExactlyInAnyOrder(ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, HEALTH_READ, STATS_READ, USERS_CREDENTIALS, RECOVERY_RESET);
+        assertThat(permissions.of(token("convo-org-admin"))).containsExactlyInAnyOrder(ACCOUNTS_READ, ACCOUNT_STATUS, HEALTH_READ, STATS_READ, USERS_CREATE, USERS_CREDENTIALS);
+        assertThat(permissions.of(token("convo-auditor"))).containsExactlyInAnyOrder(AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT, STATS_READ);
         assertThat(permissions.of(token("convo-security"))).doesNotContain(AUDIT_EXPORT).contains(PUSH_REDRIVE);
-        assertThat(permissions.of(token("convo-auditor"))).doesNotContain(PUSH_REDRIVE, HEALTH_READ);
+        assertThat(permissions.of(token("convo-auditor"))).doesNotContain(PUSH_REDRIVE, HEALTH_READ, USERS_CREDENTIALS, RECOVERY_RESET);
+        // Only the superuser role may grant admin roles.
+        for (String role : new String[] {"convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"}) assertThat(permissions.of(token(role))).doesNotContain(ROLES_MANAGE);
         assertThat(permissions.of(token("convo-admin"))).hasSize(AdminPermissions.Permission.values().length);
         assertThat(permissions.of(token("offline_access", "uma_authorization"))).isEmpty();
         assertThat(permissions.roles(token("convo-helpdesk", "offline_access"))).containsExactly("convo-helpdesk");

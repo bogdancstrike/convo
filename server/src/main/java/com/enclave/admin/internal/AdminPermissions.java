@@ -15,7 +15,19 @@ import org.springframework.stereotype.Component;
 @Component
 class AdminPermissions {
     /** What an admin role allows. No permission reads chat content: none exists in this API. */
-    enum Permission { ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, ACCOUNT_STATUS, AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT, HEALTH_READ, PUSH_REDRIVE }
+    enum Permission {
+        ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, ACCOUNT_STATUS, AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT, HEALTH_READ, PUSH_REDRIVE,
+        /** Aggregate statistics and per-account activity levels (counts only). */
+        STATS_READ,
+        /** Create sign-in accounts at the IdP. */
+        USERS_CREATE,
+        /** Reset passwords, require sign-in actions (passkey, password change, 2FA), end sessions, block/allow IdP sign-in. */
+        USERS_CREDENTIALS,
+        /** Revoke a user's recovery kit (lost or leaked); the app asks them for a new one. */
+        RECOVERY_RESET,
+        /** Grant or remove Convo admin roles (superuser only). */
+        ROLES_MANAGE
+    }
 
     private final Map<String, Set<Permission>> byRole;
 
@@ -23,11 +35,13 @@ class AdminPermissions {
         var r = properties.roles();
         this.byRole = Map.of(
                 properties.role(), EnumSet.allOf(Permission.class),
-                r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.HEALTH_READ),
-                r.orgAdmin(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ),
+                r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.HEALTH_READ,
+                        Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET),
+                r.orgAdmin(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ, Permission.STATS_READ,
+                        Permission.USERS_CREATE, Permission.USERS_CREDENTIALS),
                 r.security(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ,
-                        Permission.HEALTH_READ, Permission.PUSH_REDRIVE),
-                r.auditor(), EnumSet.of(Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT));
+                        Permission.HEALTH_READ, Permission.PUSH_REDRIVE, Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET),
+                r.auditor(), EnumSet.of(Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT, Permission.STATS_READ));
     }
 
     /** Admin roles held by this token (realm roles that are known admin roles). */

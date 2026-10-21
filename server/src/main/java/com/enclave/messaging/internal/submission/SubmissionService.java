@@ -101,6 +101,7 @@ public class SubmissionService {
             throw new EnclaveException(ErrorCode.IDEMPOTENCY_CONFLICT, "concurrent submission with the same ID");
         }
         events.publishEvent(new EnvelopesStored(List.copyOf(recipients), send.urgent()));
+        events.publishEvent(new com.enclave.messaging.SenderActivity(sender.accountId()));
         return new SendResult(true, false);
     }
 

@@ -56,7 +56,11 @@ public enum ErrorCode {
     /** Caller is not a member (or the device is not in the group roster). */
     NOT_GROUP_MEMBER(HttpStatus.FORBIDDEN, "Not a group member"),
     /** Caller's group role does not permit the action. */
-    FORBIDDEN_ROLE(HttpStatus.FORBIDDEN, "Role does not permit this action");
+    FORBIDDEN_ROLE(HttpStatus.FORBIDDEN, "Role does not permit this action"),
+    /** The resource already exists (e.g. a sign-in account with that username). */
+    CONFLICT(HttpStatus.CONFLICT, "Conflict"),
+    /** A dependency (e.g. the identity provider) is unavailable or not configured. */
+    UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable");
 
     private final HttpStatus status;
     private final String title;

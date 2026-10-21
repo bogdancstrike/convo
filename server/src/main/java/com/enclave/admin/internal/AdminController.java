@@ -55,8 +55,18 @@ class AdminController {
 
     @GetMapping("/me")
     Me me(@AuthenticationPrincipal Jwt admin) {
+        // The console calls this first after every sign-in: record the admin session once per token.
+        String session = admin.getClaimAsString("sid") != null ? admin.getClaimAsString("sid") : admin.getId();
+        if (!permissions.of(admin).isEmpty() && session != null && seenSessions.add(session)) {
+            audit.append(actor(admin), "admin.session", "console", "signed in (" + String.join(", ", permissions.roles(admin)) + ")");
+        }
         return new Me(actor(admin), permissions.roles(admin), permissions.of(admin));
     }
+
+    /** IdP sessions already recorded (bounded; a restart may record a session once more). */
+    private final java.util.Set<String> seenSessions = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<>() {
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> eldest) { return size() > 10_000; }
+    }));
 
     @GetMapping("/accounts")
     List<IdentityAdminApi.AccountSummary> accounts(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "50") int limit) {
