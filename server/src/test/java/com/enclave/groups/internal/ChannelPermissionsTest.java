@@ -25,7 +25,7 @@ class ChannelPermissionsTest {
         when(groups.hasDevice(id, caller)).thenReturn(true);
         when(groups.devices(id)).thenReturn(List.of(caller));
         var service = new GroupService(groups, mock(IdentityApi.class), delivery,
-                new GroupsProperties(1000, 5000, 262144, 1048576, Duration.ofDays(31)), Clock.systemUTC());
+                new GroupsProperties(1000, 5000, 262144, 1048576, Duration.ofDays(31), Duration.ofDays(7), 200), Clock.systemUTC());
         var command = new GroupCommands.Message(1, new byte[16], new byte[]{1,2,3});
         when(groups.members(id)).thenReturn(Map.of(caller.accountId(), Role.MEMBER));
         assertThatThrownBy(() -> service.message(caller, id, command)).isInstanceOfSatisfying(EnclaveException.class,

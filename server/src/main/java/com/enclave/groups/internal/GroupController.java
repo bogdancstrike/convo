@@ -12,6 +12,9 @@ import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -24,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 class GroupController {
 
     private final GroupService groups;
+    private final InviteService invites;
 
-    GroupController(GroupService groups) {
+    GroupController(GroupService groups, InviteService invites) {
         this.groups = groups;
+        this.invites = invites;
     }
 
     /** Device reference. */
@@ -100,6 +105,34 @@ class GroupController {
                 body.roleChanges() == null ? Map.of() : body.roleChanges().entrySet().stream()
                         .collect(Collectors.toMap(Map.Entry::getKey, e -> Role.parse(e.getValue())))));
         return new AcceptedDto(accepted.epoch(), accepted.seq(), accepted.duplicate());
+    }
+
+    @PostMapping("/v1/groups/{groupId}/invites")
+    ResponseEntity<InviteService.Invite> invite(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(invites.create(me.address(), decode(groupId, "groupId")));
+    }
+
+    @DeleteMapping("/v1/groups/{groupId}/invites")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void revokeInvites(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {
+        invites.revokeAll(me.address(), decode(groupId, "groupId"));
+    }
+
+    @PostMapping("/v1/invites/{token}/requests")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void requestToJoin(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String token) {
+        invites.request(me.address(), token);
+    }
+
+    @GetMapping("/v1/groups/{groupId}/join-requests")
+    List<InviteService.JoinRequest> joinRequests(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {
+        return invites.requests(me.address(), decode(groupId, "groupId"));
+    }
+
+    @DeleteMapping("/v1/groups/{groupId}/join-requests/{accountId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void declineJoin(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId, @PathVariable java.util.UUID accountId) {
+        invites.decline(me.address(), decode(groupId, "groupId"), accountId);
     }
 
     @PostMapping("/v1/groups/{groupId}/leave")

@@ -1,3 +1,4 @@
+import { JoinLinkHandler } from '../joinLinks';
 import { useMessageNotifications } from '../notifications';
 import { LockedChatGate, useChatLocks } from '../chatLocks';
 import { CallsPanel } from '../calls/CallsPanel';
@@ -208,6 +209,6 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
         return <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false, page: null })}
           onShared={() => navigate({ page: 'media' })} onPage={onPage} onContact={(id) => navigate({ page: `contact:${id}` })} />;
       })()}
-    </div>{allMedia && <AllMedia client={client} onClose={() => setAllMedia(false)} />}</MediaViewerProvider></LinkPreferences></ProfilesProvider>
+    </div>{allMedia && <AllMedia client={client} onClose={() => setAllMedia(false)} />}<JoinLinkHandler client={client} /></MediaViewerProvider></LinkPreferences></ProfilesProvider>
   );
 }

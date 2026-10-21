@@ -181,6 +181,11 @@ export class EnclaveApi {
     return this.signed('GET', `/v1/groups/${groupId}`);
   }
 
+  createInvite(groupId: string): Promise<{ token: string; expiresAt: string }> { return this.signed('POST', `/v1/groups/${encodeURIComponent(groupId)}/invites`); }
+  revokeInvites(groupId: string): Promise<void> { return this.signed('DELETE', `/v1/groups/${encodeURIComponent(groupId)}/invites`); }
+  requestToJoin(token: string): Promise<void> { return this.signed('POST', `/v1/invites/${encodeURIComponent(token)}/requests`); }
+  joinRequests(groupId: string): Promise<{ accountId: string; requestedAt: string }[]> { return this.signed('GET', `/v1/groups/${encodeURIComponent(groupId)}/join-requests`); }
+  declineJoin(groupId: string, accountId: string): Promise<void> { return this.signed('DELETE', `/v1/groups/${encodeURIComponent(groupId)}/join-requests/${encodeURIComponent(accountId)}`); }
   /** Leaves a group (the server stops fan-out at once; members complete the MLS removal). */
   leaveGroup(groupId: string): Promise<void> { return this.signed('POST', `/v1/groups/${encodeURIComponent(groupId)}/leave`); }
   groupCommit(groupId: string, request: GroupCommitRequest): Promise<{ epoch: number; seq: number; duplicate: boolean }> {

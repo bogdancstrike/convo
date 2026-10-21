@@ -119,7 +119,7 @@ class GroupService {
         long seq = group.nextSeq();
         groups.advance(groupId, newEpoch, seq + 1);
         groups.insertEvent(groupId, seq, group.epoch(), cmd.submissionId(), digest, cmd.commit());
-        cmd.addMembers().forEach(a -> groups.upsertMember(groupId, a, Role.MEMBER));
+        cmd.addMembers().forEach(a -> { groups.upsertMember(groupId, a, Role.MEMBER); groups.deleteJoinRequest(groupId, a); });
         cmd.addDevices().forEach(d -> groups.addDevice(groupId, d));
         cmd.removeDevices().forEach(d -> groups.removeDevice(groupId, d));
         cmd.removeMembers().forEach(a -> { groups.deleteMember(groupId, a); groups.deleteDeparture(groupId, a); });

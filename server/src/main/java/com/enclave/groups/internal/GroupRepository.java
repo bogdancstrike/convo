@@ -90,6 +90,11 @@ class GroupRepository {
                 .param("g", groupId).param("a", accountId).update();
     }
 
+    /** A pending join request is fulfilled when the account is added. */
+    void deleteJoinRequest(byte[] groupId, UUID accountId) {
+        jdbc.sql("DELETE FROM mls_group_join_requests WHERE group_id = :g AND account_id = :a").param("g", groupId).param("a", accountId).update();
+    }
+
     void addDeparture(byte[] groupId, UUID accountId) {
         jdbc.sql("INSERT INTO mls_group_departures (group_id, account_id) VALUES (:g, :a) ON CONFLICT DO NOTHING")
                 .param("g", groupId).param("a", accountId).update();

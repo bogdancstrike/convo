@@ -103,6 +103,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   and fan-out at once (`mls_group_departures`), any remaining member commits the MLS Remove;
   the sole owner must hand over first. Web and Android; `group-leave.spec.ts` Chromium/Firefox
   (DB confirms departures completed and leaver devices removed); emulator verified.
+- Invite links and join requests (GRP-03): hashed bearer links with expiry and reset, join
+  requests that reveal nothing about the group, admin approve (MLS add) / decline. Web
+  (`#/join/<token>`, `invites.spec.ts` Chromium/Firefox) and Android (info section, "Join with
+  invite link"); phone joined a browser-created group via link after approval.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -189,7 +193,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Authenticated group senders (leaf credential must match server-reported source device) | |
 | ✅ | Create group, encrypted group name, add/remove members (admin/owner), removed-member state | |
 | ✅ | Linked-device sync: own devices added/removed in joined groups on DEVICE_LIST_CHANGED | |
-| 🟡 | Leave (done: pending-removal flow, see below), promote/demote/transfer UI, invite links, join requests, bans | GRP-03, EXT-03 |
+| 🟡 | Leave, invite links and join requests done (see below); promote/demote/transfer UI exists; bans pending | GRP-03, EXT-03 |
 | ⬜ | Credential binding to account identity key, reviewed role profile, pending-removal gate | GRP-01 |
 
 ## Delivery & verification

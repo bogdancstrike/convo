@@ -57,6 +57,7 @@ import org.json.JSONObject
         item { var export by remember { mutableStateOf(false) }; ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }; if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) } }
         if (isGroup) {
             item { Text("${members.size} participants", style = MaterialTheme.typography.titleMedium) }
+            if (canManage) item { InviteSection(app, id) }
             if (canManage) item { ActionRow("Add participant", icon = Icons.Outlined.PersonAdd) { adding = true } }
             items(members, key = { it.optString("accountId") }) { member ->
                 val accountId = member.optString("accountId"); var account by remember(accountId) { mutableStateOf<JSONObject?>(null) }; var menu by remember { mutableStateOf(false) }
@@ -123,4 +124,31 @@ import org.json.JSONObject
         }
     }
     selected?.let { (message, index) -> AttachmentDialog(app, message, app.active ?: "", index) { selected = null } }
+}
+
+/** Invite link and join requests (owners/admins); approving adds the person via MLS. */
+@Composable fun InviteSection(app: MainActivity, id: String) {
+    var link by remember(id) { mutableStateOf<String?>(null) }
+    var requests by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    LaunchedEffect(id) { while (true) { app.call("joinRequests", obj("id" to id), quiet = true) { v -> requests = (v as? org.json.JSONArray)?.objects().orEmpty() }; kotlinx.coroutines.delay(10_000) } }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Invite link", style = MaterialTheme.typography.titleMedium)
+        if (link == null) OutlinedButton({ app.call("createInvite", obj("id" to id)) { v -> link = (v as? JSONObject)?.optString("url") } }) { Text("Create invite link") }
+        else {
+            RawText(link!!, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton({ (app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Convo invite", link)); app.notice = "Copied" }) { Text("Copy text") }
+                OutlinedButton({ app.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, link), null)) }) { Text("Share") }
+            }
+        }
+        Text("Anyone in your organization with the link can ask to join. Admins approve each request; the link alone does not reveal the group’s name or members.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton({ app.call("revokeInvites", obj("id" to id), success = "Links reset") { link = null } }) { Text("Reset links") }
+        requests.forEach { r ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RawText(r.optString("label"), Modifier.weight(1f))
+                TextButton({ app.call("addMembers", obj("id" to id, "members" to org.json.JSONArray(listOf(r.optString("accountId"))))) { requests = requests - r } }) { Text("Approve") }
+                TextButton({ app.call("declineJoin", obj("id" to id, "accountId" to r.optString("accountId"))) { requests = requests - r } }) { Text("Decline") }
+            }
+        }
+    }
 }

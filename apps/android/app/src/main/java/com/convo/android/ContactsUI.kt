@@ -33,6 +33,14 @@ import org.json.JSONObject
             if (!multi && query.isBlank()) {
                 item { ActionRow("New group", icon = Icons.Outlined.Group) { app.route = "new-group" } }
                 item { ActionRow("Note to self", icon = Icons.Outlined.NoteAlt) { app.call("newChat", obj("id" to app.snapshot.optString("accountId"))) { value -> (value as? JSONObject)?.optString("id")?.let(app::openChat) } } }
+                item { var joining by remember { mutableStateOf(false) }; var pasted by remember { mutableStateOf("") }
+                    ActionRow("Join with invite link", icon = Icons.Outlined.Link) { joining = true }
+                    if (joining) AlertDialog(onDismissRequest = { joining = false }, title = { Text("Join a group") },
+                        text = { Column { Text("Ask the group’s admins to add you? They will see your name."); OutlinedTextField(pasted, { pasted = it }, label = { Text("Invite link") }, singleLine = true) } },
+                        confirmButton = { TextButton({ val token = Regex("#/join/([A-Za-z0-9_-]{32})").find(pasted)?.groupValues?.get(1)
+                            if (token == null) app.error = tr("This invite link is no longer valid.") else app.call("requestToJoin", obj("token" to token), quiet = true) { v -> if (v == null) app.error = tr("This invite link is no longer valid.") else app.notice = "Request sent" }
+                            joining = false }) { Text("Ask to join") } },
+                        dismissButton = { TextButton({ joining = false }) { Text("Cancel") } }) }
             }
             item {
                 ActionRow(if (app.discovering) "Finding your contacts…" else "Find phone contacts", "With your permission, match phone numbers to Convo accounts. Contact names and photos stay on your phone.", Icons.Outlined.Contacts) { app.requestContacts() }

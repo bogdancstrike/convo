@@ -855,6 +855,19 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emit('groups', groupId);
   }
 
+  // --- invite links (GRP-03) -----------------------------------------------------------------
+
+  /** New invite link for a group/channel (owners/admins). The token is shown once; only its hash is stored. */
+  async createInviteLink(conversationId: string): Promise<{ url: string; expiresAt: string }> {
+    const { token, expiresAt } = await this.api.createInvite(groupIdOf(conversationId)!);
+    return { url: `${window.location.origin}/#/join/${token}`, expiresAt };
+  }
+  revokeInviteLinks(conversationId: string): Promise<void> { return this.api.revokeInvites(groupIdOf(conversationId)!); }
+  /** Files a join request; admins approve by adding this account. Reveals nothing about the group. */
+  requestToJoin(token: string): Promise<void> { return this.api.requestToJoin(token); }
+  joinRequests(conversationId: string) { return this.api.joinRequests(groupIdOf(conversationId)!); }
+  declineJoinRequest(conversationId: string, accountId: string): Promise<void> { return this.api.declineJoin(groupIdOf(conversationId)!, accountId); }
+
   /** Remaining members remove the MLS leaves of people who left (first one wins; races retry later). */
   private async completeDepartures(groupId: string, departed: string[]): Promise<void> {
     for (const accountId of departed) {

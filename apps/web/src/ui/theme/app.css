@@ -2289,3 +2289,6 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .jump-latest { position: absolute; right: 24px; bottom: 96px; z-index: 5; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--c-border);
   background: var(--c-panel-raised); color: var(--c-text-primary); display: grid; place-items: center; box-shadow: 0 2px 8px rgb(0 0 0 / 0.18); cursor: pointer; }
 .jump-latest .badge { position: absolute; top: -6px; right: -6px; }
+
+.invite-link { display: flex; gap: var(--space-2); }
+.invite-link input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-canvas); color: var(--c-text-primary); font-size: 0.8125rem; }

@@ -34,3 +34,11 @@ A committer cannot remove itself in MLS. `POST /v1/groups/{id}/leave` therefore 
 out of the ACL immediately (no further application fan-out, owner hand-over enforced) and records
 it in `mls_group_departures` (V15). `GroupDto.departed` lists such accounts; any remaining member
 may commit their Remove (an exception to the admin-only membership rule), which clears the row.
+
+## Invite links and join requests
+
+`InviteService` (V16): owners/admins create bearer links (24 random bytes; only the SHA-256 is
+stored, `enclave.groups.invite-ttl`, default 7 days) or reset all links. A signed-in user with a
+link files a join request (bounded by `enclave.groups.max-join-requests`); nothing about the group
+is revealed. Admins list/decline requests; approving is an ordinary MLS add, and any commit that
+adds a member clears that member's request.

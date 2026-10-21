@@ -30,7 +30,7 @@ class GroupDepartureTest {
     private final DeviceAddress member = new DeviceAddress(UUID.randomUUID(), 1);
     private final DeviceAddress leaver = new DeviceAddress(UUID.randomUUID(), 1);
     private final GroupService service = new GroupService(groups, mock(IdentityApi.class), delivery,
-            new GroupsProperties(1000, 5000, 262144, 1048576, Duration.ofDays(31)), Clock.systemUTC());
+            new GroupsProperties(1000, 5000, 262144, 1048576, Duration.ofDays(31), Duration.ofDays(7), 200), Clock.systemUTC());
 
     private void group(Map<UUID, Role> members, Set<UUID> departed) {
         var row = new GroupRepository.GroupRow(id, 4, 1, "active", false);

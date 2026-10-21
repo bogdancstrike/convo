@@ -161,6 +161,11 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'credentials': return client.credentialStatus();
     case 'pin': return client.setPinned(await target(args), Boolean(args.pinned));
     case 'canPin': return client.canPin(String(args.id));
+    case 'createInvite': return client.createInviteLink(String(args.id));
+    case 'revokeInvites': return client.revokeInviteLinks(String(args.id));
+    case 'requestToJoin': return client.requestToJoin(String(args.token));
+    case 'joinRequests': return Promise.all((await client.joinRequests(String(args.id))).map(async (r) => ({ ...r, label: await client!.displayName(r.accountId) })));
+    case 'declineJoin': return client.declineJoinRequest(String(args.id), String(args.accountId));
     case 'leaveGroup': return client.leaveGroup(String(args.id));
     case 'block': return client.setBlocked(String(args.id), Boolean(args.blocked));
     case 'setDisappearing': return client.setDisappearing(String(args.id), Number(args.seconds));

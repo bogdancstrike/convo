@@ -1,3 +1,4 @@
+import { InviteSection } from './InviteSection';
 import { LastSeen } from '../components/LastSeen';
 import { SharedPreview, ConversationActions } from './ConversationDetails';
 import { Menu } from '../components/Popover';
@@ -220,6 +221,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
         <span className="chat-kind" data-testid="conversation-kind"><Icon name={conversation.adminOnly ? 'channels' : 'group'} size={16} />{t(conversation.adminOnly ? 'channel.type' : 'group.type')}</span>
         <span className="muted-text">{t('group.participants', { count: members.length })}</span>
       </section>
+      {canManage && <InviteSection client={client} conversation={conversation} />}
       <section className="drawer-section" aria-labelledby="members-title">
         <h4 id="members-title">{t('group.participants', { count: members.length })}</h4>
         {canManage && !adding && (
