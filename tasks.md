@@ -99,6 +99,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   frozen at open), a jump-to-latest button with a new-message count appears when scrolled up.
   `unread-navigation.spec.ts` Chromium/Firefox. Android: same divider, start position and
   jump-to-latest button with new-message badge; verified on emulator with 30 unread messages.
+- Leaving groups/channels (GRP-03): E2EE "left" notice, server takes the account out of the ACL
+  and fan-out at once (`mls_group_departures`), any remaining member commits the MLS Remove;
+  the sole owner must hand over first. Web and Android; `group-leave.spec.ts` Chromium/Firefox
+  (DB confirms departures completed and leaver devices removed); emulator verified.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -185,7 +189,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Authenticated group senders (leaf credential must match server-reported source device) | |
 | ✅ | Create group, encrypted group name, add/remove members (admin/owner), removed-member state | |
 | ✅ | Linked-device sync: own devices added/removed in joined groups on DEVICE_LIST_CHANGED | |
-| ⬜ | Leave (proposal flow), promote/demote/transfer UI, invite links, join requests, bans, pins, timers | GRP-03, EXT-03 |
+| 🟡 | Leave (done: pending-removal flow, see below), promote/demote/transfer UI, invite links, join requests, bans | GRP-03, EXT-03 |
 | ⬜ | Credential binding to account identity key, reviewed role profile, pending-removal gate | GRP-01 |
 
 ## Delivery & verification

@@ -161,6 +161,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'credentials': return client.credentialStatus();
     case 'pin': return client.setPinned(await target(args), Boolean(args.pinned));
     case 'canPin': return client.canPin(String(args.id));
+    case 'leaveGroup': return client.leaveGroup(String(args.id));
     case 'block': return client.setBlocked(String(args.id), Boolean(args.blocked));
     case 'setDisappearing': return client.setDisappearing(String(args.id), Number(args.seconds));
     case 'startCall': return client.startCall(String(args.conversationId), Boolean(args.video));

@@ -20,13 +20,15 @@ export function TimerNotice({ client, message, showDay }: { client: EnclaveClien
   const own = message.authorId === client.accountId;
   const name = useAccountLabel(client, own ? undefined : message.authorId);
   const who = own ? t('chats.you') : name || '…';
-  const seconds = message.notice?.seconds ?? 0;
+  const notice = message.notice;
+  const seconds = notice?.kind === 'timer' ? notice.seconds : 0;
   return (
     <>
       {showDay && <div className="day-separator">{date(message.sort)}</div>}
       <div className="system-notice" role="status" data-testid="timer-notice">
-        <Icon name="clock" size={14} />
-        {seconds ? t('timer.noticeOn', { who, duration: timerLabel(seconds, t) }) : t('timer.noticeOff', { who })}
+        {notice?.kind === 'left' ? <Icon name="logout" size={14} /> : <Icon name="clock" size={14} />}
+        {notice?.kind === 'left' ? t('group.leftNotice', { who })
+          : seconds ? t('timer.noticeOn', { who, duration: timerLabel(seconds, t) }) : t('timer.noticeOff', { who })}
       </div>
     </>
   );

@@ -193,6 +193,8 @@ export interface GroupDto {
   epoch: number;
   members: { accountId: string; role: GroupRole }[];
   devices: DeviceRef[];
+  /** Accounts that left; their MLS leaves await removal by any member. */
+  departed?: string[];
 }
 
 export interface GroupSummaryDto {

@@ -53,6 +53,8 @@ export interface GroupRecord {
   /** Monotonic metadata version (highest wins). */
   metaVersion: number;
   members: { accountId: string; role: GroupRole }[];
+  /** Members who left and await removal of their MLS leaves. */
+  departed?: string[];
   /** This device was removed or left. */
   left: boolean;
 }
@@ -138,13 +140,19 @@ export class GroupManager {
     return result;
   }
 
+  /** Marks this account as having left (keeps history; stops group sending locally). */
+  async markLeft(groupId: string): Promise<void> {
+    const record = await this.record(groupId);
+    if (record) await this.store.put(GroupNs.group, groupId, { ...record, left: true });
+  }
+
   /** Refreshes roles/members from the DS ACL mirror. */
   async refreshRecord(groupId: string): Promise<GroupRecord | undefined> {
     const record = await this.record(groupId);
     if (!record || record.left) return record;
     try {
       const view = await this.api.group(groupId);
-      const updated = { ...record, members: view.members, adminOnly: view.adminOnly };
+      const updated = { ...record, members: view.members, adminOnly: view.adminOnly, departed: view.departed ?? [] };
       await this.store.put(GroupNs.group, groupId, updated);
       return updated;
     } catch (error) {

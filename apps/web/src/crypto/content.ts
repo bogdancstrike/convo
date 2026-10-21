@@ -94,6 +94,8 @@ export interface DataMessage {
   mentions?: string[];
   /** Conversation event: the disappearing timer changed. */
   timerUpdate?: { seconds: number };
+  /** Group event: the author left the group (shown as a notice). */
+  left?: boolean;
   /** Conversation event: a message was pinned/unpinned for everyone. */
   pin?: { targetMessageId: string; targetAuthorId: string; pinned: boolean };
 }

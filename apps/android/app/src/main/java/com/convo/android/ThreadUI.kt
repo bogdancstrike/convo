@@ -154,7 +154,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     }
 }
 @Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit) {
-    message.optJSONObject("notice")?.let { TimerNotice(app, message, it.optLong("seconds")); return }
+    message.optJSONObject("notice")?.let { TimerNotice(app, message, it.optLong("seconds"), it.optString("kind")); return }
     val outgoing = message.optString("direction") == "out"
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
@@ -296,10 +296,10 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
 val DisappearingTimers = listOf(0L to "Off", 86_400L to "24 hours", 604_800L to "7 days", 7_776_000L to "90 days")
 fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds }?.second ?: "Off")
 
-@Composable fun TimerNotice(app: MainActivity, message: JSONObject, seconds: Long) {
+@Composable fun TimerNotice(app: MainActivity, message: JSONObject, seconds: Long, kind: String = "timer") {
     val own = message.optString("authorId") == app.snapshot.optString("accountId")
     val who = if (own) tr("You") else app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == message.optString("authorId") }?.optString("title") ?: message.optString("authorId").take(8)
-    val text = if (seconds > 0) tr("{who} set disappearing messages to {duration}").replace("{who}", who).replace("{duration}", timerLabel(seconds))
+    val text = if (kind == "left") tr("{who} left").replace("{who}", who) else if (seconds > 0) tr("{who} set disappearing messages to {duration}").replace("{who}", who).replace("{duration}", timerLabel(seconds))
         else tr("{who} turned off disappearing messages").replace("{who}", who)
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center) {
         Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surface) {

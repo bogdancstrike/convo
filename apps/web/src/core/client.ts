@@ -833,6 +833,36 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   /** Removes a person from a group (admins/owners). */
+  /**
+   * Leaves a group or channel. A notice goes to the members first; the server then removes this
+   * account from the ACL and stops fan-out. A remaining member completes the MLS removal. The last
+   * owner must make someone else owner first (server-enforced).
+   */
+  async leaveGroup(conversationId: string): Promise<void> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId) throw new Error('not a group');
+    await this.mutex.run(async () => {
+      await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'data', data: { messageId: newMessageId(), timestamp: Date.now(), left: true } }, false);
+    });
+    await this.outbox.flush();
+    await this.api.leaveGroup(groupId);
+    await this.mutex.run(async () => {
+      const record = await this.groups.record(groupId);
+      if (record) await this.groups.markLeft(groupId);
+      const conversation = this.conversationCache.get(conversationId);
+      if (conversation) await this.saveConversations([{ ...conversation, left: true }]);
+    });
+    this.emit('groups', groupId);
+  }
+
+  /** Remaining members remove the MLS leaves of people who left (first one wins; races retry later). */
+  private async completeDepartures(groupId: string, departed: string[]): Promise<void> {
+    for (const accountId of departed) {
+      if (accountId === this.accountId) continue;
+      await this.mutex.run(() => this.groups.removeMember(groupId, accountId)).catch(() => undefined);
+    }
+  }
+
   async removeGroupMember(conversationId: string, accountId: string): Promise<void> {
     const groupId = groupIdOf(conversationId)!;
     await this.mutex.run(() => this.groups.removeMember(groupId, accountId));
@@ -1161,6 +1191,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       if (content.kind === 'data') {
         const applied = await this.applyData(conversationId, accountId, direction, content.data, envelope, ops, changed);
         if (accountId !== this.accountId) followUps.push(...this.receiptFollowUps(applied, accountId, conversationId, content.data));
+        if (applied === 'left') followUps.push(() => this.refreshGroup(result.groupId));
       } else if (content.kind === 'profile') {
         this.stageProfile(content.profile, accountId, ops);
       } else if (content.kind === 'groupMeta') {
@@ -1190,6 +1221,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** Reloads roles/members from the server ACL mirror after joins and commits. */
   private async refreshGroup(groupId: string): Promise<void> {
     const record = await this.groups.refreshRecord(groupId).catch(() => undefined);
+    if (record && !record.left && record.departed?.length) {
+      // Small jitter so several online members do not all race the same removal commit.
+      const departed = record.departed;
+      setTimeout(() => void this.completeDepartures(groupId, departed).then(() => this.refreshGroup(groupId)), 200 + Math.random() * 1500);
+    }
     const conversation = this.conversationCache.get(groupConversationId(groupId));
     if (record && conversation) {
       await this.saveConversations([{ ...conversation, title: record.name || conversation.title, left: record.left, adminOnly: record.adminOnly }]);
@@ -1214,7 +1250,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     envelope: EnvelopeDto,
     ops: StoreOp[],
     changed: Set<string>,
-  ): Promise<'new' | 'edited' | 'mutation' | 'ignored'> {
+  ): Promise<'new' | 'edited' | 'mutation' | 'ignored' | 'left'> {
     if (data.profile) this.stageProfile(data.profile, authorId, ops);
     const targetId = data.reaction?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
     const targetAuthor = data.reaction?.targetAuthorId ?? authorId;
@@ -1255,6 +1291,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     }
     if (data.timerUpdate) return this.applyTimerUpdate(conversation, authorId, direction, data, envelope, ops);
     if (data.pin) return this.applyPin(conversation, authorId, data, ops);
+    if (data.left) {
+      if (!groupIdOf(conversation.id) || await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored';
+      ops.push(this.repos.putMessage({ conversationId: conversation.id, id: data.messageId, authorId, direction, sentAt: data.timestamp,
+        sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp, reactions: {}, notice: { kind: 'left' } }));
+      return 'left';
+    }
     if (data.body === undefined && !data.attachments?.length) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
     ops.push({ type: 'delete', ns: RecordNs.localHiddenConversation, id: conversationId });
@@ -1441,7 +1483,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * Delivery (and, when the chat is on screen, read) receipts after a new message or an accepted
    * edit. Edits acknowledge the new revision; nothing is sent for other mutations.
    */
-  private receiptFollowUps(result: 'new' | 'edited' | 'mutation' | 'ignored', author: string, conversationId: string, data: DataMessage): (() => Promise<void>)[] {
+  private receiptFollowUps(result: 'new' | 'edited' | 'mutation' | 'ignored' | 'left', author: string, conversationId: string, data: DataMessage): (() => Promise<void>)[] {
     if (result !== 'new' && result !== 'edited') return [];
     const id = result === 'edited' ? data.edit!.targetMessageId : data.messageId;
     const revisions = result === 'edited' ? [data.edit!.revision ?? 0] : undefined;

@@ -218,6 +218,8 @@ import org.json.JSONObject
 @Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
+    if (c.optString("kind") == "group" && !c.optBoolean("left")) DropdownMenuItem(text = { Text(if (c.optBoolean("adminOnly")) "Leave channel" else "Leave group", color = MaterialTheme.colorScheme.error) },
+        leadingIcon = { Icon(Icons.Outlined.Logout, null, tint = MaterialTheme.colorScheme.error) }, onClick = { confirm = "leave" })
     if (c.optString("kind") == "group") DropdownMenuItem(text = { Text(if (c.optString("notify") == "mentions") "Notify for all messages" else "Notify only for mentions") }, leadingIcon = { Icon(Icons.Outlined.AlternateEmail, null) },
         onClick = { close(); app.call("conversation", obj("id" to c.optString("id"), "patch" to obj("notify" to if (c.optString("notify") == "mentions") JSONObject.NULL else "mentions"))) })
     if (c.optString("kind") == "direct") {
@@ -231,7 +233,11 @@ import org.json.JSONObject
     })
     DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })
     DropdownMenuItem(text = { Text("Delete chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "deleteChat" })
-    if (confirm == "block") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text("Block contact?") },
+    if (confirm == "leave") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (c.optBoolean("adminOnly")) "Leave channel?" else "Leave group?") },
+        text = { Text("You keep the history on your devices but stop receiving new messages.") },
+        confirmButton = { TextButton({ confirm = ""; close(); app.call("leaveGroup", obj("id" to c.optString("id")), quiet = true) { if (it == null) app.error = tr("You are the only owner. Make another member owner first, then leave.") } }) { Text("Leave", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
+    else if (confirm == "block") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text("Block contact?") },
         text = { Text("Their messages and calls will no longer reach you, and they won’t be told.") },
         confirmButton = { TextButton({ confirm = ""; close(); app.call("block", obj("id" to c.optString("id"), "blocked" to true), success = "Contact blocked") }) { Text("Block", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })

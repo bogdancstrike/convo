@@ -7,6 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -86,6 +88,20 @@ class GroupRepository {
     void deleteMember(byte[] groupId, UUID accountId) {
         jdbc.sql("DELETE FROM mls_group_members WHERE group_id = :g AND account_id = :a")
                 .param("g", groupId).param("a", accountId).update();
+    }
+
+    void addDeparture(byte[] groupId, UUID accountId) {
+        jdbc.sql("INSERT INTO mls_group_departures (group_id, account_id) VALUES (:g, :a) ON CONFLICT DO NOTHING")
+                .param("g", groupId).param("a", accountId).update();
+    }
+
+    void deleteDeparture(byte[] groupId, UUID accountId) {
+        jdbc.sql("DELETE FROM mls_group_departures WHERE group_id = :g AND account_id = :a").param("g", groupId).param("a", accountId).update();
+    }
+
+    /** Accounts that left but still have MLS leaves (pending removal). */
+    Set<UUID> departures(byte[] groupId) {
+        return new HashSet<>(jdbc.sql("SELECT account_id FROM mls_group_departures WHERE group_id = :g").param("g", groupId).query(UUID.class).list());
     }
 
     void addDevice(byte[] groupId, DeviceAddress device) {

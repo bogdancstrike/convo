@@ -1,3 +1,4 @@
+import { ApiError } from '../../api/errors';
 import type { EnclaveClient } from '../../core/client';
 import { isMuted, type Conversation } from '../../core/model';
 import type { MenuItem } from '../components/Popover';
@@ -49,6 +50,10 @@ export function conversationMenu(client: EnclaveClient, conversation: Conversati
     ...(conversation.kind === 'direct' ? [conversation.blocked
       ? { label: t('block.unblock'), icon: 'shield' as const, onSelect: () => void client.setBlocked(conversation.id, false), testId: 'menu-unblock' }
       : { label: t('block.block'), icon: 'shield' as const, danger: true, onSelect: confirmThen(t('block.confirm', { name: conversation.title }), () => client.setBlocked(conversation.id, true)), testId: 'menu-block' }] : []),
+    ...(group && !conversation.left ? [{ label: conversation.adminOnly ? t('group.leaveChannel') : t('group.leave'), icon: 'logout' as const, danger: true, testId: 'menu-leave',
+      onSelect: confirmThen(t('group.leaveConfirm', { name: conversation.title }), () => client.leaveGroup(conversation.id).catch((e) => {
+        window.alert(e instanceof ApiError && e.code === 'FORBIDDEN_ROLE' ? t('group.leaveOwner') : t('group.leaveFailed'));
+      })) }] : []),
     { label: t('header.close'), icon: 'close', onSelect: onClose },
     { label: t('header.clear'), icon: 'trash', onSelect: confirmThen(t('header.confirmClear'), () => client.clearConversation(conversation.id)) },
     {

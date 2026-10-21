@@ -181,6 +181,8 @@ export class EnclaveApi {
     return this.signed('GET', `/v1/groups/${groupId}`);
   }
 
+  /** Leaves a group (the server stops fan-out at once; members complete the MLS removal). */
+  leaveGroup(groupId: string): Promise<void> { return this.signed('POST', `/v1/groups/${encodeURIComponent(groupId)}/leave`); }
   groupCommit(groupId: string, request: GroupCommitRequest): Promise<{ epoch: number; seq: number; duplicate: boolean }> {
     return this.signed('POST', `/v1/groups/${groupId}/commits`, request);
   }

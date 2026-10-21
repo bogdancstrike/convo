@@ -44,7 +44,7 @@ class GroupService {
     }
 
     /** Current server view of a group. */
-    record GroupView(byte[] groupId, long epoch, Map<UUID, Role> members, List<DeviceAddress> devices, boolean adminOnly) {}
+    record GroupView(byte[] groupId, long epoch, Map<UUID, Role> members, List<DeviceAddress> devices, boolean adminOnly, Set<UUID> departed) {}
 
     /** Commit acceptance. */
     record Accepted(long epoch, long seq, boolean duplicate) {}
@@ -112,7 +112,8 @@ class GroupService {
 
         Map<UUID, Role> members = groups.members(groupId);
         List<DeviceAddress> roster = groups.devices(groupId);
-        authorize(caller, members, roster, cmd);
+        Set<UUID> departed = groups.departures(groupId);
+        authorize(caller, members, roster, cmd, departed);
 
         long newEpoch = group.epoch() + 1;
         long seq = group.nextSeq();
@@ -121,7 +122,7 @@ class GroupService {
         cmd.addMembers().forEach(a -> groups.upsertMember(groupId, a, Role.MEMBER));
         cmd.addDevices().forEach(d -> groups.addDevice(groupId, d));
         cmd.removeDevices().forEach(d -> groups.removeDevice(groupId, d));
-        cmd.removeMembers().forEach(a -> groups.deleteMember(groupId, a));
+        cmd.removeMembers().forEach(a -> { groups.deleteMember(groupId, a); groups.deleteDeparture(groupId, a); });
         cmd.roleChanges().forEach((a, r) -> groups.upsertMember(groupId, a, r));
 
         // Everyone in the pre-commit roster (including removed devices) learns the new epoch.
@@ -159,9 +160,26 @@ class GroupService {
                     Map.of("currentEpoch", group.epoch()));
         }
         groups.insertSubmission(groupId, caller, cmd.submissionId(), digest, clock.instant().plus(properties.submissionRetention()));
-        List<DeviceAddress> recipients = groups.devices(groupId).stream().filter(d -> !d.equals(caller)).toList();
+        // Members who left get no further application messages, even before their MLS removal.
+        Set<UUID> departed = groups.departures(groupId);
+        List<DeviceAddress> recipients = groups.devices(groupId).stream().filter(d -> !d.equals(caller) && !departed.contains(d.accountId())).toList();
         delivery.deliverGroup(recipients, new GroupEnvelope(GroupEnvelope.Kind.PRIVATE, caller, groupId, cmd.epoch(), 0, cmd.message()));
         return false;
+    }
+
+    /**
+     * Leaves a group: the account leaves the ACL at once and receives no further application
+     * messages; its MLS leaves stay until a remaining member commits their removal. The last owner
+     * must hand ownership to someone else first.
+     */
+    @Transactional
+    void leave(DeviceAddress caller, byte[] groupId) {
+        lockForMember(groupId, caller, false);
+        Map<UUID, Role> members = groups.members(groupId);
+        boolean lastOwner = members.get(caller.accountId()) == Role.OWNER && members.values().stream().filter(r -> r == Role.OWNER).count() == 1;
+        if (lastOwner && members.size() > 1) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "make another member owner before leaving");
+        groups.deleteMember(groupId, caller.accountId());
+        groups.addDeparture(groupId, caller.accountId());
     }
 
     /** Groups of the caller's account. */
@@ -200,12 +218,13 @@ class GroupService {
      * Server-side ACL mirror (specs §30.2): admins/owners manage other accounts; anyone manages
      * their own devices; only owners change roles; the last owner stays.
      */
-    private void authorize(DeviceAddress caller, Map<UUID, Role> members, List<DeviceAddress> roster, GroupCommands.Commit cmd) {
+    private void authorize(DeviceAddress caller, Map<UUID, Role> members, List<DeviceAddress> roster, GroupCommands.Commit cmd, Set<UUID> departed) {
         Role callerRole = members.get(caller.accountId());
+        // Completing a departure (removing the MLS leaves of someone who left) is allowed for any member.
         boolean touchesOthers = !cmd.addMembers().isEmpty()
-                || cmd.removeMembers().stream().anyMatch(a -> !a.equals(caller.accountId()))
+                || cmd.removeMembers().stream().anyMatch(a -> !a.equals(caller.accountId()) && !departed.contains(a))
                 || cmd.addDevices().stream().anyMatch(d -> !d.accountId().equals(caller.accountId()))
-                || cmd.removeDevices().stream().anyMatch(d -> !d.accountId().equals(caller.accountId()));
+                || cmd.removeDevices().stream().anyMatch(d -> !d.accountId().equals(caller.accountId()) && !departed.contains(d.accountId()));
         if (touchesOthers && !callerRole.canManageMembers()) {
             throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only admins can change membership");
         }
@@ -266,7 +285,8 @@ class GroupService {
     }
 
     private GroupView view(GroupRow group) {
-        return new GroupView(group.groupId(), group.epoch(), groups.members(group.groupId()), groups.devices(group.groupId()), group.adminOnly());
+        return new GroupView(group.groupId(), group.epoch(), groups.members(group.groupId()), groups.devices(group.groupId()), group.adminOnly(),
+                groups.departures(group.groupId()));
     }
 
     private static void requireGroupId(byte[] groupId) {

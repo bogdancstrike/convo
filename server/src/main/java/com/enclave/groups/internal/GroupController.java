@@ -54,11 +54,11 @@ class GroupController {
     record MemberDto(UUID accountId, String role) {}
 
     /** Group view. */
-    record GroupDto(String groupId, long epoch, List<MemberDto> members, List<DeviceDto> devices, boolean adminOnly) {
+    record GroupDto(String groupId, long epoch, List<MemberDto> members, List<DeviceDto> devices, boolean adminOnly, List<java.util.UUID> departed) {
         static GroupDto of(GroupService.GroupView v) {
             return new GroupDto(encode(v.groupId()), v.epoch(),
                     v.members().entrySet().stream().map(e -> new MemberDto(e.getKey(), e.getValue().db())).toList(),
-                    v.devices().stream().map(DeviceDto::of).toList(), v.adminOnly());
+                    v.devices().stream().map(DeviceDto::of).toList(), v.adminOnly(), List.copyOf(v.departed()));
         }
     }
 
@@ -100,6 +100,12 @@ class GroupController {
                 body.roleChanges() == null ? Map.of() : body.roleChanges().entrySet().stream()
                         .collect(Collectors.toMap(Map.Entry::getKey, e -> Role.parse(e.getValue())))));
         return new AcceptedDto(accepted.epoch(), accepted.seq(), accepted.duplicate());
+    }
+
+    @PostMapping("/v1/groups/{groupId}/leave")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void leave(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {
+        groups.leave(me.address(), decode(groupId, "groupId"));
     }
 
     @PutMapping("/v1/groups/{groupId}/messages")

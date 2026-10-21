@@ -27,3 +27,10 @@ Revoked devices are dropped from the routing roster immediately (no new cipherte
 the MLS removal (GRP-02 pending-removal gate is a follow-up).
 
 `GroupsApi` (module root) exposes read-only current membership to other modules (used by `calls`).
+
+## Leaving (pending removal)
+
+A committer cannot remove itself in MLS. `POST /v1/groups/{id}/leave` therefore takes the account
+out of the ACL immediately (no further application fan-out, owner hand-over enforced) and records
+it in `mls_group_departures` (V15). `GroupDto.departed` lists such accounts; any remaining member
+may commit their Remove (an exception to the admin-only membership rule), which clears the row.
