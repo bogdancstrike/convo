@@ -171,6 +171,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'declineJoin': return client.declineJoinRequest(String(args.id), String(args.accountId));
     case 'leaveGroup': return client.leaveGroup(String(args.id));
     case 'acceptRequest': return client.acceptRequest(String(args.id));
+    case 'setPushEndpoint': return args.endpoint ? context.api.setPushEndpoint(String(args.endpoint)) : context.api.clearPushEndpoint();
     case 'block': return client.setBlocked(String(args.id), Boolean(args.blocked));
     case 'setDisappearing': return client.setDisappearing(String(args.id), Number(args.seconds));
     case 'startCall': return client.startCall(String(args.conversationId), Boolean(args.video));

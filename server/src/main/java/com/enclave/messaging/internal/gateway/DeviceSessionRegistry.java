@@ -41,6 +41,11 @@ class DeviceSessionRegistry {
         });
     }
 
+    /** Whether this replica holds a live session for the device. */
+    boolean isLocal(DeviceAddress device) {
+        return !sessions.getOrDefault(device, Set.of()).isEmpty();
+    }
+
     /** New mail for a device: drain each local session that is idle. */
     void onMail(DeviceAddress device) {
         sessions.getOrDefault(device, Set.of()).forEach(DeviceSession::drainIfIdle);

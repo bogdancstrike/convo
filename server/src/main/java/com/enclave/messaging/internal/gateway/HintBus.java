@@ -46,6 +46,15 @@ class HintBus implements MessageListener {
         publish(CONTROL_PREFIX + device, directive.name());
     }
 
+    /** Whether any replica currently holds a live session for the device (presence key present). */
+    boolean isPresent(DeviceAddress device) {
+        try {
+            return Boolean.TRUE.equals(redis.hasKey(PRESENCE_PREFIX + device));
+        } catch (RuntimeException e) {
+            return false; // unknown: let the wake-up channel try
+        }
+    }
+
     /** Refreshes the presence key of a device. */
     void markPresent(DeviceAddress device, String replicaId, Duration ttl) {
         try {

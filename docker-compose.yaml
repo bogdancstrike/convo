@@ -128,6 +128,9 @@ services:
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ADMIN_URL: http://keycloak:8080/auth
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
       ENCLAVE_ADMIN_CHECKPOINT_FILE: /var/lib/convo/audit/checkpoints.log
+      ENCLAVE_PUSH_ENABLED: "true"
+      ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_NTFY_PORT:-8091},http://${CONVO_SERVER_IP:-192.168.1.144}:${CONVO_NTFY_PORT:-8091}
+      ENCLAVE_PUSH_INTERNAL_ORIGIN: http://ntfy:80
       ENCLAVE_CALLS_ENABLED: "true"
       ENCLAVE_CALLS_API_SECRET: ${CONVO_LIVEKIT_SECRET:-convo-dev-livekit-secret-change-me-0123}
     depends_on:
@@ -166,6 +169,20 @@ services:
     ports:
       - "7881:7881/tcp"
       - "50000-50100:50000-50100/udp"
+
+  # Push (MSG-02): self-hosted ntfy as UnifiedPush distributor. Wakes carry no content.
+  ntfy:
+    image: binwiederhier/ntfy:v2.28.0
+    command: ["serve"]
+    environment:
+      NTFY_BASE_URL: http://${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_NTFY_PORT:-8091}
+      NTFY_BEHIND_PROXY: "false"
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_CACHE_DURATION: 12h
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    ports:
+      - "${CONVO_NTFY_PORT:-8091}:80"
 
   # TURN relay (coturn) for clients that cannot reach LiveKit's UDP ports directly.
   coturn:
@@ -226,6 +243,7 @@ services:
       web: { condition: service_healthy }
 
 volumes:
+  ntfy-cache:
   audit-checkpoints:
   keycloak-data:
   web-tls:

@@ -27,8 +27,11 @@ class GatewayEventListener {
     private final MailboxService mailbox;
     private final IdentityApi identity;
     private final DeviceSessionRegistry registry;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
-    GatewayEventListener(HintBus hints, MailboxService mailbox, IdentityApi identity, DeviceSessionRegistry registry) {
+    GatewayEventListener(HintBus hints, MailboxService mailbox, IdentityApi identity, DeviceSessionRegistry registry,
+            org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.hints = hints;
         this.mailbox = mailbox;
         this.identity = identity;
@@ -39,6 +42,9 @@ class GatewayEventListener {
     @TransactionalEventListener
     void on(EnvelopesStored event) {
         event.recipients().forEach(hints::signalMail);
+        // Offline devices get a content-free wake-up through their push channel, if registered.
+        event.recipients().stream().filter(d -> !registry.isLocal(d) && !hints.isPresent(d)).distinct()
+                .forEach(d -> events.publishEvent(new com.enclave.messaging.MailWaiting(d)));
     }
 
     /** Revocation: purge the mailbox, close sockets, tell the account's other devices. */

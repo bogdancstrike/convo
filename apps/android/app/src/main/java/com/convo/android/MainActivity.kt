@@ -130,11 +130,11 @@ class MainActivity : FragmentActivity() {
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
-                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus(); ConnectionService.sync(this, stayConnected && phase == "ready") }
+                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
                 "alert" -> MessageNotifications.show(this, value)
                 "callLog" -> callLogVersion++
-                "snapshot" -> { snapshot = value; Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
+                "snapshot" -> { snapshot = value; PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
         setContent { ConvoTheme(snapshot.optJSONObject("settings")?.optString("theme") ?: "system") {
@@ -210,14 +210,25 @@ class MainActivity : FragmentActivity() {
         try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
         catch (_: Exception) { error = "No browser is available to set up a passkey." }
     }
-    override fun onStop() { super.onStop(); isInForeground = false; locks.onBackground() }
-    override fun onResume() { super.onResume(); if (phase == "ready") refreshCredentialStatus() }
+    override fun onStop() { super.onStop(); isInForeground = false; PushRegistration.appVisible = false; locks.onBackground() }
+    override fun onResume() { super.onResume(); if (phase == "ready") { refreshCredentialStatus(); syncPush() } }
     var isInForeground = false; private set
     /** Device-local opt-in for [ConnectionService]. */
     var stayConnected: Boolean
         get() = getPreferences(MODE_PRIVATE).getBoolean("stayConnected", false)
         set(value) { getPreferences(MODE_PRIVATE).edit().putBoolean("stayConnected", value).apply(); ConnectionService.sync(this, value && phase == "ready") }
-    override fun onStart() { super.onStart(); isInForeground = true }
+    override fun onStart() { super.onStart(); isInForeground = true; PushRegistration.appVisible = true }
+    /** Registers with a UnifiedPush distributor and sends a new endpoint to the server once. */
+    fun syncPush() {
+        PushRegistration.onEndpoint = { runOnUiThread { if (phase == "ready") sendPushEndpoint() } }
+        PushRegistration.register(this)
+        sendPushEndpoint()
+    }
+
+    private fun sendPushEndpoint() {
+        val endpoint = PushRegistration.endpoint(this)
+        if (endpoint != null && !PushRegistration.synced(this)) call("setPushEndpoint", obj("endpoint" to endpoint), quiet = true) { if (it != null) PushRegistration.markSynced(this) }
+    }
     /** Notification tap: open that chat (lock rules apply in openChat). */
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) } }
     private var notificationCallback: ((Boolean) -> Unit)? = null

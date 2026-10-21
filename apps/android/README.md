@@ -44,3 +44,10 @@ app lock and per-chat locks (BiometricPrompt with screen-lock fallback) once a p
 frame E2EE (ADR-0006); APK native libraries are limited to arm64-v8a and x86_64. The UI follows the EN/RO language setting (`I18n.kt`). Remaining gaps include exhaustive
 visual/accessibility/device testing. iOS has not been implemented. Native background delivery,
 Keystore wrapping and the reviewed Rust/SQLCipher core remain separate security/release gates.
+
+## Background notifications (UnifiedPush)
+
+Install a UnifiedPush distributor such as [ntfy](https://ntfy.sh) and set its default server to
+the organization's ntfy (Compose: `http://<server>:8091`). Convo registers automatically when it
+signs in; when it is not running, a message produces a generic "New message" notification
+(content stays end-to-end encrypted until you open the app).
