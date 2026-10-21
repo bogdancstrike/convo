@@ -69,7 +69,7 @@ export function MessageBubble({
   return (
     <>
       {showDay && <div className="day-separator">{dayLabel(m.sort, t('chats.today'), t('chats.yesterday'), date)}</div>}
-      <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}`} data-testid="message">
+      <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}`} data-testid="message" id={messageAnchor(m.authorId, m.id)}>
         {group && !own && <span className="msg-avatar">{first && <Avatar id={m.authorId} name={author || '?'} size={28} />}</span>}
         <div
           ref={bubbleRef}
@@ -202,6 +202,9 @@ function MessageMenu({ client, message: m, onClose, actions, anchor }: { client:
   useEffect(() => () => anchor.current?.focus({ preventScroll: true }), [anchor]);
   const own = m.authorId === client.accountId;
   const canEdit = client.canEdit(m);
+  const [canPin, setCanPin] = useState(false);
+  useEffect(() => { void client.canPin(m.conversationId).then(setCanPin); }, [client, m.conversationId]);
+  const pinned = !!client.conversation(m.conversationId)?.pinnedMessages?.some((p) => p.authorId === m.authorId && p.id === m.id);
 
   useEffect(() => {
     if (picker || confirmDelete) return undefined;
@@ -297,6 +300,10 @@ function MessageMenu({ client, message: m, onClose, actions, anchor }: { client:
           onClose();
           actions.onForward(m);
         }, 'action-forward')}
+        {canPin && !m.notice && item('pin', pinned ? t('pin.unpin') : t('pin.pin'), () => {
+          onClose();
+          void client.setPinned(m, !pinned);
+        }, pinned ? 'action-unpin' : 'action-pin')}
         {item('pin', m.starred ? t('msg.unstar') : t('msg.star'), () => {
           onClose();
           void client.setStarred(m, !m.starred);
@@ -359,4 +366,9 @@ function dayLabel(ms: number, today: string, yesterday: string, date: (ms: numbe
   if (d === new Date().toDateString()) return today;
   if (d === new Date(Date.now() - 86_400_000).toDateString()) return yesterday;
   return date(ms);
+}
+
+/** DOM id of a message row (pinned banner and search jump to it). */
+export function messageAnchor(authorId: string, id: string): string {
+  return `msg-${authorId}-${id}`.replace(/[^A-Za-z0-9_-]/g, '_');
 }

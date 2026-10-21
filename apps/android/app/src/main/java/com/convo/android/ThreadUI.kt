@@ -10,6 +10,7 @@ import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -72,6 +73,11 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             if (app.snapshot.optString("connection") != "online") Text("Waiting for connection. Messages will send when you reconnect.", Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (app.threadSearch) OutlinedTextField(query, { query = it }, placeholder = { Text(if (starredOnly) "Search starred messages" else "Search this chat") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) })
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val scope = rememberCoroutineScope()
+            if (!starredOnly) PinnedBanner(app, conversation, all) { target ->
+                val at = messages.indexOfFirst { it.optString("authorId") == target.optString("authorId") && it.optString("id") == target.optString("id") }
+                if (at >= 0) scope.launch { listState.animateScrollToItem(at + 1) } // +1: encryption header item
+            }
             LaunchedEffect(messages.size) { if (messages.isNotEmpty()) if (app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }
             LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("Your personal messages are end-to-end encrypted", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -142,6 +148,11 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         DropdownMenu(menu, { menu = false }) {
                             Row { listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(38.dp)) { Text(emoji) } } }
                             DropdownMenuItem(text = { Text("Message info") }, onClick = { menu = false; info = true })
+                            if (app.canPinActive) {
+                                val pinned = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == conversation }?.optJSONArray("pinnedMessages")?.objects().orEmpty()
+                                    .any { it.optString("authorId") == message.optString("authorId") && it.optString("id") == message.optString("id") }
+                                DropdownMenuItem(text = { Text(if (pinned) "Unpin" else "Pin for everyone") }, onClick = { menu = false; app.call("pin", message.targetArgs(conversation).put("pinned", !pinned)) })
+                            }
                             DropdownMenuItem(text = { Text("Reply") }, onClick = { menu = false; onReply(message) })
                             DropdownMenuItem(text = { Text("Forward") }, onClick = { menu = false; forwarding = true })
                             DropdownMenuItem(text = { Text(if (message.optBoolean("starred")) "Unstar" else "Star") }, onClick = { menu = false; app.call("star", message.targetArgs(conversation).put("value", !message.optBoolean("starred"))) })
@@ -257,6 +268,25 @@ fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds
             Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Timer, null, Modifier.size(14.dp)); RawText(" $text", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+/** Shared pins: one pinned message at a time under the header; tap cycles, × unpins (if allowed). */
+@Composable fun PinnedBanner(app: MainActivity, conversation: JSONObject, messages: List<JSONObject>, onJump: (JSONObject) -> Unit) {
+    val pins = conversation.optJSONArray("pinnedMessages")?.objects().orEmpty()
+    val targets = pins.mapNotNull { p -> messages.find { it.optString("authorId") == p.optString("authorId") && it.optString("id") == p.optString("id") && !it.optBoolean("deleted") } }
+    if (targets.isEmpty()) return
+    var index by remember(conversation.optString("id")) { mutableIntStateOf(0) }
+    val current = targets[index % targets.size]
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(Modifier.fillMaxWidth().clickable { onJump(current); index = (index + 1) % targets.size }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.PushPin, null, Modifier.size(16.dp))
+            Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                Text(if (targets.size > 1) tr("Pinned {n} of {total}").replace("{n}", "${index % targets.size + 1}").replace("{total}", "${targets.size}") else "Pinned message", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                RawText(current.optString("body").ifBlank { tr("📷 Photo") }, maxLines = 1, style = MaterialTheme.typography.bodySmall)
+            }
+            if (app.canPinActive) IconButton({ app.call("pin", current.targetArgs(conversation.optString("id")).put("pinned", false)) }) { Icon(Icons.Outlined.Close, "Unpin") }
         }
     }
 }

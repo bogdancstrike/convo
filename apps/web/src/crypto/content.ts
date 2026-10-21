@@ -94,6 +94,8 @@ export interface DataMessage {
   mentions?: string[];
   /** Conversation event: the disappearing timer changed. */
   timerUpdate?: { seconds: number };
+  /** Conversation event: a message was pinned/unpinned for everyone. */
+  pin?: { targetMessageId: string; targetAuthorId: string; pinned: boolean };
 }
 
 /** Delivery/read receipt for messages sent by the receiver of this content. */
@@ -237,6 +239,7 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (typeof value.messageId !== 'string' || typeof value.timestamp !== 'number') return false;
   if (value.recipientAccountIds !== undefined && (!Array.isArray(value.recipientAccountIds) || value.recipientAccountIds.length > 1000 || !value.recipientAccountIds.every((id) => typeof id === 'string'))) return false;
   if (value.profile !== undefined && !isProfile(value.profile)) return false;
+  if (value.pin !== undefined && (!isObject(value.pin) || typeof value.pin.targetMessageId !== 'string' || typeof value.pin.targetAuthorId !== 'string' || typeof value.pin.pinned !== 'boolean')) return false;
   if (value.mentions !== undefined && (!Array.isArray(value.mentions) || value.mentions.length > 50 || !value.mentions.every((id) => typeof id === 'string' && id.length <= 64))) return false;
   if (value.expireTimer !== undefined && !(Number.isSafeInteger(value.expireTimer) && (value.expireTimer as number) >= 0 && (value.expireTimer as number) <= 366 * 24 * 3600)) return false;
   if (value.timerUpdate !== undefined && (!isObject(value.timerUpdate) || !Number.isSafeInteger(value.timerUpdate.seconds) || (value.timerUpdate.seconds as number) < 0)) return false;

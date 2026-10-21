@@ -166,7 +166,10 @@ class MainActivity : FragmentActivity() {
         getPreferences(MODE_PRIVATE).edit().putString("server", value.trim().trimEnd('/')).apply(); recreate()
     }
     fun serverAddress() = server
+    /** Whether this account may pin in the open chat (groups/channels: owners and admins). */
+    var canPinActive by mutableStateOf(false); private set
     fun openChat(id: String) {
+        canPinActive = false; call("canPin", obj("id" to id), quiet = true) { canPinActive = it == true }
         if (locks.locked(id) && locks.unlockedChat != id) { locks.authenticate("Open locked chat", "Confirm it’s you") { locks.unlockedChat = id; openChat(id) }; return }
         threadSearch = false; active = id; route = "thread"; selectedTab = "Chats"; call("open", obj("id" to id))
     }

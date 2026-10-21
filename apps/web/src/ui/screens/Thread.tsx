@@ -1,5 +1,6 @@
 import { useCalls } from '../calls/CallProvider';
 import { TimerNotice } from './TimerNotice';
+import { PinnedBanner } from './PinnedBanner';
 import { conversationMenu } from './conversationMenu';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
@@ -175,6 +176,7 @@ export function Thread({
           )}
         />
       </header>
+      <PinnedBanner client={client} conversation={conversation} />
       {search !== null && (
         <div className="thread-search">
           <label className="search">

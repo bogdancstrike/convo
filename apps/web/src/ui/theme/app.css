@@ -2268,3 +2268,10 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .mention-suggestions button { width: 100%; text-align: left; padding: 8px 12px; border: 0; border-radius: 6px; background: none; color: var(--c-text-primary); cursor: pointer; }
 .mention-suggestions li[aria-selected='true'] button, .mention-suggestions button:hover { background: var(--c-hover); }
 .chat-mention-badge { color: var(--c-accent-text); font-weight: 700; margin-right: 4px; }
+
+/* Shared pinned messages */
+.pinned-banner { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-3); background: var(--c-panel); border-bottom: 1px solid var(--c-border); }
+.pinned-main { flex: 1; display: flex; align-items: center; gap: var(--space-2); min-width: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.pinned-text { display: grid; min-width: 0; font-size: 0.8125rem; }
+.pinned-text strong { color: var(--c-accent-text); font-weight: 600; }
+.pinned-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text-secondary); }

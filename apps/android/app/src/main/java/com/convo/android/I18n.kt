@@ -30,6 +30,7 @@ object Strings {
         " End-to-end encrypted" to " Criptat integral",
         " Securing call…" to " Se securizează apelul…",
         "Accept" to "Răspunde",
+        "Pin for everyone" to "Fixează pentru toți", "Unpin" to "Anulează fixarea", "Pinned message" to "Mesaj fixat", "Pinned {n} of {total}" to "Fixat {n} din {total}",
         "Block contact" to "Blochează contactul", "Unblock" to "Deblochează", "Block contact?" to "Blochezi contactul?", "Block" to "Blochează",
         "Contact blocked" to "Contact blocat", "Contact unblocked" to "Contact deblocat", "You blocked this contact." to "Ai blocat acest contact.",
         "Their messages and calls will no longer reach you, and they won’t be told." to "Mesajele și apelurile sale nu te vor mai ajunge, iar persoana nu va fi anunțată.",

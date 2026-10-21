@@ -80,6 +80,8 @@ export interface Conversation {
   lastActivity: number;
   preview?: string;
   unread: number;
+  /** Messages pinned for everyone (newest first, at most MAX_PINNED). */
+  pinnedMessages?: { authorId: string; id: string; pinnedAt: number; by: string }[];
   /** An unread message mentions this account (cleared when read). */
   mentioned?: boolean;
   /** Direct chat: this account blocked the peer (their direct content is dropped on arrival). */

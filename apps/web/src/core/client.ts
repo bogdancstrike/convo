@@ -475,6 +475,46 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emitConversations();
   }
 
+  // --- shared pins ------------------------------------------------------------------------
+
+  /** One stored message (e.g. a pinned target). */
+  message(conversationId: string, authorId: string, id: string): Promise<ChatMessage | undefined> {
+    return this.repos.message(conversationId, authorId, id);
+  }
+
+  /** Whether this account may pin in a chat (groups/channels: owners and admins). */
+  async canPin(conversationId: string): Promise<boolean> {
+    const conversation = this.conversationCache.get(conversationId);
+    if (!conversation || conversation.left || conversation.blocked) return false;
+    const groupId = groupIdOf(conversationId);
+    return !groupId || this.canChangeTimer(groupId, this.accountId);
+  }
+
+  /** Pins/unpins a message for everyone in the chat (at most {@link MAX_PINNED}; oldest drops off). */
+  async setPinned(target: ChatMessage, pinned: boolean): Promise<void> {
+    if (target.deleted || target.notice || !(await this.canPin(target.conversationId))) throw new Error('cannot pin');
+    await this.mutex.run(async () => {
+      const now = Date.now();
+      const data: DataMessage = { messageId: newMessageId(), timestamp: now, pin: { targetMessageId: target.id, targetAuthorId: target.authorId, pinned } };
+      const conversation = this.conversationCache.get(target.conversationId)!;
+      const updated = { ...conversation, pinnedMessages: withPin(conversation.pinnedMessages, target.authorId, target.id, pinned, now, this.accountId) };
+      this.conversationCache.set(updated.id, updated);
+      await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putConversation(updated)]);
+    });
+    this.emitConversations();
+  }
+
+  private async applyPin(conversation: Conversation, authorId: string, data: DataMessage, ops: StoreOp[]): Promise<'mutation' | 'ignored'> {
+    const groupId = groupIdOf(conversation.id);
+    if (groupId && !(await this.canChangeTimer(groupId, authorId))) return 'ignored';
+    const pin = data.pin!;
+    const target = await this.repos.message(conversation.id, pin.targetAuthorId, pin.targetMessageId);
+    // Pins cannot resurrect deleted content; unpinning unknown targets is harmless.
+    if (pin.pinned && (!target || target.deleted)) return 'ignored';
+    this.stage(ops, { ...conversation, pinnedMessages: withPin(conversation.pinnedMessages, pin.targetAuthorId, pin.targetMessageId, pin.pinned, data.timestamp, authorId) });
+    return 'mutation';
+  }
+
   /** Adds or removes the current account's reaction. */
   async react(target: ChatMessage, emoji: string): Promise<void> {
     const remove = (target.reactions[emoji] ?? []).includes(this.accountId);
@@ -1197,6 +1237,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       return 'mutation';
     }
     if (data.timerUpdate) return this.applyTimerUpdate(conversation, authorId, direction, data, envelope, ops);
+    if (data.pin) return this.applyPin(conversation, authorId, data, ops);
     if (data.body === undefined && !data.attachments?.length) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
     ops.push({ type: 'delete', ns: RecordNs.localHiddenConversation, id: conversationId });
@@ -1433,6 +1474,15 @@ const MAX_REVISED_UNREAD = 200;
 function revised(message: ChatMessage, body: string, editedAt: number, revision: number | undefined): ChatMessage {
   const status = message.status && STATUS_RANK[message.status] > STATUS_RANK.sent ? 'sent' : message.status;
   return { ...message, body, editedAt, revision, receipts: undefined, status };
+}
+
+/** Shared pins per chat (like common messengers: a short, glanceable list). */
+export const MAX_PINNED = 3;
+
+function withPin(list: Conversation['pinnedMessages'], authorId: string, id: string, pinned: boolean, at: number, by: string): Conversation['pinnedMessages'] {
+  const others = (list ?? []).filter((p) => p.authorId !== authorId || p.id !== id);
+  const next = pinned ? [{ authorId, id, pinnedAt: at, by }, ...others].sort((a, b) => b.pinnedAt - a.pinnedAt).slice(0, MAX_PINNED) : others;
+  return next.length ? next : undefined;
 }
 
 /** Sending to a blocked contact (unblock first). */

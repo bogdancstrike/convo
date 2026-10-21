@@ -79,6 +79,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   in E2EE content (members only), highlighted mentions, @ badge until read. Web and Android;
   `mentions.spec.ts` Chromium/Firefox; Android→web mention verified (badge + highlight).
   Fixed caret placement after picking a suggestion on both clients.
+- Shared message pins (FEAT-02): up to 3 per chat as authenticated E2EE events (groups/channels:
+  owners/admins, enforced by receivers); pinned banner that jumps/cycles and unpins; deleted
+  targets never resurface. Web and Android; `pins.spec.ts` Chromium/Firefox; emulator checked.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
