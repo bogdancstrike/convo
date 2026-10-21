@@ -33,6 +33,14 @@ if ! k get roles/convo-admin -r "$REALM" >/dev/null 2>&1; then
   k create roles -r "$REALM" -s name=convo-admin -s 'description=Convo organization administrator (admin console)' >/dev/null
   echo "Created realm role convo-admin"
 fi
+# Scoped admin roles (least privilege, specs §19): helpdesk, organization admin, security, auditor.
+for spec in "convo-helpdesk:Convo helpdesk (accounts, devices, revoke a device)" "convo-org-admin:Convo organization admin (accounts, disable/enable)" \
+            "convo-security:Convo security operator (accounts, devices, revoke, disable, read audit)" "convo-auditor:Convo auditor (read, verify, export audit)"; do
+  role="${spec%%:*}"
+  if ! k get "roles/$role" -r "$REALM" >/dev/null 2>&1; then
+    k create roles -r "$REALM" -s "name=$role" -s "description=${spec#*:}" >/dev/null && echo "Created realm role $role"
+  fi
+done
 if [[ -n "${ADMIN_USERNAMES:-}" ]]; then
   for user in ${ADMIN_USERNAMES//,/ }; do
     k add-roles -r "$REALM" --uusername "$user" --rolename convo-admin 2>/dev/null && echo "Granted convo-admin to $user" || echo "No user $user (skipped)"

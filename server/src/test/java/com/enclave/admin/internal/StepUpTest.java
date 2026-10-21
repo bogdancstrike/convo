@@ -20,11 +20,14 @@ import org.springframework.security.oauth2.jwt.Jwt;
 class StepUpTest {
     private final Instant now = Instant.parse("2026-10-21T12:00:00Z");
     private final AdminActions actions = mock(AdminActions.class);
+    private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"),
+            "", Duration.ofMinutes(15), Duration.ofMinutes(10));
     private final AdminController controller = new AdminController(mock(IdentityAdminApi.class), mock(AuditLog.class), actions, mock(AuditCheckpoints.class),
-            new AdminProperties("convo-admin", "", Duration.ofMinutes(15), Duration.ofMinutes(10)), Clock.fixed(now, ZoneOffset.UTC));
+            properties, Clock.fixed(now, ZoneOffset.UTC), new AdminPermissions(properties));
 
     private Jwt token(Instant authTime) {
-        var builder = Jwt.withTokenValue("t").header("alg", "RS256").subject("admin-sub").claim("preferred_username", "admin");
+        var builder = Jwt.withTokenValue("t").header("alg", "RS256").subject("admin-sub").claim("preferred_username", "admin")
+                .claim("realm_access", java.util.Map.of("roles", java.util.List.of("convo-admin")));
         if (authTime != null) builder.claim("auth_time", authTime.getEpochSecond());
         return builder.build();
     }

@@ -24,7 +24,7 @@ test('an organization admin disables and re-enables an account; the audit chain 
     expect((await request.get('/v1/admin/accounts')).status()).toBe(401);
     await adminSignIn(plain, plainU);
     await expect(plain.getByTestId('admin-name')).toBeVisible({ timeout: 30_000 });
-    await expect(plain.getByTestId('admin-error')).toContainText('administrator role');
+    await expect(plain.getByTestId('admin-no-role')).toContainText('administrator role');
 
     await enroll(member, memberU);
     await enroll(peer, peerU);

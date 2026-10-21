@@ -15,9 +15,10 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Administrator API ({@code /v1/admin/**}, Keycloak token with the admin realm role, enforced in
- * the security chain). State-changing actions require a reason and are appended to the audit log
- * in the same transaction boundary as the change is requested.
+ * Administrator API ({@code /v1/admin/**}, Keycloak token with an admin realm role; the security
+ * chain admits any admin role and each endpoint checks its scoped permission, see
+ * {@link AdminPermissions}). State-changing actions require a reason and commit with their audit
+ * entry; denied sensitive attempts are audited too.
  */
 @RestController
 @RequestMapping("/v1/admin")
@@ -31,8 +32,17 @@ class AdminController {
 
     private final AdminProperties properties;
     private final java.time.Clock clock;
+    private final AdminPermissions permissions;
 
-    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints, AdminProperties properties, java.time.Clock clock) {
+    /** This admin's roles and permissions (the console shows only what is allowed). */
+    record Me(String actor, List<String> roles, java.util.Set<AdminPermissions.Permission> permissions) {}
+
+    /** Audit export: the full chain with its head; the export itself is audited first. */
+    record AuditExport(String exportedBy, java.time.Instant exportedAt, AuditLog.FullVerification verification, List<AuditLog.Entry> entries) {}
+
+    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints, AdminProperties properties, java.time.Clock clock,
+            AdminPermissions permissions) {
+        this.permissions = permissions;
         this.checkpoints = checkpoints;
         this.properties = properties;
         this.clock = clock;
@@ -41,43 +51,59 @@ class AdminController {
         this.actions = actions;
     }
 
+    @GetMapping("/me")
+    Me me(@AuthenticationPrincipal Jwt admin) {
+        return new Me(actor(admin), permissions.roles(admin), permissions.of(admin));
+    }
+
     @GetMapping("/accounts")
-    List<IdentityAdminApi.AccountSummary> accounts(@RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "50") int limit) {
+    List<IdentityAdminApi.AccountSummary> accounts(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "50") int limit) {
+        require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
         return identity.searchAccounts(q, limit);
     }
 
     @GetMapping("/accounts/{accountId}/devices")
-    List<IdentityAdminApi.DeviceSummary> devices(@PathVariable UUID accountId) {
+    List<IdentityAdminApi.DeviceSummary> devices(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId) {
+        require(admin, AdminPermissions.Permission.DEVICES_READ);
         requireAccount(accountId);
         return identity.devices(accountId);
     }
 
     @PostMapping("/accounts/{accountId}/disable")
     AuditLog.Entry disable(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @Valid @RequestBody Reason body) {
+        requireAudited(admin, AdminPermissions.Permission.ACCOUNT_STATUS, "account.disable", accountId.toString());
         requireRecentSignIn(admin);
         return actions.setDisabled(actor(admin), accountId, true, body.reason());
     }
 
     @PostMapping("/accounts/{accountId}/enable")
     AuditLog.Entry enable(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @Valid @RequestBody Reason body) {
+        requireAudited(admin, AdminPermissions.Permission.ACCOUNT_STATUS, "account.enable", accountId.toString());
         requireRecentSignIn(admin);
         return actions.setDisabled(actor(admin), accountId, false, body.reason());
     }
 
     @PostMapping("/accounts/{accountId}/devices/{deviceId}/revoke")
     AuditLog.Entry revoke(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @PathVariable int deviceId, @Valid @RequestBody Reason body) {
+        requireAudited(admin, AdminPermissions.Permission.DEVICE_REVOKE, "device.revoke", accountId + "." + deviceId);
         requireRecentSignIn(admin);
         return actions.revokeDevice(actor(admin), accountId, deviceId, body.reason());
     }
 
     @GetMapping("/audit")
-    ResponseEntity<List<AuditLog.Entry>> audit(@RequestParam(defaultValue = "9223372036854775807") long before, @RequestParam(defaultValue = "100") int limit) {
+    ResponseEntity<List<AuditLog.Entry>> audit(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "9223372036854775807") long before, @RequestParam(defaultValue = "100") int limit) {
+        require(admin, AdminPermissions.Permission.AUDIT_READ);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(audit.page(before, limit));
     }
 
     /** Recomputes the chain; export {@code head} to an independent store to detect later rewrites. */
     @GetMapping("/audit/verify")
-    AuditLog.FullVerification verify() throws java.io.IOException {
+    AuditLog.FullVerification verify(@AuthenticationPrincipal Jwt admin) throws java.io.IOException {
+        require(admin, AdminPermissions.Permission.AUDIT_READ);
+        return fullVerification();
+    }
+
+    private AuditLog.FullVerification fullVerification() throws java.io.IOException {
         var chain = audit.verify();
         var heads = audit.heads();
         Long mismatch = null; int checked = 0;
@@ -91,9 +117,31 @@ class AdminController {
 
     /** Writes a checkpoint now (e.g. right after an incident review). */
     @PostMapping("/audit/checkpoint")
-    AuditLog.FullVerification checkpointNow() throws java.io.IOException {
+    AuditLog.FullVerification checkpointNow(@AuthenticationPrincipal Jwt admin) throws java.io.IOException {
+        requireAudited(admin, AdminPermissions.Permission.AUDIT_CHECKPOINT, "audit.checkpoint", "audit");
         checkpoints.checkpoint();
-        return verify();
+        return fullVerification();
+    }
+
+    /** Accountable export (auditors): recorded with its reason before the data leaves. */
+    @PostMapping("/audit/export")
+    ResponseEntity<AuditExport> export(@AuthenticationPrincipal Jwt admin, @Valid @RequestBody Reason body) throws java.io.IOException {
+        requireAudited(admin, AdminPermissions.Permission.AUDIT_EXPORT, "audit.export", "audit");
+        audit.append(actor(admin), "audit.export", "audit", body.reason());
+        var export = new AuditExport(actor(admin), clock.instant(), fullVerification(), audit.all());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .header("Content-Disposition", "attachment; filename=\"convo-audit-" + export.verification().entries() + ".json\"").body(export);
+    }
+
+    private void require(Jwt admin, AdminPermissions.Permission permission) {
+        if (!permissions.of(admin).contains(permission)) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "your admin role does not allow this");
+    }
+
+    /** Sensitive actions: a denial is itself recorded in the audit chain. */
+    private void requireAudited(Jwt admin, AdminPermissions.Permission permission, String action, String target) {
+        if (permissions.of(admin).contains(permission)) return;
+        audit.append(actor(admin), "denied:" + action, target, "role lacks " + permission.name());
+        throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "your admin role does not allow this");
     }
 
     /** Step-up: the IdP sign-in behind this token ({@code auth_time}) must be recent. */

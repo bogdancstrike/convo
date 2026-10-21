@@ -20,4 +20,14 @@ Step-up: disable/enable/revoke require the token's `auth_time` to be within
 `enclave.admin.step-up-max-age` (default 10 min); otherwise `STEP_UP_REQUIRED` and the console
 sends the admin through sign-in again.
 
-Not yet: scoped/limited admin roles, signed policies, and auditing of read-only lookups/denials.
+Scoped roles (specs §19, AC-ADM-01; `AdminPermissions`): `convo-admin` = everything;
+`convo-helpdesk` = accounts, devices, revoke a device; `convo-org-admin` = accounts,
+disable/enable; `convo-security` = accounts, devices, revoke, disable, read audit;
+`convo-auditor` = read/verify/export/checkpoint the audit log. The security chain admits any of
+them; each endpoint checks its permission. Denied sensitive attempts are appended to the audit
+chain (`denied:<action>`). `GET /v1/admin/me` lists the caller's roles/permissions (the console
+hides the rest); `POST /v1/admin/audit/export {reason}` records `audit.export` before returning
+the full chain with its verification. Role names: `enclave.admin.roles.*`; `keycloak-setup`
+creates the roles.
+
+Not yet: signed policies, and auditing of read-only lookups/denials.

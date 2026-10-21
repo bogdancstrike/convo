@@ -127,6 +127,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
   rules; emulator-verified save → welcome card).
+- Scoped admin roles (ADM-01, AC-ADM-01/03): helpdesk / org admin / security / auditor realm
+  roles with a least-privilege permission matrix enforced per endpoint; denied sensitive attempts
+  audited; console shows only permitted tabs/actions (`/v1/admin/me`); accountable audit export
+  (reason recorded first). `admin-roles.spec.ts` (Chromium/Firefox) + unit tests.
 - Parent-removal delegation (specs §30.3, V22): owners opt a linked group into "remove people here
   when they leave the community" (link/accept); leaving or being removed from the community
   marks them departed in those groups (fan-out stops at once, `GROUPS_CHANGED` hint, a member's
@@ -308,7 +312,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 |---|---|
 | Communities: ack due/expiry/custom reviewers, membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
-| Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
+| Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
 
 ## Web UX refresh (ADR-0003) — 2026-10-20

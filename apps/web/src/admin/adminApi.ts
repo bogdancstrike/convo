@@ -59,8 +59,15 @@ export class AdminApi {
   audit() { return this.call<AuditEntry[]>('GET', '/audit?limit=200'); }
   verify() { return this.call<AuditVerification>('GET', '/audit/verify'); }
   checkpoint() { return this.call<AuditVerification>('POST', '/audit/checkpoint'); }
+  /** Roles and permissions of the signed-in admin (the console shows only what they allow). */
+  me() { return this.call<{ actor: string; roles: string[]; permissions: Permission[] }>('GET', '/me'); }
+  /** Accountable export: recorded with its reason in the audit chain before the data is returned. */
+  exportAudit(reason: string) { return this.call<unknown>('POST', '/audit/export', { reason }); }
 }
 
 export class AdminError extends Error {
   constructor(readonly status: number, readonly code?: string) { super(`admin request failed: ${status}`); this.name = 'AdminError'; }
 }
+
+/** Scoped admin permissions (server `AdminPermissions`). */
+export type Permission = 'ACCOUNTS_READ' | 'DEVICES_READ' | 'DEVICE_REVOKE' | 'ACCOUNT_STATUS' | 'AUDIT_READ' | 'AUDIT_EXPORT' | 'AUDIT_CHECKPOINT';

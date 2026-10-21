@@ -56,6 +56,14 @@ class AuditLog {
         return new Entry(seq, at, actor, action, target, reason, HexFormat.of().formatHex(hash));
     }
 
+    /** Whole chain in order (exports; bounded at 100k entries). */
+    @Transactional(readOnly = true)
+    List<Entry> all() {
+        return jdbc.sql("SELECT seq, at, actor, action, target, reason, hash FROM admin_audit ORDER BY seq LIMIT 100000")
+                .query((rs, i) -> new Entry(rs.getLong(1), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6), HexFormat.of().formatHex(rs.getBytes(7)))).list();
+    }
+
     @Transactional(readOnly = true)
     List<Entry> page(long before, int limit) {
         return jdbc.sql("SELECT seq, at, actor, action, target, reason, hash FROM admin_audit WHERE seq < :before ORDER BY seq DESC LIMIT :limit")
