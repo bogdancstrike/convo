@@ -57,6 +57,8 @@ export interface GroupRecord {
   departed?: string[];
   /** This device was removed or left. */
   left: boolean;
+  /** About text (E2EE metadata from owners/admins). */
+  description?: string;
   /** Community root metadata (E2EE, from root owners/admins). */
   community?: import('../crypto/content').CommunityMeta;
 }

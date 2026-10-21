@@ -1,3 +1,6 @@
+import { FormattedText } from '../components/FormattedText';
+import { MAX_DESCRIPTION_BYTES } from '../../crypto/content';
+import { utf8 } from '../../lib/bytes';
 import { matches } from '../../lib/text';
 import { InviteSection } from './InviteSection';
 import { LastSeen } from '../components/LastSeen';
@@ -227,6 +230,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
         <span className="chat-kind" data-testid="conversation-kind"><Icon name={conversation.adminOnly ? 'channels' : 'group'} size={16} />{t(conversation.adminOnly ? 'channel.type' : 'group.type')}</span>
         <span className="muted-text">{t('group.participants', { count: members.length })}</span>
       </section>
+      <GroupAbout client={client} conversation={conversation} description={record?.description} canEdit={canManage} />
       {canManage && <InviteSection client={client} conversation={conversation} />}
       <section className="drawer-section" aria-labelledby="members-title">
         <h4 id="members-title">{t('group.participants', { count: members.length })}</h4>
@@ -325,5 +329,47 @@ export function CommonGroups({ client, accountId, onOpen }: { client: EnclaveCli
       {common.map((group) => <button className="settings-row" key={group.id} onClick={() => onOpen(group.id)} data-testid="common-group">
         <Avatar id={group.id} name={group.title} size={40} group /><span className="settings-row-text">{group.title}</span><Icon name="next" size={18} /></button>)}
     </section>
+  );
+}
+
+/**
+ * Group About (specs §30.8): E2EE description shown with the safe message formatting (no HTML,
+ * links visible before opening). Owners/admins edit name and description (≤ 8 KiB).
+ */
+function GroupAbout({ client, conversation, description, canEdit }: { client: EnclaveClient; conversation: Conversation; description?: string; canEdit: boolean }) {
+  const { t } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(conversation.title);
+  const [text, setText] = useState(description ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const bytes = utf8(text).length;
+  if (!editing) {
+    if (!description && !canEdit) return null;
+    return (
+      <section className="drawer-section" data-testid="group-about">
+        <h4>{t('group.about')}</h4>
+        {description ? <p className="group-description" data-testid="group-description"><FormattedText text={description} /></p>
+          : <p className="muted-text">{t('group.noDescription')}</p>}
+        {canEdit && <button className="btn btn-ghost" onClick={() => { setName(conversation.title); setText(description ?? ''); setEditing(true); }} data-testid="edit-group-info">{t('group.editInfo')}</button>}
+      </section>
+    );
+  }
+  return (
+    <form className="drawer-section group-about-form" data-testid="group-about-form" onSubmit={(e) => {
+      e.preventDefault(); setBusy(true); setError(false);
+      void client.updateGroupInfo(conversation.id, { name, description: text }).then(() => setEditing(false)).catch(() => setError(true)).finally(() => setBusy(false));
+    }}>
+      <label className="field"><span>{t('group.subject')}</span>
+        <input className="underline-input" maxLength={128} value={name} onChange={(e) => setName(e.target.value)} data-testid="group-name-edit" /></label>
+      <label className="field"><span>{t('group.about')}</span>
+        <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} aria-describedby="about-help" data-testid="group-description-edit" /></label>
+      <p id="about-help" className={`muted-text${bytes > MAX_DESCRIPTION_BYTES ? ' failed' : ''}`}>{t('group.aboutHelp', { used: bytes, max: MAX_DESCRIPTION_BYTES })}</p>
+      {error && <p role="alert" className="failed">{t('group.changeFailed')}</p>}
+      <div className="lock-actions">
+        <button className="btn btn-primary" type="submit" disabled={busy || !name.trim() || bytes > MAX_DESCRIPTION_BYTES} data-testid="save-group-info">{t('storeLock.save')}</button>
+        <button className="btn btn-ghost" type="button" onClick={() => setEditing(false)}>{t('storeLock.cancel')}</button>
+      </div>
+    </form>
   );
 }

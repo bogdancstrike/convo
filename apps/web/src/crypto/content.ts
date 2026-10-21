@@ -156,6 +156,8 @@ export interface SyncMessage {
 export interface GroupMeta {
   name: string;
   version: number;
+  /** About text (specs §30.8, ≤ 8 KiB UTF-8): plain text with the safe message formatting. */
+  description?: string;
   /**
    * Community root only (COM-01): description and labels of linked groups that a community admin
    * who is also in that group published after the link became active. Accepted only from the
@@ -293,6 +295,7 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
         typeof parsed.groupMeta.name !== 'string' ||
         parsed.groupMeta.name.length > 128 ||
         typeof parsed.groupMeta.version !== 'number' ||
+        (parsed.groupMeta.description !== undefined && (typeof parsed.groupMeta.description !== 'string' || utf8(parsed.groupMeta.description).length > MAX_DESCRIPTION_BYTES)) ||
         (parsed.groupMeta.community !== undefined && !isCommunityMeta(parsed.groupMeta.community))
       ) {
         throw new Error('malformed group metadata');
@@ -302,6 +305,9 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       return { v: parsed.v, kind: 'unknown' };
   }
 }
+
+/** Group/community About text budget (specs §30.8). */
+export const MAX_DESCRIPTION_BYTES = 8192;
 
 const CALL_ACTIONS = new Set(['ring', 'accept', 'decline', 'cancel', 'end', 'busy', 'rekey']);
 function isCallMessage(value: unknown): value is CallMessage {

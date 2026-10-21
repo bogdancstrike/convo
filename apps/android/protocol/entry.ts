@@ -226,6 +226,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'approveLink': return client.approveLink(args.request);
     case 'declineLink': return client.declineLink(args.request);
     case 'group': return client.groupRecord(args.id);
+    case 'updateGroupInfo': return client.updateGroupInfo(String(args.id), { name: args.name === undefined ? undefined : String(args.name), description: args.description === undefined ? undefined : String(args.description) });
     case 'createGroup': { const members = await Promise.all((args.members as string[]).map((id) => client!.account(id))); if (members.some((m) => !m)) throw new Error('member unavailable'); return client.createGroup(String(args.name), members.filter((m) => Boolean(m)) as any, Boolean(args.channel)); }
     case 'addMembers': return client.addGroupMembers(args.id, args.members);
     case 'removeMember': return client.removeGroupMember(args.id, args.member);

@@ -23,6 +23,7 @@ import {
   type AckResponse,
   type OnboardingPackage,
   type RulesAck,
+  MAX_DESCRIPTION_BYTES,
 } from '../crypto/content';
 import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
@@ -1056,7 +1057,31 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** Sends the current group metadata so members (especially new ones) learn the name. */
   private async shareGroupMeta(record: GroupRecord): Promise<void> {
     await this.enqueue(record.groupId, { v: CONTENT_VERSION, kind: 'groupMeta',
-      groupMeta: { name: record.name, version: record.metaVersion, ...(record.community ? { community: record.community } : {}) } }, false, undefined, [], true);
+      groupMeta: { name: record.name, version: record.metaVersion, ...(record.description ? { description: record.description } : {}),
+        ...(record.community ? { community: record.community } : {}) } }, false, undefined, [], true);
+  }
+
+  /** Renames a group and/or edits its About text (owners/admins; E2EE metadata, ≤ 8 KiB). */
+  async updateGroupInfo(conversationId: string, change: { name?: string; description?: string }): Promise<void> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId) throw new Error('not a group');
+    const name = change.name?.trim();
+    if (name !== undefined && (!name || name.length > 128)) throw new Error('invalid group name');
+    const description = change.description?.replace(/\r\n/g, '\n').trim();
+    if (description !== undefined && utf8(description).length > MAX_DESCRIPTION_BYTES) throw new Error('description too long');
+    const record = await this.mutex.run(async () => {
+      const current = await this.groups.record(groupId);
+      const role = current?.members.find((m) => m.accountId === this.accountId)?.role;
+      if (!current || (role !== 'owner' && role !== 'admin')) throw new Error('only owners and admins edit group info');
+      const next: GroupRecord = { ...current, metaVersion: current.metaVersion + 1, ...(name !== undefined ? { name } : {}),
+        ...(description !== undefined ? { description: description || undefined } : {}) };
+      await this.repos.store.put('group', groupId, next);
+      const conversation = this.conversationCache.get(conversationId);
+      if (conversation && name) await this.saveConversations([{ ...conversation, title: name }]);
+      return next;
+    });
+    await this.shareGroupMeta(record);
+    this.emit('groups', groupId);
   }
 
   // --- communities (COM-01) ---------------------------------------------------------------
@@ -1672,10 +1697,16 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private async applyGroupMeta(groupId: string, meta: GroupMeta, ops: StoreOp[], author?: string): Promise<void> {
     const record = await this.groups.record(groupId);
     if (!record || meta.version <= record.metaVersion) return;
-    // Community metadata (descriptions, linked-group labels) only from the root's owners/admins.
-    const role = record.members.find((m) => m.accountId === author)?.role;
-    const community = meta.community && (role === 'owner' || role === 'admin') ? meta.community : record.community;
-    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...record, name: meta.name, metaVersion: meta.version, ...(community ? { community } : {}) } });
+    // Group metadata (name, About, community data) is accepted only from owners/admins. Before the
+    // roster is known (fresh join) the creator's first metadata is trusted as before.
+    const isManager = (r: GroupRecord) => ['owner', 'admin'].includes(r.members.find((m) => m.accountId === author)?.role ?? '');
+    let current = record;
+    // A recently promoted admin may not be in the local roster yet: re-read roles once.
+    if (!isManager(current) && current.members.length > 0) current = await this.groups.refreshRecord(groupId).catch(() => undefined) ?? current;
+    const manager = isManager(current) || (current.members.length === 0 && current.metaVersion === 0);
+    if (!manager) return;
+    const community = meta.community ?? current.community;
+    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...current, name: meta.name, metaVersion: meta.version, description: meta.description || undefined, ...(community ? { community } : {}) } });
     const conversation = this.conversationCache.get(groupConversationId(groupId));
     if (conversation) this.stage(ops, { ...conversation, title: meta.name });
   }

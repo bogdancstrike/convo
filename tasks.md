@@ -127,6 +127,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
   rules; emulator-verified save → welcome card).
+- Rich group descriptions (specs §30.8): E2EE About text (≤ 8 KiB, safe formatting, links shown,
+  no HTML) and rename for owners/admins on web and Android; receivers accept group metadata only
+  from owners/admins (re-reading roles once for fresh promotions). `group-about.spec.ts`
+  (Chromium/Firefox, incl. markup shown as text), group suites green, emulator edit.
 - Fast accessible actions (specs §30.8): web shortcuts on a focused message (Enter menu, R reply,
   E edit, S star, F forward, I info, Delete → confirmation, ↑/↓ move), never in text fields, IME
   composition or with modifiers, listed in Settings → Chats; focus returns to the message after the

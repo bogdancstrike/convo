@@ -2384,3 +2384,6 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .shortcut-list dt { min-width: 64px; }
 .shortcut-list dd { margin: 0; }
 kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-canvas); }
+.group-description { white-space: pre-wrap; margin: 0; }
+.group-about-form { display: grid; gap: var(--space-2); }
+.group-about-form textarea { font: inherit; padding: var(--space-2); border: 1px solid var(--c-border); border-radius: var(--radius-md); background: var(--c-canvas); color: var(--c-text-primary); }

@@ -63,6 +63,28 @@ import org.json.JSONObject
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { ConversationQuickMenu(app, c) } }
         item { var export by remember { mutableStateOf(false) }; ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }; if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) } }
         if (isGroup) {
+            // About (specs §30.8): E2EE description; owners/admins edit name and description.
+            item {
+                var editing by remember { mutableStateOf(false) }
+                val description = group?.optString("description").orEmpty()
+                if (description.isNotBlank() || canManage) Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("About", style = MaterialTheme.typography.titleSmall)
+                    if (description.isNotBlank()) LinkedBody(app, description, emptyList()) else Text("No description yet.", style = MaterialTheme.typography.bodySmall)
+                    if (canManage) TextButton(onClick = { editing = true }) { Text("Edit name and description") }
+                }
+                if (editing) {
+                    var name by remember { mutableStateOf(c.optString("title")) }; var text by remember { mutableStateOf(description) }
+                    val bytes = text.toByteArray(Charsets.UTF_8).size
+                    AlertDialog(onDismissRequest = { editing = false }, title = { Text("Edit name and description") }, text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(name, { name = it.take(128) }, label = { Text("Group name") }, singleLine = true)
+                            OutlinedTextField(text, { text = it }, label = { Text("About") }, minLines = 4, maxLines = 10, isError = bytes > 8192)
+                            RawText("$bytes / 8192", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }, confirmButton = { TextButton(enabled = name.isNotBlank() && bytes <= 8192, onClick = { editing = false; app.call("updateGroupInfo", obj("id" to id, "name" to name, "description" to text)) }) { Text("Save") } },
+                        dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
+                }
+            }
             item { Text("${members.size} participants", style = MaterialTheme.typography.titleMedium) }
             // Member search (specs §30.8): local roster, case/diacritic-insensitive; Admins includes owners.
             item {
