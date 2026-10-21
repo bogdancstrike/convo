@@ -5,7 +5,7 @@ import { fold, matchesMessage } from './search';
 import { ApiError, NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { GatewaySocket, type ConnectionState } from '../api/socket';
-import type { AccountDto, CredentialStatusDto, Directive, EnvelopeDto } from '../api/types';
+import type { AccountDto, CommunityDto, CommunityLinkDto, CredentialStatusDto, Directive, EnvelopeDto } from '../api/types';
 import {
   CONTENT_VERSION,
   decodeContent,
@@ -17,6 +17,8 @@ import {
   type CallMessage,
   type DataMessage,
   type Quote,
+  type CommunityMeta,
+  type GroupMeta,
 } from '../crypto/content';
 import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
@@ -1035,7 +1037,87 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Sends the current group metadata so members (especially new ones) learn the name. */
   private async shareGroupMeta(record: GroupRecord): Promise<void> {
-    await this.enqueue(record.groupId, { v: CONTENT_VERSION, kind: 'groupMeta', groupMeta: { name: record.name, version: record.metaVersion } }, false, undefined, [], true);
+    await this.enqueue(record.groupId, { v: CONTENT_VERSION, kind: 'groupMeta',
+      groupMeta: { name: record.name, version: record.metaVersion, ...(record.community ? { community: record.community } : {}) } }, false, undefined, [], true);
+  }
+
+  // --- communities (COM-01) ---------------------------------------------------------------
+
+  /**
+   * Creates a community: a new announcement channel (only admins post) registered as the
+   * community root. Name and description stay E2EE in the channel's metadata.
+   */
+  async createCommunity(name: string, description: string): Promise<CommunityView> {
+    if (description.length > 1000) throw new Error('description too long');
+    const root = await this.createGroup(name, [], true);
+    const rootGroupId = groupIdOf(root.id)!;
+    const dto = await this.api.createCommunity(rootGroupId);
+    await this.updateCommunityMeta(rootGroupId, (c) => ({ ...c, description: description.trim() }));
+    return this.communityView(dto);
+  }
+
+  /** Communities this account belongs to (server references + E2EE names). */
+  async communities(): Promise<CommunityView[]> {
+    const mine = await this.api.myCommunities();
+    return Promise.all(mine.map((dto) => this.communityView(dto)));
+  }
+
+  /**
+   * Groups of a community as this account may see them. Labels come from the root's E2EE
+   * metadata; a community admin who is in an active linked group publishes its missing label.
+   */
+  async communityGroups(community: CommunityView): Promise<CommunityGroup[]> {
+    const links = await this.api.communityGroups(community.communityId);
+    const root = await this.groups.record(community.rootGroupId);
+    const labels = new Map((root?.community?.links ?? []).map((l) => [l.groupId, l.name]));
+    const manager = community.role === 'owner' || community.role === 'admin';
+    const missing: { groupId: string; name: string }[] = [];
+    const out: CommunityGroup[] = [];
+    for (const link of links) {
+      const local = link.member ? await this.groups.record(link.groupId) : undefined;
+      const name = (link.member ? local?.name : undefined) ?? (link.visibility === 'discoverable' ? labels.get(link.groupId) : undefined);
+      // Only discoverable groups get a label in the root (seen by every member); never private ones.
+      if (manager && link.status === 'active' && link.visibility === 'discoverable' && !labels.has(link.groupId) && local?.name) missing.push({ groupId: link.groupId, name: local.name });
+      out.push({ ...link, conversationId: groupConversationId(link.groupId), name });
+    }
+    // Keep labels only for active links (an unlinked group's label disappears with it).
+    const active = new Set(links.filter((l) => l.status === 'active' && l.visibility === 'discoverable').map((l) => l.groupId));
+    const stale = [...labels.keys()].filter((id) => !active.has(id));
+    if (manager && (missing.length || stale.length)) {
+      await this.updateCommunityMeta(community.rootGroupId, (c) => ({
+        ...c, links: [...c.links.filter((l) => active.has(l.groupId)), ...missing].slice(0, 50) })).catch(() => undefined);
+    }
+    return out;
+  }
+
+  /** Links a group this account belongs to; active at once if this account owns it. */
+  async linkGroupToCommunity(community: CommunityView, conversationId: string, visibility: 'discoverable' | 'private'): Promise<void> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId) throw new Error('not a group');
+    await this.api.linkCommunityGroup(community.communityId, groupId, visibility);
+    await this.communityGroups(community); // publishes the label when already active
+  }
+
+  acceptCommunityLink(community: CommunityView, groupId: string): Promise<void> { return this.api.acceptCommunityLink(community.communityId, groupId); }
+  unlinkCommunityGroup(community: CommunityView, groupId: string): Promise<void> { return this.api.unlinkCommunityGroup(community.communityId, groupId); }
+  /** Asks to join a discoverable group (its admins approve; nothing is shared before that). */
+  requestCommunityGroup(community: CommunityView, groupId: string): Promise<void> { return this.api.requestCommunityGroup(community.communityId, groupId); }
+
+  private async communityView(dto: CommunityDto): Promise<CommunityView> {
+    const root = await this.groups.record(dto.rootGroupId);
+    return { ...dto, conversationId: groupConversationId(dto.rootGroupId), name: root?.name || '', description: root?.community?.description ?? '' };
+  }
+
+  private async updateCommunityMeta(rootGroupId: string, change: (c: CommunityMeta) => CommunityMeta): Promise<void> {
+    const record = await this.mutex.run(async () => {
+      const current = await this.groups.record(rootGroupId);
+      if (!current) throw new Error('community root unavailable');
+      const next: GroupRecord = { ...current, metaVersion: current.metaVersion + 1, community: change(current.community ?? { description: '', links: [] }) };
+      await this.repos.store.put('group', rootGroupId, next);
+      return next;
+    });
+    await this.shareGroupMeta(record);
+    this.emit('groups', rootGroupId);
   }
 
   /** Deletes a message on this device only. */
@@ -1359,7 +1441,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       } else if (content.kind === 'profile') {
         this.stageProfile(content.profile, accountId, ops);
       } else if (content.kind === 'groupMeta') {
-        await this.applyGroupMeta(result.groupId, content.groupMeta, ops);
+        await this.applyGroupMeta(result.groupId, content.groupMeta, ops, accountId);
       } else if (content.kind === 'call') {
         followUps.push(...await this.applyCall(content.call, accountId, conversationId, envelope, ops));
       } else if (content.kind === 'unknown') {
@@ -1374,10 +1456,13 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   /** Applies a newer encrypted group name (highest version wins). */
-  private async applyGroupMeta(groupId: string, meta: { name: string; version: number }, ops: StoreOp[]): Promise<void> {
+  private async applyGroupMeta(groupId: string, meta: GroupMeta, ops: StoreOp[], author?: string): Promise<void> {
     const record = await this.groups.record(groupId);
     if (!record || meta.version <= record.metaVersion) return;
-    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...record, name: meta.name, metaVersion: meta.version } });
+    // Community metadata (descriptions, linked-group labels) only from the root's owners/admins.
+    const role = record.members.find((m) => m.accountId === author)?.role;
+    const community = meta.community && (role === 'owner' || role === 'admin') ? meta.community : record.community;
+    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...record, name: meta.name, metaVersion: meta.version, ...(community ? { community } : {}) } });
     const conversation = this.conversationCache.get(groupConversationId(groupId));
     if (conversation) this.stage(ops, { ...conversation, title: meta.name });
   }
@@ -1722,6 +1807,20 @@ interface PendingUpload {
   files: (Omit<PreparedFile, 'data'> & { data: string; pointer?: AttachmentPointer; resume?: UploadResume })[];
   voice?: { durationMs: number };
   createdAt: number;
+}
+
+/** A community as shown to this account (COM-01). */
+export interface CommunityView extends CommunityDto {
+  /** Conversation ID of the root announcement channel. */
+  conversationId: string;
+  name: string;
+  description: string;
+}
+
+/** A linked group with its E2EE label when known. */
+export interface CommunityGroup extends CommunityLinkDto {
+  conversationId: string;
+  name?: string;
 }
 
 /** Sending to a blocked contact (unblock first). */

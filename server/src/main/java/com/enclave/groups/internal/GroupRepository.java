@@ -56,6 +56,11 @@ class GroupRepository {
                 .param("e", epoch).param("n", nextSeq).param("g", groupId).update();
     }
 
+    /** Group IDs an account is a member of. */
+    java.util.List<byte[]> groupIdsOf(UUID account) {
+        return jdbc.sql("SELECT group_id FROM mls_group_members WHERE account_id = :a").param("a", account).query(byte[].class).list();
+    }
+
     Map<UUID, Role> members(byte[] groupId) {
         Map<UUID, Role> members = new LinkedHashMap<>();
         jdbc.sql("SELECT account_id, role FROM mls_group_members WHERE group_id = :g ORDER BY joined_at, account_id")

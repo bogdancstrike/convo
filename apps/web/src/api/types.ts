@@ -240,3 +240,9 @@ export interface CredentialStatusDto {
   passkey: boolean;
   otp: boolean;
 }
+
+/** Community reference (COM-01): IDs and role only; the name is E2EE in the root group. */
+export interface CommunityDto { communityId: string; rootGroupId: string; role: GroupRole; version: number }
+
+/** A linked group as the server lets this account see it. */
+export interface CommunityLinkDto { groupId: string; visibility: 'discoverable' | 'private'; status: 'proposed' | 'active'; member: boolean; canAccept: boolean; version: number }

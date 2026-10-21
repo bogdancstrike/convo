@@ -100,6 +100,8 @@ import org.json.JSONObject
                 app.route == "new" -> "New chat"
                 app.route == "new-group" -> "New group"
                 app.route == "new-channel" -> "New channel"
+                app.route == "new-community" -> "New community"
+                app.route.startsWith("community:") -> "Community"
                 app.route != "list" -> when (app.route) { "storage" -> "Storage and data"; "notifications" -> "Notifications"; "recovery" -> "History and recovery"; "profile" -> "Your profile"; "all-media" -> "All Media"; else -> app.route.replaceFirstChar { it.uppercase() } }
                 else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
             }
@@ -122,7 +124,7 @@ import org.json.JSONObject
                 })
             }, bottomBar = {
                 if (app.route == "list") NavigationBar {
-                    listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Channels" to Icons.Outlined.Campaign, "Unread" to Icons.Outlined.MarkChatUnread, "Calls" to Icons.Outlined.Call, "Settings" to Icons.Outlined.AccountCircle).forEach { (label, icon) ->
+                    listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Channels" to Icons.Outlined.Campaign, "Communities" to Icons.Outlined.Groups, "Calls" to Icons.Outlined.Call, "Settings" to Icons.Outlined.AccountCircle).forEach { (label, icon) ->
                         NavigationBarItem(app.selectedTab == label && !mediaOpen, onClick = { if (label == "Media") mediaOpen = true else { app.selectedTab = label; app.route = "list" } }, icon = { if (label == "Settings") PersonAvatar(app, app.snapshot.optString("accountId"), app.snapshot.optJSONObject("device")?.label() ?: "You", 24) else Icon(icon, label) }, label = { Text(if (label == "Settings") "Profile" else label) })
                     }
                 }
@@ -139,8 +141,11 @@ import org.json.JSONObject
                     route == "media" -> MediaBrowser(app, app.active) { app.route = "info" }
                     route == "starred" -> NativeThread(app, starredOnly = true)
                     route == "appearance" -> WallpaperPicker(app, perChat = true)
+                    route == "new-community" -> NewCommunity(app)
+                    route.startsWith("community:") -> CommunityDetail(app, route.substringAfter(':'))
                     tab == "Settings" -> NativeSettings(app)
                     tab == "Calls" -> CallsTab(app)
+                    tab == "Communities" -> CommunitiesTab(app)
                     else -> ChatList(app, tab == "Channels", tab == "Unread")
                 }
                 }
@@ -170,13 +175,14 @@ import org.json.JSONObject
     var query by remember { mutableStateOf("") }; var matches by remember { mutableStateOf(emptyList<String>()) }; var archived by remember { mutableStateOf(false) }
     // Locked chats are listed only after authenticating, never in ordinary lists or search.
     var showLocked by remember { mutableStateOf(false) }
+    var unreadChip by remember { mutableStateOf(unreadOnly) }
     val locked = app.locks.lockedChats
     LaunchedEffect(query) { if (query.isBlank()) matches = emptyList() else { kotlinx.coroutines.delay(200); app.call("search", obj("query" to query)) { result -> matches = (result as? JSONArray)?.objects()?.map { it.optString("conversationId") }?.filter { it !in app.locks.lockedChats } ?: emptyList() } } }
-    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { (it.optString("id") in locked) == showLocked }.filter { showLocked || (if (unreadOnly) it.optInt("unread") > 0 else it.optBoolean("adminOnly") == channels) && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
+    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { (it.optString("id") in locked) == showLocked }.filter { showLocked || (if (unreadChip) it.optInt("unread") > 0 else it.optBoolean("adminOnly") == channels) && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
     Column {
         OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth().padding(12.dp), singleLine = true, placeholder = { Text("Search or start a new chat") }, leadingIcon = { Icon(Icons.Outlined.Search, null) })
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(!archived && !showLocked, { archived = false; showLocked = false }, label = { Text("All") }); FilterChip(archived && !showLocked, { archived = true; showLocked = false }, label = { Text("Archived") })
+            FilterChip(!archived && !showLocked, { archived = false; showLocked = false }, label = { Text("All") }); FilterChip(archived && !showLocked, { archived = true; showLocked = false }, label = { Text("Archived") }); FilterChip(unreadChip && !showLocked, { unreadChip = !unreadChip; showLocked = false }, label = { Text("Unread") })
             if (locked.isNotEmpty()) FilterChip(showLocked, { if (showLocked) showLocked = false else app.locks.authenticate("Show locked chats", "Confirm it’s you") { showLocked = true } },
                 label = { Text("Locked chats") }, leadingIcon = { Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp)) })
         }

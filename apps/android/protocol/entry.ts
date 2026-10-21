@@ -75,6 +75,12 @@ async function target(args: Record<string, any>) {
   const message = (await client.messages(args.conversationId, Number.MAX_SAFE_INTEGER)).find((m) => m.id === args.id && m.authorId === args.authorId);
   if (!message || message.deleted) throw new Error('message unavailable'); return message;
 }
+/** A community this account belongs to (fresh server view + E2EE names). */
+async function community(id: unknown) {
+  if (!client) throw new Error('not ready');
+  const found = (await client.communities()).find((c) => c.communityId === String(id));
+  if (!found) throw new Error('community unavailable'); return found;
+}
 async function mediaEntries(args: Record<string, any>) {
   if (!client) throw new Error('not ready');
   // Native chat locks are device-local: locked chats never appear in global media.
@@ -181,6 +187,13 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     }
     case 'declineCall': { const invite = client.pendingInvite(String(args.callId)); if (invite) await client.declineCall(invite, Boolean(args.busy)); return; }
     case 'missCall': { const invite = client.pendingInvite(String(args.callId)); if (invite) await client.missCall(invite); return; }
+    case 'communities': return client.communities();
+    case 'createCommunity': return client.createCommunity(String(args.name), String(args.description ?? ''));
+    case 'communityGroups': return client.communityGroups(await community(args.id));
+    case 'linkCommunityGroup': return client.linkGroupToCommunity(await community(args.id), String(args.conversationId), args.visibility === 'private' ? 'private' : 'discoverable');
+    case 'acceptCommunityLink': return client.acceptCommunityLink(await community(args.id), String(args.groupId));
+    case 'unlinkCommunityGroup': return client.unlinkCommunityGroup(await community(args.id), String(args.groupId));
+    case 'requestCommunityGroup': return client.requestCommunityGroup(await community(args.id), String(args.groupId));
     case 'rotateCallKey': return client.rotateCallKey(String(args.conversationId), String(args.callId), Number(args.after));
     case 'endCall': return client.endCall(String(args.callId), String(args.conversationId), Boolean(args.answered));
     case 'callLog': return client.callLog();

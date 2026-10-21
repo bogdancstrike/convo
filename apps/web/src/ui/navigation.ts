@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
  *
  * Routes: `#/` · `#/chat/<id>` · `#/chat/<id>/info` · `#/new` · `#/new-group` · `#/settings[/<page>]`
  */
-export type SidePanel = 'chats' | 'new' | 'new-group' | 'settings' | 'calls' | 'channels' | 'new-channel';
+export type SidePanel = 'chats' | 'new' | 'new-group' | 'settings' | 'calls' | 'channels' | 'new-channel' | 'communities';
 
 export interface NavState {
   panel: SidePanel;
@@ -26,6 +26,8 @@ export function parseHash(hash: string): NavState {
     case 'channels':
     case 'new-channel':
       return { panel: parts[0], chat: null, info: false, page: null };
+    case 'communities':
+      return { panel: 'communities', chat: null, info: false, page: parts[1] ?? null };
     case 'new':
       return { panel: 'new', chat: null, info: false, page: null };
     case 'new-group':
@@ -40,6 +42,7 @@ export function parseHash(hash: string): NavState {
 export function formatHash(state: NavState): string {
   if (state.chat) return `#/chat/${encodeURIComponent(state.chat)}${state.info ? `/info${state.page ? `/${state.page.startsWith('contact:') ? state.page.split(':').map(encodeURIComponent).join('/') : encodeURIComponent(state.page)}` : ''}` : ''}`;
   if (state.panel === 'settings' && state.page) return `#/settings/${encodeURIComponent(state.page)}`;
+  if (state.panel === 'communities' && state.page) return `#/communities/${encodeURIComponent(state.page)}`;
   return state.panel === 'chats' ? '#/' : `#/${state.panel}`;
 }
 
@@ -51,7 +54,7 @@ export function escapeNavigation(state: NavState): Partial<NavState> {
   }
   if (state.info) return { info: false, page: null };
   if (state.chat) return { chat: null, info: false, page: null };
-  if (state.panel === 'settings' && state.page) return { page: null };
+  if ((state.panel === 'settings' || state.panel === 'communities') && state.page) return { page: null };
   if (state.panel === 'new-group') return { panel: 'new' };
   if (state.panel === 'new-channel') return { panel: 'channels' };
   return { panel: 'chats', page: null };
@@ -74,7 +77,7 @@ export function useNavigation(): [NavState, (next: Partial<NavState>, replace?: 
       // Changing panel or chat leaves any settings sub-page unless one is given explicitly.
       const leavesPage = next.panel !== undefined || next.chat !== undefined;
       merged.page = next.page !== undefined ? next.page : leavesPage ? null : current.page;
-      if (merged.panel !== 'settings' && !(merged.chat && merged.info)) merged.page = null;
+      if (merged.panel !== 'settings' && merged.panel !== 'communities' && !(merged.chat && merged.info)) merged.page = null;
       const hash = formatHash(merged);
       if (hash !== window.location.hash) {
         if (replace) window.history.replaceState(null, '', hash);

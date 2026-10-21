@@ -1,3 +1,4 @@
+import { CommunitiesPanel } from './CommunitiesPanel';
 import { JoinLinkHandler } from '../joinLinks';
 import { useMessageNotifications } from '../notifications';
 import { LockedChatGate, useChatLocks } from '../chatLocks';
@@ -100,6 +101,9 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
         );
       case 'calls':
         return <CallsPanel client={client} onOpenChat={openChat} />;
+      case 'communities':
+        return <CommunitiesPanel client={client} page={nav.page} onNavigate={(page) => navigate({ page })}
+          onOpenChat={(id, info) => navigate({ panel: 'chats', chat: id, info: !!info, page: null })} />;
       case 'new-channel':
         return <NewGroupPanel client={client} channel onBack={() => navigate({ panel: 'channels' })} onCreated={(c) => openChat(c.id)} />;
       case 'new-group':
@@ -154,6 +158,8 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           onClick={() => navigate({ panel: 'calls', chat: null, info: false })} data-testid="nav-calls"><Icon name="calls" /></button>
         <button className="rail-btn" aria-label={t('nav.channels')} title={t('nav.channels')} aria-current={nav.panel === 'channels' ? 'page' : undefined}
           onClick={() => navigate({ panel: 'channels', chat: null, info: false })} data-testid="nav-channels"><Icon name="channels" /></button>
+        <button className="rail-btn" aria-label={t('community.title')} title={t('community.title')} aria-current={nav.panel === 'communities' ? 'page' : undefined}
+          onClick={() => navigate({ panel: 'communities', chat: null, info: false, page: null })} data-testid="nav-communities"><Icon name="community" /></button>
         <span className="spacer" />
         <button className="rail-btn" onClick={() => setAllMedia(true)} aria-label={t('gallery.title')} title={t('gallery.title')} data-testid="nav-media"><Icon name="image" /></button>
         <button className="rail-btn" data-testid="nav-settings" onClick={() => navigate({ panel: 'settings', chat: null })} aria-label={`${t('settings.title')}: ${labelOf(client.device)}`} title={t('settings.title')} aria-current={nav.panel === 'settings' ? 'page' : undefined}>

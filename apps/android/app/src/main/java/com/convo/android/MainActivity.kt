@@ -184,7 +184,12 @@ class MainActivity : FragmentActivity() {
     fun toggleSelected(key: String) { val s = selection ?: return; selection = if (key in s) s - key else if (s.size < 100) s + key else s }
     /** Whether this account may pin in the open chat (groups/channels: owners and admins). */
     var canPinActive by mutableStateOf(false); private set
+    /** Where Back from a thread returns (e.g. the community it was opened from); null = chat list. */
+    var threadReturn: Pair<String, String>? = null
+    /** Opens a chat from another screen; Back returns to that screen and tab. */
+    fun openChatFrom(id: String) { val from = route to selectedTab; openChat(id); threadReturn = from }
     fun openChat(id: String) {
+        threadReturn = null
         canPinActive = false; call("canPin", obj("id" to id), quiet = true) { canPinActive = it == true }
         if (locks.locked(id) && locks.unlockedChat != id) { locks.authenticate("Open locked chat", "Confirm it’s you") { locks.unlockedChat = id; openChat(id) }; return }
         threadSearch = false; active = id; route = "thread"; selectedTab = "Chats"; call("open", obj("id" to id))
@@ -254,10 +259,11 @@ class MainActivity : FragmentActivity() {
             route == "thread" && threadSearch -> threadSearch = false
             route.startsWith("contact-media:") -> route = route.replace("contact-media:", "contact:")
             route.startsWith("contact:") -> route = "info"
+            route == "new-community" || route.startsWith("community:") -> route = "list"
             route in listOf("media", "starred", "appearance", "members") -> route = "info"
             route == "info" -> route = "thread"
             route == "thread" && selection != null -> selection = null
-            route == "thread" -> { active = null; route = "list"; locks.unlockedChat = null; selection = null; call("close") }
+            route == "thread" -> { active = null; locks.unlockedChat = null; selection = null; call("close"); val back = threadReturn; threadReturn = null; if (back != null) { selectedTab = back.second; route = back.first } else route = "list" }
             selectedTab == "Settings" && route != "list" -> route = "list"
             else -> { route = "list"; selectedTab = "Chats" }
         }

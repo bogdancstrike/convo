@@ -2,6 +2,8 @@ import type { CallJoin } from '../core/calls';
 import type { DeviceCredentials, HttpClient } from './http';
 import type {
   AccountDto,
+  CommunityDto,
+  CommunityLinkDto,
   CredentialStatusDto,
   ClaimResponse,
   CreateGroupRequest,
@@ -115,6 +117,23 @@ export class EnclaveApi {
   endCall(callId: string): Promise<void> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/end`); }
   /** Own sign-in credential types at the IdP (passkey/OTP) for lock gating; `unavailable` on IdP errors. */
   accountCredentials(): Promise<CredentialStatusDto> { return this.signed('GET', '/v1/account/credentials'); }
+  // --- communities (COM-01) ---
+  createCommunity(rootGroupId: string): Promise<CommunityDto> { return this.signed('POST', '/v1/communities', { rootGroupId }); }
+  myCommunities(): Promise<CommunityDto[]> { return this.signed('GET', '/v1/communities/mine'); }
+  communityGroups(communityId: string): Promise<CommunityLinkDto[]> { return this.signed('GET', `/v1/communities/${encodeURIComponent(communityId)}/groups`); }
+  linkCommunityGroup(communityId: string, groupId: string, visibility: 'discoverable' | 'private'): Promise<CommunityLinkDto> {
+    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/links`, { groupId, visibility });
+  }
+  acceptCommunityLink(communityId: string, groupId: string): Promise<void> {
+    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/links/${encodeURIComponent(groupId)}/accept`);
+  }
+  unlinkCommunityGroup(communityId: string, groupId: string): Promise<void> {
+    return this.signed('DELETE', `/v1/communities/${encodeURIComponent(communityId)}/links/${encodeURIComponent(groupId)}`);
+  }
+  requestCommunityGroup(communityId: string, groupId: string): Promise<void> {
+    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/groups/${encodeURIComponent(groupId)}/join`);
+  }
+
   /** UnifiedPush endpoint for content-free wake-ups (Android; MSG-02). */
   setPushEndpoint(endpoint: string): Promise<void> { return this.signed('PUT', '/v1/push/endpoint', { endpoint }); }
   clearPushEndpoint(): Promise<void> { return this.signed('DELETE', '/v1/push/endpoint'); }

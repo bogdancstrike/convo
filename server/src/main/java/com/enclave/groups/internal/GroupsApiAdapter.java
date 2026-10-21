@@ -11,7 +11,28 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class GroupsApiAdapter implements GroupsApi {
     private final GroupRepository groups;
-    GroupsApiAdapter(GroupRepository groups) { this.groups = groups; }
+    private final InviteService invites;
+    GroupsApiAdapter(GroupRepository groups, InviteService invites) { this.groups = groups; this.invites = invites; }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<GroupSummary> summary(byte[] groupId) {
+        return groups.find(groupId).filter((g) -> !"deleted".equals(g.status())).map((g) -> {
+            var roles = new java.util.HashMap<UUID, String>();
+            groups.members(groupId).forEach((a, r) -> roles.put(a, r.db()));
+            return new GroupSummary(java.util.Map.copyOf(roles), g.adminOnly());
+        });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<byte[]> groupsOf(UUID accountId) { return groups.groupIdsOf(accountId); }
+
+    @Override
+    @Transactional
+    public void requestToJoin(byte[] groupId, UUID accountId) {
+        invites.requestFor(groupId, accountId);
+    }
 
     @Override
     @Transactional(readOnly = true)

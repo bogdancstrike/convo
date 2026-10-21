@@ -69,13 +69,18 @@ class InviteService {
         byte[] groupId = jdbc.sql("SELECT group_id FROM mls_group_invites WHERE token_hash = :h AND expires_at > :now")
                 .param("h", sha256(raw)).param("now", OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))
                 .query(byte[].class).optional().orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "invite not found"));
-        if (groups.members(groupId).containsKey(caller.accountId())) return; // already a member
+        requestFor(groupId, caller.accountId());
+    }
+
+    /** Join request without a link (e.g. community discovery); same ban/limit rules. */
+    void requestFor(byte[] groupId, UUID account) {
+        if (groups.members(groupId).containsKey(account)) return; // already a member
         // Banned accounts get the same answer as an invalid link (no signal that a ban exists).
-        if (groups.bans(groupId).contains(caller.accountId())) throw new EnclaveException(ErrorCode.NOT_FOUND, "invite not found");
+        if (groups.bans(groupId).contains(account)) throw new EnclaveException(ErrorCode.NOT_FOUND, "invite not found");
         Long pending = jdbc.sql("SELECT count(*) FROM mls_group_join_requests WHERE group_id = :g").param("g", groupId).query(Long.class).single();
         if (pending >= properties.maxJoinRequests()) throw new EnclaveException(ErrorCode.RATE_LIMITED, "too many pending requests");
         jdbc.sql("INSERT INTO mls_group_join_requests (group_id, account_id) VALUES (:g, :a) ON CONFLICT DO NOTHING")
-                .param("g", groupId).param("a", caller.accountId()).update();
+                .param("g", groupId).param("a", account).update();
     }
 
     @Transactional(readOnly = true)

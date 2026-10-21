@@ -57,6 +57,8 @@ export interface GroupRecord {
   departed?: string[];
   /** This device was removed or left. */
   left: boolean;
+  /** Community root metadata (E2EE, from root owners/admins). */
+  community?: import('../crypto/content').CommunityMeta;
 }
 
 /** Some invited accounts have no device that can be added right now (no KeyPackage). */

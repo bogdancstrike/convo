@@ -35,6 +35,7 @@ test('join a group through an invite link after admin approval; reset links inva
     await expect(carol.locator('.chat-row').filter({ hasText: groupName })).toBeVisible({ timeout: 30_000 });
 
     await owner.getByTestId('revoke-invites').click();
+    await expect(owner.getByTestId('invite-link')).toHaveCount(0); // revoked on the server before Dan tries
     await dan.goto(url);
     await expect(dan.getByTestId('join-dialog')).toBeVisible({ timeout: 45_000 });
     await dan.getByTestId('join-request-send').click();

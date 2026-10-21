@@ -125,6 +125,17 @@ export interface SyncMessage {
 export interface GroupMeta {
   name: string;
   version: number;
+  /**
+   * Community root only (COM-01): description and labels of linked groups that a community admin
+   * who is also in that group published after the link became active. Accepted only from the
+   * root's owners/admins; labels are shown only for links the server reports active.
+   */
+  community?: CommunityMeta;
+}
+
+export interface CommunityMeta {
+  description: string;
+  links: { groupId: string; name: string }[];
 }
 
 /**
@@ -214,7 +225,8 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
         !isObject(parsed.groupMeta) ||
         typeof parsed.groupMeta.name !== 'string' ||
         parsed.groupMeta.name.length > 128 ||
-        typeof parsed.groupMeta.version !== 'number'
+        typeof parsed.groupMeta.version !== 'number' ||
+        (parsed.groupMeta.community !== undefined && !isCommunityMeta(parsed.groupMeta.community))
       ) {
         throw new Error('malformed group metadata');
       }
@@ -233,6 +245,12 @@ function isCallMessage(value: unknown): value is CallMessage {
     && (value.generation === undefined || (Number.isSafeInteger(value.generation) && (value.generation as number) >= 0 && (value.generation as number) < 2 ** 31))
     && (value.action !== 'ring' || typeof value.key === 'string')
     && (value.action !== 'rekey' || (typeof value.key === 'string' && typeof value.generation === 'number' && value.generation > 0));
+}
+
+function isCommunityMeta(value: unknown): value is CommunityMeta {
+  return isObject(value) && typeof value.description === 'string' && value.description.length <= 1000 && Array.isArray(value.links)
+    && value.links.length <= 50 && value.links.every((l) => isObject(l) && typeof l.groupId === 'string' && /^[A-Za-z0-9_-]{43}$/.test(l.groupId)
+      && typeof l.name === 'string' && l.name.length > 0 && l.name.length <= 128);
 }
 
 function isRevision(value: unknown): value is number {

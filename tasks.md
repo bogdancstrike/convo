@@ -100,6 +100,17 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Failed wakes are retried with backoff (verified by stopping ntfy during a send); vanished
   endpoints are forgotten and re-registered by the app. FCM (Google devices without a
   distributor) remains open.
+- Communities slice 1 (COM-01/02, V21): community = admin-only announcement channel registered
+  as root; link groups with both authorities (community admin proposes, group owner accepts;
+  owner of both links at once), one parent, no nesting, members must already be in the community;
+  discoverable vs private links; members see discoverable groups by E2EE label (published in
+  the root metadata by an admin who is in the group) and ask to join (normal approval); private
+  names never broadcast. Web Communities panel (list/create/detail, add group, accept, unlink).
+  Verified `communities.spec.ts` (Chromium/Firefox, repeated) + server unit tests. Android:
+  Communities tab (Unread became a chat-list chip), create/detail/add group/accept/ask to join;
+  emulator-verified against a web community (label, request → approval → open group, read-only
+  announcements, Back returns to the community, create with description). Acknowledgements,
+  onboarding and parent-removal delegation are next slices.
 - Browser passphrase lock (WEB-01): Settings → Privacy → Browser passphrase wraps the storage
   keys with Argon2id (64 MiB, t=3; `hash-wasm`); first activation re-seals the whole local store
   and adds an outer pseudonym layer. Locked start shows only the unlock screen (wrong passphrase,
@@ -272,7 +283,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Group leave/roles/invites, communities | GRP-03, COM-01/02 |
+| Communities: acknowledgements, onboarding, removal delegation | COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
