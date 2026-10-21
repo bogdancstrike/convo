@@ -117,12 +117,14 @@ class MainActivity : FragmentActivity() {
         }
         cacheDir.listFiles()?.filter { it.name.startsWith("convo-preview-") }?.forEach { it.delete() }
         if (!BuildConfig.DEBUG || android.os.Build.HARDWARE != "ranchu") window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        MessageNotifications.createChannel(this)
         auth = AuthorizationService(this, AppAuthConfiguration.Builder().setConnectionBuilder(DevelopmentTls(this)).build())
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
                 "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus() }
                 "call" -> calls.onEvent(value)
+                "alert" -> MessageNotifications.show(this, value)
                 "callLog" -> callLogVersion++
                 "snapshot" -> { snapshot = value; Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
@@ -197,8 +199,18 @@ class MainActivity : FragmentActivity() {
         try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
         catch (_: Exception) { error = "No browser is available to set up a passkey." }
     }
-    override fun onStop() { super.onStop(); locks.onBackground() }
+    override fun onStop() { super.onStop(); isInForeground = false; locks.onBackground() }
     override fun onResume() { super.onResume(); if (phase == "ready") refreshCredentialStatus() }
+    var isInForeground = false; private set
+    override fun onStart() { super.onStart(); isInForeground = true }
+    /** Notification tap: open that chat (lock rules apply in openChat). */
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) } }
+    private var notificationCallback: ((Boolean) -> Unit)? = null
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> notificationCallback?.invoke(granted); notificationCallback = null }
+    fun requestNotificationPermission(callback: (Boolean) -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT < 33) { callback(true); return }
+        notificationCallback = callback; notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
     /** Updates lock eligibility. An unavailable IdP answer keeps the last confirmed value. */
     fun refreshCredentialStatus(done: (String) -> Unit = {}) = call("credentials", quiet = true) { value ->
         val status = value as? JSONObject

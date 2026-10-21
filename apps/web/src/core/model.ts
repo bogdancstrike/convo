@@ -82,6 +82,8 @@ export interface Conversation {
   unread: number;
   /** Messages pinned for everyone (newest first, at most MAX_PINNED). */
   pinnedMessages?: { authorId: string; id: string; pinnedAt: number; by: string }[];
+  /** Groups: alert for every message or only when this account is mentioned (mute = none). */
+  notify?: 'all' | 'mentions';
   /** An unread message mentions this account (cleared when read). */
   mentioned?: boolean;
   /** Direct chat: this account blocked the peer (their direct content is dropped on arrival). */
@@ -145,6 +147,10 @@ export interface Settings {
   appLock: boolean;
   /** Minutes in the background before the app lock engages again (0 = immediately). */
   appLockAfterMinutes: 0 | 1 | 5 | 15;
+  /** Show system notifications for new messages on this device. */
+  notifications: boolean;
+  /** Notification content: nothing identifying (default), sender only, or sender and text. */
+  notificationPreview: 'generic' | 'sender' | 'full';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -161,6 +167,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lockedChats: [],
   appLock: false,
   appLockAfterMinutes: 1,
+  notifications: false,
+  notificationPreview: 'generic',
 };
 
 /** Persistent identity of this enrolled device. */

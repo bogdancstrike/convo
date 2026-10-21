@@ -99,7 +99,7 @@ import org.json.JSONObject
                 app.route == "new" -> "New chat"
                 app.route == "new-group" -> "New group"
                 app.route == "new-channel" -> "New channel"
-                app.route != "list" -> when (app.route) { "storage" -> "Storage and data"; "recovery" -> "History and recovery"; "profile" -> "Your profile"; "all-media" -> "All Media"; else -> app.route.replaceFirstChar { it.uppercase() } }
+                app.route != "list" -> when (app.route) { "storage" -> "Storage and data"; "notifications" -> "Notifications"; "recovery" -> "History and recovery"; "profile" -> "Your profile"; "all-media" -> "All Media"; else -> app.route.replaceFirstChar { it.uppercase() } }
                 else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
             }
             Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = {
@@ -218,6 +218,8 @@ import org.json.JSONObject
 @Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
+    if (c.optString("kind") == "group") DropdownMenuItem(text = { Text(if (c.optString("notify") == "mentions") "Notify for all messages" else "Notify only for mentions") }, leadingIcon = { Icon(Icons.Outlined.AlternateEmail, null) },
+        onClick = { close(); app.call("conversation", obj("id" to c.optString("id"), "patch" to obj("notify" to if (c.optString("notify") == "mentions") JSONObject.NULL else "mentions"))) })
     if (c.optString("kind") == "direct") {
         val blocked = c.optBoolean("blocked")
         DropdownMenuItem(text = { Text(if (blocked) "Unblock" else "Block contact", color = if (blocked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Outlined.Block, null) },

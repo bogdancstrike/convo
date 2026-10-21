@@ -82,6 +82,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Shared message pins (FEAT-02): up to 3 per chat as authenticated E2EE events (groups/channels:
   owners/admins, enforced by receivers); pinned banner that jumps/cycles and unpins; deleted
   targets never resurface. Web and Android; `pins.spec.ts` Chromium/Firefox; emulator checked.
+- Message notifications (FEAT-02/MSG-02 groundwork): opt-in per device, generic preview by
+  default (sender / sender+text optional), locked chats and app lock force generic, muted chats
+  silent, groups can be set to "mentions only" (verified structured mentions). Web Notification
+  API (`notifications.spec.ts`, Chromium/Firefox) and Android channel + POST_NOTIFICATIONS with a
+  generic lock-screen version and tap-to-open; verified on emulator while running in the
+  foreground. Background delivery without a running process still needs UnifiedPush/FCM.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 

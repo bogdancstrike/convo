@@ -27,7 +27,7 @@ import { downloadAttachment, prepareFile, uploadAttachment } from './attachments
 import { replenishPreKeys } from './enrollment';
 import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
-import { groupConversationId, groupIdOf, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
+import { groupConversationId, groupIdOf, isMuted, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
 import { sanitizeAutoDownload } from './mediaPolicy';
 import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './disappearing';
@@ -73,6 +73,8 @@ export interface ClientEvents extends Record<string, unknown> {
   callLog: undefined;
   /** Confirmed passkey registration changed. */
   credentials: boolean;
+  /** A new incoming message that should alert (see `emitAlert`). */
+  alert: { conversationId: string; authorId: string; messageId: string; mention: boolean; body?: string; attachment: boolean };
 }
 
 const TYPING_TTL_SECONDS = 10;
@@ -292,7 +294,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   async updateConversation(
     id: string,
-    patch: Partial<Pick<Conversation, 'wallpaper' | 'pinned' | 'muted' | 'mutedUntil' | 'archived' | 'draft'>>,
+    patch: Partial<Pick<Conversation, 'wallpaper' | 'pinned' | 'muted' | 'mutedUntil' | 'archived' | 'draft' | 'notify'>>,
   ): Promise<void> {
     // Serialized with envelope processing so a concurrent receipt cannot write back a stale copy.
     await this.mutex.run(async () => {
@@ -480,6 +482,19 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** One stored message (e.g. a pinned target). */
   message(conversationId: string, authorId: string, id: string): Promise<ChatMessage | undefined> {
     return this.repos.message(conversationId, authorId, id);
+  }
+
+  /**
+   * Decides whether a new incoming message should alert, after it was committed. Muted chats never
+   * alert; "mentions only" groups alert when a verified structured mention names this account. The
+   * UI applies device settings, visibility, locks and the preview level.
+   */
+  private emitAlert(conversationId: string, authorId: string, data: DataMessage): void {
+    const conversation = this.conversationCache.get(conversationId);
+    if (!conversation || isMuted(conversation) || conversation.blocked) return;
+    const mention = !!data.mentions?.includes(this.accountId) && !!groupIdOf(conversationId);
+    if (conversation.kind === 'group' && conversation.notify === 'mentions' && !mention) return;
+    this.emit('alert', { conversationId, authorId, messageId: data.messageId, mention, body: data.body, attachment: !!data.attachments?.length });
   }
 
   /** Whether this account may pin in a chat (groups/channels: owners and admins). */
@@ -870,6 +885,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if ('saveToGallery' in patch && typeof patch.saveToGallery !== 'boolean') throw new Error('invalid gallery setting');
     if ('appLock' in patch && (typeof patch.appLock !== 'boolean' || (patch.appLock && this.passkeyEnrolled !== true && !this.currentSettings.appLock))) throw new Error('passkey required');
     if ('appLockAfterMinutes' in patch && ![0, 1, 5, 15].includes(patch.appLockAfterMinutes as number)) throw new Error('invalid app lock delay');
+    if ('notificationPreview' in patch && !['generic', 'sender', 'full'].includes(patch.notificationPreview as string)) throw new Error('invalid preview');
+    if ('notifications' in patch && typeof patch.notifications !== 'boolean') throw new Error('invalid notifications');
     if ('lockedChats' in patch && (!Array.isArray(patch.lockedChats) || patch.lockedChats.length > 1000 || !patch.lockedChats.every((id) => typeof id === 'string' && id.length <= 200))) throw new Error('invalid locked chats');
     this.currentSettings = { ...this.currentSettings, ...patch };
     await this.repos.store.commit([this.repos.putSettings(this.currentSettings)]);
@@ -1430,6 +1447,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const revisions = result === 'edited' ? [data.edit!.revision ?? 0] : undefined;
     const group = groupIdOf(conversationId) ? conversationId : undefined;
     const followUps = [() => this.enqueue(author, receipt('delivery', [id], group, revisions), false)];
+    if (result === 'new') followUps.push(async () => this.emitAlert(conversationId, author, data));
     if (this.currentSettings.readReceipts && this.activeConversation === conversationId && document.visibilityState === 'visible') {
       followUps.push(() => this.enqueue(author, receipt('read', [id], group, revisions), false));
     }

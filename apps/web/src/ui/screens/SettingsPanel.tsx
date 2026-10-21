@@ -17,12 +17,13 @@ import type { MessageKey } from '../i18n/en';
 
 const LINK_POLL_MS = 3000;
 
-export type SettingsPage = 'profile' | 'chats' | 'storage' | 'privacy' | 'devices' | 'security' | 'recovery';
+export type SettingsPage = 'profile' | 'chats' | 'notifications' | 'storage' | 'privacy' | 'devices' | 'security' | 'recovery';
 
 export const SETTINGS_PAGES: { page: SettingsPage; icon: IconName; title: MessageKey; hint: MessageKey }[] = [
   { page: 'profile', icon: 'camera', title: 'profile.title', hint: 'profile.hint' },
   { page: 'recovery', icon: 'shield', title: 'recovery.title', hint: 'recovery.hint' },
   { page: 'chats', icon: 'palette', title: 'settings.chats', hint: 'settings.chats.hint' },
+  { page: 'notifications', icon: 'mute', title: 'settings.notifications', hint: 'settings.notifications.hint' },
   { page: 'storage', icon: 'download', title: 'settings.storage', hint: 'settings.storage.hint' },
   { page: 'privacy', icon: 'lock', title: 'settings.privacy', hint: 'settings.privacy.hint' },
   { page: 'devices', icon: 'devices', title: 'settings.devices', hint: 'settings.devices.hint' },
@@ -71,6 +72,7 @@ export function SettingsPanel({
           {current.page === 'profile' && <ProfileSettings client={client} />}
           {current.page === 'recovery' && <RecoverySettings client={client} />}
           {current.page === 'chats' && <ChatsPage settings={settings} update={update} />}
+          {current.page === 'notifications' && <NotificationsPage settings={settings} update={update} />}
           {current.page === 'storage' && <StoragePage settings={settings} update={update} />}
           {current.page === 'privacy' && <PrivacyPage client={client} settings={settings} update={update} />}
           {current.page === 'devices' && <DevicesPage client={client} />}
@@ -129,6 +131,26 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
  * Media auto-download. Browsers cannot tell roaming apart and never save files automatically, so
  * one switch per media kind applies to Wi-Fi and other networks; Android offers per-network rules.
  */
+/** Device notifications: opt-in, browser permission, preview level (generic by default). */
+function NotificationsPage({ settings, update }: { settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
+  const { t } = useI18n();
+  const supported = typeof Notification !== 'undefined';
+  const [permission, setPermission] = useState(supported ? Notification.permission : 'denied');
+  const toggle = async (on: boolean) => {
+    if (on && supported && Notification.permission !== 'granted') setPermission(await Notification.requestPermission());
+    update({ notifications: on && (!supported || Notification.permission === 'granted') });
+  };
+  return (
+    <Card title={t('settings.notifications')}>
+      <Switch checked={settings.notifications && permission === 'granted'} disabled={!supported} onChange={(on) => void toggle(on)}
+        label={t('notify.setting')} description={permission === 'denied' ? t('notify.blocked') : t('notify.settingHelp')} testId="toggle-notifications" />
+      <Segmented label={t('notify.preview')} value={settings.notificationPreview} testId="notification-preview" onChange={(v) => update({ notificationPreview: v as SettingsModel['notificationPreview'] })}
+        options={[{ value: 'generic', label: t('notify.preview.generic') }, { value: 'sender', label: t('notify.preview.sender') }, { value: 'full', label: t('notify.preview.full') }]} />
+      <p className="muted-text">{t('notify.previewHelp')}</p>
+    </Card>
+  );
+}
+
 function StoragePage({ settings, update }: { settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
   const { t } = useI18n();
   const enabled = (kind: MediaKind) => settings.autoDownload.wifi.includes(kind);

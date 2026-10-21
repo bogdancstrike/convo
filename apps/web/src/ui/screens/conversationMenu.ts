@@ -29,6 +29,11 @@ export function conversationMenu(client: EnclaveClient, conversation: Conversati
             { label: t('header.muteAlways'), onSelect: () => void client.setMute(conversation.id, Infinity), testId: 'menu-mute-always' },
           ],
         },
+    ...(group ? [{
+      label: conversation.notify === 'mentions' ? t('notify.allMessages') : t('notify.mentionsOnly'),
+      icon: 'mute' as const, testId: 'menu-notify-mode',
+      onSelect: () => void client.updateConversation(conversation.id, { notify: conversation.notify === 'mentions' ? undefined : 'mentions' }),
+    }] : []),
     {
       label: conversation.pinned ? t('header.unpin') : t('header.pin'),
       icon: 'pin',

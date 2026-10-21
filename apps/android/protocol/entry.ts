@@ -51,6 +51,7 @@ async function startClient() {
   // Calls: ring/accept/decline/end events and history changes go to the native call UI.
   client.on('call', (event) => emit('call', event));
   client.on('callLog', () => emit('callLog', {}));
+  client.on('alert', (alert) => emit('alert', alert));
   emit('phase', { name: 'loading' }); await client.start(); accessToken = ''; link = null;
   emit('phase', { name: 'ready' }); await snapshot();
   void client.lastSeenHeartbeat().catch(() => undefined);

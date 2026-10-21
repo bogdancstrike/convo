@@ -1,3 +1,4 @@
+import { useMessageNotifications } from '../notifications';
 import { LockedChatGate, useChatLocks } from '../chatLocks';
 import { CallsPanel } from '../calls/CallsPanel';
 import { AllMedia } from './AllMedia';
@@ -78,6 +79,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
   }, [nav.chat, active, conversations.length, navigate]);
 
   const openChat = (id: string) => { setChatSearch(null); navigate({ panel: 'chats', chat: id, info: false }); };
+  useMessageNotifications(client, nav.chat, openChat);
   const openNoteToSelf = async () => {
     const c = await client.openConversation({ accountId: client.accountId, username: client.device.username, displayName: client.device.displayName });
     openChat(c.id);
