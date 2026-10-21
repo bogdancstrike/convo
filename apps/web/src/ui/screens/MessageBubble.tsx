@@ -1,3 +1,4 @@
+import { AckBox } from './AckBox';
 import { isInlineImage } from '../../core/attachments';
 import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom';
 import { createPortal } from 'react-dom';
@@ -137,6 +138,7 @@ export function MessageBubble({
                   <FormattedText text={m.body} highlight={highlight} mentions={mentionLabels} />
                 </span>
               )}
+              {m.ackRequest && <AckBox client={client} message={m} />}
             </>
           )}
           <span className="meta">

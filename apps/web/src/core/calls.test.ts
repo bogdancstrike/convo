@@ -49,3 +49,15 @@ it('validates rekey messages', () => {
     expect(() => decodeContent(encodeContent({ v: CONTENT_VERSION, kind: 'call', call } as never))).toThrow();
   }
 });
+
+it('validates acknowledgement requests and responses', () => {
+  const id = 'abcdefghijklmnopqrstuv';
+  const data = { messageId: id, timestamp: 1, body: 'policy', ackRequest: { requestId: id, revision: 1, reviewers: ['owner-1'], audience: ['a', 'b'] } };
+  expect(decodeContent(encodeContent({ v: CONTENT_VERSION, kind: 'data', data }))).toMatchObject({ data: { ackRequest: { reviewers: ['owner-1'] } } });
+  for (const bad of [{ ...data.ackRequest, reviewers: [] }, { ...data.ackRequest, reviewers: Array(11).fill('x') }, { ...data.ackRequest, revision: 0 }]) {
+    expect(() => decodeContent(encodeContent({ v: CONTENT_VERSION, kind: 'data', data: { ...data, ackRequest: bad } } as never))).toThrow();
+  }
+  const ack = { requestId: id, requestRevision: 1, conversationId: `g:${'A'.repeat(43)}`, messageId: id, authorId: 'owner-1', contentRevision: 0, timestamp: 2 };
+  expect(decodeContent(encodeContent({ v: CONTENT_VERSION, kind: 'ack', ack }))).toMatchObject({ kind: 'ack' });
+  expect(() => decodeContent(encodeContent({ v: CONTENT_VERSION, kind: 'ack', ack: { ...ack, conversationId: 'peer' } } as never))).toThrow();
+});

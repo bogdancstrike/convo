@@ -19,6 +19,8 @@ import {
   type Quote,
   type CommunityMeta,
   type GroupMeta,
+  type AckRequest,
+  type AckResponse,
 } from '../crypto/content';
 import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
@@ -358,8 +360,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    *
    * @throws Error if the body is empty or exceeds 64 KiB
    */
-  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[]): Promise<void> {
-    await this.sendMessage(conversationId, { body, quote, mentions });
+  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck = false): Promise<void> {
+    await this.sendMessage(conversationId, { body, quote, mentions, requestAck });
   }
 
   /**
@@ -513,7 +515,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[] },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -537,6 +539,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       expireTimer: this.conversationCache.get(conversationId)?.expireSeconds || undefined,
       // Mentions only make sense in groups and only for current members.
       mentions: group && content.mentions?.length ? [...new Set(content.mentions)].filter((id) => recipients.includes(id)).slice(0, 50) : undefined,
+      ackRequest: content.requestAck && group ? this.newAckRequest(group, recipients) : undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -555,6 +558,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       expireTimer: data.expireTimer,
       expiresAt: data.expireTimer ? data.timestamp + data.expireTimer * 1000 : undefined,
       mentions: data.mentions,
+      ackRequest: data.ackRequest,
     };
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
@@ -1408,7 +1412,85 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         return followUps; // only meaningful inside a group
       case 'call':
         return this.applyCall(content.call, sender, undefined, envelope, ops);
+      case 'ack':
+        await this.applyAck(sender, content.ack, envelope, ops, changed);
+        return followUps;
     }
+  }
+
+  /**
+   * An acknowledgement (specs §30.6). Reviewers record it only from audience members for the
+   * current request revision; own devices learn that this account already responded.
+   */
+  private async applyAck(sender: string, ack: AckResponse, envelope: EnvelopeDto, ops: StoreOp[], changed: Set<string>): Promise<void> {
+    const target = await this.repos.message(ack.conversationId, ack.authorId, ack.messageId);
+    const request = target?.ackRequest;
+    if (!target || !request || target.deleted || request.requestId !== ack.requestId || request.revision !== ack.requestRevision) return;
+    if (sender === this.accountId) {
+      if ((target.myAck?.revision ?? -1) >= ack.contentRevision) return;
+      ops.push(this.repos.putMessage({ ...target, myAck: { revision: ack.contentRevision, at: ack.timestamp, pending: [] } }));
+    } else {
+      if (!request.reviewers.includes(this.accountId) || !request.audience.includes(sender)) return;
+      if ((target.acks?.[sender]?.revision ?? -1) >= ack.contentRevision) return; // dedupe across devices/retries
+      ops.push(this.repos.putMessage({ ...target, acks: { ...target.acks, [sender]: { at: envelope.serverTimestamp, revision: ack.contentRevision } } }));
+    }
+    changed.add(ack.conversationId);
+  }
+
+  /**
+   * Explicitly acknowledges an announcement: one pairwise response per named reviewer plus an
+   * own-device sync. Delivery, opening or read receipts never do this on the user's behalf.
+   */
+  async acknowledge(message: ChatMessage): Promise<void> {
+    const request = message.ackRequest;
+    if (!request || !request.audience.includes(this.accountId) || message.deleted) throw new Error('nothing to acknowledge');
+    const revision = message.revision ?? 0;
+    if (message.myAck?.revision === revision) return;
+    const ack: AckResponse = { requestId: request.requestId, requestRevision: request.revision, conversationId: message.conversationId,
+      messageId: message.id, authorId: message.authorId, contentRevision: revision, timestamp: Date.now() };
+    const reviewers = request.reviewers.filter((id) => id !== this.accountId);
+    await this.mutex.run(async () => {
+      const current = await this.repos.message(message.conversationId, message.authorId, message.id) ?? message;
+      const ops: StoreOp[] = [this.repos.putMessage({ ...current, myAck: { revision, at: ack.timestamp, pending: reviewers } })];
+      // A reviewer who is also in the audience records their own response directly.
+      if (request.reviewers.includes(this.accountId)) {
+        ops[0] = this.repos.putMessage({ ...current, myAck: { revision, at: ack.timestamp, pending: reviewers }, acks: { ...current.acks, [this.accountId]: { at: ack.timestamp, revision } } });
+      }
+      await this.repos.store.commit(ops);
+      for (const reviewer of reviewers) await this.enqueue(reviewer, { v: CONTENT_VERSION, kind: 'ack', ack }, false);
+      await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'ack', ack }, false);
+    });
+    this.emit('messages', message.conversationId);
+  }
+
+  /**
+   * Request for an announcement in a community root this account manages: reviewers are the
+   * publisher and the community owner(s); the audience is everyone else in the community now.
+   */
+  private newAckRequest(group: GroupRecord, recipients: string[]): AckRequest {
+    const role = group.members.find((m) => m.accountId === this.accountId)?.role;
+    if (!group.community || !group.adminOnly || (role !== 'owner' && role !== 'admin')) throw new Error('acknowledgements are for community announcements');
+    const owners = group.members.filter((m) => m.role === 'owner').map((m) => m.accountId);
+    return { requestId: newMessageId(), revision: 1, reviewers: [...new Set([this.accountId, ...owners])].slice(0, 10), audience: recipients.slice(0, 5000) };
+  }
+
+  /** Accept a request only in a community root, from an owner/admin, naming owners/admins as reviewers. */
+  private async validAckRequest(conversationId: string, authorId: string, request: AckRequest): Promise<boolean> {
+    const groupId = groupIdOf(conversationId);
+    const group = groupId ? await this.groups.record(groupId) : undefined;
+    if (!group?.adminOnly || !group.community) return false;
+    const manager = (id: string) => ['owner', 'admin'].includes(group.members.find((m) => m.accountId === id)?.role ?? '');
+    return manager(authorId) && request.reviewers.every(manager) && !request.audience.includes(authorId);
+  }
+
+  /** Clears a reviewer from the pending list once their response was accepted by the server. */
+  private async ackDelivered(item: OutboxItem): Promise<void> {
+    if (item.content.kind !== 'ack' || item.destination === this.accountId) return;
+    const ack = item.content.ack;
+    const target = await this.repos.message(ack.conversationId, ack.authorId, ack.messageId);
+    if (!target?.myAck || target.myAck.revision !== ack.contentRevision || !target.myAck.pending.includes(item.destination)) return;
+    await this.repos.store.commit([this.repos.putMessage({ ...target, myAck: { ...target.myAck, pending: target.myAck.pending.filter((id) => id !== item.destination) } })]);
+    this.emit('messages', ack.conversationId);
   }
 
   /** MLS envelopes: Welcome (join), commit (membership change), application message. */
@@ -1568,6 +1650,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       reactions: {},
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
+      ackRequest: data.ackRequest && await this.validAckRequest(conversation.id, authorId, data.ackRequest) ? data.ackRequest : undefined,
     };
     const visible = this.activeConversation === conversation.id && document.visibilityState === 'visible';
     const mentionsMe = direction === 'in' && !visible && !!message.mentions?.includes(this.accountId);
@@ -1668,6 +1751,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   private async onOutboxAccepted(item: OutboxItem): Promise<void> {
+    if (item.content.kind === 'ack') { await this.ackDelivered(item); return; }
     await this.updateStatus(item, 'sent');
   }
 

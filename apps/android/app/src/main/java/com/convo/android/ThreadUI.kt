@@ -144,6 +144,12 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         suggestions.forEach { m -> AssistChip({ input = input.dropLast(mentionQuery!!.length + 1) + "@${m.optString("label")} "; selection = androidx.compose.ui.text.TextRange(input.length); picked.removeAll { it.optString("accountId") == m.optString("accountId") }; picked.add(m) },
                             label = { RawText("@${m.optString("label")}") }) }
                     }
+                    // Community announcements: owners/admins may ask for explicit acknowledgements.
+                    var canAck by remember(id) { mutableStateOf(false) }; var requestAck by remember(id) { mutableStateOf(false) }
+                    LaunchedEffect(id) { if (id.startsWith("g:")) app.call("canRequestAck", obj("id" to id), quiet = true) { canAck = it == true } }
+                    if (canAck) Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(requestAck, { requestAck = it }); Text("Ask members to acknowledge this announcement", style = MaterialTheme.typography.bodySmall)
+                    }
                     Row(Modifier.fillMaxWidth().padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (!voice) {
                             IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file") }
@@ -153,7 +159,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         if (voice || input.isBlank()) VoiceComposer(app, id) { voice = it }
                         else IconButton(onClick = {
                             val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
-                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions)) { if (it != null) { input = ""; quote = null; picked.clear() } } }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
+                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to requestAck)) { if (it != null) { input = ""; quote = null; picked.clear(); requestAck = false } } }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
                     }
                 }
             }
@@ -177,6 +183,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
                     if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty())
+                    if (message.has("ackRequest")) AckBox(app, message)
                     val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
                     val visual = attachments.withIndex().filter { (_, a) -> a.optString("contentType").let { it.startsWith("image/") || it.startsWith("video/") } }.map { it.index to it.value }
                     if (visual.size >= 2) AlbumGrid(app, message, conversation, visual) { selectedAttachment = it }

@@ -62,6 +62,14 @@ export function Composer({
   const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [emoji, setEmoji] = useState(false);
+  // Community announcements: owners/admins may ask members for an explicit acknowledgement.
+  const [canRequestAck, setCanRequestAck] = useState(false);
+  const [requestAck, setRequestAck] = useState(false);
+  useEffect(() => {
+    if (!conversation.adminOnly) return;
+    void client.groupRecord(conversation.id).then((g) => setCanRequestAck(!!g?.community
+      && ['owner', 'admin'].includes(g.members.find((m) => m.accountId === client.accountId)?.role ?? '')));
+  }, [client, conversation.id, conversation.adminOnly]);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const typingSent = useRef(0);
@@ -132,8 +140,9 @@ export function Composer({
           current?.kind === 'reply'
             ? { messageId: current.target.id, authorId: current.target.authorId, excerpt: (current.target.body ?? '').slice(0, 120) }
             : undefined;
-        await client.sendText(conversation.id, body, quote, mentionsIn(body, picked));
+        await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), requestAck);
         setPicked([]);
+        setRequestAck(false);
       }
       void client.sendTyping(conversation.id, 'stopped');
     } catch (e) {
@@ -271,6 +280,9 @@ export function Composer({
             <Icon name="close" size={18} />
           </button>
         </div>
+      )}
+      {canRequestAck && mode?.kind !== 'edit' && (
+        <label className="ack-toggle"><input type="checkbox" checked={requestAck} onChange={(e) => setRequestAck(e.target.checked)} data-testid="request-ack" /> {t('ack.requestToggle')}</label>
       )}
       <div className="composer">
         {recording ? (

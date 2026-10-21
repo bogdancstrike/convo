@@ -41,6 +41,9 @@ async function snapshot() {
     limits: { attachmentMaxBytes: MAX_ATTACHMENT_BYTES }, settings: client.settings, history: client.historyStatus, connection: client.socket.state,
     profiles: Object.fromEntries(client.profiles()), active, messages: active ? await Promise.all((await client.messages(active, 1000)).map(async (m) => ({
       ...publicMessage(m), mentionLabels: m.mentions?.length ? await Promise.all(m.mentions.map((id) => client!.displayName(id))) : undefined,
+      // Acknowledgements: reviewer names for members; audience names only for reviewers.
+      ackNames: m.ackRequest ? Object.fromEntries(await Promise.all([...new Set([...m.ackRequest.reviewers,
+        ...(m.ackRequest.reviewers.includes(client!.accountId) ? m.ackRequest.audience : [])])].map(async (id) => [id, id === client!.accountId ? 'You' : await client!.displayName(id)]))) : undefined,
     }))) : [] });
 }
 const refresh = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void snapshot().catch(() => undefined), 60); };
@@ -135,7 +138,12 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'directory': return client.searchDirectory(String(args.query));
     case 'account': return client.account(String(args.id));
     case 'newChat': { const account = args.id === client.accountId ? { accountId: client.accountId, username: client.device.username, displayName: client.device.displayName } : await client.account(args.id); if (!account) throw new Error('account unavailable'); return client.openConversation(account); }
-    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined);
+    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, args.requestAck === true);
+    case 'acknowledge': return client.acknowledge(await target(args));
+    case 'canRequestAck': {
+      const record = await client.groupRecord(String(args.id));
+      return !!record?.community && !!record.adminOnly && ['owner', 'admin'].includes(record.members.find((m) => m.accountId === client!.accountId)?.role ?? '');
+    }
     case 'memberLabels': {
       const record = await client.groupRecord(String(args.id));
       return Promise.all((record?.members ?? []).filter((m) => m.accountId !== client!.accountId).map(async (m) => ({ accountId: m.accountId, label: await client!.displayName(m.accountId) })));

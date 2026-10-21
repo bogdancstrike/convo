@@ -98,6 +98,35 @@ export interface DataMessage {
   left?: boolean;
   /** Conversation event: a message was pinned/unpinned for everyone. */
   pin?: { targetMessageId: string; targetAuthorId: string; pinned: boolean };
+  /** Community announcement asking for an explicit acknowledgement (specs §30.6). */
+  ackRequest?: AckRequest;
+}
+
+/**
+ * Acknowledgement request bound to one announcement. Reviewers (≤ 10, owners/admins) receive
+ * individual responses; the audience is fixed when the announcement is published.
+ */
+export interface AckRequest {
+  requestId: string;
+  revision: number;
+  reviewers: string[];
+  audience: string[];
+}
+
+/**
+ * An explicit acknowledgement, sent pairwise to each named reviewer and synced to the sender's
+ * own devices. Never a post: it carries no announcement text, only IDs and revisions.
+ */
+export interface AckResponse {
+  requestId: string;
+  requestRevision: number;
+  /** Community root conversation (`g:<groupId>`), announcement ID and author. */
+  conversationId: string;
+  messageId: string;
+  authorId: string;
+  /** Announcement content revision that was acknowledged (edits require a new response). */
+  contentRevision: number;
+  timestamp: number;
 }
 
 /** Delivery/read receipt for messages sent by the receiver of this content. */
@@ -171,7 +200,8 @@ export type Content =
   | { v: number; kind: 'typing'; typing: TypingMessage }
   | { v: number; kind: 'call'; call: CallMessage }
   | { v: number; kind: 'groupMeta'; groupMeta: GroupMeta }
-  | { v: number; kind: 'profile'; profile: UserProfile };
+  | { v: number; kind: 'profile'; profile: UserProfile }
+  | { v: number; kind: 'ack'; ack: AckResponse };
 
 /** Content this client cannot interpret. */
 export interface UnknownContent {
@@ -220,6 +250,9 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
     case 'call':
       if (!isCallMessage(parsed.call)) throw new Error('malformed call message');
       return parsed as unknown as Content;
+    case 'ack':
+      if (!isAckResponse(parsed.ack)) throw new Error('malformed acknowledgement');
+      return parsed as unknown as Content;
     case 'groupMeta':
       if (
         !isObject(parsed.groupMeta) ||
@@ -245,6 +278,23 @@ function isCallMessage(value: unknown): value is CallMessage {
     && (value.generation === undefined || (Number.isSafeInteger(value.generation) && (value.generation as number) >= 0 && (value.generation as number) < 2 ** 31))
     && (value.action !== 'ring' || typeof value.key === 'string')
     && (value.action !== 'rekey' || (typeof value.key === 'string' && typeof value.generation === 'number' && value.generation > 0));
+}
+
+const ID = /^[A-Za-z0-9_-]{1,64}$/;
+function isIdList(value: unknown, max: number): value is string[] {
+  return Array.isArray(value) && value.length <= max && value.every((id) => typeof id === 'string' && ID.test(id));
+}
+
+function isAckRequest(value: unknown): value is AckRequest {
+  return isObject(value) && typeof value.requestId === 'string' && ID.test(value.requestId) && Number.isSafeInteger(value.revision) && (value.revision as number) >= 1
+    && isIdList(value.reviewers, 10) && (value.reviewers as string[]).length >= 1 && isIdList(value.audience, 5000);
+}
+
+function isAckResponse(value: unknown): value is AckResponse {
+  return isObject(value) && typeof value.requestId === 'string' && ID.test(value.requestId) && Number.isSafeInteger(value.requestRevision)
+    && typeof value.conversationId === 'string' && /^g:[A-Za-z0-9_-]{43}$/.test(value.conversationId)
+    && typeof value.messageId === 'string' && ID.test(value.messageId) && typeof value.authorId === 'string' && ID.test(value.authorId)
+    && isRevision(value.contentRevision) && Number.isFinite(value.timestamp);
 }
 
 function isCommunityMeta(value: unknown): value is CommunityMeta {
@@ -273,6 +323,7 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.edit !== undefined && (!isObject(value.edit) || typeof value.edit.targetMessageId !== 'string' || typeof value.edit.body !== 'string'
     || utf8(value.edit.body).length > MAX_BODY_BYTES || (value.edit.revision !== undefined && !isRevision(value.edit.revision)))) return false;
   if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
+  if (value.ackRequest !== undefined && !isAckRequest(value.ackRequest)) return false;
   if (value.attachments !== undefined) {
     if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS) return false;
     if (!value.attachments.every(isAttachmentPointer)) return false;

@@ -69,6 +69,12 @@ export interface ChatMessage {
   undecryptable?: boolean;
   /** Sanitized failure reason for outgoing messages. */
   error?: string;
+  /** Community announcement: acknowledgement request (validated author/reviewers). */
+  ackRequest?: import('../crypto/content').AckRequest;
+  /** Reviewer only: responses received (account → time and acknowledged content revision). */
+  acks?: Record<string, { at: number; revision: number }>;
+  /** Audience member: own response (content revision; reviewers still waiting for delivery). */
+  myAck?: { revision: number; at: number; pending: string[] };
 }
 
 export interface Conversation {

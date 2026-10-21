@@ -26,7 +26,15 @@ clients keep them in the root group's metadata (`GroupMeta.community`, accepted 
 owners/admins). Only **discoverable** links get a label there; private group names are never
 broadcast to the root.
 
-Not yet (later COM slices): announcement acknowledgements (§30.6), newcomer onboarding (§30.7),
+Announcement acknowledgements (§30.6) are client-only E2EE: an announcement carries `ackRequest`
+(request ID/revision, ≤ 10 owner/admin reviewers, audience snapshot), accepted only in a community
+root from an owner/admin. A member's explicit response is a typed `ack` content sent pairwise to
+each reviewer plus own-device sync (no server endpoint, no feed post, independent of read receipts);
+reviewers accept it only from the audience for the current request revision and count it only for
+the current content revision, so edits ask again. The server sees ordinary pairwise envelopes.
+
+Not yet (later COM slices): due dates/expiry/withdrawal and custom reviewer selection for
+acknowledgements, newcomer onboarding (§30.7),
 parent-removal delegation and tracked membership operations (§30.3), owner-transfer rules for
 community leave.
 

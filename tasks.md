@@ -109,8 +109,15 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Verified `communities.spec.ts` (Chromium/Firefox, repeated) + server unit tests. Android:
   Communities tab (Unread became a chat-list chip), create/detail/add group/accept/ask to join;
   emulator-verified against a web community (label, request → approval → open group, read-only
-  announcements, Back returns to the community, create with description). Acknowledgements,
-  onboarding and parent-removal delegation are next slices.
+  announcements, Back returns to the community, create with description).
+- Announcement acknowledgements (specs §30.6): admins tick "Ask members to acknowledge"; members
+  press "I acknowledge this announcement" and see who receives it (publisher + owners); response
+  is a typed E2EE `ack` to each reviewer + own devices (pending → sent), never a post, works with
+  read receipts off; reviewers see "Acknowledged N of M" and per-member state; editing the
+  announcement invalidates earlier responses ("Updated — please acknowledge again"). Web
+  `acknowledgements.spec.ts` (Chromium/Firefox, repeated); Android emulator acknowledged a web
+  announcement and the reviewer count updated. Not yet: due/expiry/withdraw, custom reviewers.
+  Onboarding and parent-removal delegation are next.
 - Browser passphrase lock (WEB-01): Settings → Privacy → Browser passphrase wraps the storage
   keys with Argon2id (64 MiB, t=3; `hash-wasm`); first activation re-seals the whole local store
   and adds an outer pseudonym layer. Locked start shows only the unlock screen (wrong passphrase,
@@ -283,7 +290,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Communities: acknowledgements, onboarding, removal delegation | COM-01/02 |
+| Communities: onboarding, removal delegation, ack due/expiry/custom reviewers | COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
