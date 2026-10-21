@@ -9,6 +9,8 @@ import { loadDeploymentInfo } from '../config/deployment';
 export interface AccountSummary { accountId: string; username: string; displayName: string | null; status: string; activeDevices: number }
 export interface DeviceSummary { deviceId: number; platform: string; createdAt: string; lastSeenDay: string | null }
 export interface AuditEntry { seq: number; at: string; actor: string; action: string; target: string; reason: string; hash: string }
+/** Aggregate wake-delivery health: counts only (`oldestPending` is an ISO-8601 duration). */
+export interface Health { push: { pending: number; oldestPending: string; deadLetters: Record<string, number> } }
 export interface AuditVerification { valid: boolean; entries: number; head: string; firstBrokenSeq: number | null; checkpointsChecked: number; checkpointMismatchSeq: number | null }
 
 export class AdminApi {
@@ -63,6 +65,9 @@ export class AdminApi {
   me() { return this.call<{ actor: string; roles: string[]; permissions: Permission[] }>('GET', '/me'); }
   /** Accountable export: recorded with its reason in the audit chain before the data is returned. */
   exportAudit(reason: string) { return this.call<unknown>('POST', '/audit/export', { reason }); }
+  health() { return this.call<Health>('GET', '/health'); }
+  /** Re-queues dead-lettered message wakes; audited with its reason first. */
+  redrive(reason: string) { return this.call<{ queued: number }>('POST', '/push/redrive', { reason }); }
 }
 
 export class AdminError extends Error {
@@ -70,4 +75,4 @@ export class AdminError extends Error {
 }
 
 /** Scoped admin permissions (server `AdminPermissions`). */
-export type Permission = 'ACCOUNTS_READ' | 'DEVICES_READ' | 'DEVICE_REVOKE' | 'ACCOUNT_STATUS' | 'AUDIT_READ' | 'AUDIT_EXPORT' | 'AUDIT_CHECKPOINT';
+export type Permission = 'ACCOUNTS_READ' | 'DEVICES_READ' | 'DEVICE_REVOKE' | 'ACCOUNT_STATUS' | 'AUDIT_READ' | 'AUDIT_EXPORT' | 'AUDIT_CHECKPOINT' | 'HEALTH_READ' | 'PUSH_REDRIVE';

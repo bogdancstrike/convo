@@ -42,7 +42,15 @@ class GatewayEventListener {
     @TransactionalEventListener
     void on(EnvelopesStored event) {
         event.recipients().forEach(hints::signalMail);
-        // Offline devices get a content-free wake-up through their push channel, if registered.
+    }
+
+    /**
+     * Offline devices get a content-free wake-up through their push channel. Published before
+     * commit so the push module records its wake intent in the same transaction as the envelopes
+     * (no wake is lost between commit and enqueue).
+     */
+    @TransactionalEventListener(phase = org.springframework.transaction.event.TransactionPhase.BEFORE_COMMIT)
+    void wake(EnvelopesStored event) {
         event.recipients().stream().filter(d -> !registry.isLocal(d) && !hints.isPresent(d)).distinct()
                 .forEach(d -> events.publishEvent(new com.enclave.messaging.MailWaiting(d, event.urgent())));
     }

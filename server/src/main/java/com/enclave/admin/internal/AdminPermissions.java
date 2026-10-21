@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 class AdminPermissions {
     /** What an admin role allows. No permission reads chat content: none exists in this API. */
-    enum Permission { ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, ACCOUNT_STATUS, AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT }
+    enum Permission { ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, ACCOUNT_STATUS, AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT, HEALTH_READ, PUSH_REDRIVE }
 
     private final Map<String, Set<Permission>> byRole;
 
@@ -23,9 +23,10 @@ class AdminPermissions {
         var r = properties.roles();
         this.byRole = Map.of(
                 properties.role(), EnumSet.allOf(Permission.class),
-                r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE),
-                r.orgAdmin(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS),
-                r.security(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ),
+                r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.HEALTH_READ),
+                r.orgAdmin(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ),
+                r.security(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ,
+                        Permission.HEALTH_READ, Permission.PUSH_REDRIVE),
                 r.auditor(), EnumSet.of(Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT));
     }
 

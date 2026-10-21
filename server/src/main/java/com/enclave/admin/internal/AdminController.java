@@ -33,6 +33,7 @@ class AdminController {
     private final AdminProperties properties;
     private final java.time.Clock clock;
     private final AdminPermissions permissions;
+    private final com.enclave.push.PushApi push;
 
     /** This admin's roles and permissions (the console shows only what is allowed). */
     record Me(String actor, List<String> roles, java.util.Set<AdminPermissions.Permission> permissions) {}
@@ -41,7 +42,8 @@ class AdminController {
     record AuditExport(String exportedBy, java.time.Instant exportedAt, AuditLog.FullVerification verification, List<AuditLog.Entry> entries) {}
 
     AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints, AdminProperties properties, java.time.Clock clock,
-            AdminPermissions permissions) {
+            AdminPermissions permissions, com.enclave.push.PushApi push) {
+        this.push = push;
         this.permissions = permissions;
         this.checkpoints = checkpoints;
         this.properties = properties;
@@ -131,6 +133,25 @@ class AdminController {
         var export = new AuditExport(actor(admin), clock.instant(), fullVerification(), audit.all());
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .header("Content-Disposition", "attachment; filename=\"convo-audit-" + export.verification().entries() + ".json\"").body(export);
+    }
+
+    /** Aggregate service health: counts only, no account, device or endpoint identifiers. */
+    record Health(com.enclave.push.PushApi.Health push) {}
+
+    @GetMapping("/health")
+    ResponseEntity<Health> health(@AuthenticationPrincipal Jwt admin) {
+        require(admin, AdminPermissions.Permission.HEALTH_READ);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Health(push.health()));
+    }
+
+    /** Re-queues dead-lettered message wakes (e.g. after a distributor outage); audited first. */
+    record Redriven(int queued, AuditLog.Entry audit) {}
+
+    @PostMapping("/push/redrive")
+    Redriven redrive(@AuthenticationPrincipal Jwt admin, @Valid @RequestBody Reason body) {
+        requireAudited(admin, AdminPermissions.Permission.PUSH_REDRIVE, "push.redrive", "push");
+        AuditLog.Entry entry = audit.append(actor(admin), "push.redrive", "push", body.reason());
+        return new Redriven(push.redrive(), entry);
     }
 
     private void require(Jwt admin, AdminPermissions.Permission permission) {

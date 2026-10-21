@@ -10,27 +10,22 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.sql.Timestamp;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Registers UnifiedPush endpoints and sends content-free wake-ups. Sending is asynchronous on
- * virtual threads with a per-device rate limit; failures are only logged (the mailbox keeps the
- * messages and the device catches up when it connects).
+ * Registers UnifiedPush endpoints and records content-free wake intents. An intent is written in
+ * the transaction that stores the envelopes ({@link MailWaiting} is published before commit), so
+ * no wake is lost between commit and enqueue; {@link PushDispatcher} delivers it.
  */
 @Service
 class PushService {
-    private static final Logger log = LoggerFactory.getLogger(PushService.class);
     /** The whole wake payload: nothing about the sender, conversation or content. */
     static final String WAKE = "{\"t\":\"wake\"}";
     /** Urgent wake (the sender marked it, e.g. a call ring): the device rings generically. */
@@ -45,9 +40,8 @@ class PushService {
     enum Outcome { DELIVERED, RETRY, GONE, REJECTED }
 
     private final Transport transport;
-    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-    private final Map<DeviceAddress, Instant> lastWake = new ConcurrentHashMap<>();
-    private final Map<DeviceAddress, Instant> lastUrgent = new ConcurrentHashMap<>();
+    /** Runs after an intent commits, so a wake usually leaves within milliseconds, not a poll later. */
+    private volatile Runnable nudge = () -> { };
 
     @org.springframework.beans.factory.annotation.Autowired
     PushService(JdbcClient jdbc, PushProperties properties, Clock clock) {
@@ -67,6 +61,8 @@ class PushService {
         this.transport = transport;
     }
 
+    void onIntent(Runnable nudge) { this.nudge = nudge; }
+
     void register(DeviceAddress device, String endpoint) {
         if (!allowed(endpoint)) throw new EnclaveException(ErrorCode.POLICY_VIOLATION, "push distributor not allowed");
         jdbc.sql("""
@@ -77,64 +73,46 @@ class PushService {
 
     void unregister(DeviceAddress device) {
         jdbc.sql("DELETE FROM push_endpoints WHERE account_id = :a AND device_id = :d").param("a", device.accountId()).param("d", device.deviceId()).update();
+        jdbc.sql("DELETE FROM push_intents WHERE account_id = :a AND device_id = :d").param("a", device.accountId()).param("d", device.deviceId()).update();
     }
 
-    /** Published after commit, outside a transaction: handle immediately, send asynchronously. */
+    /**
+     * Synchronous listener: joins the envelope transaction. One pending intent per device and kind;
+     * later mail coalesces into it. Devices without a registered endpoint get nothing.
+     */
     @EventListener
     void on(MailWaiting event) {
         if (!properties.enabled()) return;
         Instant now = clock.instant();
-        var last = event.urgent() ? lastUrgent : lastWake;
-        Instant previous = last.get(event.device());
-        if (previous != null && previous.plus(event.urgent() ? properties.urgentMinInterval() : properties.minInterval()).isAfter(now)) return;
-        String endpoint = jdbc.sql("SELECT endpoint FROM push_endpoints WHERE account_id = :a AND device_id = :d")
-                .param("a", event.device().accountId()).param("d", event.device().deviceId()).query(String.class).optional().orElse(null);
-        if (endpoint == null || !allowed(endpoint)) return;
-        last.put(event.device(), now);
-        String payload = event.urgent() ? URGENT : WAKE;
-        DeviceAddress device = event.device();
-        executor.submit(() -> deliver(device, endpoint, payload));
+        int added = jdbc.sql("""
+                INSERT INTO push_intents (account_id, device_id, urgent, due_at, expires_at)
+                SELECT CAST(:a AS uuid), CAST(:d AS int), CAST(:u AS boolean), CAST(:now AS timestamptz), CAST(:expires AS timestamptz) FROM push_endpoints WHERE account_id = :a AND device_id = :d
+                ON CONFLICT (account_id, device_id, urgent) DO NOTHING""")
+                .param("a", event.device().accountId()).param("d", event.device().deviceId()).param("u", event.urgent())
+                .param("now", Timestamp.from(now)).param("expires", Timestamp.from(now.plus(event.urgent() ? properties.urgentTtl() : properties.intentTtl())))
+                .update();
+        if (added == 0) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { nudge.run(); }
+            });
+        } else {
+            nudge.run();
+        }
     }
 
     @ApplicationModuleListener
     void on(DeviceRevoked event) {
         unregister(event.address());
-        lastWake.remove(event.address());
-        lastUrgent.remove(event.address());
     }
 
-    /**
-     * Sends one wake with bounded retries (exponential backoff on a virtual thread). A distributor
-     * that no longer knows the endpoint (404/410) causes it to be forgotten; the app registers a
-     * new one the next time it runs.
-     */
-    Outcome deliver(DeviceAddress device, String endpoint, String payload) {
-        Duration delay = properties.retryBackoff();
-        Outcome outcome = Outcome.RETRY;
-        for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
-            outcome = attempt(endpoint, payload);
-            if (outcome != Outcome.RETRY) break;
-            if (attempt < properties.maxAttempts()) {
-                try { Thread.sleep(delay); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-                delay = delay.multipliedBy(2);
-            }
-        }
-        switch (outcome) {
-            case GONE -> jdbc.sql("DELETE FROM push_endpoints WHERE account_id = :a AND device_id = :d AND endpoint = :e")
-                    .param("a", device.accountId()).param("d", device.deviceId()).param("e", endpoint).update();
-            case RETRY -> log.info("Push wake gave up after {} attempts", properties.maxAttempts());
-            case REJECTED -> log.info("Push wake rejected by distributor");
-            case DELIVERED -> { }
-        }
-        return outcome;
-    }
-
-    private Outcome attempt(String endpoint, String payload) {
+    /** One delivery attempt to the distributor (no redirects, bounded timeout). */
+    Outcome attempt(String endpoint, String payload) {
         try {
             return classify(transport.post(internal(endpoint), payload));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return Outcome.REJECTED;
+            return Outcome.RETRY;
         } catch (Exception e) {
             return Outcome.RETRY; // connection refused, timeout, DNS
         }

@@ -19,6 +19,12 @@ import org.springframework.validation.annotation.Validated;
  * @param timeout HTTP timeout for one wake
  * @param maxAttempts attempts per wake (transport errors, 429 and 5xx are retried)
  * @param retryBackoff delay before the first retry; doubles per attempt
+ * @param intentTtl how long a message wake intent may wait (then it is dead-lettered as expired)
+ * @param urgentTtl how long an urgent (call ring) intent may wait; a late ring is useless
+ * @param pollInterval how often workers look for due intents (a hint also triggers a poll)
+ * @param lease how long a claimed intent is reserved for one worker before others may retry it
+ * @param batchSize intents claimed per poll
+ * @param deadLetterRetention how long sanitized dead letters are kept (specs: diagnostics ≤ 24 h)
  */
 @Validated
 @ConfigurationProperties("enclave.push")
@@ -30,4 +36,10 @@ public record PushProperties(
         @DefaultValue("3s") @NotNull Duration urgentMinInterval,
         @DefaultValue("5s") @NotNull Duration timeout,
         @DefaultValue("4") @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(10) int maxAttempts,
-        @DefaultValue("2s") @NotNull Duration retryBackoff) {}
+        @DefaultValue("2s") @NotNull Duration retryBackoff,
+        @DefaultValue("1h") @NotNull Duration intentTtl,
+        @DefaultValue("60s") @NotNull Duration urgentTtl,
+        @DefaultValue("1s") @NotNull Duration pollInterval,
+        @DefaultValue("30s") @NotNull Duration lease,
+        @DefaultValue("50") @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(1000) int batchSize,
+        @DefaultValue("24h") @NotNull Duration deadLetterRetention) {}

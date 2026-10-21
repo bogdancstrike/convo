@@ -6,5 +6,6 @@ export default defineConfig({
     lib: { entry: fileURLToPath(new URL('./entry.ts', import.meta.url)), name: 'ConvoProtocol', formats: ['iife'], fileName: () => 'core.js' },
     rollupOptions: { output: { inlineDynamicImports: true } },
   },
-  resolve: { alias: { '@privacyresearch/libsignal-protocol-typescript': fileURLToPath(new URL('../../web/node_modules/@privacyresearch/libsignal-protocol-typescript', import.meta.url)) } },
+  resolve: { alias: { '@noble/post-quantum/ml-dsa.js': fileURLToPath(new URL('./optional-stub.ts', import.meta.url)), '@hpke/chacha20poly1305': fileURLToPath(new URL('./optional-stub.ts', import.meta.url)), '@hpke/dhkem-x448': fileURLToPath(new URL('./optional-stub.ts', import.meta.url)), '@hpke/ml-kem': fileURLToPath(new URL('./optional-stub.ts', import.meta.url)), '@hpke/hybridkem-x-wing': fileURLToPath(new URL('./optional-stub.ts', import.meta.url)),
+    '@privacyresearch/libsignal-protocol-typescript': fileURLToPath(new URL('../../web/node_modules/@privacyresearch/libsignal-protocol-typescript', import.meta.url)) } },
 });

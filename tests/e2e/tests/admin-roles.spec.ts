@@ -30,11 +30,16 @@ test('helpdesk and auditor roles see only their own duties; exports are audited'
     await expect(row.getByTestId('admin-toggle-status')).toHaveCount(0);
     await row.getByTestId('admin-devices').click();
     await expect(helpdesk.getByTestId('admin-device-list').getByTestId('admin-revoke')).toHaveCount(1);
+    // Aggregate health is readable (counts only); re-queueing failed wake-ups is a security duty.
+    await helpdesk.getByTestId('admin-tab-health').click();
+    await expect(helpdesk.getByTestId('admin-push-pending')).toHaveText(/^\d+$/);
+    await expect(helpdesk.getByTestId('admin-push-redrive')).toHaveCount(0);
 
     // Auditor: only the audit log; verify and export (the export is recorded with its reason).
     await adminSignIn(auditor, auditorU);
     await expect(auditor.getByTestId('admin-tab-accounts')).toHaveCount(0);
     await expect(auditor.getByTestId('admin-search')).toHaveCount(0);
+    await expect(auditor.getByTestId('admin-tab-health')).toHaveCount(0);
     await auditor.getByTestId('admin-verify').click();
     await expect(auditor.getByTestId('admin-verification')).toContainText('Chain intact');
     const reason = `quarterly review ${Date.now()}`;

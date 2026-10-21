@@ -106,8 +106,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   ringing generic "Incoming call" (full-screen intent); verified: killed app → web call → ring
   notification → tap → Accept → connected, encrypted. Socket close clears presence at once.
   Failed wakes are retried with backoff (verified by stopping ntfy during a send); vanished
-  endpoints are forgotten and re-registered by the app. FCM (Google devices without a
-  distributor) remains open.
+  endpoints are forgotten and re-registered by the app. Durable wake intents (V24): recorded in
+  the envelope transaction, leased by polling workers (`SKIP LOCKED`), retried with backoff,
+  sanitized dead letters (24 h) with an admin Health tab and audited redrive. Verified: ntfy down
+  → 3 attempts → server restart → ntfy back → delivered; 4 failures → `gave_up` → security
+  operator redrive → delivered. FCM (Google devices without a distributor) remains open.
 - Communities slice 1 (COM-01/02, V21): community = admin-only announcement channel registered
   as root; link groups with both authorities (community admin proposes, group owner accepts;
   owner of both links at once), one parent, no nesting, members must already be in the community;
@@ -346,7 +349,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Item | Task |
 |---|---|
 | Communities: ack withdraw/custom reviewers, membership-operation retries/ownership transfer flow, polls/events | COM-01/02 |
-| Durable push intents (retries are in memory today), FCM and Web Push fallbacks | MSG-02 |
+| FCM and Web Push fallbacks; kill-point/Valkey-loss drills for push | MSG-02 |
 | Calls: screen sharing, invited-member call links | CALL-01 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |

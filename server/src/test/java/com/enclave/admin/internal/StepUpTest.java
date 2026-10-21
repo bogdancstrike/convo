@@ -23,7 +23,8 @@ class StepUpTest {
     private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"),
             "", Duration.ofMinutes(15), Duration.ofMinutes(10));
     private final AdminController controller = new AdminController(mock(IdentityAdminApi.class), mock(AuditLog.class), actions, mock(AuditCheckpoints.class),
-            properties, Clock.fixed(now, ZoneOffset.UTC), new AdminPermissions(properties));
+            properties, Clock.fixed(now, ZoneOffset.UTC), new AdminPermissions(properties),
+            mock(com.enclave.push.PushApi.class));
 
     private Jwt token(Instant authTime) {
         var builder = Jwt.withTokenValue("t").header("alg", "RS256").subject("admin-sub").claim("preferred_username", "admin")
