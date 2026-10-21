@@ -13,6 +13,8 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     assetsInlineLimit: 0,
+    // Two pages: the messenger and the organization admin console (ADM-01).
+    rollupOptions: { input: { main: 'index.html', admin: 'admin.html' } },
   },
   server: {
     port: 5173,

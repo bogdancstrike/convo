@@ -45,7 +45,8 @@
       "frontchannelLogout": true,
       "redirectUris": [
         "/convo/callback",
-        "/convo/passkey-done"
+        "/convo/passkey-done",
+        "/convo/admin"
       ],
       "webOrigins": [
         "+"
@@ -220,5 +221,13 @@
     }
   ],
   "loginTheme": "convo",
-  "webAuthnPolicyPasswordlessRpId": "convo.doncea.ro"
+  "webAuthnPolicyPasswordlessRpId": "convo.doncea.ro",
+  "roles": {
+    "realm": [
+      {
+        "name": "convo-admin",
+        "description": "Convo organization administrator (admin console)"
+      }
+    ]
+  }
 }

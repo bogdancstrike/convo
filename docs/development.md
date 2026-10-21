@@ -17,6 +17,7 @@ docker compose down -v              # stop and delete all data
 | URL | What |
 |---|---|
 | https://localhost:8443 | Web app (nginx; proxies `/v1` → server, `/auth` → Keycloak) |
+| https://localhost:8443/admin | Convo organization admin console (realm role `convo-admin`) |
 | https://localhost:8443/auth/admin | Keycloak admin (`admin` / `admin-dev-password`) |
 | http://localhost:5050 | pgAdmin (database "Enclave (dev)" pre-registered; password `enclave-dev-db`) |
 | localhost:5433 | PostgreSQL (`enclave` / `enclave-dev-db`) |

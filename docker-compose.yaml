@@ -69,6 +69,8 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+      # Comma-separated Keycloak usernames that get the convo-admin role (development convenience).
+      ADMIN_USERNAMES: ${CONVO_ADMIN_USERNAMES:-bogdan}
     volumes:
       - ./deploy/keycloak/credential-status-client.sh:/setup/credential-status-client.sh:ro
     depends_on:

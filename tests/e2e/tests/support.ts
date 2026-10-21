@@ -21,7 +21,7 @@ const random = () => Math.random().toString(36).slice(2, 7);
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Creates a unique realm user, e.g. `ana-k3j9x` named "Ana K3j9x" with a unique phone number. */
-export async function createUser(request: APIRequestContext, prefix: string, options: { omitPhone?: boolean; requiredActions?: string[] } = {}): Promise<TestUser> {
+export async function createUser(request: APIRequestContext, prefix: string, options: { omitPhone?: boolean; requiredActions?: string[]; realmRoles?: string[] } = {}): Promise<TestUser> {
   const tokenResponse = await request.post('/auth/realms/master/protocol/openid-connect/token', {
     form: { grant_type: 'password', client_id: 'admin-cli', username: ADMIN_USER, password: ADMIN_PASSWORD },
   });
@@ -49,6 +49,12 @@ export async function createUser(request: APIRequestContext, prefix: string, opt
     },
   });
   expect(created.status(), 'Keycloak user creation').toBe(201);
+  if (options.realmRoles?.length) {
+    const id = created.headers().location!.split('/').pop()!;
+    const roles = await Promise.all(options.realmRoles.map(async (name) => (await request.get(`/auth/admin/realms/enclave/roles/${name}`, { headers: { Authorization: `Bearer ${token}` } })).json()));
+    const granted = await request.post(`/auth/admin/realms/enclave/users/${id}/role-mappings/realm`, { headers: { Authorization: `Bearer ${token}` }, data: roles });
+    expect(granted.ok(), 'Keycloak role mapping').toBeTruthy();
+  }
   return user;
 }
 

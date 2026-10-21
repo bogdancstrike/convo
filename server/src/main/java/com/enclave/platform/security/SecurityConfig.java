@@ -65,6 +65,40 @@ class SecurityConfig {
     /** Routes that need no authentication. */
     static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws"};
 
+    /**
+     * Organization administration ({@code /v1/admin/**}): Keycloak bearer token carrying the admin
+     * realm role ({@code enclave.admin.role}, default {@code convo-admin}). No device signature.
+     */
+    @Bean
+    @Order(0)
+    SecurityFilterChain adminChain(HttpSecurity http, ProblemWriter problems, JwtDecoder decoder, SecurityProperties properties,
+            DeploymentProperties deployment, @org.springframework.beans.factory.annotation.Value("${enclave.admin.role:convo-admin}") String adminRole) throws Exception {
+        var converter = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            Object access = jwt.getClaim("realm_access");
+            Object roles = access instanceof java.util.Map<?, ?> map ? map.get("roles") : null;
+            return roles instanceof java.util.Collection<?> list
+                    ? list.stream().map(r -> (org.springframework.security.core.GrantedAuthority) new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + r)).toList()
+                    : java.util.List.of();
+        });
+        return http
+                .securityMatcher("/v1/admin/**")
+                .csrf(c -> c.disable())
+                .cors(c -> {})
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(a -> a.anyRequest().hasRole(adminRole))
+                .oauth2ResourceServer(o -> o.authenticationManagerResolver(request -> {
+                    String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromRequest(request)
+                            .replacePath(null).replaceQuery(null).build().toUriString();
+                    var provider = new JwtAuthenticationProvider(new OriginJwtDecoder(decoder,
+                            deployment.endpointFor(properties.oidc().issuer(), origin), properties.oidc().issuer()));
+                    provider.setJwtAuthenticationConverter(converter);
+                    return provider::authenticate;
+                }).authenticationEntryPoint(entryPoint(problems)))
+                .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint(problems)).accessDeniedHandler(denied(problems)))
+                .build();
+    }
+
     @Bean
     @Order(1)
     SecurityFilterChain accountChain(HttpSecurity http, ProblemWriter problems, JwtDecoder decoder,

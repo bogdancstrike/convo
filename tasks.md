@@ -127,6 +127,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   receipts, typing or profile sharing) with Accept/Block; replying accepts. Web
   (`requests.spec.ts`) and Android (emulator: Request tag, banner, accept).
 - Full regression 2026-10-21 (evening): 80 passed, 0 failed, 0 flaky, 4 skipped (hostname-only).
+- Admin console (ADM-01, first slice): `admin` module + `/admin` page for Keycloak role
+  `convo-admin`; account search, disable/enable and device revoke with mandatory reasons, each
+  committed with a hash-chained audit entry (V18) and a verify endpoint. No access to chat data.
+  `admin.spec.ts` Chromium/Firefox (role required, disabled device denied, chain intact).
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -241,7 +245,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Passphrase lock for browser storage | WEB-01 |
 | Group leave/roles/invites, communities | GRP-03, COM-01/02 |
 | Durable push/notification intents (outbox table + workers) | MSG-02 |
-| Admin console, audit log, policies | ADM-01 |
+| Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
 
 ## Web UX refresh (ADR-0003) — 2026-10-20
