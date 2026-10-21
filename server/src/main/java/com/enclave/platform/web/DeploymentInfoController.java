@@ -27,9 +27,13 @@ class DeploymentInfoController {
      * nonces are required, plain {@code v1} clients are told to update instead of failing silently.
      */
     private final List<String> apiVersions;
+    private final PushInfo push;
 
     DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security, AttachmentPolicy attachments,
-            MessagePolicy messages, @org.springframework.beans.factory.annotation.Value("${enclave.identity.device-auth.require-nonce:true}") boolean requireNonce) {
+            MessagePolicy messages, @org.springframework.beans.factory.annotation.Value("${enclave.identity.device-auth.require-nonce:true}") boolean requireNonce,
+            @org.springframework.beans.factory.annotation.Value("${enclave.push.enabled:false}") boolean pushEnabled,
+            @org.springframework.beans.factory.annotation.Value("${enclave.push.allowed-origins:}") List<String> pushOrigins) {
+        this.push = new PushInfo(pushEnabled ? pushOrigins.stream().filter(o -> !o.isBlank()).toList() : List.of());
         this.apiVersions = requireNonce ? List.of("v1.2") : List.of("v1", "v1.2");
         this.deployment = deployment;
         this.security = security;
@@ -42,7 +46,7 @@ class DeploymentInfoController {
         String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
         return new DeploymentInfo(deployment.id(), deployment.displayName(), apiVersions,
                 new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()), new Limits(attachments.maxFileBytes(),
-                        messages.editWindow().toMillis(), messages.channelEditWindow().toMillis(), messages.editDeliveryGrace().toMillis()));
+                        messages.editWindow().toMillis(), messages.channelEditWindow().toMillis(), messages.editDeliveryGrace().toMillis()), push);
     }
 
     /**
@@ -50,8 +54,15 @@ class DeploymentInfoController {
      * @param displayName organization name
      * @param apiVersions supported API versions
      * @param oidc OIDC client settings for the web app
+     * @param push which push servers phones may use for background wake-ups
      */
-    record DeploymentInfo(String deploymentId, String displayName, List<String> apiVersions, OidcInfo oidc, Limits limits) {}
+    record DeploymentInfo(String deploymentId, String displayName, List<String> apiVersions, OidcInfo oidc, Limits limits, PushInfo push) {}
+
+    /**
+     * @param servers UnifiedPush distributor servers (ntfy) this organization accepts; a phone's push
+     *     app must use one of them. Empty when push wake-ups are disabled.
+     */
+    record PushInfo(List<String> servers) {}
     /**
      * @param attachmentMaxBytes plaintext attachment limit
      * @param editWindowMs edit window for chats, groups and Note to self

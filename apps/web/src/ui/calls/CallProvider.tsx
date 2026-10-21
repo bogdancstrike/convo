@@ -9,7 +9,7 @@ const CallScreen = lazy(() => import('./CallScreen').then((m) => ({ default: m.C
 import { Ringer } from './ringer';
 
 export type CallPhase = 'incoming' | 'outgoing' | 'connecting' | 'connected' | 'ended';
-export type CallEndReason = 'declined' | 'busy' | 'noAnswer' | 'ended' | 'failed' | 'unsupported' | 'answeredElsewhere' | 'removed';
+export type CallEndReason = 'declined' | 'busy' | 'noAnswer' | 'ended' | 'failed' | 'unsupported' | 'answeredElsewhere' | 'removed' | 'lost';
 
 export interface ActiveCall {
   callId?: string;
@@ -71,9 +71,16 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
     if (others > 0 && active.phase !== 'connected') { ringer.current.stop(); patch({ phase: 'connected', connectedAt: Date.now() }); }
     // Direct call: the other side left. Group call: stay until the user hangs up.
     if (others === 0 && active.phase === 'connected' && !client.conversations().find((c) => c.id === active.conversationId && c.kind === 'group')) {
-      patch({ phase: 'ended', reason: 'ended' });
-      void client.endCall(active.callId!, active.conversationId, true).catch(() => undefined);
-      void finish('ended');
+      // A hang-up arrives as an encrypted "end" message (which finishes the call as 'ended').
+      // If the other side vanished without one, their connection dropped (network, call server
+      // unreachable): say so instead of pretending they hung up.
+      const callId = active.callId;
+      setTimeout(() => {
+        const still = current.current;
+        if (!still || still.callId !== callId || still.phase !== 'connected' || (media.current?.remotes.length ?? 0) > 0) return;
+        void client.endCall(callId!, still.conversationId, true).catch(() => undefined);
+        void finish('lost');
+      }, 2500);
     }
   }, [bump, client, finish, patch]);
 
@@ -88,7 +95,8 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
 
   const connect = useCallback(async (join: Parameters<LiveKitCall['connect']>[0], key: string, video: boolean, generation = 0) => {
     const { LiveKitCall } = await import('./liveKitCall');
-    const lk = new LiveKitCall(onMediaChange, () => void rotateIfLeader(lk), () => { if (media.current === lk) void finish('removed'); });
+    const lk = new LiveKitCall(onMediaChange, () => void rotateIfLeader(lk), () => { if (media.current === lk) void finish('removed'); },
+      () => { if (media.current === lk) void finish('lost'); });
     media.current = lk;
     await lk.connect(join, key, video, generation);
     onMediaChange();

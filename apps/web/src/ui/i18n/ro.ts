@@ -635,6 +635,7 @@ export const ro: Record<MessageKey, string> = {
   'calls.reason.ended': 'Apel încheiat',
   'calls.reason.removed': 'Nu mai faci parte din acest grup',
   'calls.reason.failed': 'Apelul a eșuat. Verifică conexiunea.',
+  'calls.reason.lost': 'Apelul nu a putut rămâne conectat. Unul dintre voi poate fi într-o rețea care nu ajunge la serverul de apeluri.',
   'calls.reason.unsupported': 'Acest browser nu poate cripta integral apelurile. Folosește Chrome, Edge sau Firefox actualizat.',
   'calls.reason.answeredElsewhere': 'Ai răspuns pe alt dispozitiv',
   'calls.clear': 'Șterge',

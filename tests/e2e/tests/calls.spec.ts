@@ -158,3 +158,16 @@ test('a member removed from the group is dropped from its ongoing call and the k
     await bob.getByTestId('call-end').click();
   } finally { await closeAll(owner, bob, carol); }
 });
+
+test('if the other side drops without hanging up, the caller is told the connection was lost', async ({ browser, request }) => {
+  const { caller, callee } = await pair(browser, request);
+  try {
+    await caller.getByTestId('start-voice-call').click();
+    await callee.getByTestId('call-accept').click({ timeout: 30_000 });
+    await expect(screen(caller)).toHaveAttribute('data-phase', 'connected', { timeout: 30_000 });
+    // The callee's browser disappears (no encrypted "end" message is sent).
+    await callee.context().close();
+    await expect(screen(caller)).toHaveAttribute('data-reason', 'lost', { timeout: 60_000 });
+    await expect(screen(caller)).toContainText('couldn’t stay connected');
+  } finally { await closeAll(caller); }
+});

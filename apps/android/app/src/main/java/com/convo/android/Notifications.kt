@@ -73,6 +73,7 @@ object MessageNotifications {
             else app.call("settings", obj("patch" to obj("notifications" to on)))
         }
         var stay by remember { mutableStateOf(app.stayConnected) }
+        BackgroundDelivery(app, stay)
         PrivacySwitch("Stay connected in the background", "Keeps a small ongoing notification so messages and calls arrive while Convo is in the background. Uses more battery.", stay) { on ->
             stay = on; app.stayConnected = on
         }
@@ -83,5 +84,46 @@ object MessageNotifications {
             }
         }
         Text("Hidden shows only “New message”. Locked chats and app lock always hide content; the lock screen always shows a generic notification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+/**
+ * Whether messages and calls reach this phone while Convo is closed, and how to fix it. Wake-ups
+ * come through a UnifiedPush app (ntfy) using one of the organization's push servers, or from the
+ * optional ongoing background connection.
+ */
+@Composable fun BackgroundDelivery(app: MainActivity, stayConnected: Boolean) {
+    var servers by remember { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(Unit) { app.call("pushServers", quiet = true) { v -> servers = (v as? org.json.JSONArray)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty() } }
+    val version = app.pushVersion
+    val installed = remember(version) { PushRegistration.distributorInstalled(app) }
+    val endpoint = remember(version) { PushRegistration.endpoint(app) }
+    val rejected = remember(version) { PushRegistration.rejected(app) }
+    val server = servers?.firstOrNull()
+    val host = endpoint?.let { runCatching { android.net.Uri.parse(it).host }.getOrNull() }
+    val (ok, title, body) = when {
+        stayConnected -> Triple(true, tr("Background delivery: always connected"), tr("Convo keeps a connection open, so messages and calls arrive while it is in the background."))
+        servers?.isEmpty() == true -> Triple(false, tr("Push is not available here"), tr("Your organization has not set up push. Turn on “Stay connected in the background” to receive messages while Convo is closed."))
+        !installed -> Triple(false, tr("Messages arrive only while Convo is open"), tr("Install the free ntfy app, open it, and set its default server to {server}. Convo then wakes up for new messages and calls without draining the battery.").replace("{server}", server ?: "…"))
+        rejected -> Triple(false, tr("Your push app uses the wrong server"), tr("ntfy is using {host}. In ntfy → Settings → Default server, enter {server}, then reopen Convo.").replace("{host}", host ?: "?").replace("{server}", server ?: "…"))
+        endpoint == null -> Triple(false, tr("Setting up background delivery…"), tr("Open the ntfy app once and make sure its default server is {server}.").replace("{server}", server ?: "…"))
+        else -> Triple(true, tr("Background delivery is on"), tr("New messages and calls wake Convo through {host}. The wake-up carries no content.").replace("{host}", host ?: "push"))
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = if (ok) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RawText(title, style = MaterialTheme.typography.titleSmall)
+            RawText(body, style = MaterialTheme.typography.bodySmall)
+            if (!ok && !stayConnected && servers?.isEmpty() == false) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!installed) OutlinedButton({
+                    val market = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=io.heckel.ntfy"))
+                    runCatching { app.startActivity(market) }.onFailure { runCatching { app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://ntfy.sh/docs/subscribe/phone/"))) } }
+                }) { Text("Get ntfy") }
+                if (server != null) OutlinedButton({
+                    (app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ntfy server", server))
+                    app.notice = tr("Server address copied")
+                }) { Text("Copy server address") }
+                if (installed) OutlinedButton({ PushRegistration.setRejected(app, false); PushRegistration.save(app, null); app.syncPush(); app.pushVersion++ }) { Text("Retry") }
+            }
+        }
     }
 }

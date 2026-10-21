@@ -28,7 +28,9 @@ export class LiveKitCall {
   private readonly worker: Worker;
 
   constructor(private readonly onChange: () => void, private readonly onParticipantLeft: () => void = () => undefined,
-    private readonly onRemoved: () => void = () => undefined) {
+    private readonly onRemoved: () => void = () => undefined,
+    /** The room connection dropped and could not be restored (network, call server unreachable). */
+    private readonly onLost: () => void = () => undefined) {
     if (!isE2EESupported()) throw new CallEncryptionUnsupportedError();
     this.worker = new Worker(new URL('livekit-client/e2ee-worker', import.meta.url), { type: 'module' });
     this.room = new Room({ adaptiveStream: true, dynacast: true, e2ee: { keyProvider: this.keyProvider, worker: this.worker } });
@@ -39,7 +41,10 @@ export class LiveKitCall {
     }
     this.room.on(RoomEvent.ParticipantDisconnected, () => this.onParticipantLeft());
     // The server removes devices of accounts that left the group (or were removed) from its calls.
-    this.room.on(RoomEvent.Disconnected, (reason) => { if (reason === DisconnectReason.PARTICIPANT_REMOVED) this.onRemoved(); });
+    this.room.on(RoomEvent.Disconnected, (reason) => {
+      if (reason === DisconnectReason.PARTICIPANT_REMOVED) this.onRemoved();
+      else if (!this.leaving && reason !== DisconnectReason.CLIENT_INITIATED) this.onLost();
+    });
   }
 
   /** Same-origin WebSocket base; the SDK appends LiveKit's `/rtc` path. */
@@ -80,7 +85,11 @@ export class LiveKitCall {
   setMic(on: boolean) { return this.room.localParticipant.setMicrophoneEnabled(on); }
   setCamera(on: boolean) { return this.room.localParticipant.setCameraEnabled(on); }
 
+  /** Set while we hang up ourselves, so our own disconnect is not reported as a lost connection. */
+  private leaving = false;
+
   async leave(): Promise<void> {
+    this.leaving = true;
     await this.room.disconnect(true).catch(() => undefined);
     this.worker.terminate();
   }

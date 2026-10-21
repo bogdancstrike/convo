@@ -633,6 +633,7 @@ export const en = {
   'calls.reason.ended': 'Call ended',
   'calls.reason.removed': 'You are no longer in this group',
   'calls.reason.failed': 'Call failed. Check your connection.',
+  'calls.reason.lost': 'The call couldn’t stay connected. One of you may be on a network that can’t reach the call server.',
   'calls.reason.unsupported': 'This browser can’t encrypt calls end-to-end. Use a current Chrome, Edge or Firefox.',
   'calls.reason.answeredElsewhere': 'Answered on another device',
   'calls.clear': 'Clear',

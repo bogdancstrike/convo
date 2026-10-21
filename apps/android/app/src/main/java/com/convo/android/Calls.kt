@@ -210,6 +210,8 @@ class CallManager(private val app: MainActivity) {
                 if (event is RoomEvent.ParticipantDisconnected) rotateIfLeader()
                 // The server removes devices of accounts that are no longer group members.
                 if (event is RoomEvent.Disconnected && event.reason == io.livekit.android.events.DisconnectReason.PARTICIPANT_REMOVED) { finish("removed"); return@collect }
+                // Our own hang-up cancels this collector first, so any other disconnect is a lost connection.
+                if (event is RoomEvent.Disconnected && event.reason != io.livekit.android.events.DisconnectReason.CLIENT_INITIATED) { end(answered = true); finish("lost"); return@collect }
                 version++
                 onRoomChanged()
             }
@@ -229,7 +231,16 @@ class CallManager(private val app: MainActivity) {
         val active = call ?: return
         val others = room?.remoteParticipants?.size ?: 0
         if (others > 0 && active.phase != "connected" && active.phase != "ended") { stopRing(); call = active.copy(phase = "connected", connectedAt = System.currentTimeMillis()) }
-        if (others == 0 && active.phase == "connected" && !active.conversationId.startsWith("g:")) { end(answered = true); finish("ended") }
+        if (others == 0 && active.phase == "connected" && !active.conversationId.startsWith("g:")) {
+            // A hang-up arrives as an encrypted "end" message (finishing as "ended"). If the other side
+            // vanished without one, their connection dropped: say so instead of "Call ended".
+            val callId = active.callId
+            app.lifecycleScope.launch {
+                delay(2500)
+                val still = call
+                if (still != null && still.callId == callId && still.phase == "connected" && (room?.remoteParticipants?.size ?: 0) == 0) { end(answered = true); finish("lost") }
+            }
+        }
     }
 
     private fun finish(reason: String) {
@@ -277,7 +288,7 @@ class CallManager(private val app: MainActivity) {
         "outgoing" -> "Calling…"
         "connecting" -> "Connecting…"
         "connected" -> formatDuration(now - (call.connectedAt ?: now))
-        else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; "removed" -> "You are no longer in this group"; else -> "Call ended" }
+        else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; "removed" -> "You are no longer in this group"; "lost" -> "The call couldn’t stay connected. One of you may be on a network that can’t reach the call server."; else -> "Call ended" }
     }
     Surface(Modifier.fillMaxSize(), color = Color(0xFF0B141A), contentColor = Color(0xFFF2F5F7)) {
         Box(Modifier.fillMaxSize()) {

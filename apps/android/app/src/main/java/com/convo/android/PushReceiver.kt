@@ -61,6 +61,11 @@ object PushRegistration {
     fun setNotificationsEnabled(context: Context, enabled: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("notifications", enabled).apply()
     fun notificationsEnabled(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("notifications", false)
 
+    /** The server refused the endpoint (its push app uses a server this organization does not allow). */
+    fun setRejected(context: Context, rejected: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("rejected", rejected).apply()
+    fun rejected(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("rejected", false)
+    fun distributorInstalled(context: Context) = UnifiedPush.getDistributors(context).isNotEmpty()
+
     /** Uses the current or default distributor (e.g. ntfy) when one is installed; silent otherwise. */
     fun register(context: Context) {
         if (UnifiedPush.getDistributors(context).isEmpty()) return

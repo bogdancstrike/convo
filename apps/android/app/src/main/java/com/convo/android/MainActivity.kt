@@ -219,6 +219,8 @@ class MainActivity : FragmentActivity() {
     override fun onResume() { super.onResume(); if (phase == "ready") { refreshCredentialStatus(refresh = true); syncPush() } }
     var isInForeground = false; private set
     /** Device-local opt-in for [ConnectionService]. */
+    /** Bumped when the push registration state changes (Settings re-reads it). */
+    var pushVersion by mutableStateOf(0)
     var stayConnected: Boolean
         get() = getPreferences(MODE_PRIVATE).getBoolean("stayConnected", false)
         set(value) { getPreferences(MODE_PRIVATE).edit().putBoolean("stayConnected", value).apply(); ConnectionService.sync(this, value && phase == "ready") }
@@ -234,7 +236,12 @@ class MainActivity : FragmentActivity() {
     private fun sendPushEndpoint() {
         val endpoint = PushRegistration.endpoint(this)
         // Once per process (and on every new endpoint): the server may have dropped a stale one.
-        if (endpoint != null && (!PushRegistration.synced(this) || sentPushEndpoint != endpoint)) call("setPushEndpoint", obj("endpoint" to endpoint), quiet = true) { sentPushEndpoint = endpoint; PushRegistration.markSynced(this) }
+        if (endpoint != null && (!PushRegistration.synced(this) || sentPushEndpoint != endpoint)) call("setPushEndpoint", obj("endpoint" to endpoint), quiet = true) { result ->
+            // null = refused (e.g. the push app uses a server this organization does not accept).
+            PushRegistration.setRejected(this, result == null)
+            if (result != null) { sentPushEndpoint = endpoint; PushRegistration.markSynced(this) }
+            pushVersion++
+        }
     }
     /** Notification tap: open that chat (lock rules apply in openChat). */
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) } }

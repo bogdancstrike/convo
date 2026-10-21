@@ -1,5 +1,5 @@
 import { safetyNumber } from '../../web/src/crypto/safetyNumber';
-import { loadDeploymentInfo } from '../../web/src/config/deployment';
+import { deploymentInfo, loadDeploymentInfo } from '../../web/src/config/deployment';
 import { MAX_ATTACHMENT_BYTES, configureAttachmentLimit } from '../../web/src/core/attachments';
 import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
@@ -172,6 +172,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
       if (patch.photo && typeof patch.photo === 'string') { const bytes = fromBase64Url(patch.photo); patch.photo = await prepareProfilePhoto(new File([bytes], 'profile', { type: args.mime })); }
       if (args.removePhoto) patch.photo = undefined; return client.updateProfile(patch);
     }
+    case 'pushServers': return (deploymentInfo() ?? await loadDeploymentInfo()).push?.servers ?? [];
     case 'credentials': return client.credentialStatus(args.refresh === true);
     case 'pin': return client.setPinned(await target(args), Boolean(args.pinned));
     case 'canPin': return client.canPin(String(args.id));
