@@ -6,7 +6,7 @@ file tracks what is actually built, verified, and what is still missing.
 
 Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
-## Active checkpoint — 2026-10-20
+## Active checkpoint — 2026-10-21
 
 - [x] 2026-10-21 Deployment: hostname `convo.doncik.ro`, no fixed IPs in the repo (`CONVO_SERVER_IP`
   required from `.env`); web image runs behind a Kubernetes ingress (`CONVO_TLS=off`, `UPSTREAM_*`,
@@ -22,9 +22,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   shared web light/dark tokens, success feedback and encrypted drafts are now implemented.
 - Backend advertises/enforces a configurable 100 MiB attachment policy; clients apply its plaintext
   limit before reading files. Encryption tags/padding have a separate bounded ciphertext allowance.
-- `convo.doncik.ro` is mapped locally to `the LAN host`; HTTPS exposes both 443 and 8443, with a
-  matching self-signed SAN certificate. Keycloak uses this domain as the passwordless RP ID.
-  WebAuthn registration followed by a genuine passwordless assertion is E2E verified in Chromium.
+- Deployment hostname `convo.doncik.ro` (Kubernetes: public through the Cloudflare tunnel; Compose:
+  a hosts/LAN-DNS entry to the Docker host, HTTPS on 443 and 8443 with a self-signed SAN
+  certificate). Keycloak keeps the passwordless RP ID equal to the hostname. WebAuthn registration
+  followed by a genuine passwordless assertion is E2E verified in Chromium.
 - Responsive Convo Keycloak login theme and editable required telephone input are implemented.
   Web Settings no longer exposes a separate Security category; confirmed red Log out remains.
 - Shared safety-number display preserves existing pinned-library bytes and avoids Firefox's
@@ -123,7 +124,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   read receipts off; reviewers see "Acknowledged N of M" and per-member state; editing the
   announcement invalidates earlier responses ("Updated — please acknowledge again"). Web
   `acknowledgements.spec.ts` (Chromium/Firefox, repeated); Android emulator acknowledged a web
-  announcement and the reviewer count updated. Not yet: due/expiry/withdraw, custom reviewers.
+  announcement and the reviewer count updated. Optional due and closing times (web + Android):
+  members see both, responses after the due time are marked late, none are accepted after closing
+  (server acceptance time decides). Not yet: withdraw, custom reviewer selection.
 - Community onboarding (specs §30.7): admins edit "Welcome & rules" (welcome text, rules with
   optional acknowledgement, recommended groups, checklist presets + custom, required/optional);
   members get a welcome card with a private checklist (own-device sync), versioned rules
@@ -231,8 +234,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   verification also compares the database against every checkpoint. Step-up: sensitive actions
   need a sign-in at most 10 minutes old (`STEP_UP_REQUIRED`, unit-tested).
   `admin.spec.ts` Chromium/Firefox (role required, disabled device denied, chain intact).
-- Still open: physical-device/accessibility testing,
-  background call ringing (push), remaining UI parity and legacy-origin migration.
+- Still open: physical-device/accessibility testing, legacy-origin migration, and the items in
+  "Next up" below.
 
 ## Foundations (FND)
 
@@ -325,7 +328,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Status | Item | Notes |
 |---|---|---|
 | ✅ | Root `docker-compose.yaml`: Postgres, Valkey, Keycloak (realm import), SeaweedFS, server, web | |
-| ✅ | Playwright e2e (Chromium + Firefox): enrollment, bidirectional E2EE chat, receipts, reactions, edit, delete, offline mailbox delivery, Note to self, device linking, encrypted photo/file exchange, ciphertext-only object store, MLS groups | 14/14 passing |
+| ✅ | Playwright e2e (Chromium + Firefox), 38 spec files covering messaging, groups, communities, calls, media, privacy, notifications and admin | last full run 98 passed / 0 failed / 4 skipped (hostname-only passkey specs) |
+| ✅ | Kubernetes: CI-published images (`convo-server`, `convo-web`, `convo-keycloak`), homelab Helm charts (own Keycloak for same-origin passkeys; shared Postgres/Redis/MinIO/ntfy; LiveKit + coturn) | `deploy/k8s.md`; charts lint/render, web image verified in ingress mode |
 | ✅ | Shared Java/TypeScript contract vectors for device signatures and enrollment transcripts | `contracts/vectors` |
 
 ## Fixed along the way
@@ -341,8 +345,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Communities: ack due/expiry/custom reviewers, membership-operation retries/ownership transfer flow | COM-01/02 |
-| FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
+| Communities: ack withdraw/custom reviewers, membership-operation retries/ownership transfer flow, polls/events | COM-01/02 |
+| Durable push intents (retries are in memory today), FCM and Web Push fallbacks | MSG-02 |
+| Calls: screen sharing, invited-member call links | CALL-01 |
+| First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
 
@@ -380,6 +386,6 @@ Chromium/Firefox regression will run again after this checkpoint. ADR-0004 recor
 security review, deployment-backup and group-join limits. Existing HTTP-origin IndexedDB data
 requires explicit migration to the HTTPS origin; browser origins do not share local storage.
 
-Additional requested work in progress: clickable links with an optional redirect confirmation,
-richer conversation info/actions, old-origin migration, native Android with emulator/ADB evidence
-and APK in `apps/assets`, followed by iOS. See the implementation plans in `docs/superpowers/plans`.
+Since then: clickable links with redirect confirmation, richer conversation info/actions and the
+native Android client (APK in `apps/assets`) are done. Old-origin migration and iOS remain open.
+Historical implementation plans are in `docs/superpowers/plans`.

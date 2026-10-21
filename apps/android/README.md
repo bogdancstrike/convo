@@ -48,6 +48,7 @@ Keystore wrapping and the reviewed Rust/SQLCipher core remain separate security/
 ## Background notifications (UnifiedPush)
 
 Install a UnifiedPush distributor such as [ntfy](https://ntfy.sh) and set its default server to
-the organization's ntfy (Compose: `http://<server>:8091`). Convo registers automatically when it
+the organization's ntfy (homelab deployment: `https://ntfy.doncik.ro`, signed in with an account
+that can read `up*` topics; Compose: `http://<server>:8091`). Convo registers automatically when it
 signs in; when it is not running, a message produces a generic "New message" notification
 (content stays end-to-end encrypted until you open the app).

@@ -12,15 +12,20 @@ devices; the servers only relay ciphertext.
 **Every feature in the launch inventory is required at launch on Android and web.** iOS remains a
 subsequent client target.
 
-> **Project status — early implementation.** A working web client and backend run today via
-> `docker compose`: organization sign-in, browser enrollment and device linking, end-to-end
-> encrypted 1:1 chats (Signal protocol) and groups (MLS), photos, files, videos and voice notes,
-> reactions, replies, edits, deletes, forwarding, directory search by name/phone, a
-> messenger-style UI in English and Romanian with light/dark themes. Calls, communities, push
-> notifications and administration are not built yet. A native Android development client and installable APK are available; full web/mobile parity and native security certification remain open. Interim choices (browser
-> crypto libraries, device-auth nonce) are recorded in [docs/decisions](docs/decisions) and
-> [specs §32](docs/specs.md#32-implementation-status-and-recorded-deviations); progress is tracked in
-> [tasks.md](tasks.md).
+> **Project status — pre-release implementation.** The web client, a native Android client and the
+> backend run today with `docker compose`, and in Kubernetes from published images
+> ([deploy/k8s.md](deploy/k8s.md), deployment hostname `convo.doncik.ro`). Working: organization
+> sign-in with optional passkeys, device enrollment and linking, end-to-end encrypted 1:1 chats
+> (Signal protocol), groups and channels (MLS), communities with announcements, acknowledgements
+> and onboarding, encrypted media and voice notes, end-to-end encrypted audio/video calls (LiveKit
+> SFU + coturn), push wake-ups without content (UnifiedPush/ntfy), app and per-chat locks,
+> disappearing messages, an admin console with scoped roles and an audit chain, and EN/RO
+> light/dark UIs with matching web and Android features. Still open before release: the reviewed
+> native Rust/SQLCipher core, post-quantum keys, FCM fallback, signed client policies, physical
+> device/accessibility certification, independent security review and iOS. Interim choices are
+> recorded in [docs/decisions](docs/decisions) and
+> [specs §32](docs/specs.md#32-implementation-status-and-recorded-deviations); progress is tracked
+> in [tasks.md](tasks.md).
 
 [Specification](docs/specs.md) · [Architecture](docs/arf.md) · [UI](docs/UI.md) · [Mobile](docs/mobile.md) · [Delivery tasks](docs/tasks.md) · [Progress](tasks.md) · [Decisions](docs/decisions) · [Diagrams](docs/diagrams/README.md)
 
@@ -32,7 +37,7 @@ subsequent client target.
 ## Run it locally
 
 ```bash
-docker compose up -d --build                  # postgres, valkey, keycloak, seaweedfs, pgadmin, server, web
+docker compose up -d --build                  # postgres, valkey, keycloak, seaweedfs, livekit, coturn, ntfy, pgadmin, server, web
 open https://localhost:8443                    # sign in as alice / alice-dev-password (also bob, carol)
 docker compose --profile e2e run --rm e2e     # Playwright end-to-end suite (Chromium + Firefox)
 ```
@@ -85,7 +90,12 @@ contents, names and keys remain end-to-end encrypted.
 | Media | Encrypted photos (EXIF stripped), files, videos with posters, voice notes, in-app viewer, shared galleries and all-chat search/filter/batch actions |
 | UX | Messenger-style layout, directory search by name/handle/phone, emoji picker, splash with E2EE notice, URL-based navigation (refresh-safe), EN/RO, light/dark with contrast tests |
 | History and recovery | Encrypted account archive, linked-device history restore, saved recovery code plus organization login, last-device logout safeguard |
-| Platform | Spring Modulith backend with verified module boundaries, PostgreSQL mailbox, Valkey hints, SeaweedFS object storage, pgAdmin |
+| Communities | Announcement feed with linked groups (discoverable or private), ask-to-join, explicit acknowledgements with due/closing times and named reviewers, welcome/rules/checklist onboarding, parent-removal delegation |
+| Calls | 1:1 and group audio/video through a self-hosted LiveKit SFU with frame E2EE (no unencrypted fallback), coturn relay, multi-device ringing, key rotation when someone leaves, ringing via push |
+| Notifications | Generic previews by default, per-chat All/Mentions/Muted, timed snooze, UnifiedPush (ntfy) wake-ups without content, optional Android background connection |
+| Privacy | Passkeys from Settings, app lock and per-chat locks (passkey on web, biometrics on Android), browser passphrase lock (Argon2id), disappearing messages, blocking, message requests |
+| Administration | Separate admin console: account/device support with reasons, scoped helpdesk/org-admin/security/auditor roles, step-up, hash-chained audit with external checkpoints and export |
+| Platform | Spring Modulith backend (identity, messaging, groups, communities, attachments, calls, push, admin) with verified boundaries, PostgreSQL mailbox, Valkey hints, S3 object storage; Compose for development, Helm charts and CI-built images for Kubernetes |
 
 ## Complete launch feature inventory
 
@@ -214,25 +224,27 @@ Signal library licensing, browser portability, cryptographic composition, and sa
 
 ```mermaid
 flowchart TB
-    A["Android · Flutter + Kotlin adapters"]
+    A["Android · Kotlin + Jetpack Compose"]
     W["Web · React + TypeScript"]
-    C["Client-held encryption keys<br/>Shared Rust protocol core / browser adapter"]
+    C["Client-held encryption keys<br/>Shared TypeScript protocol core today<br/>(reviewed Rust core is a release gate)"]
     B["On-prem backend modulith<br/>Spring Modulith · API / gateway / push / admin"]
     I["Organization identity<br/>Keycloak / existing IdP"]
     D[("PostgreSQL<br/>Ciphertext mailboxes + durable intents")]
     O[("S3-compatible storage<br/>Encrypted attachments")]
     V["Valkey<br/>Ephemeral routing hints / limits"]
-    T["Self-hosted TURN<br/>Direct call relay"]
-    S["Self-hosted SFU<br/>E2EE group calls / screen sharing"]
+    T["coturn<br/>Call relay"]
+    S["LiveKit SFU<br/>E2EE 1:1 and group calls"]
+    P["ntfy (UnifiedPush)<br/>Content-free wake-ups"]
     A --> C
     W --> C
     C -->|"TLS + E2EE payloads"| B
     A & W --> I
     B --> D & O & V
+    B --> P --> A
     A & W --> T & S
 ```
 
-The backend launches as a Spring Modulith application with explicit feature modules, owned data, verified boundaries and durable events. Modules can be extracted into microservices if needed; extraction requires explicit contracts and migration work. PostgreSQL owns durable mailbox and notification intent; Valkey accelerates coordination. The first clients use Flutter on Android and React/TypeScript on web, with shared protocol contracts and Rust logic subject to browser feasibility validation. Kotlin Multiplatform remains a documented mobile alternative. [Architecture decisions](docs/arf.md#14-updated-architecture-decisions).
+The backend launches as a Spring Modulith application with explicit feature modules, owned data, verified boundaries and durable events. Modules can be extracted into microservices if needed; extraction requires explicit contracts and migration work. PostgreSQL owns durable mailbox and notification intent; Valkey accelerates coordination. The clients are React/TypeScript on web and Kotlin/Jetpack Compose on Android. Today the Android client runs the same version-pinned TypeScript protocol core in a headless engine (never remote code); the reviewed shared Rust core with native storage remains a release gate (docs/mobile.md). [Architecture decisions](docs/arf.md#14-updated-architecture-decisions).
 
 ## Deployment scope
 
