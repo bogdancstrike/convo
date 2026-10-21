@@ -34,6 +34,9 @@ test('photo auto-download can be turned off and the photo loads on tap', async (
     const manual = recipient.getByTestId('attachment-image-download');
     await expect(manual).toBeVisible();
     await expect(manual).toContainText('B');
+    // The sender's encrypted tiny preview is shown (blurred) before the photo is downloaded.
+    await expect(manual).toHaveClass(/has-preview/);
+    expect(await manual.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain('data:image/jpeg');
     await recipient.waitForTimeout(1000);
     expect(downloads).toBe(0);
     await manual.click();

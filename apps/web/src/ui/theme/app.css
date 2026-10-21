@@ -2307,3 +2307,8 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .album-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(17 27 33 / 0.8); z-index: 1; color: #fff; font-size: 1.5rem; font-weight: 600; pointer-events: none; }
 
 .album-tile .manual-download span { display: none; } /* tiles are too small for the size label */
+
+/* Encrypted tiny previews shown blurred while photos load or wait for a tap */
+.attachment-image.has-preview { background-size: cover; background-position: center; position: relative; overflow: hidden; }
+.attachment-image.has-preview::before { content: ''; position: absolute; inset: -8px; background: inherit; filter: blur(12px); transform: scale(1.1); }
+.attachment-image.has-preview > * { position: relative; }

@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -41,6 +42,8 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     var requested by remember(pointer.optString("attachmentId")) { mutableStateOf(false) }
     val own = message.optString("authorId") == app.snapshot.optString("accountId")
     val load = requested || MediaPolicy.automatic(app, pointer, own)
+    // Encrypted tiny preview from the sender, shown blurred until the full photo is available.
+    val preview = remember(pointer.optString("attachmentId")) { pointer.optString("thumbnail").takeIf { image && it.isNotBlank() }?.let { mediaBitmap(app.decode(it), 64) } }
     LaunchedEffect(pointer.optString("attachmentId"), load) {
         if (video && pointer.optString("thumbnail").isNotBlank()) {
             bitmap = withContext(Dispatchers.IO) { mediaBitmap(app.decode(pointer.optString("thumbnail")), 800) }
@@ -53,6 +56,7 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     if (image || video) {
         val manual = image && !load && bitmap == null
         Box((if (compact) Modifier.size(128.dp) else Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp)).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (manual) "Download $name" else if (video) "Play $name" else "View $name", onClick = { if (manual) requested = true else open() }), contentAlignment = Alignment.Center) {
+            if (bitmap == null) preview?.let { Image(it, null, Modifier.matchParentSize().blur(16.dp), contentScale = ContentScale.Crop) }
             bitmap?.let { Image(it, name, if (compact) Modifier.fillMaxSize() else Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 300.dp), contentScale = if (compact) ContentScale.Crop else ContentScale.Fit) }
             if (video) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) { Icon(Icons.Outlined.PlayArrow, "Play $name", Modifier.padding(12.dp).size(32.dp)) }
             else if (manual) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) {

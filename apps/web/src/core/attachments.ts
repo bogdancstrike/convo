@@ -115,13 +115,20 @@ async function reencodeImage(file: File, contentType: string, fileName: string):
   canvas.width = width;
   canvas.height = height;
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, width, height);
+  // Tiny preview (≤ 32 px) carried inside the E2EE pointer; shown blurred until the photo loads.
+  const thumbScale = 32 / Math.max(width, height);
+  const thumb = document.createElement('canvas');
+  thumb.width = Math.max(1, Math.round(width * thumbScale)); thumb.height = Math.max(1, Math.round(height * thumbScale));
+  thumb.getContext('2d')!.drawImage(bitmap, 0, 0, thumb.width, thumb.height);
   bitmap.close();
+  const thumbBlob = await new Promise<Blob | null>((resolve) => thumb.toBlob(resolve, 'image/jpeg', 0.6));
+  const thumbnail = thumbBlob ? toBase64Url(new Uint8Array(await thumbBlob.arrayBuffer())) : undefined;
   const outType = contentType === 'image/png' ? 'image/png' : 'image/jpeg';
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), outType, 0.9),
   );
   const name = outType === 'image/jpeg' ? fileName.replace(/\.(png|webp|jpe?g)$/i, '') + '.jpg' : fileName;
-  return { data: new Uint8Array(await blob.arrayBuffer()), contentType: outType, fileName: name, width, height };
+  return { data: new Uint8Array(await blob.arrayBuffer()), contentType: outType, fileName: name, width, height, thumbnail };
 }
 
 /** Encrypts and uploads a prepared file; returns the pointer to embed in E2EE content. */

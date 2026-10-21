@@ -79,14 +79,17 @@ export function AttachmentView({ client, pointer, authorId }: { client: EnclaveC
   };
 
   const name = pointer.fileName ?? (image ? t('attachment.photo') : t('attachment.file'));
+  // Encrypted tiny preview from the sender (blurred) while the full photo is not available yet.
+  const preview = pointer.thumbnail ? `data:image/jpeg;base64,${pointer.thumbnail.replace(/-/g, '+').replace(/_/g, '/')}` : undefined;
+  const previewStyle = preview ? { backgroundImage: `url("${preview}")` } : {};
   if (audio && !error) return <AudioPlayer url={url} pointer={pointer} onRequest={load ? undefined : () => setRequested(true)} />;
   if (isVideo(pointer) && !error) return <VideoView pointer={pointer} />;
   if (image && !error) {
     if (!load && !url) {
       return (
-        <button type="button" className="attachment-image placeholder manual" onClick={() => setRequested(true)} data-testid="attachment-image-download"
+        <button type="button" className={`attachment-image placeholder manual${preview ? ' has-preview' : ''}`} onClick={() => setRequested(true)} data-testid="attachment-image-download"
           aria-label={`${t('attachment.download')} ${name} · ${formatBytes(pointer.size, locale)}`}
-          style={{ aspectRatio: pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '4 / 3' }}>
+          style={{ aspectRatio: pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '4 / 3', ...previewStyle }}>
           <span className="manual-download"><Icon name="download" size={22} /><span>{formatBytes(pointer.size, locale)}</span></span>
         </button>
       );
@@ -97,10 +100,11 @@ export function AttachmentView({ client, pointer, authorId }: { client: EnclaveC
       </button>
     ) : (
       <div
-        className="attachment-image placeholder"
+        className={`attachment-image placeholder${preview ? ' has-preview' : ''}`}
         role="img"
         aria-label={t('attachment.loading')}
-        style={{ aspectRatio: pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '4 / 3' }}
+        style={{ aspectRatio: pointer.width && pointer.height ? `${pointer.width} / ${pointer.height}` : '4 / 3', ...previewStyle }}
+        data-testid="attachment-preview"
       />
     );
   }
