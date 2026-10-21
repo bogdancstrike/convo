@@ -12,7 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 class GroupsApiAdapter implements GroupsApi {
     private final GroupRepository groups;
     private final InviteService invites;
-    GroupsApiAdapter(GroupRepository groups, InviteService invites) { this.groups = groups; this.invites = invites; }
+    private final GroupService service;
+    GroupsApiAdapter(GroupRepository groups, InviteService invites, GroupService service) { this.groups = groups; this.invites = invites; this.service = service; }
+
+    @Override
+    public RemovalOutcome removeOnBehalf(byte[] groupId, UUID accountId) { return service.removeOnBehalf(groupId, accountId); }
 
     @Override
     @Transactional(readOnly = true)

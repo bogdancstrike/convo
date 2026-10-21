@@ -77,7 +77,8 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
     val manager = c.optString("role") in listOf("owner", "admin")
     val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty()
     fun ready(id: String) = conversations.any { it.optString("id") == id }
-    fun act(method: String, groupId: String) = app.call(method, obj("id" to communityId, "groupId" to groupId)) { refresh++ }
+    fun act(method: String, groupId: String, delegation: Boolean = false) = app.call(method, obj("id" to communityId, "groupId" to groupId, "delegation" to delegation)) { refresh++ }
+    val follow = remember(communityId) { mutableStateMapOf<String, Boolean>() }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -106,11 +107,13 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                 g.optString("visibility") == "private" -> "Private — invited members only"
                 else -> "Anyone in the community can ask to join"
             }
-            ListItem(headlineContent = { RawText(g.optString("name").ifBlank { tr("Private group") }) }, supportingContent = { Text(status) },
+            ListItem(headlineContent = { RawText(g.optString("name").ifBlank { tr("Private group") }) },
+                supportingContent = { Column { Text(status); if (g.optString("status") == "active" && g.optBoolean("delegation")) Text("Follows community removals", style = MaterialTheme.typography.bodySmall)
+                    if (g.optBoolean("canAccept")) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(follow[groupId] ?: true, { follow[groupId] = it }); Text("Remove people here when they leave the community", style = MaterialTheme.typography.bodySmall) } } },
                 leadingContent = { PersonAvatar(app, conversation, g.optString("name").ifBlank { "?" }, 40, group = true) },
                 trailingContent = {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (g.optBoolean("canAccept")) Button(onClick = { act("acceptCommunityLink", groupId) }) { Text("Accept") }
+                        if (g.optBoolean("canAccept")) Button(onClick = { act("acceptCommunityLink", groupId, follow[groupId] ?: true) }) { Text("Accept") }
                         if (g.optString("status") == "active" && !g.optBoolean("member") && g.optString("visibility") == "discoverable") {
                             if (groupId in requested) Text("Request sent", style = MaterialTheme.typography.bodySmall)
                             else Button(onClick = { app.call("requestCommunityGroup", obj("id" to communityId, "groupId" to groupId)) { requested = requested + groupId } }) { Text("Ask to join") }
@@ -129,17 +132,19 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
         val linked = groups.orEmpty().map { it.optString("conversationId") }.toSet()
         val candidates = conversations.filter { it.optString("kind") == "group" && !it.optBoolean("left") && it.optString("id") != c.optString("conversationId") && it.optString("id") !in linked }
         var visibility by remember { mutableStateOf("discoverable") }
+        var delegation by remember { mutableStateOf(true) }
         AlertDialog(onDismissRequest = { adding = false }, title = { Text("Add a group") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("discoverable" to "Community members can see it and ask to join", "private" to "Hidden; members join by invitation").forEach { (value, label) ->
                     Row(Modifier.fillMaxWidth().selectable(visibility == value) { visibility = value }, verticalAlignment = Alignment.CenterVertically) { RadioButton(visibility == value, { visibility = value }); Text(label) }
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delegation, { delegation = it }); Text("Also remove people from the group when they leave the community (groups you own)", style = MaterialTheme.typography.bodySmall) }
                 HorizontalDivider()
                 if (candidates.isEmpty()) Text("You’re not in any other groups that can be added.")
                 candidates.forEach { conv ->
                     ListItem(headlineContent = { RawText(conv.optString("title")) }, modifier = Modifier.clickable {
                         adding = false
-                        app.call("linkCommunityGroup", obj("id" to communityId, "conversationId" to conv.optString("id"), "visibility" to visibility)) { refresh++ }
+                        app.call("linkCommunityGroup", obj("id" to communityId, "conversationId" to conv.optString("id"), "visibility" to visibility, "delegation" to delegation)) { refresh++ }
                     })
                 }
             }

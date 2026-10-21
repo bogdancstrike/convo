@@ -17,4 +17,10 @@ public interface DeliveryApi {
      * @param envelope MLS envelope
      */
     void deliverGroup(Collection<DeviceAddress> recipients, GroupEnvelope envelope);
+
+    /**
+     * Content-free hint (after commit) that a group's server state changed without an MLS commit
+     * (e.g. a member left or was removed on their behalf): clients refresh and complete removals.
+     */
+    void groupChanged(Collection<DeviceAddress> devices);
 }

@@ -25,6 +25,15 @@ public interface GroupsApi {
      */
     void requestToJoin(byte[] groupId, UUID accountId);
 
+    /** Result of {@link #removeOnBehalf}. */
+    enum RemovalOutcome { REMOVED, NOT_MEMBER, LAST_OWNER }
+
+    /**
+     * Removes an account as if it had left (delegated community removal): fan-out stops now; a
+     * member's client commits the MLS removal. A last owner with other members is not removed.
+     */
+    RemovalOutcome removeOnBehalf(byte[] groupId, UUID accountId);
+
     /** Groups (32-byte IDs) the account is a member of. */
     java.util.List<byte[]> groupsOf(UUID accountId);
 

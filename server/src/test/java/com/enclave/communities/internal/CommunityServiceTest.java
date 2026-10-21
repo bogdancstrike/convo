@@ -22,8 +22,15 @@ class CommunityServiceTest {
         @Override Optional<Link> linkOf(byte[] g) { return Optional.ofNullable(links.get(Arrays.toString(g))); }
         @Override List<Link> links(UUID c) { return links.values().stream().filter(l -> l.communityId().equals(c)).toList(); }
         @Override long countLinks(UUID c) { return links(c).size(); }
-        @Override void propose(UUID c, byte[] g, String v, UUID by, boolean accepted) { links.put(Arrays.toString(g), new Link(c, g, v, accepted ? "active" : "proposed", by, 1)); }
-        @Override void accept(UUID c, byte[] g, UUID by) { var l = links.get(Arrays.toString(g)); links.put(Arrays.toString(g), new Link(c, g, l.visibility(), "active", l.proposedBy(), l.version() + 1)); }
+        final Map<String, String> ops = new LinkedHashMap<>();
+        @Override void propose(UUID c, byte[] g, String v, UUID by, boolean accepted, boolean d) { links.put(Arrays.toString(g), new Link(c, g, v, accepted ? "active" : "proposed", by, 1, accepted && d)); }
+        @Override void accept(UUID c, byte[] g, UUID by, boolean d) { var l = links.get(Arrays.toString(g)); links.put(Arrays.toString(g), new Link(c, g, l.visibility(), "active", l.proposedBy(), l.version() + 1, d)); }
+        @Override Optional<Community> byRoot(byte[] g) { return communities.values().stream().filter(c -> Arrays.equals(c.rootGroupId(), g)).findFirst(); }
+        @Override void recordOperation(UUID c, byte[] g, UUID a, String s) { ops.put(Arrays.toString(g) + a, s); }
+        @Override List<Operation> operations(UUID c) { return ops.entrySet().stream().map(e -> new Operation(new byte[32], UUID.randomUUID(), e.getValue(), java.time.Instant.EPOCH)).toList(); }
+        @Override int completeOperations(byte[] g, java.util.Collection<UUID> accounts) {
+            int n = 0; for (UUID a : accounts) if ("pending".equals(ops.get(Arrays.toString(g) + a))) { ops.put(Arrays.toString(g) + a, "completed"); n++; } return n;
+        }
         @Override void unlink(UUID c, byte[] g) { links.remove(Arrays.toString(g)); }
     }
 
@@ -38,6 +45,15 @@ class CommunityServiceTest {
         @Override public Optional<Set<UUID>> members(byte[] g) { return summary(g).map(s -> s.roles().keySet()); }
         @Override public Optional<GroupSummary> summary(byte[] g) { return Optional.ofNullable(groups.get(Arrays.toString(g))); }
         @Override public void requestToJoin(byte[] g, UUID a) { joinRequests.add(Arrays.toString(g) + a); }
+        final List<String> removed = new ArrayList<>();
+        @Override public RemovalOutcome removeOnBehalf(byte[] g, UUID a) {
+            var s = groups.get(Arrays.toString(g));
+            if (s == null || !s.roles().containsKey(a)) return RemovalOutcome.NOT_MEMBER;
+            if (s.isOwner(a) && s.roles().values().stream().filter("owner"::equals).count() == 1 && s.roles().size() > 1) return RemovalOutcome.LAST_OWNER;
+            removed.add(Arrays.toString(g) + a);
+            Map<UUID, String> r = new LinkedHashMap<>(s.roles()); r.remove(a); groups.put(Arrays.toString(g), new GroupSummary(r, s.adminOnly()));
+            return RemovalOutcome.REMOVED;
+        }
         @Override public List<byte[]> groupsOf(UUID a) {
             List<byte[]> out = new ArrayList<>();
             groups.forEach((k, s) -> { if (s.roles().containsKey(a)) out.add(parse(k)); });
@@ -86,25 +102,25 @@ class CommunityServiceTest {
     @Test void linkingNeedsBothAuthoritiesAndOneParent() {
         UUID c = community();
         // Owner of both: active at once.
-        assertThat(service.link(owner, c, chat, "discoverable").status()).isEqualTo("active");
+        assertThat(service.link(owner, c, chat, "discoverable", false).status()).isEqualTo("active");
         // A community admin proposes a group they don't own: the group owner must accept.
-        assertThat(service.link(admin, c, team, "discoverable").status()).isEqualTo("proposed");
+        assertThat(service.link(admin, c, team, "discoverable", false).status()).isEqualTo("proposed");
         assertThat(service.groups(subOwner, c)).filteredOn(l -> l.status().equals("proposed")).singleElement().satisfies(l -> assertThat(l.canAccept()).isTrue());
-        assertCode(() -> service.accept(admin, c, team), ErrorCode.FORBIDDEN_ROLE);
-        service.accept(subOwner, c, team);
+        assertCode(() -> service.accept(admin, c, team, false), ErrorCode.FORBIDDEN_ROLE);
+        service.accept(subOwner, c, team, false);
         // Ordinary members cannot link; no group gets two parents; roots are never subgroups.
-        assertCode(() -> service.link(member, c, secret, "private"), ErrorCode.FORBIDDEN_ROLE);
-        assertCode(() -> service.link(owner, c, chat, "discoverable"), ErrorCode.POLICY_VIOLATION);
-        assertCode(() -> service.link(owner, c, root, "discoverable"), ErrorCode.POLICY_VIOLATION);
+        assertCode(() -> service.link(member, c, secret, "private", false), ErrorCode.FORBIDDEN_ROLE);
+        assertCode(() -> service.link(owner, c, chat, "discoverable", false), ErrorCode.POLICY_VIOLATION);
+        assertCode(() -> service.link(owner, c, root, "discoverable", false), ErrorCode.POLICY_VIOLATION);
         // Members outside the community block activation (no silent enrollment).
-        assertCode(() -> service.link(owner, c, plain, "discoverable"), ErrorCode.POLICY_VIOLATION);
+        assertCode(() -> service.link(owner, c, plain, "discoverable", false), ErrorCode.POLICY_VIOLATION);
     }
 
     @Test void discoveryShowsOnlyWhatTheCallerMaySee() {
         UUID c = community();
-        service.link(owner, c, chat, "discoverable");
-        service.link(owner, c, secret, "private");
-        service.link(admin, c, team, "discoverable"); // proposed
+        service.link(owner, c, chat, "discoverable", false);
+        service.link(owner, c, secret, "private", false);
+        service.link(admin, c, team, "discoverable", false); // proposed
         // Ordinary member: the active discoverable group only (and they are in it).
         assertThat(service.groups(member, c)).extracting(CommunityService.LinkView::groupId).containsExactly(CommunityService.hex(chat), CommunityService.hex(team));
         assertThat(service.groups(subOwner, c)).extracting(CommunityService.LinkView::groupId).containsExactly(CommunityService.hex(chat), CommunityService.hex(team));
@@ -115,8 +131,8 @@ class CommunityServiceTest {
 
     @Test void membersAskToJoinOnlyDiscoverableActiveGroups() {
         UUID c = community();
-        service.link(owner, c, chat, "discoverable");
-        service.link(owner, c, secret, "private");
+        service.link(owner, c, chat, "discoverable", false);
+        service.link(owner, c, secret, "private", false);
         service.requestJoin(subOwner, c, chat);
         assertThat(groups.joinRequests).hasSize(1);
         assertCode(() -> service.requestJoin(subOwner, c, secret), ErrorCode.NOT_FOUND);
@@ -125,10 +141,29 @@ class CommunityServiceTest {
 
     @Test void eitherAuthorityMayUnlink() {
         UUID c = community();
-        service.link(admin, c, team, "discoverable");
-        service.accept(subOwner, c, team);
+        service.link(admin, c, team, "discoverable", false);
+        service.accept(subOwner, c, team, false);
         assertCode(() -> service.unlink(member, c, team), ErrorCode.FORBIDDEN_ROLE);
         service.unlink(subOwner, c, team);
         assertThat(service.groups(admin, c)).isEmpty();
+    }
+
+    @Test void removalFromTheCommunityFollowsOnlyIntoDelegatingGroups() {
+        UUID c = community();
+        service.link(owner, c, chat, "discoverable", true);      // owner grants delegation
+        service.link(admin, c, team, "discoverable", false);
+        service.accept(subOwner, c, team, false);                  // team stays standalone
+        service.onRootRemoval(root, Set.of(member));
+        assertThat(groups.removed).containsExactly(Arrays.toString(chat) + member);
+        assertThat(repo.ops).containsEntry(Arrays.toString(chat) + member, "pending");
+        service.onGroupRemovalCommitted(chat, Set.of(member));
+        assertThat(repo.ops).containsEntry(Arrays.toString(chat) + member, "completed");
+        // Not a root: no cascade. A last owner is never stranded.
+        service.onRootRemoval(team, Set.of(subOwner));
+        groups.put(chat, false, owner, "owner", subOwner, "member");
+        service.onRootRemoval(root, Set.of(owner));
+        assertThat(repo.ops).containsEntry(Arrays.toString(chat) + owner, "blocked");
+        assertThat(service.operations(admin, c)).extracting(CommunityService.OperationView::status).containsExactlyInAnyOrder("completed", "blocked");
+        assertCode(() -> service.operations(subOwner, c), ErrorCode.FORBIDDEN_ROLE); // community admins only
     }
 }

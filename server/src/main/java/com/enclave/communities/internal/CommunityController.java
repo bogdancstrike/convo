@@ -13,7 +13,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 class CommunityController {
     record CreateRequest(String rootGroupId) {}
-    record LinkRequest(String groupId, String visibility) {}
+    record LinkRequest(String groupId, String visibility, Boolean delegation) {}
+    record AcceptRequest(Boolean delegation) {}
 
     private final CommunityService communities;
     CommunityController(CommunityService communities) { this.communities = communities; }
@@ -36,19 +37,25 @@ class CommunityController {
 
     @PostMapping("/v1/communities/{communityId}/links")
     CommunityService.LinkView link(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId, @RequestBody LinkRequest body) {
-        return communities.link(me.accountId(), communityId, decode(body.groupId(), "groupId"), body.visibility() == null ? "discoverable" : body.visibility());
+        return communities.link(me.accountId(), communityId, decode(body.groupId(), "groupId"), body.visibility() == null ? "discoverable" : body.visibility(), Boolean.TRUE.equals(body.delegation()));
     }
 
     @PostMapping("/v1/communities/{communityId}/links/{groupId}/accept")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void accept(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId, @PathVariable String groupId) {
-        communities.accept(me.accountId(), communityId, decode(groupId, "groupId"));
+    void accept(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId, @PathVariable String groupId,
+            @RequestBody(required = false) AcceptRequest body) {
+        communities.accept(me.accountId(), communityId, decode(groupId, "groupId"), body != null && Boolean.TRUE.equals(body.delegation()));
     }
 
     @DeleteMapping("/v1/communities/{communityId}/links/{groupId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void unlink(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId, @PathVariable String groupId) {
         communities.unlink(me.accountId(), communityId, decode(groupId, "groupId"));
+    }
+
+    @GetMapping("/v1/communities/{communityId}/operations")
+    List<CommunityService.OperationView> operations(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId) {
+        return communities.operations(me.accountId(), communityId);
     }
 
     @PostMapping("/v1/communities/{communityId}/groups/{groupId}/join")

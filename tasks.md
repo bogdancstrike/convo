@@ -126,7 +126,14 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   (tick + rules ack → reviewer count). Fixed on the way: a re-entrant mutex deadlock in the
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
-  rules; emulator-verified save → welcome card). Parent-removal delegation is next.
+  rules; emulator-verified save → welcome card).
+- Parent-removal delegation (specs §30.3, V22): owners opt a linked group into "remove people here
+  when they leave the community" (link/accept); leaving or being removed from the community
+  marks them departed in those groups (fan-out stops at once, `GROUPS_CHANGED` hint, a member's
+  client commits the MLS removal), last owners are never stranded (blocked operation), and
+  admins see "Membership updates". Web `community-removal.spec.ts` (Chromium/Firefox); Android
+  emulator: removed from the community → "You are no longer a member" in the delegating group,
+  no later messages.
 - Browser passphrase lock (WEB-01): Settings → Privacy → Browser passphrase wraps the storage
   keys with Argon2id (64 MiB, t=3; `hash-wasm`); first activation re-seals the whole local store
   and adds an outer pseudonym layer. Locked start shows only the unlock screen (wrong passphrase,
@@ -299,7 +306,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Communities: removal delegation, ack due/expiry/custom reviewers | COM-01/02 |
+| Communities: ack due/expiry/custom reviewers, membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |

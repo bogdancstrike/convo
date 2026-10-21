@@ -131,7 +131,7 @@ export interface EnvelopeDto {
   content: string;
 }
 
-export type Directive = 'KEYS_LOW' | 'KEYPACKAGES_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED';
+export type Directive = 'KEYS_LOW' | 'KEYPACKAGES_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED' | 'GROUPS_CHANGED';
 
 export interface ServerFrame {
   requestId: number;
@@ -245,4 +245,6 @@ export interface CredentialStatusDto {
 export interface CommunityDto { communityId: string; rootGroupId: string; role: GroupRole; version: number }
 
 /** A linked group as the server lets this account see it. */
-export interface CommunityLinkDto { groupId: string; visibility: 'discoverable' | 'private'; status: 'proposed' | 'active'; member: boolean; canAccept: boolean; version: number }
+export interface CommunityLinkDto { groupId: string; visibility: 'discoverable' | 'private'; status: 'proposed' | 'active'; member: boolean; canAccept: boolean; version: number;
+  /** The group follows community removal (its owner accepted parent-removal delegation). */
+  delegation: boolean }

@@ -13,6 +13,8 @@ public enum Directive {
     DEVICE_LIST_CHANGED,
     /** Organization policy changed. */
     POLICY_UPDATED,
+    /** A group's membership changed without an MLS commit; refresh groups (no group named). */
+    GROUPS_CHANGED,
     /** The device was revoked; the gateway closes the socket with 4401. */
     REVOKED
 }

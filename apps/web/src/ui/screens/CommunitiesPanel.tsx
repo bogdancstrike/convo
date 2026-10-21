@@ -106,6 +106,8 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingView | undefined>();
+  const [operations, setOperations] = useState<{ groupId: string; name: string; status: 'pending' | 'completed' | 'blocked' }[]>([]);
+  const [follow, setFollow] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const manager = community.role === 'owner' || community.role === 'admin';
   // Re-render when secure group state arrives: a group the server lists as joined opens only
@@ -116,6 +118,7 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
   const load = useCallback(() => {
     void client.communityGroups(community).then(setGroups).catch(() => setError(t('community.loadFailed')));
     void client.onboarding(community).then(setOnboarding).catch(() => undefined);
+    if (community.role === 'owner' || community.role === 'admin') void client.communityOperations(community).then(setOperations).catch(() => undefined);
   }, [client, community, t]);
   const askToJoin = (groupId: string) => { setError(null); void client.requestCommunityGroup(community, groupId).then(() => setRequested((r) => new Set(r).add(groupId))).catch(() => setError(t('community.actionFailed'))); };
   useEffect(() => { load(); return client.on('groups', load); }, [client, load]);
@@ -167,11 +170,13 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
                 <span className="row-main">
                   <span className="row-title">{g.name ?? t('community.privateGroup')}</span>
                   <span className="row-preview">{g.status === 'proposed' ? t(g.canAccept ? 'community.proposedToYou' : 'community.waitingOwner')
-                    : open ? t('community.joined') : g.member ? t('community.joining') : t(g.visibility === 'private' ? 'community.private' : 'community.discoverable')}</span>
+                    : open ? t('community.joined') : g.member ? t('community.joining') : t(g.visibility === 'private' ? 'community.private' : 'community.discoverable')}
+                    {g.status === 'active' && g.delegation && <span data-testid="community-delegation"> · {t('community.followsRemoval')}</span>}</span>
                 </span>
               </button>
               <span className="community-group-actions">
-                {g.canAccept && <button className="btn btn-primary" onClick={() => act(client.acceptCommunityLink(community, g.groupId))} data-testid="community-accept">{t('community.accept')}</button>}
+                {g.canAccept && <label className="muted-text"><input type="checkbox" checked={follow[g.groupId] ?? true} onChange={(e) => setFollow((f) => ({ ...f, [g.groupId]: e.target.checked }))} data-testid="community-accept-delegation" /> {t('community.delegationShort')}</label>}
+                {g.canAccept && <button className="btn btn-primary" onClick={() => act(client.acceptCommunityLink(community, g.groupId, follow[g.groupId] ?? true))} data-testid="community-accept">{t('community.accept')}</button>}
                 {g.status === 'active' && !g.member && g.visibility === 'discoverable' && (requested.has(g.groupId)
                   ? <span className="muted-text" data-testid="community-requested">{t('community.requested')}</span>
                   : <button className="btn btn-primary" data-testid="community-join" onClick={() => askToJoin(g.groupId)}>{t('community.askToJoin')}</button>)}
@@ -181,6 +186,18 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
           ); })}
         </ul>
         {groups?.length === 0 && <p className="muted-text">{t(manager ? 'community.noGroupsAdmin' : 'community.noGroups')}</p>}
+        {manager && operations.filter((o) => o.status !== 'completed').length > 0 && (
+          <div className="community-ops" data-testid="community-operations">
+            <h3 className="section-title">{t('community.operations')}</h3>
+            <ul className="list">
+              {operations.filter((o) => o.status !== 'completed').map((o) => {
+                const label = groups?.find((g) => g.groupId === o.groupId)?.name ?? t('community.privateGroup');
+                return <li key={`${o.groupId}:${o.name}`} className="settings-row" data-testid="community-operation" data-status={o.status}>
+                  <span className="settings-row-text">{t(o.status === 'pending' ? 'community.opPending' : 'community.opBlocked', { name: o.name, group: label })}</span></li>;
+              })}
+            </ul>
+          </div>
+        )}
         {manager && !adding && <button className="btn" onClick={() => setAdding(true)} data-testid="community-add-group"><Icon name="plus" size={16} /> {t('community.addGroup')}</button>}
         {manager && adding && <AddGroup client={client} community={community} linked={new Set((groups ?? []).map((g) => g.conversationId))}
           onDone={() => { setAdding(false); load(); }} onError={() => setError(t('community.linkFailed'))} />}
@@ -196,6 +213,7 @@ function AddGroup({ client, community, linked, onDone, onError }: {
 }) {
   const { t } = useI18n();
   const [visibility, setVisibility] = useState<'discoverable' | 'private'>('discoverable');
+  const [delegation, setDelegation] = useState(true);
   const candidates = client.conversations().filter((c) => c.kind === 'group' && !c.left && c.id !== community.conversationId && !linked.has(c.id));
   return (
     <div className="community-add" data-testid="community-add">
@@ -205,10 +223,11 @@ function AddGroup({ client, community, linked, onDone, onError }: {
           <label key={v}><input type="radio" name="visibility" checked={visibility === v} onChange={() => setVisibility(v)} data-testid={`community-visibility-${v}`} /> {t(`community.${v}Help`)}</label>
         ))}
       </fieldset>
+      <label className="ack-toggle"><input type="checkbox" checked={delegation} onChange={(e) => setDelegation(e.target.checked)} data-testid="community-delegation-toggle" /> {t('community.delegationHelp')}</label>
       <ul className="list">
         {candidates.map((c) => (
           <li key={c.id}>
-            <button className="row" data-testid="community-pick-group" onClick={() => void client.linkGroupToCommunity(community, c.id, visibility).then(onDone).catch(onError)}>
+            <button className="row" data-testid="community-pick-group" onClick={() => void client.linkGroupToCommunity(community, c.id, visibility, delegation).then(onDone).catch(onError)}>
               <Avatar id={c.id} name={c.title} size={36} group />
               <span className="row-main"><span className="row-title">{c.title}</span></span>
             </button>

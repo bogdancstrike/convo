@@ -23,7 +23,8 @@ class CommunityService {
     static final int MAX_LINKS = 50;
 
     record CommunityView(UUID communityId, String rootGroupId, String role, long version) {}
-    record LinkView(String groupId, String visibility, String status, boolean member, boolean canAccept, long version) {}
+    record LinkView(String groupId, String visibility, String status, boolean member, boolean canAccept, long version, boolean delegation) {}
+    record OperationView(String groupId, UUID accountId, String status, java.time.Instant updatedAt) {}
 
     private final CommunityRepository communities;
     private final GroupsApi groups;
@@ -74,14 +75,14 @@ class CommunityService {
             boolean member = sub.roles().containsKey(caller);
             boolean owner = sub.isOwner(caller);
             boolean visible = "active".equals(link.status()) && "discoverable".equals(link.visibility()) || manager || member;
-            if (visible) out.add(new LinkView(hex(link.groupId()), link.visibility(), link.status(), member, owner && "proposed".equals(link.status()), link.version()));
+            if (visible) out.add(new LinkView(hex(link.groupId()), link.visibility(), link.status(), member, owner && "proposed".equals(link.status()), link.version(), link.delegation()));
         }
         return out;
     }
 
     /** A community admin links (or proposes) a group; it is active at once only if they also own it. */
     @Transactional
-    LinkView link(UUID caller, UUID communityId, byte[] groupId, String visibility) {
+    LinkView link(UUID caller, UUID communityId, byte[] groupId, String visibility, boolean delegation) {
         var community = memberCommunity(caller, communityId);
         if (!"discoverable".equals(visibility) && !"private".equals(visibility)) throw new EnclaveException(ErrorCode.INVALID_REQUEST, "visibility");
         var root = groups.summary(community.rootGroupId()).orElseThrow();
@@ -94,13 +95,14 @@ class CommunityService {
         if (communities.countLinks(communityId) >= MAX_LINKS) throw new EnclaveException(ErrorCode.POLICY_VIOLATION, "too many linked groups");
         boolean accepted = sub.isOwner(caller);
         if (accepted) requireSubset(sub, root);
-        communities.propose(communityId, groupId, visibility, caller, accepted);
-        return new LinkView(hex(groupId), visibility, accepted ? "active" : "proposed", sub.roles().containsKey(caller), !accepted && sub.isOwner(caller), 1);
+        // Only the group's owner can grant parent-removal delegation (here: the owner linking it).
+        communities.propose(communityId, groupId, visibility, caller, accepted, delegation);
+        return new LinkView(hex(groupId), visibility, accepted ? "active" : "proposed", sub.roles().containsKey(caller), !accepted && sub.isOwner(caller), 1, accepted && delegation);
     }
 
     /** The subgroup owner accepts a proposed link. */
     @Transactional
-    void accept(UUID caller, UUID communityId, byte[] groupId) {
+    void accept(UUID caller, UUID communityId, byte[] groupId, boolean delegation) {
         var community = communities.find(communityId).orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "community not found"));
         var link = communities.linkOf(groupId).filter((l) -> l.communityId().equals(communityId))
                 .orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "link not found"));
@@ -108,7 +110,7 @@ class CommunityService {
         if (!sub.isOwner(caller)) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only the group owner can accept");
         if ("active".equals(link.status())) return;
         requireSubset(sub, groups.summary(community.rootGroupId()).orElseThrow());
-        communities.accept(communityId, groupId, caller);
+        communities.accept(communityId, groupId, caller, delegation);
     }
 
     /** Either authority may detach: a community admin or the subgroup owner. */
@@ -130,6 +132,43 @@ class CommunityService {
         var link = communities.linkOf(groupId).filter((l) -> l.communityId().equals(communityId) && "active".equals(l.status()) && "discoverable".equals(l.visibility()))
                 .orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "group not found"));
         groups.requestToJoin(link.groupId(), caller);
+    }
+
+    /** Membership operations of a community (root owners/admins). */
+    @Transactional(readOnly = true)
+    List<OperationView> operations(UUID caller, UUID communityId) {
+        var community = memberCommunity(caller, communityId);
+        if (!groups.summary(community.rootGroupId()).map((s) -> s.isManager(caller)).orElse(false)) {
+            throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only community admins see operations");
+        }
+        return communities.operations(communityId).stream().map((o) -> new OperationView(hex(o.groupId()), o.accountId(), o.status(), o.updatedAt())).toList();
+    }
+
+    /**
+     * Someone left or was removed from a community root: apply it to every linked group that
+     * accepted parent-removal delegation. Pending until a member commits the MLS removal; a last
+     * owner is never stranded (blocked until ownership is transferred).
+     */
+    @Transactional
+    void onRootRemoval(byte[] rootGroupId, java.util.Set<UUID> accounts) {
+        var community = communities.byRoot(rootGroupId).orElse(null);
+        if (community == null) return;
+        for (var link : communities.links(community.communityId())) {
+            if (!"active".equals(link.status()) || !link.delegation()) continue;
+            for (UUID account : accounts) {
+                switch (groups.removeOnBehalf(link.groupId(), account)) {
+                    case REMOVED -> communities.recordOperation(community.communityId(), link.groupId(), account, "pending");
+                    case LAST_OWNER -> communities.recordOperation(community.communityId(), link.groupId(), account, "blocked");
+                    case NOT_MEMBER -> { }
+                }
+            }
+        }
+    }
+
+    /** A group's MLS removal commit was accepted: its pending operations are done. */
+    @Transactional
+    void onGroupRemovalCommitted(byte[] groupId, java.util.Set<UUID> accounts) {
+        communities.completeOperations(groupId, accounts);
     }
 
     /** Linked subgroups' members must already be community members (specs §30.3, P0). */

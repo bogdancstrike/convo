@@ -121,11 +121,14 @@ export class EnclaveApi {
   createCommunity(rootGroupId: string): Promise<CommunityDto> { return this.signed('POST', '/v1/communities', { rootGroupId }); }
   myCommunities(): Promise<CommunityDto[]> { return this.signed('GET', '/v1/communities/mine'); }
   communityGroups(communityId: string): Promise<CommunityLinkDto[]> { return this.signed('GET', `/v1/communities/${encodeURIComponent(communityId)}/groups`); }
-  linkCommunityGroup(communityId: string, groupId: string, visibility: 'discoverable' | 'private'): Promise<CommunityLinkDto> {
-    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/links`, { groupId, visibility });
+  linkCommunityGroup(communityId: string, groupId: string, visibility: 'discoverable' | 'private', delegation = false): Promise<CommunityLinkDto> {
+    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/links`, { groupId, visibility, delegation });
   }
-  acceptCommunityLink(communityId: string, groupId: string): Promise<void> {
-    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/links/${encodeURIComponent(groupId)}/accept`);
+  acceptCommunityLink(communityId: string, groupId: string, delegation = false): Promise<void> {
+    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/links/${encodeURIComponent(groupId)}/accept`, { delegation });
+  }
+  communityOperations(communityId: string): Promise<{ groupId: string; accountId: string; status: 'pending' | 'completed' | 'blocked'; updatedAt: string }[]> {
+    return this.signed('GET', `/v1/communities/${encodeURIComponent(communityId)}/operations`);
   }
   unlinkCommunityGroup(communityId: string, groupId: string): Promise<void> {
     return this.signed('DELETE', `/v1/communities/${encodeURIComponent(communityId)}/links/${encodeURIComponent(groupId)}`);

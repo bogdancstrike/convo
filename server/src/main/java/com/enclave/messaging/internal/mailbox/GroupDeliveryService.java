@@ -54,4 +54,9 @@ class GroupDeliveryService implements DeliveryApi {
         }
         events.publishEvent(new EnvelopesStored(List.copyOf(recipients), envelope.urgent()));
     }
+
+    @Override
+    public void groupChanged(Collection<DeviceAddress> devices) {
+        if (!devices.isEmpty()) events.publishEvent(new GroupChanged(List.copyOf(devices)));
+    }
 }

@@ -47,6 +47,12 @@ class GatewayEventListener {
                 .forEach(d -> events.publishEvent(new com.enclave.messaging.MailWaiting(d, event.urgent())));
     }
 
+    /** Group membership changed without a commit: content-free refresh hint. */
+    @TransactionalEventListener
+    void on(com.enclave.messaging.internal.mailbox.GroupChanged event) {
+        event.devices().forEach(d -> hints.signalControl(d, Directive.GROUPS_CHANGED));
+    }
+
     /** Revocation: purge the mailbox, close sockets, tell the account's other devices. */
     @ApplicationModuleListener
     void on(DeviceRevoked event) {

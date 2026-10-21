@@ -186,8 +186,20 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     try {
       await this.mutex.run(() => this.groups.ensureKeyPackages());
       await this.syncOwnDevicesInGroups();
+      await this.refreshAllGroups(); // completes removals that happened while this device was offline
     } catch (error) {
       console.warn('Group maintenance failed', error instanceof Error ? error.message : error);
+    }
+  }
+
+  /**
+   * Re-reads every joined group's server state; pending departures (leaves, delegated community
+   * removals) are then committed by one of the remaining members.
+   */
+  private async refreshAllGroups(): Promise<void> {
+    for (const c of this.conversations()) {
+      const groupId = groupIdOf(c.id);
+      if (groupId && !c.left) await this.refreshGroup(groupId).catch(() => undefined);
     }
   }
 
@@ -1097,14 +1109,21 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   /** Links a group this account belongs to; active at once if this account owns it. */
-  async linkGroupToCommunity(community: CommunityView, conversationId: string, visibility: 'discoverable' | 'private'): Promise<void> {
+  async linkGroupToCommunity(community: CommunityView, conversationId: string, visibility: 'discoverable' | 'private', delegation = false): Promise<void> {
     const groupId = groupIdOf(conversationId);
     if (!groupId) throw new Error('not a group');
-    await this.api.linkCommunityGroup(community.communityId, groupId, visibility);
+    await this.api.linkCommunityGroup(community.communityId, groupId, visibility, delegation);
     await this.communityGroups(community); // publishes the label when already active
   }
 
-  acceptCommunityLink(community: CommunityView, groupId: string): Promise<void> { return this.api.acceptCommunityLink(community.communityId, groupId); }
+  /** The group owner accepts a link; `delegation` lets community removal also remove members here. */
+  acceptCommunityLink(community: CommunityView, groupId: string, delegation = false): Promise<void> { return this.api.acceptCommunityLink(community.communityId, groupId, delegation); }
+
+  /** Community admins: membership operations with display names (pending/blocked/completed). */
+  async communityOperations(community: CommunityView): Promise<{ groupId: string; accountId: string; name: string; status: 'pending' | 'completed' | 'blocked' }[]> {
+    const ops = await this.api.communityOperations(community.communityId);
+    return Promise.all(ops.map(async (o) => ({ ...o, name: await this.displayName(o.accountId) })));
+  }
   unlinkCommunityGroup(community: CommunityView, groupId: string): Promise<void> { return this.api.unlinkCommunityGroup(community.communityId, groupId); }
   /** Asks to join a discoverable group (its admins approve; nothing is shared before that). */
   requestCommunityGroup(community: CommunityView, groupId: string): Promise<void> { return this.api.requestCommunityGroup(community.communityId, groupId); }
@@ -1901,6 +1920,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       }
       case 'KEYPACKAGES_LOW':
         await this.mutex.run(() => this.groups.ensureKeyPackages()).catch(() => undefined);
+        break;
+      case 'GROUPS_CHANGED':
+        await this.refreshAllGroups();
         break;
       case 'DEVICE_LIST_CHANGED':
         this.emit('devices', undefined);

@@ -198,8 +198,8 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'communities': return client.communities();
     case 'createCommunity': return client.createCommunity(String(args.name), String(args.description ?? ''));
     case 'communityGroups': return client.communityGroups(await community(args.id));
-    case 'linkCommunityGroup': return client.linkGroupToCommunity(await community(args.id), String(args.conversationId), args.visibility === 'private' ? 'private' : 'discoverable');
-    case 'acceptCommunityLink': return client.acceptCommunityLink(await community(args.id), String(args.groupId));
+    case 'linkCommunityGroup': return client.linkGroupToCommunity(await community(args.id), String(args.conversationId), args.visibility === 'private' ? 'private' : 'discoverable', args.delegation === true);
+    case 'acceptCommunityLink': return client.acceptCommunityLink(await community(args.id), String(args.groupId), args.delegation === true);
     case 'unlinkCommunityGroup': return client.unlinkCommunityGroup(await community(args.id), String(args.groupId));
     case 'onboarding': return client.onboarding(await community(args.id));
     case 'saveOnboarding': return client.saveOnboarding(await community(args.id), {

@@ -41,6 +41,16 @@ private record synced to own devices (`sync.onboarding`, higher mutation counter
 acknowledgements are a typed `rulesAck` (version + digest) to the named reviewers, who keep only
 the current version's responses. Recommendations never enroll anyone.
 
+Parent-removal delegation (§30.3, V22): a group owner may accept (or, linking their own group,
+grant) that community removal also removes members from the group (`delegation`). When an
+account leaves or is removed from the root (`GroupMembersRemoved` on the root), the module applies
+`GroupsApi.removeOnBehalf` to every delegating active link: the account becomes "departed" (no
+further fan-out, call tokens refused), devices get a content-free `GROUPS_CHANGED` hint, and any
+remaining member's client commits the MLS removal. Each step is a `community_membership_ops`
+row (`pending` → `completed` when the group's removal commit is accepted; `blocked` if the
+account is the group's last owner), visible to community admins (`GET .../operations`). Groups
+without delegation stay standalone.
+
 Not yet (later COM slices): due dates/expiry/withdrawal and custom reviewer selection for
 acknowledgements,
 parent-removal delegation and tracked membership operations (§30.3), owner-transfer rules for

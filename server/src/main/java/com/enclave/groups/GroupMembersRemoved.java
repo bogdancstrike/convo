@@ -10,5 +10,14 @@ import java.util.UUID;
  *
  * @param groupId 32-byte MLS group ID
  * @param accounts accounts that are no longer members
+ * @param mlsRemoved true when an accepted MLS commit removed their leaves (cryptographic removal
+ *     done); false when only the server ACL changed (leave, delegated removal) and a member's
+ *     client still has to commit the removal
  */
-public record GroupMembersRemoved(byte[] groupId, Set<UUID> accounts) {}
+public record GroupMembersRemoved(byte[] groupId, Set<UUID> accounts, boolean mlsRemoved) {
+
+    /** ACL-only removal. */
+    public GroupMembersRemoved(byte[] groupId, Set<UUID> accounts) {
+        this(groupId, accounts, false);
+    }
+}

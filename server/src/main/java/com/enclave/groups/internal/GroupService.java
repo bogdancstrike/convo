@@ -129,7 +129,7 @@ class GroupService {
         cmd.addDevices().forEach(d -> groups.addDevice(groupId, d));
         cmd.removeDevices().forEach(d -> groups.removeDevice(groupId, d));
         cmd.removeMembers().forEach(a -> { groups.deleteMember(groupId, a); groups.deleteDeparture(groupId, a); });
-        if (!cmd.removeMembers().isEmpty()) events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.copyOf(cmd.removeMembers())));
+        if (!cmd.removeMembers().isEmpty()) events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.copyOf(cmd.removeMembers()), true));
         cmd.roleChanges().forEach((a, r) -> groups.upsertMember(groupId, a, r));
 
         // Everyone in the pre-commit roster (including removed devices) learns the new epoch.
@@ -188,6 +188,27 @@ class GroupService {
         groups.deleteMember(groupId, caller.accountId());
         groups.addDeparture(groupId, caller.accountId());
         events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.of(caller.accountId())));
+        delivery.groupChanged(groups.devices(groupId).stream().filter(d -> !d.accountId().equals(caller.accountId())).toList());
+    }
+
+    /**
+     * Delegated removal (community parent-removal, specs §30.3): like a leave on the account's
+     * behalf — the server stops fan-out at once and any member completes the MLS removal. Never
+     * strands a last owner.
+     */
+    @Transactional
+    com.enclave.groups.GroupsApi.RemovalOutcome removeOnBehalf(byte[] groupId, UUID account) {
+        requireGroupId(groupId);
+        if (groups.lock(groupId, false).isEmpty()) return com.enclave.groups.GroupsApi.RemovalOutcome.NOT_MEMBER;
+        Map<UUID, Role> members = groups.members(groupId);
+        if (!members.containsKey(account)) return com.enclave.groups.GroupsApi.RemovalOutcome.NOT_MEMBER;
+        boolean lastOwner = members.get(account) == Role.OWNER && members.values().stream().filter(r -> r == Role.OWNER).count() == 1;
+        if (lastOwner && members.size() > 1) return com.enclave.groups.GroupsApi.RemovalOutcome.LAST_OWNER;
+        groups.deleteMember(groupId, account);
+        groups.addDeparture(groupId, account);
+        events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.of(account)));
+        delivery.groupChanged(groups.devices(groupId).stream().filter(d -> !d.accountId().equals(account)).toList());
+        return com.enclave.groups.GroupsApi.RemovalOutcome.REMOVED;
     }
 
     /** Bans (and the client separately removes) an account; owners can only be banned by owners. */
