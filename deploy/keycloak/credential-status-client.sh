@@ -21,7 +21,9 @@ fi
 for action in UPDATE_PROFILE UPDATE_PASSWORD CONFIGURE_TOTP webauthn-register webauthn-register-passwordless \
               VERIFY_PROFILE delete_credential CONFIGURE_RECOVERY_AUTHN_CODES update_user_locale; do
   if ! k get "authentication/required-actions/$action" -r "$REALM" >/dev/null 2>&1; then
-    name=$(k get authentication/unregistered-required-actions -r "$REALM" --format csv --noquotes --fields providerId,name | awk -F, -v id="$action" '$1 == id { print $2 }')
+    # The Keycloak image has no awk/sed: match the CSV row in bash.
+    name=$(k get authentication/unregistered-required-actions -r "$REALM" --format csv --noquotes --fields providerId,name \
+      | while IFS=, read -r id label; do [[ "$id" == "$action" ]] && echo "$label"; done)
     if [[ -n "$name" ]]; then
       k create authentication/register-required-action -r "$REALM" -s "providerId=$action" -s "name=$name" >/dev/null && echo "Registered required action $action"
     fi
