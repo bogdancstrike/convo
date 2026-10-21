@@ -168,6 +168,9 @@ class MainActivity : FragmentActivity() {
         getPreferences(MODE_PRIVATE).edit().putString("server", value.trim().trimEnd('/')).apply(); recreate()
     }
     fun serverAddress() = server
+    /** Batch selection in the open chat ("authorId/id" keys); null when not selecting. */
+    var selection by mutableStateOf<Set<String>?>(null)
+    fun toggleSelected(key: String) { val s = selection ?: return; selection = if (key in s) s - key else if (s.size < 100) s + key else s }
     /** Whether this account may pin in the open chat (groups/channels: owners and admins). */
     var canPinActive by mutableStateOf(false); private set
     fun openChat(id: String) {
@@ -229,7 +232,8 @@ class MainActivity : FragmentActivity() {
             route.startsWith("contact:") -> route = "info"
             route in listOf("media", "starred", "appearance", "members") -> route = "info"
             route == "info" -> route = "thread"
-            route == "thread" -> { active = null; route = "list"; locks.unlockedChat = null; call("close") }
+            route == "thread" && selection != null -> selection = null
+            route == "thread" -> { active = null; route = "list"; locks.unlockedChat = null; selection = null; call("close") }
             selectedTab == "Settings" && route != "list" -> route = "list"
             else -> { route = "list"; selectedTab = "Chats" }
         }

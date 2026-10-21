@@ -87,6 +87,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 if (conversation.optBoolean("blocked")) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("You blocked this contact.", Modifier.weight(1f)); TextButton({ app.call("block", obj("id" to id, "blocked" to false), success = "Contact unblocked") }) { Text("Unblock") }
                 }
+                else if (app.selection != null) SelectionBar(app, id, all)
                 else if (readOnly) Text(if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
                 else Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                     quote?.let { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("Reply: ${it.optString("excerpt")}", Modifier.weight(1f), maxLines = 2); IconButton({ quote = null }) { Icon(Icons.Outlined.Close, "Cancel reply") } } }
@@ -125,7 +126,10 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
-        Card(Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
+        val key = "${message.optString("authorId")}/${message.optString("id")}"
+        val selecting = app.selection != null
+        if (selecting) Checkbox(key in app.selection.orEmpty(), { app.toggleSelected(key) }, Modifier.align(Alignment.CenterVertically))
+        Card(Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { if (selecting) app.toggleSelected(key) }, onLongClick = { if (selecting) app.toggleSelected(key) else menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (conversation.startsWith("g:") && !outgoing) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { RawText(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }
@@ -148,6 +152,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         DropdownMenu(menu, { menu = false }) {
                             Row { listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(38.dp)) { Text(emoji) } } }
                             DropdownMenuItem(text = { Text("Message info") }, onClick = { menu = false; info = true })
+                            DropdownMenuItem(text = { Text("Select") }, onClick = { menu = false; app.selection = setOf("${message.optString("authorId")}/${message.optString("id")}") })
                             if (app.canPinActive) {
                                 val pinned = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == conversation }?.optJSONArray("pinnedMessages")?.objects().orEmpty()
                                     .any { it.optString("authorId") == message.optString("authorId") && it.optString("id") == message.optString("id") }
@@ -289,4 +294,24 @@ fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds
             if (app.canPinActive) IconButton({ app.call("pin", current.targetArgs(conversation.optString("id")).put("pinned", false)) }) { Icon(Icons.Outlined.Close, "Unpin") }
         }
     }
+}
+
+/** Batch actions on selected messages (max 100): copy, star, forward to one chat, delete for me. */
+@Composable fun SelectionBar(app: MainActivity, conversation: String, all: List<JSONObject>) {
+    val keys = app.selection ?: return
+    val chosen = all.filter { "${it.optString("authorId")}/${it.optString("id")}" in keys }.sortedBy { it.optLong("sort") }
+    var forward by remember { mutableStateOf(false) }; var delete by remember { mutableStateOf(false) }
+    fun each(method: String, extra: (JSONObject) -> JSONObject = { it }) = chosen.forEach { app.call(method, extra(it.targetArgs(conversation)), quiet = true) }
+    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton({ app.selection = null }) { Icon(Icons.Outlined.Close, "Cancel selection") }
+        RawText(tr("{count} selected").replace("{count}", "${chosen.size}"), Modifier.weight(1f))
+        IconButton({ (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo messages", chosen.joinToString("\n") { it.optString("body") })); app.notice = "Copied" }, enabled = chosen.isNotEmpty()) { Icon(Icons.Outlined.ContentCopy, "Copy text") }
+        IconButton({ val value = !chosen.all { it.optBoolean("starred") }; each("star") { it.put("value", value) }; app.selection = null }, enabled = chosen.isNotEmpty()) { Icon(Icons.Outlined.StarOutline, "Star") }
+        IconButton({ forward = true }, enabled = chosen.isNotEmpty()) { Icon(Icons.AutoMirrored.Outlined.Send, "Forward") }
+        IconButton({ delete = true }, enabled = chosen.isNotEmpty()) { Icon(Icons.Outlined.Delete, "Delete for me", tint = MaterialTheme.colorScheme.error) }
+    }
+    if (delete) Confirm("Delete selected messages for you?", "Other participants keep their copies.", "Delete for me", { delete = false }) { delete = false; each("deleteMessage") { it.put("everyone", false) }; app.selection = null }
+    if (forward) AlertDialog(onDismissRequest = { forward = false }, title = { Text("Forward to") }, text = { LazyColumn { items(app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { !app.locks.locked(it.optString("id")) }) { c ->
+        TextButton({ forward = false; each("forward") { it.put("destination", c.optString("id")) }; app.selection = null; app.notice = "Forwarded" }) { RawText(c.optString("title")) } } } },
+        confirmButton = { TextButton({ forward = false }) { Text("Cancel") } })
 }

@@ -40,7 +40,10 @@ export function MessageBubble({
   highlight,
   quotedAuthor,
   actions,
+  selection,
 }: {
+  /** Batch selection mode: a checkbox replaces the context menu; clicking toggles. */
+  selection?: { selected: boolean; toggle: () => void };
   client: EnclaveClient;
   message: ChatMessage;
   group: boolean;
@@ -69,7 +72,9 @@ export function MessageBubble({
   return (
     <>
       {showDay && <div className="day-separator">{dayLabel(m.sort, t('chats.today'), t('chats.yesterday'), date)}</div>}
-      <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}`} data-testid="message" id={messageAnchor(m.authorId, m.id)}>
+      <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}${selection?.selected ? ' selected' : ''}`} data-testid="message" id={messageAnchor(m.authorId, m.id)}
+        onClickCapture={selection ? (e) => { e.preventDefault(); e.stopPropagation(); if (!system) selection.toggle(); } : undefined}>
+        {selection && !system && <input type="checkbox" className="select-box" checked={selection.selected} readOnly aria-label={t('select.message')} data-testid="select-message" />}
         {group && !own && <span className="msg-avatar">{first && <Avatar id={m.authorId} name={author || '?'} size={28} />}</span>}
         <div
           ref={bubbleRef}
@@ -128,7 +133,7 @@ export function MessageBubble({
             </>
           )}
           <span className="meta">
-            {m.starred && <Icon name="pin" size={12} label={t('msg.starred')} />}
+            {m.starred && <span data-testid="starred"><Icon name="pin" size={12} label={t('msg.starred')} /></span>}
             {m.expireTimer && !m.deleted && <span title={t('timer.badge', { duration: timerLabel(m.expireTimer, t) })} aria-label={t('timer.badge', { duration: timerLabel(m.expireTimer, t) })} data-testid="message-timer"><Icon name="clock" size={12} /></span>}
             {m.editedAt && !m.deleted && <span>{t('thread.edited')}</span>}
             <span>{time(m.sentAt)}</span>

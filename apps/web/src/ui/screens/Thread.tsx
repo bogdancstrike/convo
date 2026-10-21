@@ -1,6 +1,7 @@
 import { useCalls } from '../calls/CallProvider';
 import { TimerNotice } from './TimerNotice';
 import { PinnedBanner } from './PinnedBanner';
+import { MAX_SELECTION, SelectionBar } from './SelectionBar';
 import { conversationMenu } from './conversationMenu';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
@@ -58,6 +59,10 @@ export function Thread({
   const [dragging, setDragging] = useState(false);
   const [search, setSearch] = useState<string | null>(null);
   const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
+  // Batch selection (FEAT-02): up to MAX_SELECTION messages for copy/forward/star/delete-for-me.
+  const [selection, setSelection] = useState<Set<string> | null>(null);
+  const [batchForward, setBatchForward] = useState<ChatMessage[] | null>(null);
+  const keyOf = (m: ChatMessage) => `${m.authorId}/${m.id}`;
   const [info, setInfo] = useState<ChatMessage | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -116,7 +121,9 @@ export function Thread({
           : t('header.clickForInfo')
         : t('thread.noteHint');
 
-  const menu = conversationMenu(client, conversation, t, onInfo, () => setSearch(''), onClose);
+  const menu = [{ label: t('select.start'), icon: 'check' as const, onSelect: () => setSelection(new Set()), testId: 'menu-select' },
+    ...conversationMenu(client, conversation, t, onInfo, () => setSearch(''), onClose)];
+  const chosen = selection ? messages.filter((m) => selection.has(keyOf(m))).sort((a, b) => a.sort - b.sort) : [];
 
   return (
     <section
@@ -235,6 +242,9 @@ export function Thread({
               showDay={newDay}
               highlight={search ?? undefined}
               quotedAuthor={m.quote ? (m.quote.authorId === client.accountId ? t('chats.you') : group ? '' : title) : ''}
+              selection={selection ? { selected: selection.has(keyOf(m)), toggle: () => setSelection((s) => {
+                const next = new Set(s); if (next.has(keyOf(m))) next.delete(keyOf(m)); else if (next.size < MAX_SELECTION) next.add(keyOf(m)); return next;
+              }) } : undefined}
               actions={{
                 onReply: (target) => setMode({ kind: 'reply', target }),
                 onEdit: (target) => setMode({ kind: 'edit', target }),
@@ -249,7 +259,7 @@ export function Thread({
         <div className="channel-read-only" role="status" data-testid="blocked-banner"><Icon name="lock" size={16} />{t('block.banner', { name: title })}
           <button className="btn" onClick={() => void client.setBlocked(conversation.id, false)} data-testid="unblock">{t('block.unblock')}</button></div>
       )}
-      {!conversation.left && !readOnly && !conversation.blocked && (
+      {!conversation.left && !readOnly && !conversation.blocked && !selection && (
         <Composer
           key={conversation.id}
           client={client}
@@ -266,6 +276,13 @@ export function Thread({
             stickToBottom.current = true;
           }}
         />
+      )}
+      {selection && (
+        <SelectionBar client={client} messages={chosen} onCancel={() => setSelection(null)} onForward={() => setBatchForward(chosen)} />
+      )}
+      {batchForward && (
+        <ForwardDialog client={client} messages={batchForward} onClose={() => setBatchForward(null)}
+          onDone={(c) => { setBatchForward(null); setSelection(null); onOpenConversation(c.id); }} />
       )}
       {readOnly && !conversation.left && <div className="channel-read-only" role="status"><Icon name="lock" size={16} />{t(record?.needsJoin ? 'group.rejoin' : 'channel.readOnly')}</div>}
       {forwarding && (

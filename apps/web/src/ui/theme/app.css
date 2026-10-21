@@ -2275,3 +2275,10 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .pinned-text { display: grid; min-width: 0; font-size: 0.8125rem; }
 .pinned-text strong { color: var(--c-accent-text); font-weight: 600; }
 .pinned-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text-secondary); }
+
+/* Batch selection */
+.selection-bar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); background: var(--c-panel); border-top: 1px solid var(--c-border); }
+.selection-bar .spacer { flex: 1; }
+.message-row .select-box { align-self: center; margin: 0 var(--space-2); width: 18px; height: 18px; accent-color: var(--c-accent); }
+.message-row.selected { background: color-mix(in srgb, var(--c-accent) 12%, transparent); }
+.message-row:has(.select-box) { cursor: pointer; }

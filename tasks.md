@@ -91,6 +91,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   (`remoteMessaging`, visible ongoing notification) keeps delivery working in the background —
   verified: a message sent while Convo was on the home screen produced a notification. Push
   (UnifiedPush/FCM) for a fully stopped app remains open.
+- Batch selection (FEAT-02): select up to 100 messages to copy, star, forward to one chat or
+  delete for me (confirmed, partial outcomes reported). Web (`selection.spec.ts`) and Android
+  (message menu → Select); emulator verified.
+- Full regression 2026-10-21 (later): 67 passed, 1 flaky (Firefox last-seen timing), 4 skipped.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
