@@ -90,6 +90,19 @@ class GroupRepository {
                 .param("g", groupId).param("a", accountId).update();
     }
 
+    void ban(byte[] groupId, UUID accountId, UUID by) {
+        jdbc.sql("INSERT INTO mls_group_bans (group_id, account_id, banned_by) VALUES (:g, :a, :b) ON CONFLICT DO NOTHING")
+                .param("g", groupId).param("a", accountId).param("b", by).update();
+    }
+
+    void unban(byte[] groupId, UUID accountId) {
+        jdbc.sql("DELETE FROM mls_group_bans WHERE group_id = :g AND account_id = :a").param("g", groupId).param("a", accountId).update();
+    }
+
+    Set<UUID> bans(byte[] groupId) {
+        return new HashSet<>(jdbc.sql("SELECT account_id FROM mls_group_bans WHERE group_id = :g").param("g", groupId).query(UUID.class).list());
+    }
+
     /** A pending join request is fulfilled when the account is added. */
     void deleteJoinRequest(byte[] groupId, UUID accountId) {
         jdbc.sql("DELETE FROM mls_group_join_requests WHERE group_id = :g AND account_id = :a").param("g", groupId).param("a", accountId).update();

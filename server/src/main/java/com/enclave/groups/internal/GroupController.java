@@ -135,6 +135,23 @@ class GroupController {
         invites.decline(me.address(), decode(groupId, "groupId"), accountId);
     }
 
+    @PutMapping("/v1/groups/{groupId}/bans/{accountId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void ban(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId, @PathVariable java.util.UUID accountId) {
+        groups.ban(me.address(), decode(groupId, "groupId"), accountId, true);
+    }
+
+    @DeleteMapping("/v1/groups/{groupId}/bans/{accountId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void unban(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId, @PathVariable java.util.UUID accountId) {
+        groups.ban(me.address(), decode(groupId, "groupId"), accountId, false);
+    }
+
+    @GetMapping("/v1/groups/{groupId}/bans")
+    java.util.Set<java.util.UUID> bans(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {
+        return groups.bans(me.address(), decode(groupId, "groupId"));
+    }
+
     @PostMapping("/v1/groups/{groupId}/leave")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void leave(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {

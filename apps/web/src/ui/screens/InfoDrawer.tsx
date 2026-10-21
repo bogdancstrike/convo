@@ -272,6 +272,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
                     { label: t('group.makeOwner'), icon: 'shield' as const, onSelect: () => { if (window.confirm(t('group.confirmOwner', { name: m.label }))) void run(() => client.changeGroupRole(conversation.id, m.accountId, 'owner')); } }] : []),
                   ...(myRole === 'owner' && m.role === 'owner' ? [{ label: t('group.removeOwner'), icon: 'shield' as const, onSelect: () => void run(() => client.changeGroupRole(conversation.id, m.accountId, 'admin')) }] : []),
                   { label: t('group.remove'), icon: 'trash', danger: true, onSelect: () => { if (window.confirm(t('group.confirmRemove', { name: m.label }))) void run(() => client.removeGroupMember(conversation.id, m.accountId)); } },
+                  { label: t('group.ban'), icon: 'trash', danger: true, testId: 'member-ban', onSelect: () => { if (window.confirm(t('group.confirmBan', { name: m.label }))) void run(() => client.banMember(conversation.id, m.accountId)); } },
                 ]} trigger={({ open, toggle }) => <button className="icon-btn" disabled={busy} onClick={toggle} aria-label={`${t('group.memberOptions')}: ${m.label}`} aria-expanded={open} data-testid={`member-menu-${m.username}`}><Icon name="more" /></button>} />
               )}
             </li>

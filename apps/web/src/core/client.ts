@@ -865,6 +865,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   revokeInviteLinks(conversationId: string): Promise<void> { return this.api.revokeInvites(groupIdOf(conversationId)!); }
   /** Files a join request; admins approve by adding this account. Reveals nothing about the group. */
   requestToJoin(token: string): Promise<void> { return this.api.requestToJoin(token); }
+  /** Bans an account (no join requests or re-adds) and removes it if it is a member. */
+  async banMember(conversationId: string, accountId: string): Promise<void> {
+    await this.api.banMember(groupIdOf(conversationId)!, accountId);
+    const record = await this.groups.record(groupIdOf(conversationId)!);
+    if (record?.members.some((m) => m.accountId === accountId)) await this.removeGroupMember(conversationId, accountId);
+  }
+  unbanMember(conversationId: string, accountId: string): Promise<void> { return this.api.unbanMember(groupIdOf(conversationId)!, accountId); }
+  groupBans(conversationId: string): Promise<string[]> { return this.api.groupBans(groupIdOf(conversationId)!); }
   joinRequests(conversationId: string) { return this.api.joinRequests(groupIdOf(conversationId)!); }
   declineJoinRequest(conversationId: string, accountId: string): Promise<void> { return this.api.declineJoin(groupIdOf(conversationId)!, accountId); }
 

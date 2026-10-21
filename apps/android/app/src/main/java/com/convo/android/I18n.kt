@@ -30,6 +30,8 @@ object Strings {
         " End-to-end encrypted" to " Criptat integral",
         " Securing call…" to " Se securizează apelul…",
         "Accept" to "Răspunde",
+        "Remove and ban" to "Elimină și interzice", "Remove and ban?" to "Elimini și interzici?", "Unban" to "Ridică interdicția", "Banned ({count})" to "Interziși ({count})",
+        "They cannot ask to join or be added again until unbanned." to "Nu va putea cere să intre sau fi adăugat din nou până la ridicarea interdicției.",
         "Invite link" to "Link de invitație", "Create invite link" to "Creează link de invitație", "Share" to "Distribuie", "Reset links" to "Resetează linkurile", "Links reset" to "Linkuri resetate",
         "Approve" to "Aprobă", "Decline" to "Refuză", "Join with invite link" to "Alătură-te cu link de invitație", "Join a group" to "Alătură-te unui grup", "Ask to join" to "Cere să intri", "Request sent" to "Cerere trimisă",
         "Ask the group’s admins to add you? They will see your name." to "Le ceri administratorilor grupului să te adauge? Îți vor vedea numele.", "This invite link is no longer valid." to "Acest link de invitație nu mai este valid.",

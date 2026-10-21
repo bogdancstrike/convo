@@ -74,6 +74,7 @@ import org.json.JSONObject
                                 DropdownMenuItem(text = { Text(if (role == "owner") "Change owner to admin" else "Make owner") }, onClick = { menu = false; roleConfirm = accountId to if (role == "owner") "admin" else "owner" })
                             }
                             DropdownMenuItem(text = { Text("Remove", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; roleConfirm = accountId to "remove" })
+                            DropdownMenuItem(text = { Text("Remove and ban", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; roleConfirm = accountId to "ban" })
                         }
                     }
                 }
@@ -82,7 +83,8 @@ import org.json.JSONObject
         }
     }
     if (adding) androidx.compose.ui.window.Dialog(onDismissRequest = { adding = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) { Surface(Modifier.fillMaxSize()) { Column { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Add participant", Modifier.weight(1f).padding(16.dp), style = MaterialTheme.typography.titleLarge); IconButton({ adding = false }) { Icon(Icons.Outlined.Close, "Close") } }; ContactsPicker(app, multi = true, excluded = members.map { it.optString("accountId") }.toSet()) { a -> app.call("addMembers", obj("id" to id, "members" to JSONArray(listOf(a.optString("accountId"))))) { adding = false } } } } }
-    roleConfirm?.let { (member, role) -> Confirm(if (role == "remove") "Remove participant?" else "Change participant role?", if (role == "owner") "An owner has the same group permissions as you." else "The server will enforce group permissions and keep at least one owner.", "Confirm", { roleConfirm = null }) { roleConfirm = null; app.call(if (role == "remove") "removeMember" else "role", obj("id" to id, "member" to member, "role" to role)) } }
+    roleConfirm?.takeIf { it.second == "ban" }?.let { (member, _) -> Confirm("Remove and ban?", "They cannot ask to join or be added again until unbanned.", "Remove and ban", { roleConfirm = null }) { roleConfirm = null; app.call("banMember", obj("id" to id, "accountId" to member)) } }
+    roleConfirm?.takeIf { it.second != "ban" }?.let { (member, role) -> Confirm(if (role == "remove") "Remove participant?" else "Change participant role?", if (role == "owner") "An owner has the same group permissions as you." else "The server will enforce group permissions and keep at least one owner.", "Confirm", { roleConfirm = null }) { roleConfirm = null; app.call(if (role == "remove") "removeMember" else "role", obj("id" to id, "member" to member, "role" to role)) } }
 }
 @Composable fun ContactInfo(app: MainActivity, id: String) {
     var account by remember(id) { mutableStateOf<JSONObject?>(null) }; var groups by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -130,7 +132,11 @@ import org.json.JSONObject
 @Composable fun InviteSection(app: MainActivity, id: String) {
     var link by remember(id) { mutableStateOf<String?>(null) }
     var requests by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
-    LaunchedEffect(id) { while (true) { app.call("joinRequests", obj("id" to id), quiet = true) { v -> requests = (v as? org.json.JSONArray)?.objects().orEmpty() }; kotlinx.coroutines.delay(10_000) } }
+    var banned by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    LaunchedEffect(id) { while (true) {
+        app.call("joinRequests", obj("id" to id), quiet = true) { v -> requests = (v as? org.json.JSONArray)?.objects().orEmpty() }
+        app.call("groupBans", obj("id" to id), quiet = true) { v -> banned = (v as? org.json.JSONArray)?.objects().orEmpty() }
+        kotlinx.coroutines.delay(10_000) } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Invite link", style = MaterialTheme.typography.titleMedium)
         if (link == null) OutlinedButton({ app.call("createInvite", obj("id" to id)) { v -> link = (v as? JSONObject)?.optString("url") } }) { Text("Create invite link") }
@@ -143,6 +149,8 @@ import org.json.JSONObject
         }
         Text("Anyone in your organization with the link can ask to join. Admins approve each request; the link alone does not reveal the group’s name or members.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton({ app.call("revokeInvites", obj("id" to id), success = "Links reset") { link = null } }) { Text("Reset links") }
+        if (banned.isNotEmpty()) Text(tr("Banned ({count})").replace("{count}", "${banned.size}"), style = MaterialTheme.typography.titleSmall)
+        banned.forEach { r -> Row(verticalAlignment = Alignment.CenterVertically) { RawText(r.optString("label"), Modifier.weight(1f)); TextButton({ app.call("unbanMember", obj("id" to id, "accountId" to r.optString("accountId"))) { banned = banned - r } }) { Text("Unban") } } }
         requests.forEach { r ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RawText(r.optString("label"), Modifier.weight(1f))

@@ -114,6 +114,8 @@ class GroupService {
         List<DeviceAddress> roster = groups.devices(groupId);
         Set<UUID> departed = groups.departures(groupId);
         authorize(caller, members, roster, cmd, departed);
+        Set<UUID> banned = groups.bans(groupId);
+        if (cmd.addMembers().stream().anyMatch(banned::contains)) throw new EnclaveException(ErrorCode.FORBIDDEN, "account is banned from this group; unban first");
 
         long newEpoch = group.epoch() + 1;
         long seq = group.nextSeq();
@@ -180,6 +182,27 @@ class GroupService {
         if (lastOwner && members.size() > 1) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "make another member owner before leaving");
         groups.deleteMember(groupId, caller.accountId());
         groups.addDeparture(groupId, caller.accountId());
+    }
+
+    /** Bans (and the client separately removes) an account; owners can only be banned by owners. */
+    @Transactional
+    void ban(DeviceAddress caller, byte[] groupId, UUID accountId, boolean banned) {
+        lockForMember(groupId, caller, false);
+        Map<UUID, Role> members = groups.members(groupId);
+        Role role = members.get(caller.accountId());
+        if (role == null || !role.canManageMembers()) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only admins can ban");
+        if (accountId.equals(caller.accountId())) throw new EnclaveException(ErrorCode.INVALID_REQUEST, "cannot ban yourself");
+        if (members.get(accountId) == Role.OWNER && role != Role.OWNER) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only owners can ban owners");
+        if (banned) { groups.ban(groupId, accountId, caller.accountId()); groups.deleteJoinRequest(groupId, accountId); }
+        else groups.unban(groupId, accountId);
+    }
+
+    @Transactional(readOnly = true)
+    Set<UUID> bans(DeviceAddress caller, byte[] groupId) {
+        requireGroupId(groupId);
+        // No row lock here: read-only transactions cannot take FOR SHARE locks in PostgreSQL.
+        if (!groups.members(groupId).containsKey(caller.accountId())) throw new EnclaveException(ErrorCode.NOT_GROUP_MEMBER, "not a member");
+        return groups.bans(groupId);
     }
 
     /** Groups of the caller's account. */

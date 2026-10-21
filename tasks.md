@@ -107,6 +107,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   requests that reveal nothing about the group, admin approve (MLS add) / decline. Web
   (`#/join/<token>`, `invites.spec.ts` Chromium/Firefox) and Android (info section, "Join with
   invite link"); phone joined a browser-created group via link after approval.
+- Group bans (GRP-03, V17): admins "Remove and ban"; banned accounts cannot be re-added and their
+  join requests look like invalid links; banned list with Unban. Web E2E (in `invites.spec.ts`);
+  Android UI built (shared core/server path), not emulator-exercised.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -193,7 +196,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Authenticated group senders (leaf credential must match server-reported source device) | |
 | ✅ | Create group, encrypted group name, add/remove members (admin/owner), removed-member state | |
 | ✅ | Linked-device sync: own devices added/removed in joined groups on DEVICE_LIST_CHANGED | |
-| 🟡 | Leave, invite links and join requests done (see below); promote/demote/transfer UI exists; bans pending | GRP-03, EXT-03 |
+| ✅ | Leave, invite links, join requests, bans (see below); promote/demote/transfer UI | GRP-03, EXT-03 |
 | ⬜ | Credential binding to account identity key, reviewed role profile, pending-removal gate | GRP-01 |
 
 ## Delivery & verification

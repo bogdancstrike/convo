@@ -13,11 +13,14 @@ export function InviteSection({ client, conversation }: { client: EnclaveClient;
   const { t } = useI18n();
   const [link, setLink] = useState<string | null>(null);
   const [requests, setRequests] = useState<{ accountId: string; label: string }[]>([]);
+  const [banned, setBanned] = useState<{ accountId: string; label: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => void client.joinRequests(conversation.id)
     .then((list) => Promise.all(list.map(async (r) => ({ accountId: r.accountId, label: await client.displayName(r.accountId) }))))
-    .then(setRequests).catch(() => undefined), [client, conversation.id]);
+    .then(setRequests).catch(() => undefined)
+    .then(() => client.groupBans(conversation.id)).then((ids) => Promise.all((ids ?? []).map(async (accountId) => ({ accountId, label: await client.displayName(accountId) }))))
+    .then(setBanned).catch(() => undefined), [client, conversation.id]);
   useEffect(() => { load(); const timer = setInterval(load, 10_000); return () => clearInterval(timer); }, [load]);
   const run = async (task: () => Promise<void>) => {
     setBusy(true); setError(null);
@@ -44,6 +47,13 @@ export function InviteSection({ client, conversation }: { client: EnclaveClient;
           <span className="settings-row-text">{r.label}</span>
           <button className="btn btn-primary" disabled={busy} onClick={() => void run(() => client.addGroupMembers(conversation.id, [r.accountId]))} data-testid="approve-join">{t('invite.approve')}</button>
           <button className="btn" disabled={busy} onClick={() => void run(() => client.declineJoinRequest(conversation.id, r.accountId))} data-testid="decline-join">{t('invite.decline')}</button>
+        </div>
+      ))}
+      {banned.length > 0 && <h4>{t('group.banned', { count: banned.length })}</h4>}
+      {banned.map((b) => (
+        <div className="settings-row" key={b.accountId} data-testid="banned-member">
+          <span className="settings-row-text">{b.label}</span>
+          <button className="btn" disabled={busy} onClick={() => void run(() => client.unbanMember(conversation.id, b.accountId))} data-testid="unban">{t('group.unban')}</button>
         </div>
       ))}
       {error && <p role="alert" className="failed">{error}</p>}

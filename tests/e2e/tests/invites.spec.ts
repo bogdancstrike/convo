@@ -39,5 +39,19 @@ test('join a group through an invite link after admin approval; reset links inva
     await expect(dan.getByTestId('join-dialog')).toBeVisible({ timeout: 45_000 });
     await dan.getByTestId('join-request-send').click();
     await expect(dan.getByTestId('join-dialog')).toContainText('no longer valid');
+
+    // Ban: removes Carol and refuses her requests through new links until unbanned.
+    owner.once('dialog', (d) => void d.accept());
+    await owner.getByTestId(`member-menu-${carolU.username}`).click();
+    await owner.getByTestId('member-ban').click();
+    await expect(owner.getByTestId('banned-member').filter({ hasText: carolU.name })).toBeVisible({ timeout: 20_000 });
+    await owner.getByTestId('create-invite').click();
+    const second = await owner.getByTestId('invite-link').inputValue();
+    await carol.goto(second);
+    await expect(carol.getByTestId('join-dialog')).toBeVisible({ timeout: 45_000 });
+    await carol.getByTestId('join-request-send').click();
+    await expect(carol.getByTestId('join-dialog')).toContainText('no longer valid');
+    await owner.getByTestId('unban').click();
+    await expect(owner.getByTestId('banned-member')).toHaveCount(0);
   } finally { await closeAll(owner, bob, carol, dan); }
 });

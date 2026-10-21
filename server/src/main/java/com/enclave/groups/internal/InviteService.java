@@ -70,6 +70,8 @@ class InviteService {
                 .param("h", sha256(raw)).param("now", OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))
                 .query(byte[].class).optional().orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "invite not found"));
         if (groups.members(groupId).containsKey(caller.accountId())) return; // already a member
+        // Banned accounts get the same answer as an invalid link (no signal that a ban exists).
+        if (groups.bans(groupId).contains(caller.accountId())) throw new EnclaveException(ErrorCode.NOT_FOUND, "invite not found");
         Long pending = jdbc.sql("SELECT count(*) FROM mls_group_join_requests WHERE group_id = :g").param("g", groupId).query(Long.class).single();
         if (pending >= properties.maxJoinRequests()) throw new EnclaveException(ErrorCode.RATE_LIMITED, "too many pending requests");
         jdbc.sql("INSERT INTO mls_group_join_requests (group_id, account_id) VALUES (:g, :a) ON CONFLICT DO NOTHING")

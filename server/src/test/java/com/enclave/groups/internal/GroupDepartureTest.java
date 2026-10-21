@@ -64,6 +64,16 @@ class GroupDepartureTest {
         assertThatThrownBy(() -> service.commit(member, id, other)).isInstanceOfSatisfying(EnclaveException.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN_ROLE));
     }
 
+    @Test void bannedAccountsCannotBeAddedUntilUnbanned() {
+        group(Map.of(owner.accountId(), Role.OWNER, member.accountId(), Role.MEMBER), Set.of());
+        when(groups.bans(id)).thenReturn(Set.of(leaver.accountId()));
+        var add = new GroupCommands.Commit(4, new byte[16], new byte[]{9}, null, List.of(leaver.accountId()), List.of(), List.of(), List.of(), Map.of());
+        assertThatThrownBy(() -> service.commit(owner, id, add)).isInstanceOfSatisfying(EnclaveException.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN));
+        assertThatThrownBy(() -> service.ban(member, id, leaver.accountId(), true)).isInstanceOfSatisfying(EnclaveException.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN_ROLE));
+        service.ban(owner, id, leaver.accountId(), false);
+        verify(groups).unban(id, leaver.accountId());
+    }
+
     @Test void theLastOwnerMustHandOverFirst() {
         group(Map.of(owner.accountId(), Role.OWNER, member.accountId(), Role.MEMBER), Set.of());
         assertThatThrownBy(() -> service.leave(owner, id)).isInstanceOfSatisfying(EnclaveException.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN_ROLE));
