@@ -2,7 +2,7 @@ import { configureRecovery } from './recovery';
 import { isProfile, type UserProfile } from './profile';
 import { AccountHistory, type HistoryStatus } from './history';
 import { fold, matchesMessage } from './search';
-import { ApiError } from '../api/errors';
+import { ApiError, NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { GatewaySocket, type ConnectionState } from '../api/socket';
 import type { AccountDto, CredentialStatusDto, Directive, EnvelopeDto } from '../api/types';
@@ -21,9 +21,9 @@ import {
 import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
 import { Mutex } from '../lib/mutex';
-import { utf8 } from '../lib/bytes';
+import { utf8, fromBase64Url, toBase64Url } from '../lib/bytes';
 import type { StoreOp } from '../storage/encryptedStore';
-import { downloadAttachment, prepareFile, uploadAttachment } from './attachments';
+import { downloadAttachment, prepareFile, uploadAttachment, type PreparedFile } from './attachments';
 import { replenishPreKeys } from './enrollment';
 import { GroupManager, type GroupRecord } from './groups';
 import { approveRequest, describeRequest, type IncomingLinkRequest } from './linking';
@@ -153,7 +153,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.expiryTimer = setInterval(() => void this.sweepExpired().catch(() => undefined), 30_000);
     this.socket.on('state', (state) => {
       this.emit('connection', state);
-      if (state === 'online') void this.outbox.flush();
+      if (state === 'online') { void this.outbox.flush(); void this.flushPendingUploads(); }
       if (state === 'revoked') void this.handleRevoked();
     });
     this.socket.on('envelope', (envelope) => void this.mutex.run(() => this.processEnvelope(envelope)).then(() => this.outbox.flush()));
@@ -168,7 +168,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       });
     });
     this.socket.start();
-    this.retryTimer = setInterval(() => void this.outbox.flush(), OUTBOX_RETRY_MS);
+    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); }, OUTBOX_RETRY_MS);
     void this.maintainGroups();
   }
 
@@ -355,17 +355,75 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    */
   async sendAttachments(conversationId: string, files: File[], caption: string, onProgress?: (done: number) => void): Promise<void> {
     if (files.length === 0 || files.length > MAX_ATTACHMENTS) throw new Error('invalid attachment count');
+    const prepared: PreparedFile[] = [];
+    for (const file of files) prepared.push(await prepareFile(file));
     const pointers: AttachmentPointer[] = [];
-    for (const file of files) {
-      pointers.push(await uploadAttachment(this.api, await prepareFile(file)));
-      onProgress?.(pointers.length);
+    try {
+      for (const file of prepared) {
+        pointers.push(await uploadAttachment(this.api, file));
+        onProgress?.(pointers.length);
+      }
+    } catch (error) {
+      if (!(error instanceof NetworkError)) throw error;
+      await this.queueUpload({ conversationId, caption, files: prepared }); // offline: send when back online
+      return;
     }
     await this.sendMessage(conversationId, { body: caption, attachments: pointers });
   }
 
+  /**
+   * Offline-queued upload (FEAT-01): keeps the prepared files in the encrypted local store and shows
+   * a "waiting to upload" placeholder that already has the final message ID, so the eventual send
+   * replaces it and can never duplicate it.
+   */
+  private async queueUpload(upload: { conversationId: string; caption: string; files: PreparedFile[]; voice?: { durationMs: number } }): Promise<void> {
+    // File bytes are stored as base64url: the encrypted store serializes values as JSON.
+    const entry: PendingUpload = { conversationId: upload.conversationId, caption: upload.caption, voice: upload.voice, id: newMessageId(), createdAt: Date.now(),
+      files: upload.files.map((f) => ({ ...f, data: toBase64Url(f.data) })) };
+    const placeholder: ChatMessage = { conversationId: upload.conversationId, id: entry.id, authorId: this.accountId, direction: 'out',
+      body: upload.caption.trim() || undefined, sentAt: entry.createdAt, sort: entry.createdAt, status: 'queued', reactions: {},
+      pendingFiles: upload.files.map((f) => ({ name: f.fileName, size: f.data.byteLength, contentType: f.contentType })) };
+
+    await this.repos.store.commit([{ type: 'put', ns: RecordNs.pendingUploads, id: entry.id, value: entry }, this.repos.putMessage(placeholder)]);
+    this.emit('messages', upload.conversationId);
+  }
+
+  private uploading = false;
+  /** Uploads queued files once the network is back; stops at the first network failure. */
+  async flushPendingUploads(): Promise<void> {
+    if (this.uploading) return;
+    this.uploading = true;
+    try {
+      const pending = (await this.repos.store.list<PendingUpload>(RecordNs.pendingUploads)).sort((a, b) => a.createdAt - b.createdAt);
+      for (const entry of pending) {
+        const pointers: AttachmentPointer[] = [];
+        try {
+          for (const file of entry.files) pointers.push(await uploadAttachment(this.api, { ...file, data: fromBase64Url(file.data) as Uint8Array<ArrayBuffer> }, entry.voice ? { voiceNote: true, durationMs: entry.voice.durationMs } : {}));
+        } catch (error) {
+          if (error instanceof NetworkError) return;
+          // A permanent failure (e.g. policy limit) leaves a failed placeholder instead of retrying forever.
+          const placeholder = await this.repos.message(entry.conversationId, this.accountId, entry.id);
+          await this.repos.store.commit([{ type: 'delete', ns: RecordNs.pendingUploads, id: entry.id },
+            ...(placeholder ? [this.repos.putMessage({ ...placeholder, status: 'failed', error: 'UPLOAD_FAILED' })] : [])]);
+          this.emit('messages', entry.conversationId);
+          continue;
+        }
+        await this.sendMessage(entry.conversationId, { body: entry.caption, attachments: pointers }, entry.id);
+        await this.repos.store.delete(RecordNs.pendingUploads, entry.id);
+      }
+    } finally { this.uploading = false; }
+  }
+
   /** Encrypts, uploads and sends a recorded voice note. */
   async sendVoiceNote(conversationId: string, file: File, durationMs: number): Promise<void> {
-    const pointer = await uploadAttachment(this.api, await prepareFile(file), { voiceNote: true, durationMs });
+    const prepared = await prepareFile(file);
+    let pointer: AttachmentPointer;
+    try { pointer = await uploadAttachment(this.api, prepared, { voiceNote: true, durationMs }); }
+    catch (error) {
+      if (!(error instanceof NetworkError)) throw error;
+      await this.queueUpload({ conversationId, caption: '', files: [prepared], voice: { durationMs } });
+      return;
+    }
     await this.sendMessage(conversationId, { attachments: [pointer] });
   }
 
@@ -426,6 +484,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private async sendMessage(
     conversationId: string,
     content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[] },
+    /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
+    messageId?: string,
   ): Promise<void> {
     const text = content.body?.trim() || undefined;
     if (!text && !content.attachments?.length) throw new Error('empty message');
@@ -436,7 +496,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const recipients = group ? group.members.map((m) => m.accountId).filter((id) => id !== this.accountId) : conversationId !== this.accountId ? [conversationId] : [];
     const data: DataMessage = {
       recipientAccountIds: recipients,
-      messageId: newMessageId(),
+      messageId: messageId ?? newMessageId(),
       timestamp: Date.now(),
       body: text,
       quote: content.quote,
@@ -1598,6 +1658,16 @@ function withPin(list: Conversation['pinnedMessages'], authorId: string, id: str
   const others = (list ?? []).filter((p) => p.authorId !== authorId || p.id !== id);
   const next = pinned ? [{ authorId, id, pinnedAt: at, by }, ...others].sort((a, b) => b.pinnedAt - a.pinnedAt).slice(0, MAX_PINNED) : others;
   return next.length ? next : undefined;
+}
+
+/** Prepared attachments waiting for the network (encrypted at rest by the local store). */
+interface PendingUpload {
+  id: string;
+  conversationId: string;
+  caption: string;
+  files: (Omit<PreparedFile, 'data'> & { data: string })[];
+  voice?: { durationMs: number };
+  createdAt: number;
 }
 
 /** Sending to a blocked contact (unblock first). */

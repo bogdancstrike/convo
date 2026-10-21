@@ -126,6 +126,12 @@ export function MessageBubble({
           ) : (
             <>
               <Attachments client={client} message={m} />
+              {m.pendingFiles?.map((f, i) => (
+                <div className="attachment-file pending" key={i} data-testid="pending-upload">
+                  <Icon name="clock" size={16} />
+                  <span className="name">{f.name}<span className="muted-text"> · {m.status === 'failed' ? t('upload.failed') : t('upload.waiting')}</span></span>
+                </div>
+              ))}
               {m.body && (
                 <span data-testid="message-body">
                   <FormattedText text={m.body} highlight={highlight} mentions={mentionLabels} />

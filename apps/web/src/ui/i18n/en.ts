@@ -532,6 +532,8 @@ export const en = {
   'link.qr': 'QR code with the comparison code. Scan it from Convo on your phone, or compare the digits below.',
   'album.label': 'Album with {count} items',
   'thread.unreadDividerOne': '1 unread message',
+  'upload.waiting': 'waiting for connection',
+  'upload.failed': 'upload failed',
   'settings.chats.hint': 'Theme, language, Enter to send',
   'settings.privacy.hint': 'Passwordless sign-in, chat locks, receipts',
   'settings.devices.hint': 'Linked devices and link requests',

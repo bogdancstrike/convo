@@ -119,6 +119,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   5-photo album, viewer at 4 / 5). Singular "1 unread message" divider on both clients.
 - Encrypted image thumbnails (FEAT-01): senders embed a ≤32 px JPEG inside the E2EE pointer;
   receivers show it blurred while loading or before a manual download (web + Android).
+- Offline-queued uploads (FEAT-01): attachments/voice notes sent without network are kept in the
+  encrypted store with a "waiting for connection" placeholder that already has the final message
+  ID; uploaded and sent on reconnect (no duplicates). Fixed: binary data must be stored as
+  base64url (the store serializes JSON). `offline-upload.spec.ts` Chromium/Firefox.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -193,7 +197,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Image re-encode strips EXIF/location; safe download content types (no active content) | |
 | ✅ | Composer: file picker, drag & drop, paste, size limit feedback, upload progress, captions | |
 | ✅ | Photos render inline (decrypted in memory), files download on explicit action; expired/offline/integrity states | |
-| 🟡 | Albums, voice notes and encrypted image thumbnails done; resumable multipart and offline-queued uploads pending | FEAT-01/EXT-02 |
+| 🟡 | Albums, voice notes, encrypted thumbnails and offline-queued uploads done; resumable multipart uploads pending | FEAT-01/EXT-02 |
 
 ## Groups (GRP-01/02/03)
 

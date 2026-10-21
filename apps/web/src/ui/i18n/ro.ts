@@ -534,6 +534,8 @@ export const ro: Record<MessageKey, string> = {
   'link.qr': 'Cod QR cu codul de comparare. Scanează-l din Convo pe telefon sau compară cifrele de mai jos.',
   'album.label': 'Album cu {count} elemente',
   'thread.unreadDividerOne': '1 mesaj necitit',
+  'upload.waiting': 'se așteaptă conexiunea',
+  'upload.failed': 'încărcarea a eșuat',
   'settings.chats.hint': 'Temă, limbă, Enter pentru trimitere',
   'settings.privacy.hint': 'Autentificare fără parolă, conversații blocate, confirmări',
   'settings.devices.hint': 'Dispozitive conectate și cereri de conectare',

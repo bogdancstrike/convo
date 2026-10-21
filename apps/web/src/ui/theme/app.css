@@ -2312,3 +2312,5 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .attachment-image.has-preview { background-size: cover; background-position: center; position: relative; overflow: hidden; }
 .attachment-image.has-preview::before { content: ''; position: absolute; inset: -8px; background: inherit; filter: blur(12px); transform: scale(1.1); }
 .attachment-image.has-preview > * { position: relative; }
+
+.attachment-file.pending { opacity: 0.8; }

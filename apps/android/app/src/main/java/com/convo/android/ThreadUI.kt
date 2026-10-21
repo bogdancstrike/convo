@@ -173,6 +173,9 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
                     val visual = attachments.withIndex().filter { (_, a) -> a.optString("contentType").let { it.startsWith("image/") || it.startsWith("video/") } }.map { it.index to it.value }
                     if (visual.size >= 2) AlbumGrid(app, message, conversation, visual) { selectedAttachment = it }
+                    message.optJSONArray("pendingFiles")?.objects()?.forEach { f ->
+                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp)); RawText(" ${f.optString("name")} · ${tr(if (message.optString("status") == "failed") "upload failed" else "waiting for connection")}", style = MaterialTheme.typography.bodySmall) }
+                    }
                     attachments.forEachIndexed { index, a ->
                         if (visual.size < 2 || visual.none { it.first == index }) AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
                     }

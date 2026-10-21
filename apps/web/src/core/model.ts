@@ -46,6 +46,8 @@ export interface ChatMessage {
   editedAt?: number;
   /** Disappearing-message timer (seconds) the sender applied. */
   expireTimer?: number;
+  /** Files waiting for the network (offline-queued upload placeholder). */
+  pendingFiles?: { name: string; size: number; contentType: string }[];
   /** Mentioned account IDs (groups). */
   mentions?: string[];
   /** Deadline after which this device deletes the message. */
