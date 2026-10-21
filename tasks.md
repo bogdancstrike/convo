@@ -129,7 +129,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   invite link"); phone joined a browser-created group via link after approval.
 - Group bans (GRP-03, V17): admins "Remove and ban"; banned accounts cannot be re-added and their
   join requests look like invalid links; banned list with Unban. Web E2E (in `invites.spec.ts`);
-  Android UI built (shared core/server path), not emulator-exercised.
+  Android verified on the emulator (2026-10-21): as a promoted admin it used "Remove and ban" →
+  web saw the member removed and listed as banned, and her join request via a new link was
+  refused; Android "Unban" cleared the server ban (`mls_group_bans`) and its banned list.
 - Linking QR (ID-02): new devices show the comparison code as a QR (`convo-link:<digits>`), web
   E2E decodes it with jsQR and matches the digits; Android trusted devices scan it (ZXing) to
   pick the matching request, still confirming before approval. Real camera scan needs a
