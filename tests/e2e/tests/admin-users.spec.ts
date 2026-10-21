@@ -55,6 +55,7 @@ test('create a user, temporary password, reset, block and allow sign-in', async 
     // Reset gives a new one-time password; the audit records the reason, never the password.
     await admin.goto(`${ADMIN_URL}/#/sign-in`);
     const again = await openSignIn(admin, username);
+    await again.getByRole('tab', { name: 'Security' }).click();
     await again.getByTestId('signin-reset-password').click();
     await confirmReason(admin, 'forgot password');
     const reset = (await admin.getByTestId('one-time-secret').innerText()).trim();
@@ -64,13 +65,15 @@ test('create a user, temporary password, reset, block and allow sign-in', async 
     // Blocking sign-in refuses the password at the sign-in page; allowing restores it.
     await again.getByTestId('signin-block').click();
     await confirmReason(admin, 'left the company');
-    await expect(again.getByTestId('signin-blocked')).toBeVisible();
+    await expect(admin.locator('.ant-drawer-title')).toContainText('Sign-in blocked');
     const blocked = await newPage(browser);
     await messengerSignIn(blocked, username, reset);
     await expect(blocked.locator('#input-error, .kc-feedback-text, [class*="alert"]').first()).toBeVisible({ timeout: 20_000 });
     await again.getByTestId('signin-allow').click();
     await confirmReason(admin, 'returned');
-    await expect(again.getByTestId('signin-blocked')).toHaveCount(0);
+    await expect(admin.locator('.ant-drawer-title')).toContainText('Sign-in allowed');
+    await again.getByRole('tab', { name: /Audit/ }).click();
+    await expect(again.getByTestId('signin-audit')).toContainText('user.sign-in-block');
     await closeAll(blocked);
 
     await adminGo(admin, 'audit');
@@ -122,15 +125,18 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
     await security.getByTestId('activity-search').locator('input').fill(memberU.username);
     await security.locator('.ant-select-item-option').filter({ hasText: memberU.username }).click();
     const activity = security.getByTestId('user-drawer');
-    await expect(activity.getByText('Encrypted items')).toBeVisible();
+    await expect(activity.getByTestId('activity-facts')).toContainText('Days used');
+    await expect(activity.getByTestId('activity-facts')).not.toContainText('Days used0 of');
     await adminGo(security, 'activity');
 
     // Security cannot grant roles; the superuser can, but not to themselves.
     let signIn = await (async () => { await security.getByTestId('admin-tab-sign-in').click(); await security.getByTestId('idp-search').fill(helperU.username);
       await security.getByTestId(`idp-user-${helperU.username}`).click(); return security.getByTestId('signin-drawer'); })();
+    await signIn.getByRole('tab', { name: 'Roles' }).click();
     await expect(signIn.getByTestId('role-convo-helpdesk')).toHaveCount(0);
     await adminSignIn(root, superU);
     signIn = await openSignIn(root, helperU.username);
+    await signIn.getByRole('tab', { name: 'Roles' }).click();
     await signIn.getByTestId('role-convo-helpdesk').click();
     await confirmReason(root, 'joins the helpdesk');
     await expect(signIn.getByText('Helpdesk').first()).toBeVisible();
@@ -141,6 +147,7 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
     await expect(root.getByTestId('permission-map').locator('.react-flow__node')).not.toHaveCount(0);
     await adminGo(root, 'sign-in');
     const own = await openSignIn(root, superU.username);
+    await own.getByRole('tab', { name: 'Security' }).click();
     await own.getByTestId('signin-reset-password').click();
     await confirmReason(root, 'self');
     await expect(root.getByText(/another administrator/i)).toBeVisible();

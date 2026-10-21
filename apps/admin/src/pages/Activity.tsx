@@ -99,10 +99,13 @@ function ActivityStats({ days, levels, overview }: { days: number; levels: Level
         </Card>
       </Col>
       <Col xs={24} xl={10}>
-        <Card title="Active people per day">
-          {overview ? <Chart label="Active people per day" height={260} option={{
+        <Card title="People using Convo per day" extra={<Typography.Text type="secondary">sent something vs only opened</Typography.Text>}>
+          {overview ? <Chart label="People using Convo per day, split into senders and readers" height={260} option={{
             xAxis: { type: 'category', data: overview.days.map((d) => shortDay(d.day)), boundaryGap: false }, yAxis: { type: 'value', minInterval: 1 },
-            series: [{ name: 'Active people', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.15 }, data: overview.days.map((d) => d.activeAccounts) }],
+            series: [
+              { name: 'Sent something', type: 'line', stack: 'people', smooth: true, showSymbol: false, areaStyle: { opacity: 0.35 }, data: overview.days.map((d) => d.senders) },
+              { name: 'Only opened', type: 'line', stack: 'people', smooth: true, showSymbol: false, areaStyle: { opacity: 0.2 }, data: overview.days.map((d) => Math.max(0, d.activeAccounts - d.senders)) },
+            ],
           }} /> : <Skeleton active />}
         </Card>
       </Col>
@@ -111,6 +114,28 @@ function ActivityStats({ days, levels, overview }: { days: number; levels: Level
           {overview ? <Chart label="Encrypted items by weekday" height={260} option={{
             xAxis: { type: 'category', data: WEEKDAYS }, yAxis: { type: 'value', minInterval: 1 },
             series: [{ name: 'Items', type: 'bar', barMaxWidth: 22, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: byWeekday }],
+          }} /> : <Skeleton active />}
+        </Card>
+      </Col>
+      <Col xs={24} xl={16}>
+        <Card title="Web and Android" extra={<Typography.Text type="secondary">people per day on each platform</Typography.Text>}>
+          {overview ? <Chart label="People per day on web and Android" height={240} option={{
+            xAxis: { type: 'category', data: overview.days.map((d) => shortDay(d.day)) }, yAxis: { type: 'value', minInterval: 1 },
+            series: [
+              { name: 'Web', type: 'bar', barMaxWidth: 10, itemStyle: { borderRadius: [3, 3, 0, 0] }, data: overview.days.map((d) => d.webUsers) },
+              { name: 'Android', type: 'bar', barMaxWidth: 10, itemStyle: { borderRadius: [3, 3, 0, 0], color: SERIES[4] }, data: overview.days.map((d) => d.androidUsers) },
+            ],
+          }} /> : <Skeleton active />}
+        </Card>
+      </Col>
+      <Col xs={24} xl={8}>
+        <Card title="Platform share" extra={<Typography.Text type="secondary">person-days in the period</Typography.Text>}>
+          {overview ? <Chart label="Share of usage by platform" height={240} option={{
+            tooltip: { trigger: 'item' }, legend: { bottom: 0, top: 'auto' },
+            series: [{ type: 'pie', radius: ['45%', '72%'], label: { show: false }, itemStyle: { borderRadius: 6, borderWidth: 2 }, data: [
+              { name: 'Web', value: overview.days.reduce((n, d) => n + d.webUsers, 0), itemStyle: { color: SERIES[0] } },
+              { name: 'Android', value: overview.days.reduce((n, d) => n + d.androidUsers, 0), itemStyle: { color: SERIES[4] } },
+            ] }],
           }} /> : <Skeleton active />}
         </Card>
       </Col>

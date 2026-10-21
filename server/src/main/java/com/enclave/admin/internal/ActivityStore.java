@@ -18,12 +18,20 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 class ActivityStore {
-    /** Items and distinct active senders for one day. */
-    record Day(LocalDate day, long items, long activeAccounts) {}
+    /**
+     * One day across the organization.
+     *
+     * @param items encrypted items sent
+     * @param activeAccounts people who opened Convo or sent something
+     * @param senders people who sent at least one item
+     * @param web people who used the web app
+     * @param android people who used the Android app
+     */
+    record Day(LocalDate day, long items, long activeAccounts, long senders, long web, long android) {}
     /** One account's totals over a window. */
     record AccountActivity(UUID accountId, long items, int activeDays, LocalDate lastActiveDay) {}
-    /** One account's items on one day. */
-    record AccountDay(LocalDate day, long items) {}
+    /** One account's day: items sent, whether Convo was opened, and on which platforms. */
+    record AccountDay(LocalDate day, long items, boolean opened, boolean web, boolean android) {}
 
     private final JdbcClient jdbc;
     private final AdminProperties properties;
@@ -46,6 +54,18 @@ class ActivityStore {
                 .param("a", event.accountId()).param("d", today()).update();
     }
 
+    /** First authenticated request of a device today: the person used Convo (and on which platform). */
+    @EventListener
+    void on(com.enclave.identity.DeviceActiveToday event) {
+        if (!properties.activity().enabled()) return;
+        boolean web = "web".equals(event.platform()), android = "android".equals(event.platform());
+        jdbc.sql("""
+                INSERT INTO account_activity_daily (account_id, day, items, opened, web, android) VALUES (:a, :d, 0, true, :w, :n)
+                ON CONFLICT (account_id, day) DO UPDATE SET opened = true,
+                    web = account_activity_daily.web OR EXCLUDED.web, android = account_activity_daily.android OR EXCLUDED.android""")
+                .param("a", event.accountId()).param("d", today()).param("w", web).param("n", android).update();
+    }
+
     @Scheduled(fixedDelayString = "PT6H", initialDelayString = "PT5M")
     int purge() {
         return jdbc.sql("DELETE FROM account_activity_daily WHERE day < :cutoff")
@@ -54,8 +74,12 @@ class ActivityStore {
 
     /** Totals per day since {@code from} (days without activity are omitted). */
     List<Day> daily(LocalDate from) {
-        return jdbc.sql("SELECT day, sum(items) AS items, count(*) AS accounts FROM account_activity_daily WHERE day >= :from GROUP BY day ORDER BY day")
-                .param("from", from).query((rs, i) -> new Day(rs.getObject("day", LocalDate.class), rs.getLong("items"), rs.getLong("accounts"))).list();
+        return jdbc.sql("""
+                SELECT day, sum(items) AS items, count(*) AS accounts, count(*) FILTER (WHERE items > 0) AS senders,
+                       count(*) FILTER (WHERE web) AS web, count(*) FILTER (WHERE android) AS android
+                FROM account_activity_daily WHERE day >= :from GROUP BY day ORDER BY day""")
+                .param("from", from).query((rs, i) -> new Day(rs.getObject("day", LocalDate.class), rs.getLong("items"), rs.getLong("accounts"),
+                        rs.getLong("senders"), rs.getLong("web"), rs.getLong("android"))).list();
     }
 
     /** Most active accounts since {@code from}. */
@@ -89,8 +113,9 @@ class ActivityStore {
 
     /** One account's daily items since {@code from}. */
     List<AccountDay> account(UUID accountId, LocalDate from) {
-        return jdbc.sql("SELECT day, items FROM account_activity_daily WHERE account_id = :a AND day >= :from ORDER BY day")
-                .param("a", accountId).param("from", from).query((rs, i) -> new AccountDay(rs.getObject("day", LocalDate.class), rs.getLong("items"))).list();
+        return jdbc.sql("SELECT day, items, opened, web, android FROM account_activity_daily WHERE account_id = :a AND day >= :from ORDER BY day")
+                .param("a", accountId).param("from", from).query((rs, i) -> new AccountDay(rs.getObject("day", LocalDate.class), rs.getLong("items"),
+                        rs.getBoolean("opened"), rs.getBoolean("web"), rs.getBoolean("android"))).list();
     }
 
     private static AccountActivity activity(java.sql.ResultSet rs, int row) throws java.sql.SQLException {

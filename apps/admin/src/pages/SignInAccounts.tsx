@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, App, Button, Card, Checkbox, Drawer, Form, Input, Modal, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Checkbox, Form, Input, Modal, Space, Table, Tag, Typography } from 'antd';
 import { UserAddOutlined } from '@ant-design/icons';
 import { api, errorText, type SignInAccount } from '../api';
-import { SignInPanel } from '../components/SignInPanel';
+import { SignInDrawer } from '../components/SignInDrawer';
 import { useSecret } from '../components/confirm';
 import { CREDENTIAL_LABELS, fmtDay, ROLE_LABELS } from '../format';
 import type { PageProps } from '../Shell';
@@ -18,7 +18,6 @@ export function SignInPage({ can, navigate, param }: PageProps) {
   const [creating, setCreating] = useState(false);
   const load = useCallback(() => { setError(null); void api.idpUsers(query).then(setRows).catch((e) => { setRows([]); setError(errorText(e)); }); }, [query]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
-  const loadOne = useCallback(() => api.idpUser(param), [param]);
   return (
     <div data-testid="admin-signin">
       <div className="page-head">
@@ -39,9 +38,7 @@ export function SignInPage({ can, navigate, param }: PageProps) {
             { title: 'Created', key: 't', width: 140, render: (_, r) => fmtDay(r.user.createdAt) },
           ]} />
       </Card>
-      <Drawer open={!!param} width={600} onClose={() => navigate('sign-in')} destroyOnClose title="Sign-in account" data-testid="signin-drawer">
-        {param && <SignInPanel load={loadOne} can={can} onChanged={load} />}
-      </Drawer>
+      <SignInDrawer id={param || null} onClose={() => navigate('sign-in')} can={can} onChanged={load} navigate={navigate} />
       <CreateUser open={creating} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); load(); navigate(`sign-in/${id}`); }} />
     </div>
   );

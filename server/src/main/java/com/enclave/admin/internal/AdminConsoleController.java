@@ -62,7 +62,8 @@ class AdminConsoleController {
     // --- statistics ------------------------------------------------------------------------
 
     /** One day of the dashboard series (every day of the window is present, zeros included). */
-    record DayStats(LocalDate day, long items, long activeAccounts, long newAccounts, long calls, long videoCalls, long groupCalls) {}
+    record DayStats(LocalDate day, long items, long activeAccounts, long senders, long webUsers, long androidUsers, long newAccounts,
+            long calls, long videoCalls, long groupCalls) {}
 
     /**
      * @param activityTracking whether per-day activity is recorded (false: items/active are zero)
@@ -82,7 +83,8 @@ class AdminConsoleController {
         List<DayStats> series = new ArrayList<>();
         for (LocalDate d = from; !d.isAfter(today); d = d.plusDays(1)) {
             var a = items.get(d); var n = created.get(d); var c = callDays.get(d);
-            series.add(new DayStats(d, a == null ? 0 : a.items(), a == null ? 0 : a.activeAccounts(), n == null ? 0 : n.count(),
+            series.add(new DayStats(d, a == null ? 0 : a.items(), a == null ? 0 : a.activeAccounts(), a == null ? 0 : a.senders(),
+                    a == null ? 0 : a.web(), a == null ? 0 : a.android(), n == null ? 0 : n.count(),
                     c == null ? 0 : c.calls(), c == null ? 0 : c.video(), c == null ? 0 : c.group()));
         }
         return noStore(new Overview(identity.directoryStats(today), groups.counts(), communities.count(), series,

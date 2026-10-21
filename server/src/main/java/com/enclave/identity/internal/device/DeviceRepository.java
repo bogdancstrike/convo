@@ -75,12 +75,12 @@ public class DeviceRepository {
         return updated == 1;
     }
 
-    /** Records day-granularity activity; no-op when already recorded today. */
-    public void touch(UUID accountId, int deviceId) {
-        jdbc.sql("""
+    /** Records day-granularity activity; returns whether the stored day changed. */
+    public boolean touch(UUID accountId, int deviceId) {
+        return jdbc.sql("""
                 UPDATE devices SET last_seen_day = current_date
                  WHERE account_id = :a AND device_id = :d AND last_seen_day IS DISTINCT FROM current_date""")
-                .param("a", accountId).param("d", deviceId).update();
+                .param("a", accountId).param("d", deviceId).update() == 1;
     }
 
     private static Device map(ResultSet rs, int row) throws SQLException {

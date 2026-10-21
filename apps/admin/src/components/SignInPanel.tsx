@@ -10,14 +10,31 @@ import { useReason, useSecret } from './confirm';
  * are never shown or stored: a reset creates a temporary password, shown once, that the person
  * must change at their next sign-in.
  */
-export function SignInPanel({ load, can, onChanged }: { load: () => Promise<SignInAccount>; can: (p: Permission) => boolean; onChanged?: () => void }) {
-  const { message } = App.useApp();
-  const ask = useReason();
-  const secret = useSecret();
+export function SignInPanel({ load, can, onChanged, sections = ['details', 'actions', 'roles'] }: {
+  load: () => Promise<SignInAccount>; can: (p: Permission) => boolean; onChanged?: () => void; sections?: Section[];
+}) {
+  const state = useSignIn(load);
+  return <SignInSections {...state} can={can} onChanged={onChanged} sections={sections} />;
+}
+
+export type Section = 'details' | 'actions' | 'roles';
+
+/** Loads one sign-in account and lets sections refresh it after a change. */
+export function useSignIn(load: () => Promise<SignInAccount>) {
   const [account, setAccount] = useState<SignInAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refresh = useCallback(() => { setError(null); void load().then(setAccount).catch((e) => setError(errorText(e))); }, [load]);
   useEffect(refresh, [refresh]);
+  return { account, error, refresh };
+}
+
+/** Details, credential/session actions and admin roles of a loaded sign-in account. */
+export function SignInSections({ account, error, refresh, can, onChanged, sections }: ReturnType<typeof useSignIn> & {
+  can: (p: Permission) => boolean; onChanged?: () => void; sections: Section[];
+}) {
+  const { message } = App.useApp();
+  const ask = useReason();
+  const secret = useSecret();
   if (error) return <Alert type="warning" showIcon message={error} />;
   if (!account) return <Spin />;
   const u = account.user;
@@ -27,7 +44,7 @@ export function SignInPanel({ load, can, onChanged }: { load: () => Promise<Sign
   const credentials = can('USERS_CREDENTIALS');
   return (
     <div data-testid="signin-panel">
-      <Descriptions column={1} bordered>
+      {sections.includes('details') && <Descriptions column={1} bordered>
         <Descriptions.Item label="Username">{u.username}</Descriptions.Item>
         <Descriptions.Item label="Name">{[u.firstName, u.lastName].filter(Boolean).join(' ') || '—'}</Descriptions.Item>
         <Descriptions.Item label="Email">{u.email || '—'}</Descriptions.Item>
@@ -43,8 +60,9 @@ export function SignInPanel({ load, can, onChanged }: { load: () => Promise<Sign
         <Descriptions.Item label="Created">{fmtTime(u.createdAt)}</Descriptions.Item>
         <Descriptions.Item label="Convo">{account.convoAccountId ? <Tag color="blue">Signed in at least once</Tag> : <Tag>Not signed in yet</Tag>}</Descriptions.Item>
         <Descriptions.Item label="Admin roles"><Space wrap>{u.roles.length ? u.roles.map((r) => <Tag key={r} color="purple">{ROLE_LABELS[r] ?? r}</Tag>) : 'none'}</Space></Descriptions.Item>
-      </Descriptions>
-      {credentials && (
+      </Descriptions>}
+      {sections.includes('actions') && !credentials && <Alert type="info" showIcon message="Your admin role cannot change sign-in credentials." />}
+      {sections.includes('actions') && credentials && (
         <>
           <Divider orientation="left" plain>Credentials and sessions</Divider>
           <Space wrap>
@@ -76,7 +94,8 @@ export function SignInPanel({ load, can, onChanged }: { load: () => Promise<Sign
           </Space>
         </>
       )}
-      {can('ROLES_MANAGE') && (
+      {sections.includes('roles') && !can('ROLES_MANAGE') && <Alert type="info" showIcon message="Only administrators with the Administrator (all) role grant or remove roles." />}
+      {sections.includes('roles') && can('ROLES_MANAGE') && (
         <>
           <Divider orientation="left" plain>Admin roles</Divider>
           <Space wrap>{Object.entries(ROLE_LABELS).map(([role, label]) => {

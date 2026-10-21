@@ -45,7 +45,7 @@ class AdminConsoleControllerTest {
 
     @Test void statisticsFillEveryDayAndNeedTheStatsPermission() {
         when(activity.today()).thenReturn(LocalDate.of(2026, 10, 21));
-        when(activity.daily(any())).thenReturn(List.of(new ActivityStore.Day(LocalDate.of(2026, 10, 20), 42, 3)));
+        when(activity.daily(any())).thenReturn(List.of(new ActivityStore.Day(LocalDate.of(2026, 10, 20), 42, 3, 2, 2, 1)));
         when(identity.newAccountsPerDay(any())).thenReturn(List.of());
         when(calls.callsPerDay(any())).thenReturn(List.of(new CallsApi.CallDay(LocalDate.of(2026, 10, 21), 2, 1, 0)));
         when(identity.directoryStats(any())).thenReturn(new IdentityAdminApi.DirectoryStats(10, 1, 12, 3, 5, 8));
@@ -61,9 +61,9 @@ class AdminConsoleControllerTest {
         var account = new IdentityAdminApi.AccountSummary(id, "ana", "Ana", "active", 1, now, null);
         when(activity.today()).thenReturn(LocalDate.of(2026, 10, 21));
         when(identity.account(id)).thenReturn(Optional.of(account));
-        when(activity.account(eq(id), any())).thenReturn(List.of(new ActivityStore.AccountDay(LocalDate.of(2026, 10, 20), 5)));
+        when(activity.account(eq(id), any())).thenReturn(List.of(new ActivityStore.AccountDay(LocalDate.of(2026, 10, 20), 5, true, true, false)));
         assertThat(controller.accountActivity(fresh("convo-helpdesk"), id, 30).getBody().summary().level()).isEqualTo("low");
-        var many = java.util.stream.IntStream.range(0, 16).mapToObj(i -> new ActivityStore.AccountDay(LocalDate.of(2026, 10, 1 + i), 1)).toList();
+        var many = java.util.stream.IntStream.range(0, 16).mapToObj(i -> new ActivityStore.AccountDay(LocalDate.of(2026, 10, 1 + i), 1, true, false, true)).toList();
         when(activity.account(eq(id), any())).thenReturn(many);
         assertThat(controller.accountActivity(fresh("convo-helpdesk"), id, 30).getBody().summary().level()).isEqualTo("high");
         when(activity.account(eq(id), any())).thenReturn(List.of());

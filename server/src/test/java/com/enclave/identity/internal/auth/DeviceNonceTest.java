@@ -35,7 +35,8 @@ class DeviceNonceTest {
     private final NonceRepository nonces = mock(NonceRepository.class);
     private final IdentityProperties properties = mock(IdentityProperties.class);
     private final DeviceSignatureAuthenticator authenticator = new DeviceSignatureAuthenticator(devices, accounts, requestIds, nonces, properties,
-            Clock.fixed(Instant.ofEpochMilli(r.get("expiresAtMillis").asLong()).minusSeconds(60), ZoneOffset.UTC));
+            Clock.fixed(Instant.ofEpochMilli(r.get("expiresAtMillis").asLong()).minusSeconds(60), ZoneOffset.UTC),
+            org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
 
     DeviceNonceTest() {
         String[] address = r.get("deviceAddress").asString().split("\\.");

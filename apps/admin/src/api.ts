@@ -17,7 +17,8 @@ export interface AccountSummary {
 export interface DeviceSummary { deviceId: number; platform: string; createdAt: string; lastSeenDay: string | null }
 export interface AuditEntry { seq: number; at: string; actor: string; action: string; target: string; reason: string; hash: string }
 export interface AuditVerification { valid: boolean; entries: number; head: string; firstBrokenSeq: number | null; checkpointsChecked: number; checkpointMismatchSeq: number | null }
-export interface DayStats { day: string; items: number; activeAccounts: number; newAccounts: number; calls: number; videoCalls: number; groupCalls: number }
+/** One day: activeAccounts = opened Convo or sent; senders = sent at least one item; web/androidUsers = people per platform. */
+export interface DayStats { day: string; items: number; activeAccounts: number; senders: number; webUsers: number; androidUsers: number; newAccounts: number; calls: number; videoCalls: number; groupCalls: number }
 export interface Overview {
   directory: { accounts: number; disabled: number; devices: number; seenToday: number; seen7d: number; seen30d: number };
   groups: { groups: number; channels: number }; communities: number; days: DayStats[];
@@ -25,7 +26,8 @@ export interface Overview {
 }
 export type Level = 'high' | 'medium' | 'low' | 'none';
 export interface UserActivity { account: AccountSummary; items: number; activeDays: number; lastActiveDay: string | null; level: Level }
-export interface AccountActivity { summary: UserActivity; days: { day: string; items: number }[]; window: number }
+export interface AccountDay { day: string; items: number; opened: boolean; web: boolean; android: boolean }
+export interface AccountActivity { summary: UserActivity; days: AccountDay[]; window: number }
 export interface IdpUser {
   id: string; username: string; firstName: string | null; lastName: string | null; email: string | null; phone: string | null; enabled: boolean;
   createdAt: string | null; requiredActions: string[]; credentialTypes: string[]; roles: string[]; sessions: number; lastAccess: string | null;

@@ -45,9 +45,17 @@ class DeviceSignatureAuthenticator implements DeviceRequestAuthenticator {
     private final NonceRepository nonces;
     private final IdentityProperties properties;
     private final Clock clock;
+    private final org.springframework.context.ApplicationEventPublisher events;
+    /** Last day a {@code DeviceActiveToday} was published per device (bounded, LRU). */
+    private final java.util.Map<com.enclave.contracts.DeviceAddress, java.time.LocalDate> activeToday = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<>(256, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(java.util.Map.Entry<com.enclave.contracts.DeviceAddress, java.time.LocalDate> e) { return size() > 50_000; }
+            });
 
     DeviceSignatureAuthenticator(DeviceRepository devices, AccountRepository accounts,
-            RequestIdRepository requestIds, NonceRepository nonces, IdentityProperties properties, Clock clock) {
+            RequestIdRepository requestIds, NonceRepository nonces, IdentityProperties properties, Clock clock,
+            org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.nonces = nonces;
         this.devices = devices;
         this.accounts = accounts;
@@ -99,6 +107,12 @@ class DeviceSignatureAuthenticator implements DeviceRequestAuthenticator {
             throw unauthenticated("replayed request");
         }
         devices.touch(address.accountId(), address.deviceId());
+        // Once per device and UTC day (a new device already has today's last-seen date, so the
+        // touch above cannot tell). Consumers upsert, so a repeat after a restart is harmless.
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(clock.instant(), java.time.ZoneOffset.UTC);
+        if (!today.equals(activeToday.put(address, today))) {
+            events.publishEvent(new com.enclave.identity.DeviceActiveToday(address.accountId(), address.deviceId(), device.platform()));
+        }
         return new AuthenticatedDevice(address, device.platform());
     }
 
