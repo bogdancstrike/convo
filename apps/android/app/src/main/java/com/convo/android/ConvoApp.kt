@@ -71,6 +71,7 @@ import org.json.JSONObject
                     "link", "linkEnded" -> {
                         Text("Link this phone", style = MaterialTheme.typography.titleLarge)
                         Text("On a trusted device, open Settings → Devices. Approve only if both devices show this code.", Modifier.padding(vertical = 16.dp))
+                        if (app.phase == "link" && app.linkCode.isNotBlank()) LinkQr(app.linkCode)
                         Text(app.linkCode, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
                         Text("Uploaded encrypted history will follow your account after approval.", Modifier.padding(vertical = 16.dp))
                         TextButton(onClick = { app.call("newLink") }) { Text("Get a new code") }

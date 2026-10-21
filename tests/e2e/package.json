@@ -7,6 +7,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "jsqr": "1.4.0"
   }
 }

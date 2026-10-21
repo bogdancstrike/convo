@@ -40,6 +40,8 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     // Calls: official LiveKit SDK (Apache-2.0) with E2EE frame cryptors; see ADR-0006.
     implementation("io.livekit:livekit-android:2.29.0")
+    // Device-linking QR codes (Apache-2.0): ZXing core for rendering, embedded scanner for approval.
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("net.openid:appauth:0.11.1")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.55")

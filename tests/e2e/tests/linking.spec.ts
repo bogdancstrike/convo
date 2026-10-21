@@ -21,6 +21,20 @@ test('link a second browser with code comparison, then fan-out reaches both devi
   await expect(newDeviceCode).toBeVisible({ timeout: 45_000 });
   const code = (await newDeviceCode.textContent())!.trim();
   expect(code).toMatch(/^\d{3} \d{3} \d{3} \d{3}$/);
+  // The QR on the new device decodes to the same comparison code (scannable from a trusted phone).
+  await expect(anaSecond.getByTestId('link-qr')).toBeVisible();
+  const qrSrc = await anaSecond.getByTestId('link-qr').getAttribute('src');
+  const decoder = await anaSecond.context().newPage();
+  await decoder.addScriptTag({ path: require.resolve('jsqr/dist/jsQR.js') });
+  const decoded = await decoder.evaluate(async (src) => {
+    const img = new Image(); img.src = src!; await img.decode();
+    const canvas = document.createElement('canvas'); canvas.width = 400; canvas.height = 400;
+    const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 400, 400); ctx.drawImage(img, 0, 0, 400, 400);
+    const data = ctx.getImageData(0, 0, 400, 400);
+    return (window as unknown as { jsQR: (d: Uint8ClampedArray, w: number, h: number) => { data: string } | null }).jsQR(data.data, 400, 400)?.data ?? null;
+  }, qrSrc);
+  await decoder.close();
+  expect(decoded).toBe(`convo-link:${(await newDeviceCode.textContent())!.replace(/\D/g, '')}`);
 
   // Trusted device sees the same code and approves.
   await anaLaptop.getByTestId('nav-settings').click();

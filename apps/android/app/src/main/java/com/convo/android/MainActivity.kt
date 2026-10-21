@@ -69,6 +69,14 @@ class MainActivity : FragmentActivity() {
             else call("signIn", obj("token" to token.accessToken))
         } }
     }
+    private var scanCallback: ((String?) -> Unit)? = null
+    private val qrScanner = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result -> scanCallback?.invoke(result.contents); scanCallback = null }
+    /** Scans a device-linking QR code with the embedded ZXing scanner (it asks for camera access). */
+    fun scanLinkQr(callback: (String?) -> Unit) {
+        scanCallback = callback
+        qrScanner.launch(com.journeyapps.barcodescanner.ScanOptions().setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+            .setPrompt(tr("Scan the QR code shown on the new device")).setBeepEnabled(false).setOrientationLocked(false))
+    }
     private var micCallback: ((Boolean) -> Unit)? = null
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> micCallback?.invoke(granted); micCallback = null }
     fun requestMicrophone(callback: (Boolean) -> Unit) { micCallback = callback; micPermission.launch(Manifest.permission.RECORD_AUDIO) }

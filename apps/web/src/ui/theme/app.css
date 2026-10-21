@@ -2294,3 +2294,5 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .invite-link input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-canvas); color: var(--c-text-primary); font-size: 0.8125rem; }
 
 .system-notice.security { color: var(--c-warning-text); background: var(--c-warning-bg); }
+
+.link-qr { display: block; margin: var(--space-3) auto; padding: 8px; background: #fff; border-radius: 12px; }

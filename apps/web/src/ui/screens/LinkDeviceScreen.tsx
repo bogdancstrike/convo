@@ -1,3 +1,4 @@
+import { LinkQr } from '../components/LinkQr';
 import { useEffect, useRef, useState } from 'react';
 import type { EnclaveApi } from '../../api/enclaveApi';
 import { browserLabel, LinkRequest } from '../../core/linking';
@@ -95,6 +96,7 @@ export function LinkDeviceScreen({
         {state.name === 'waiting' && (
           <>
             <p>{t('link.instructions')}</p>
+            <LinkQr code={state.code} label={t('link.qr')} />
             <div className="code-box" aria-label={t('link.code')} data-testid="link-code">
               {state.code}
             </div>

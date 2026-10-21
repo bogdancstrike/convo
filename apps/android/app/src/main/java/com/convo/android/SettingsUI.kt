@@ -99,6 +99,8 @@ import org.json.JSONObject
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Link a new device", style = MaterialTheme.typography.titleLarge)
         Text("Sign in on the new device. Approve only if its comparison code matches.")
+        OutlinedButton({ app.scanLinkQr { scanned -> val match = matchLinkRequest(scanned, requests); if (match != null) confirm = match else if (scanned != null) app.error = tr("No pending link request matches this QR code.") } }) {
+            Icon(Icons.Outlined.QrCodeScanner, null); Text(" Scan QR code") }
         requests.forEach { r -> Card { Column(Modifier.padding(16.dp)) { Text(r.optString("label")); Text(r.optString("code"), style = MaterialTheme.typography.headlineMedium); Row { TextButton({ app.call("declineLink", obj("request" to r)) }) { Text("Decline") }; Button({ confirm = r }) { Text("Compare codes") } } } } }
         devices.forEach { d -> ActionRow(if (d.optBoolean("current")) "This device" else "${d.optString("platform")} · #${d.optInt("deviceId")}", d.optString("createdAt"), Icons.Outlined.Devices) { if (!d.optBoolean("current")) confirm = d } }
     }

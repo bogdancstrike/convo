@@ -529,6 +529,7 @@ export const en = {
   'group.unban': 'Unban',
   'security.deviceAdded': 'Security: a new device was linked to your account — {device}. If this wasn’t you, unlink it in Settings → Devices.',
   'security.deviceRemoved': 'Security: {device} was removed from your account.',
+  'link.qr': 'QR code with the comparison code. Scan it from Convo on your phone, or compare the digits below.',
   'settings.chats.hint': 'Theme, language, Enter to send',
   'settings.privacy.hint': 'Passwordless sign-in, chat locks, receipts',
   'settings.devices.hint': 'Linked devices and link requests',

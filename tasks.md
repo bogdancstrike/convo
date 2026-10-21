@@ -110,6 +110,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Group bans (GRP-03, V17): admins "Remove and ban"; banned accounts cannot be re-added and their
   join requests look like invalid links; banned list with Unban. Web E2E (in `invites.spec.ts`);
   Android UI built (shared core/server path), not emulator-exercised.
+- Linking QR (ID-02): new devices show the comparison code as a QR (`convo-link:<digits>`), web
+  E2E decodes it with jsQR and matches the digits; Android trusted devices scan it (ZXing) to
+  pick the matching request, still confirming before approval. Real camera scan needs a
+  physical device.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 
@@ -171,7 +175,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Provisioning sessions: E2EE ProvisionMessage relay, single-use code hash, expiry, cancel/decline | |
 | ✅ | `POST /v1/devices/link`: Keycloak token **and** approving-device code required; IK must match account | |
 | ✅ | X25519 → HKDF → AES-GCM channel bound to `ENCLAVE-PROVISION-V1` transcript (AAD) | WebCrypto X25519 |
-| ✅ | 12-digit comparison code on both screens; approve/decline in Settings | QR scan alternative pending |
+| ✅ | 12-digit comparison code on both screens; approve/decline in Settings; QR code on the new device, Android QR scan to approve | qrcode (web), ZXing (Android) |
 | ✅ | Shared enrollment completion path (primary + linked), linked devices restore the account encrypted archive | legacy old-origin migration pending |
 | ✅ | Own-device notices on link/removal: persistent security notices in Note to self (deterministic IDs, archive-safe) | web + Android, linking E2E |
 
@@ -220,7 +224,6 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| QR display/scan for linking | ID-02 |
 | Albums, voice notes, resumable uploads | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
 | Group leave/roles/invites, communities | GRP-03, COM-01/02 |
