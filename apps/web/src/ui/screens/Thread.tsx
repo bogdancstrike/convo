@@ -104,10 +104,39 @@ export function Thread({
     return q ? messages.filter((m) => m.body && fold(m.body).includes(q)) : messages;
   }, [messages, search]);
 
+  // First-unread navigation (FEAT-03): the unread count when the chat opened (Thread is keyed by
+  // chat) marks where the "N unread messages" divider goes; the view starts there, not at the end.
+  const [unreadAtOpen] = useState(conversation.unread);
+  // Computed once from the history present at open; later arrivals must not move the divider.
+  const anchor = useRef<string | null>(null);
+  if (!anchor.current && unreadAtOpen && messages.length) {
+    const incoming = messages.filter((m) => m.direction === 'in' && !m.notice);
+    const first = incoming[Math.max(0, incoming.length - unreadAtOpen)];
+    anchor.current = first ? `${first.authorId}/${first.id}` : null;
+  }
+  const firstUnread = anchor.current;
+  const positioned = useRef(false);
+  const [atBottom, setAtBottom] = useState(true);
+  const [newBelow, setNewBelow] = useState(0);
+  const seen = useRef(shown.length);
+
   useLayoutEffect(() => {
     const list = listRef.current;
-    if (list && stickToBottom.current && !search) list.scrollTop = list.scrollHeight;
-  }, [shown, typing, search]);
+    if (!list || search) return;
+    const grew = shown.length - seen.current;
+    seen.current = shown.length;
+    if (!positioned.current && firstUnread) {
+      const divider = list.querySelector<HTMLElement>('[data-testid="unread-divider"]');
+      if (divider) { positioned.current = true; stickToBottom.current = false; setAtBottom(false); divider.scrollIntoView({ block: 'start' }); return; }
+    }
+    if (grew > 0 && !stickToBottom.current) setNewBelow((n) => n + grew);
+    if (stickToBottom.current) list.scrollTop = list.scrollHeight;
+  }, [shown, typing, search, firstUnread]);
+  const jumpToLatest = () => {
+    const list = listRef.current; if (!list) return;
+    stickToBottom.current = true; setAtBottom(true); setNewBelow(0);
+    list.scrollTo({ top: list.scrollHeight, behavior: client.settings.animations ? 'smooth' : 'auto' });
+  };
 
   const authorName = (m: ChatMessage) => (m.authorId === client.accountId ? t('chats.you') : group ? '' : title);
 
@@ -124,6 +153,32 @@ export function Thread({
   const menu = [{ label: t('select.start'), icon: 'check' as const, onSelect: () => setSelection(new Set()), testId: 'menu-select' },
     ...conversationMenu(client, conversation, t, onInfo, () => setSearch(''), onClose)];
   const chosen = selection ? messages.filter((m) => selection.has(keyOf(m))).sort((a, b) => a.sort - b.sort) : [];
+
+  const renderBubble = (m: ChatMessage, i: number, newDay: boolean) => {
+    const prev = shown[i - 1];
+    const first = newDay || !prev || prev.authorId !== m.authorId || m.sort - prev.sort > 10 * 60_000;
+    return (
+            <MessageBubble
+              key={`${m.authorId}/${m.id}`}
+              client={client}
+              message={m}
+              group={group}
+              first={first}
+              showDay={newDay}
+              highlight={search ?? undefined}
+              quotedAuthor={m.quote ? (m.quote.authorId === client.accountId ? t('chats.you') : group ? '' : title) : ''}
+              selection={selection ? { selected: selection.has(keyOf(m)), toggle: () => setSelection((s) => {
+                const next = new Set(s); if (next.has(keyOf(m))) next.delete(keyOf(m)); else if (next.size < MAX_SELECTION) next.add(keyOf(m)); return next;
+              }) } : undefined}
+              actions={{
+                onReply: (target) => setMode({ kind: 'reply', target }),
+                onEdit: (target) => setMode({ kind: 'edit', target }),
+                onForward: setForwarding,
+                onInfo: setInfo,
+              }}
+            />
+    );
+  };
 
   return (
     <section
@@ -222,6 +277,8 @@ export function Thread({
         onScroll={(e) => {
           const el = e.currentTarget;
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          setAtBottom(stickToBottom.current);
+          if (stickToBottom.current) setNewBelow(0);
         }}
       >
         <div className="e2ee-banner">
@@ -230,31 +287,17 @@ export function Thread({
         {shown.map((m, i) => {
           const prev = shown[i - 1];
           const newDay = !prev || new Date(prev.sort).toDateString() !== new Date(m.sort).toDateString();
-          const first = newDay || !prev || prev.authorId !== m.authorId || m.sort - prev.sort > 10 * 60_000;
+          const divider = !search && firstUnread === `${m.authorId}/${m.id}` ? <div className="unread-divider" data-testid="unread-divider" key="unread-divider">{t('thread.unreadDivider', { count: unreadAtOpen })}</div> : null;
+          if (divider) return [divider, m.notice ? <TimerNotice key={`${m.authorId}/${m.id}`} client={client} message={m} showDay={newDay} /> : renderBubble(m, i, newDay)];
           if (m.notice) return <TimerNotice key={`${m.authorId}/${m.id}`} client={client} message={m} showDay={newDay} />;
-          return (
-            <MessageBubble
-              key={`${m.authorId}/${m.id}`}
-              client={client}
-              message={m}
-              group={group}
-              first={first}
-              showDay={newDay}
-              highlight={search ?? undefined}
-              quotedAuthor={m.quote ? (m.quote.authorId === client.accountId ? t('chats.you') : group ? '' : title) : ''}
-              selection={selection ? { selected: selection.has(keyOf(m)), toggle: () => setSelection((s) => {
-                const next = new Set(s); if (next.has(keyOf(m))) next.delete(keyOf(m)); else if (next.size < MAX_SELECTION) next.add(keyOf(m)); return next;
-              }) } : undefined}
-              actions={{
-                onReply: (target) => setMode({ kind: 'reply', target }),
-                onEdit: (target) => setMode({ kind: 'edit', target }),
-                onForward: setForwarding,
-                onInfo: setInfo,
-              }}
-            />
-          );
+          return renderBubble(m, i, newDay);
         })}
       </div>
+      {!atBottom && !search && (
+        <button className="jump-latest" onClick={jumpToLatest} aria-label={t('thread.jumpLatest')} data-testid="jump-latest">
+          <Icon name="chevronDown" size={20} />{newBelow > 0 && <span className="badge" data-testid="jump-latest-count">{newBelow}</span>}
+        </button>
+      )}
       {conversation.blocked && (
         <div className="channel-read-only" role="status" data-testid="blocked-banner"><Icon name="lock" size={16} />{t('block.banner', { name: title })}
           <button className="btn" onClick={() => void client.setBlocked(conversation.id, false)} data-testid="unblock">{t('block.unblock')}</button></div>

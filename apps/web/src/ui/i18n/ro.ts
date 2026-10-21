@@ -503,6 +503,8 @@ export const ro: Record<MessageKey, string> = {
   'select.failed': 'Nu s-a putut copia',
   'select.confirmDelete': 'Ștergi {count} mesaje pentru tine? Ceilalți își păstrează copiile.',
   'select.partial': '{done} din {total} finalizate',
+  'thread.unreadDivider': '{count} mesaje necitite',
+  'thread.jumpLatest': 'Mergi la cele mai noi mesaje',
   'settings.chats.hint': 'Temă, limbă, Enter pentru trimitere',
   'settings.privacy.hint': 'Autentificare fără parolă, conversații blocate, confirmări',
   'settings.devices.hint': 'Dispozitive conectate și cereri de conectare',

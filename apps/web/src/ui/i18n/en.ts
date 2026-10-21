@@ -501,6 +501,8 @@ export const en = {
   'select.failed': 'Could not copy',
   'select.confirmDelete': 'Delete {count} messages for you? Other people keep their copies.',
   'select.partial': '{done} of {total} done',
+  'thread.unreadDivider': '{count} unread messages',
+  'thread.jumpLatest': 'Jump to latest messages',
   'settings.chats.hint': 'Theme, language, Enter to send',
   'settings.privacy.hint': 'Passwordless sign-in, chat locks, receipts',
   'settings.devices.hint': 'Linked devices and link requests',
