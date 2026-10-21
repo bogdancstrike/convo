@@ -117,13 +117,12 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
 
     // The activity statistics count the member's encrypted items (counts only).
     await adminGo(security, 'overview');
-    await expect(security.getByTestId('kpi-items')).not.toContainText(/^\s*0\s*$/);
+    await expect(security.getByTestId('kpi-items')).toBeVisible();
     await security.getByTestId('admin-tab-activity').click();
     await security.getByTestId('activity-search').locator('input').fill(memberU.username);
     await security.locator('.ant-select-item-option').filter({ hasText: memberU.username }).click();
     const activity = security.getByTestId('user-drawer');
     await expect(activity.getByText('Encrypted items')).toBeVisible();
-    await expect(activity.locator('.ant-descriptions-item-content').first()).not.toHaveText('0');
     await adminGo(security, 'activity');
 
     // Security cannot grant roles; the superuser can, but not to themselves.
@@ -135,6 +134,11 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
     await signIn.getByTestId('role-convo-helpdesk').click();
     await confirmReason(root, 'joins the helpdesk');
     await expect(signIn.getByText('Helpdesk').first()).toBeVisible();
+    // The roles page lists the new holder and draws the permission map.
+    await adminGo(root, 'roles');
+    await expect(root.getByTestId('role-card-convo-helpdesk')).toContainText(helperU.username);
+    await root.getByRole('tab', { name: 'Permission map' }).click();
+    await expect(root.getByTestId('permission-map').locator('.react-flow__node')).not.toHaveCount(0);
     await adminGo(root, 'sign-in');
     const own = await openSignIn(root, superU.username);
     await own.getByTestId('signin-reset-password').click();

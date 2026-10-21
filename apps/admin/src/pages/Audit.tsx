@@ -52,7 +52,7 @@ export function AuditPage({ can }: PageProps) {
           <Select value={kind} onChange={setKind} style={{ width: 180 }} options={[{ value: 'all', label: 'All actions' }, { value: 'denied', label: 'Refused attempts' }, ...kinds.map((k) => ({ value: k, label: k }))]} />
           <Typography.Text type="secondary">{shown.length} entries</Typography.Text>
         </Space>
-        <Table rowKey="seq" size="small" loading={!entries} dataSource={shown} pagination={{ pageSize: 50, hideOnSinglePage: true }}
+        <Table rowKey="seq" loading={!entries} dataSource={shown} pagination={{ pageSize: 50, hideOnSinglePage: true }}
           onRow={() => ({ 'data-testid': 'admin-audit-entry' } as never)}
           columns={[
             { title: '#', dataIndex: 'seq', width: 64 },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntApp, Avatar, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tag, Typography } from 'antd';
-import { AuditOutlined, BarChartOutlined, DashboardOutlined, HeartOutlined, IdcardOutlined, LogoutOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, AuditOutlined, BarChartOutlined, DashboardOutlined, HeartOutlined, IdcardOutlined, LogoutOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
 import { AdminError, api, type Me, type Permission } from './api';
 import { session, signIn, signOut } from './auth';
 import { themeConfig } from './theme';
@@ -12,6 +12,7 @@ import { SignInPage } from './pages/SignInAccounts';
 import { ActivityPage } from './pages/Activity';
 import { AuditPage } from './pages/Audit';
 import { HealthPage } from './pages/Health';
+import { RolesPage } from './pages/Roles';
 
 /** Pages, the permission each needs, and their menu entry. */
 const PAGES = [
@@ -19,6 +20,7 @@ const PAGES = [
   { key: 'users', label: 'Users', icon: <TeamOutlined />, needs: 'ACCOUNTS_READ' as Permission },
   { key: 'sign-in', label: 'Sign-in accounts', icon: <IdcardOutlined />, needs: 'ACCOUNTS_READ' as Permission },
   { key: 'activity', label: 'Activity', icon: <BarChartOutlined />, needs: 'STATS_READ' as Permission },
+  { key: 'roles', label: 'Roles & permissions', icon: <ApartmentOutlined />, needs: 'ACCOUNTS_READ' as Permission },
   { key: 'audit', label: 'Audit log', icon: <AuditOutlined />, needs: 'AUDIT_READ' as Permission },
   { key: 'health', label: 'Health', icon: <HeartOutlined />, needs: 'HEALTH_READ' as Permission },
 ] as const;
@@ -93,6 +95,7 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
           {page === 'users' && <UsersPage {...props} />}
           {page === 'sign-in' && <SignInPage {...props} />}
           {page === 'activity' && <ActivityPage {...props} />}
+          {page === 'roles' && <RolesPage {...props} />}
           {page === 'audit' && <AuditPage {...props} />}
           {page === 'health' && <HealthPage {...props} />}
         </Layout.Content>

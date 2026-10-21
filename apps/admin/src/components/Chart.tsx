@@ -7,10 +7,10 @@ import { useDark } from './useDark';
 export function Chart({ option, height = 280, label }: { option: EChartsOption; height?: number; label: string }) {
   const dark = useDark();
   const t = chartTheme(dark);
-  const axis = { axisLine: { lineStyle: { color: t.grid } }, axisLabel: { color: t.text }, splitLine: { lineStyle: { color: t.grid } } };
+  const axis = { axisLine: { lineStyle: { color: t.grid } }, axisLabel: { color: t.text, fontSize: 12 }, splitLine: { lineStyle: { color: t.grid } } };
   const themed: EChartsOption = {
     color: [...SERIES],
-    textStyle: { fontFamily: "'Inter Variable', Inter, system-ui, sans-serif", color: t.text },
+    textStyle: { fontFamily: "'Inter Variable', Inter, system-ui, sans-serif", color: t.text, fontSize: 13 },
     grid: { left: 40, right: 16, top: 36, bottom: 28, containLabel: true },
     tooltip: { trigger: 'axis', backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, textStyle: { color: t.text } },
     legend: { top: 0, textStyle: { color: t.text }, icon: 'roundRect' },

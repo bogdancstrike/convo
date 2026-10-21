@@ -37,7 +37,7 @@ export function OverviewPage(_: PageProps) {
         ].map((k) => (
           <Col key={k.title} xs={24} sm={12} xl={4}>
             <Card className="kpi" data-testid={k.testId}>{data ? <Statistic title={k.title} value={k.value ?? 0} formatter={(v) => compact(Number(v))} /> : <Skeleton active paragraph={false} />}
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{data ? k.sub : ' '}</Typography.Text></Card>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>{data ? k.sub : ' '}</Typography.Text></Card>
           </Col>
         ))}
         <Col xs={24} xl={16}>

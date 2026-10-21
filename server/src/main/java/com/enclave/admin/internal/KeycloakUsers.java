@@ -154,6 +154,18 @@ class KeycloakUsers {
                 .headers(h -> h.setBearerAuth(accessToken())).contentType(MediaType.APPLICATION_JSON).body(List.of(rep)).retrieve().toBodilessEntity());
     }
 
+    /** A role holder (no credentials or attributes). */
+    record Holder(String id, String username, String firstName, String lastName, boolean enabled) {}
+
+    /** Holders of one managed admin role. */
+    List<Holder> holders(String role) {
+        if (!MANAGED_ROLES.contains(role)) throw new EnclaveException(ErrorCode.INVALID_REQUEST, "not a Convo admin role");
+        List<UserRep> users = call(() -> http.get().uri(admin(b -> b.pathSegment("roles", role, "users").queryParam("max", 500))).headers(h -> h.setBearerAuth(accessToken()))
+                .retrieve().body(new ParameterizedTypeReference<List<UserRep>>() {}));
+        return users == null ? List.of() : users.stream().map(u -> new Holder(u.id(), u.username(), u.firstName(), u.lastName(), Boolean.TRUE.equals(u.enabled())))
+                .sorted(java.util.Comparator.comparing(Holder::username)).toList();
+    }
+
     private void update(String id, Map<String, Object> changes) {
         call(() -> http.put().uri(admin(b -> b.pathSegment("users", id))).headers(h -> h.setBearerAuth(accessToken()))
                 .contentType(MediaType.APPLICATION_JSON).body(changes).retrieve().toBodilessEntity());

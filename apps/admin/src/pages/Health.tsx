@@ -36,7 +36,7 @@ export function HealthPage({ can }: PageProps) {
             try { const r = await api.redrive(reason); message.success(`${r.queued} wake-ups queued again.`); load(); } catch (e) { message.error(errorText(e)); }
           }}>Retry failed message wake-ups</Button>}>
             {dead.length === 0 ? <Empty description="No failures in the last 24 hours" /> : (
-              <Table rowKey="key" size="small" pagination={false} dataSource={dead} onRow={() => ({ 'data-testid': 'admin-push-dead-row' } as never)} columns={[
+              <Table rowKey="key" pagination={false} dataSource={dead} onRow={() => ({ 'data-testid': 'admin-push-dead-row' } as never)} columns={[
                 { title: 'Reason', dataIndex: 'reason', render: (r: string) => REASONS[r] ?? r },
                 { title: 'Kind', dataIndex: 'kind', render: (k: string) => k === 'call' ? 'Call rings' : 'Messages' },
                 { title: 'Count', dataIndex: 'n', align: 'right' },

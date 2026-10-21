@@ -75,6 +75,18 @@ class ActivityStore {
                 .param("from", from).param("ids", accountIds).query(ActivityStore::activity).list();
     }
 
+    /** People per activity level since {@code from}: active-day thresholds for high and medium. */
+    record LevelCounts(long high, long medium, long low) {}
+
+    LevelCounts levels(LocalDate from, int highDays, int mediumDays) {
+        return jdbc.sql("""
+                SELECT count(*) FILTER (WHERE days >= :h) AS high, count(*) FILTER (WHERE days < :h AND days >= :m) AS medium,
+                       count(*) FILTER (WHERE days < :m) AS low
+                FROM (SELECT account_id, count(*) AS days FROM account_activity_daily WHERE day >= :from GROUP BY account_id) a""")
+                .param("from", from).param("h", highDays).param("m", mediumDays)
+                .query((rs, i) -> new LevelCounts(rs.getLong("high"), rs.getLong("medium"), rs.getLong("low"))).single();
+    }
+
     /** One account's daily items since {@code from}. */
     List<AccountDay> account(UUID accountId, LocalDate from) {
         return jdbc.sql("SELECT day, items FROM account_activity_daily WHERE account_id = :a AND day >= :from ORDER BY day")

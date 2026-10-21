@@ -27,7 +27,7 @@ export function SignInPanel({ load, can, onChanged }: { load: () => Promise<Sign
   const credentials = can('USERS_CREDENTIALS');
   return (
     <div data-testid="signin-panel">
-      <Descriptions column={1} size="small" bordered>
+      <Descriptions column={1} bordered>
         <Descriptions.Item label="Username">{u.username}</Descriptions.Item>
         <Descriptions.Item label="Name">{[u.firstName, u.lastName].filter(Boolean).join(' ') || '—'}</Descriptions.Item>
         <Descriptions.Item label="Email">{u.email || '—'}</Descriptions.Item>

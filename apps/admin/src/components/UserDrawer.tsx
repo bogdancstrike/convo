@@ -39,7 +39,7 @@ export function UserDrawer({ accountId, onClose, can, onChanged }: { accountId: 
           ...(can('STATS_READ') ? [{ key: 'activity', label: 'Activity', children: (
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <Segmented value={days} onChange={(v) => setDays(Number(v))} options={[{ label: '30 days', value: 30 }, { label: '90 days', value: 90 }]} />
-              {activity && <Descriptions size="small" column={2} bordered>
+              {activity && <Descriptions column={2} bordered>
                 <Descriptions.Item label="Encrypted items">{activity.summary.items}</Descriptions.Item>
                 <Descriptions.Item label="Active days">{activity.summary.activeDays} of {activity.window}</Descriptions.Item>
                 <Descriptions.Item label="Last active">{fmtDay(activity.summary.lastActiveDay)}</Descriptions.Item>
@@ -64,7 +64,7 @@ export function UserDrawer({ accountId, onClose, can, onChanged }: { accountId: 
           { key: 'signin', label: 'Sign-in', children: <SignInPanel load={loadSignIn} can={can} onChanged={changed} /> },
           { key: 'security', label: 'Security', children: (
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <Descriptions size="small" column={1} bordered>
+              <Descriptions column={1} bordered>
                 <Descriptions.Item label="Status">{account.status === 'active' ? <Tag color="green">Active</Tag> : <Tag color="red">Disabled</Tag>}</Descriptions.Item>
                 <Descriptions.Item label="First sign-in">{fmtTime(account.createdAt)}</Descriptions.Item>
                 <Descriptions.Item label="Linked devices">{account.activeDevices}</Descriptions.Item>

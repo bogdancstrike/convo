@@ -119,6 +119,20 @@ class AdminConsoleController {
         return noStore(out);
     }
 
+    /** How many active (not disabled) people fall into each level over the window. */
+    record Levels(long high, long medium, long low, long none, int window) {}
+
+    @GetMapping("/stats/levels")
+    ResponseEntity<Levels> levels(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "30") int days) {
+        guard.require(admin, Permission.STATS_READ);
+        int window = Math.max(7, Math.min(days, 90));
+        LocalDate today = activity.today();
+        var counts = activity.levels(today.minusDays(window - 1L), (int) Math.ceil(window * 0.5), (int) Math.ceil(window * 0.15));
+        var directory = identity.directoryStats(today);
+        long none = Math.max(0, directory.accounts() - directory.disabled() - counts.high() - counts.medium() - counts.low());
+        return noStore(new Levels(counts.high(), counts.medium(), counts.low(), none, window));
+    }
+
     record AccountActivityView(UserActivity summary, List<ActivityStore.AccountDay> days, int window) {}
 
     /** One account's activity: daily encrypted items sent over the window (counts only). */
@@ -234,6 +248,27 @@ class AdminConsoleController {
         selfGuard(admin, id);
         idp.setRole(id, body.role(), body.granted());
         return audit.append(guard.actor(admin), action, "idp:" + id + " " + body.role(), body.reason());
+    }
+
+    // --- roles -------------------------------------------------------------------------------
+
+    /**
+     * @param permissions what the role allows (enforced by the server on every call)
+     * @param holders who has it at the identity provider; empty when account management is off
+     */
+    record RoleView(String role, List<Permission> permissions, List<KeycloakUsers.Holder> holders) {}
+
+    /** Admin roles, their permissions and holders (the console's roles page and diagram). */
+    @GetMapping("/roles")
+    ResponseEntity<List<RoleView>> roles(@AuthenticationPrincipal Jwt admin) {
+        guard.require(admin, Permission.ACCOUNTS_READ);
+        List<RoleView> out = new ArrayList<>();
+        for (var e : guard.matrix().entrySet()) {
+            List<KeycloakUsers.Holder> holders = idp.available() ? idp.holders(e.getKey()) : List.of();
+            out.add(new RoleView(e.getKey(), e.getValue().stream().sorted().toList(), holders));
+        }
+        out.sort(Comparator.comparingInt((RoleView r) -> -r.permissions().size()).thenComparing(RoleView::role));
+        return noStore(out);
     }
 
     // --- recovery kit ----------------------------------------------------------------------

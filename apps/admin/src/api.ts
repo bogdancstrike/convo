@@ -31,6 +31,9 @@ export interface IdpUser {
   createdAt: string | null; requiredActions: string[]; credentialTypes: string[]; roles: string[]; sessions: number; lastAccess: string | null;
 }
 export interface SignInAccount { user: IdpUser; convoAccountId: string | null }
+export interface RoleHolder { id: string; username: string; firstName: string | null; lastName: string | null; enabled: boolean }
+export interface RoleView { role: string; permissions: Permission[]; holders: RoleHolder[] }
+export interface Levels { high: number; medium: number; low: number; none: number; window: number }
 export interface Health { push: { pending: number; oldestPending: string; deadLetters: Record<string, number> } }
 
 export class AdminError extends Error {
@@ -73,6 +76,8 @@ export const api = {
   signOutEverywhere: (id: string, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/sign-out`, { reason }),
   setSignInEnabled: (id: string, enabled: boolean, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/enabled`, { enabled, reason }),
   setRole: (id: string, role: string, granted: boolean, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/roles`, { role, granted, reason }),
+  roles: () => call<RoleView[]>('GET', '/roles'),
+  levels: (days: number) => call<Levels>('GET', `/stats/levels?days=${days}`),
   audit: () => call<AuditEntry[]>('GET', '/audit?limit=500'),
   verify: () => call<AuditVerification>('GET', '/audit/verify'),
   checkpoint: () => call<AuditVerification>('POST', '/audit/checkpoint'),

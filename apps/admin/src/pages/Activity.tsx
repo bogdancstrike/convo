@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Alert, AutoComplete, Card, Col, Row, Segmented, Table, Tag, Typography } from 'antd';
-import { api, errorText, type AccountSummary, type UserActivity } from '../api';
+import { Alert, AutoComplete, Card, Col, Row, Segmented, Skeleton, Statistic, Table, Tag, Typography } from 'antd';
+import { Chart } from '../components/Chart';
+import { SERIES } from '../theme';
+import { api, errorText, type AccountSummary, type Levels, type Overview, type UserActivity } from '../api';
 import { UserDrawer } from '../components/UserDrawer';
-import { fmtDay, LEVEL, nameOf } from '../format';
+import { fmtDay, LEVEL, nameOf, shortDay } from '../format';
 import type { PageProps } from '../Shell';
 
 /** Most and least active people, and a search to open anyone's activity. Counts only. */
@@ -13,6 +15,13 @@ export function ActivityPage({ can, navigate, param }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [options, setOptions] = useState<AccountSummary[]>([]);
+  const [levels, setLevels] = useState<Levels | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  useEffect(() => {
+    setLevels(null); setOverview(null);
+    void api.levels(days).then(setLevels).catch((e) => setError(errorText(e)));
+    void api.overview(days).then(setOverview).catch((e) => setError(errorText(e)));
+  }, [days]);
   useEffect(() => {
     setTop(null); setQuiet(null);
     void api.usersByActivity('active', days, 10).then(setTop).catch((e) => setError(errorText(e)));
@@ -34,6 +43,7 @@ export function ActivityPage({ can, navigate, param }: PageProps) {
         <Segmented value={days} onChange={(v) => setDays(Number(v))} options={[{ label: '7 days', value: 7 }, { label: '30 days', value: 30 }, { label: '90 days', value: 90 }]} />
       </div>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+      <ActivityStats days={days} levels={levels} overview={overview} />
       <Card style={{ marginBottom: 16 }}>
         <AutoComplete style={{ width: 380 }} value={search} onChange={setSearch} placeholder="Find a person to see their activity" data-testid="activity-search"
           options={options.map((a) => ({ value: a.accountId, label: `${nameOf(a)} (@${a.username})` }))}
@@ -41,11 +51,69 @@ export function ActivityPage({ can, navigate, param }: PageProps) {
       </Card>
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={12}><Card title="Most active" data-testid="activity-top">
-          <Table rowKey={(r) => r.account.accountId} size="small" loading={!top} dataSource={top ?? []} pagination={false} columns={columns} onRow={open} /></Card></Col>
+          <Table rowKey={(r) => r.account.accountId} loading={!top} dataSource={top ?? []} pagination={false} columns={columns} onRow={open} /></Card></Col>
         <Col xs={24} xl={12}><Card title="Least active" extra={<Typography.Text type="secondary">never or longest ago first</Typography.Text>} data-testid="activity-quiet">
-          <Table rowKey={(r) => r.account.accountId} size="small" loading={!quiet} dataSource={quiet ?? []} pagination={false} columns={columns} onRow={open} /></Card></Col>
+          <Table rowKey={(r) => r.account.accountId} loading={!quiet} dataSource={quiet ?? []} pagination={false} columns={columns} onRow={open} /></Card></Col>
       </Row>
       <UserDrawer accountId={param || null} onClose={() => navigate('activity')} can={can} />
     </div>
+  );
+}
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** Activity KPIs and charts: levels, active people per day, and items by weekday. */
+function ActivityStats({ days, levels, overview }: { days: number; levels: Levels | null; overview: Overview | null }) {
+  const active = levels ? levels.high + levels.medium + levels.low : 0;
+  const total = levels ? active + levels.none : 0;
+  const items = overview?.days.reduce((n, d) => n + d.items, 0) ?? 0;
+  const peak = overview?.days.reduce((m, d) => Math.max(m, d.activeAccounts), 0) ?? 0;
+  const byWeekday = WEEKDAYS.map((_, i) => overview?.days.filter((d) => (new Date(d.day).getUTCDay() + 6) % 7 === i).reduce((n, d) => n + d.items, 0) ?? 0);
+  const kpis = [
+    { title: `Active · ${days} d`, value: active, suffix: total ? `/ ${total}` : '', testId: 'activity-kpi-active' },
+    { title: 'Adoption', value: total ? Math.round((active / total) * 100) : 0, suffix: '%', testId: 'activity-kpi-adoption' },
+    { title: 'Very active', value: levels?.high ?? 0, suffix: 'people', testId: 'activity-kpi-high' },
+    { title: 'Peak active in a day', value: peak, suffix: 'people', testId: 'activity-kpi-peak' },
+    { title: 'Items per active person', value: active ? Math.round(items / active) : 0, suffix: `in ${days} d`, testId: 'activity-kpi-items' },
+    { title: 'Inactive', value: levels?.none ?? 0, suffix: 'people', testId: 'activity-kpi-inactive' },
+  ];
+  return (
+    <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      {kpis.map((k) => (
+        <Col key={k.title} xs={24} sm={12} xl={4}>
+          <Card className="kpi" data-testid={k.testId}>{levels && overview ? <Statistic title={k.title} value={k.value} suffix={<span style={{ fontSize: 14, opacity: 0.6 }}>{k.suffix}</span>} /> : <Skeleton active paragraph={false} />}</Card>
+        </Col>
+      ))}
+      <Col xs={24} xl={8}>
+        <Card title="Activity levels" extra={<Typography.Text type="secondary">share of active days</Typography.Text>}>
+          {levels ? <Chart label="People by activity level" height={260} option={{
+            tooltip: { trigger: 'item' }, legend: { bottom: 0, top: 'auto' },
+            series: [{ type: 'pie', radius: ['45%', '72%'], label: { show: false }, itemStyle: { borderRadius: 6, borderWidth: 2 },
+              data: [
+                { name: LEVEL.high.label, value: levels.high, itemStyle: { color: '#2E9D6A' } },
+                { name: LEVEL.medium.label, value: levels.medium, itemStyle: { color: SERIES[0] } },
+                { name: LEVEL.low.label, value: levels.low, itemStyle: { color: '#F2B66D' } },
+                { name: LEVEL.none.label, value: levels.none, itemStyle: { color: '#94a3b8' } },
+              ] }],
+          }} /> : <Skeleton active />}
+        </Card>
+      </Col>
+      <Col xs={24} xl={10}>
+        <Card title="Active people per day">
+          {overview ? <Chart label="Active people per day" height={260} option={{
+            xAxis: { type: 'category', data: overview.days.map((d) => shortDay(d.day)), boundaryGap: false }, yAxis: { type: 'value', minInterval: 1 },
+            series: [{ name: 'Active people', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.15 }, data: overview.days.map((d) => d.activeAccounts) }],
+          }} /> : <Skeleton active />}
+        </Card>
+      </Col>
+      <Col xs={24} xl={6}>
+        <Card title="By weekday" extra={<Typography.Text type="secondary">encrypted items</Typography.Text>}>
+          {overview ? <Chart label="Encrypted items by weekday" height={260} option={{
+            xAxis: { type: 'category', data: WEEKDAYS }, yAxis: { type: 'value', minInterval: 1 },
+            series: [{ name: 'Items', type: 'bar', barMaxWidth: 22, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: byWeekday }],
+          }} /> : <Skeleton active />}
+        </Card>
+      </Col>
+    </Row>
   );
 }

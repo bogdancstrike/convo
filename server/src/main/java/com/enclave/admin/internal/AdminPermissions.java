@@ -59,4 +59,7 @@ class AdminPermissions {
 
     /** All role names that may use the admin API at all (for the security chain). */
     List<String> allRoles() { return List.copyOf(byRole.keySet()); }
+
+    /** Every admin role and what it allows (the console draws this matrix). */
+    Map<String, Set<Permission>> matrix() { return byRole; }
 }

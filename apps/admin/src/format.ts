@@ -35,3 +35,21 @@ export const CREDENTIAL_LABELS: Record<string, string> = { password: 'Password',
 export const ROLE_LABELS: Record<string, string> = {
   'convo-admin': 'Administrator (all)', 'convo-helpdesk': 'Helpdesk', 'convo-org-admin': 'Organization admin', 'convo-security': 'Security', 'convo-auditor': 'Auditor',
 };
+
+/** What each permission lets an administrator do, grouped for the roles diagram. */
+export const PERMISSIONS: Record<string, { label: string; group: 'People' | 'Sign-in' | 'Audit' | 'Operations' }> = {
+  ACCOUNTS_READ: { label: 'See people and accounts', group: 'People' },
+  DEVICES_READ: { label: 'See linked devices', group: 'People' },
+  DEVICE_REVOKE: { label: 'Unlink a device', group: 'People' },
+  ACCOUNT_STATUS: { label: 'Disable / enable accounts', group: 'People' },
+  RECOVERY_RESET: { label: 'Revoke a recovery kit', group: 'People' },
+  USERS_CREATE: { label: 'Create sign-in accounts', group: 'Sign-in' },
+  USERS_CREDENTIALS: { label: 'Reset passwords, require passkey/2FA, block sign-in', group: 'Sign-in' },
+  ROLES_MANAGE: { label: 'Grant and remove admin roles', group: 'Sign-in' },
+  AUDIT_READ: { label: 'Read and verify the audit log', group: 'Audit' },
+  AUDIT_EXPORT: { label: 'Export the audit log', group: 'Audit' },
+  AUDIT_CHECKPOINT: { label: 'Write audit checkpoints', group: 'Audit' },
+  STATS_READ: { label: 'Statistics and activity', group: 'Operations' },
+  HEALTH_READ: { label: 'Delivery health', group: 'Operations' },
+  PUSH_REDRIVE: { label: 'Retry failed wake-ups', group: 'Operations' },
+};

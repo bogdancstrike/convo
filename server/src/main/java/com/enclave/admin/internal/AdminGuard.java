@@ -45,6 +45,8 @@ class AdminGuard {
         }
     }
 
+    java.util.Map<String, java.util.Set<AdminPermissions.Permission>> matrix() { return permissions.matrix(); }
+
     /** Stable admin identity for the audit: IdP subject plus readable handle. */
     String actor(Jwt admin) {
         String name = admin.getClaimAsString("preferred_username");
