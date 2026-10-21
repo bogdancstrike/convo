@@ -33,6 +33,10 @@ jobs:
             image: bogdancstrike/convo-web
             context: ./apps/web
             dockerfile: ./apps/web/Dockerfile
+          - name: keycloak
+            image: bogdancstrike/convo-keycloak
+            context: ./deploy/keycloak
+            dockerfile: ./deploy/keycloak/Dockerfile
 
     steps:
       - name: Check out repository

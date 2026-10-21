@@ -19,6 +19,8 @@ spring:
     redis:
       host: ${VALKEY_HOST:localhost}
       port: ${VALKEY_PORT:6379}
+      password: ${VALKEY_PASSWORD:}
+      database: ${VALKEY_DATABASE:0}
       timeout: 2s
   modulith:
     events:

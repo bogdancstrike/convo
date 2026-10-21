@@ -8,6 +8,13 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 ## Active checkpoint — 2026-10-20
 
+- [x] 2026-10-21 Deployment: hostname `convo.doncik.ro`, no fixed IPs in the repo (`CONVO_SERVER_IP`
+  required from `.env`); web image runs behind a Kubernetes ingress (`CONVO_TLS=off`, `UPSTREAM_*`,
+  `CONVO_KEYCLOAK_ADMIN=off`); production Keycloak image (theme, realm without dev users, setup
+  script); GitHub Actions publish `convo-server`, `convo-web`, `convo-keycloak` to Docker Hub on
+  every push; homelab charts `app-charts/convo` + `charts/livekit` + `charts/coturn` (shared
+  Postgres/Redis/MinIO/ntfy, cloudflared route). See `deploy/k8s.md`.
+
 - Native Compose Android client and APK are implemented and committed; Android↔web encrypted
   exchange, trusted linking/history restore, and update/process-restart persistence are verified
   on emulator-5554. Full parity, physical devices, native storage certification and iOS remain open.

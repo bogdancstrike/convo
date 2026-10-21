@@ -8,10 +8,12 @@ Production runs on the homelab k3s cluster from the charts in
 | --- | --- | --- |
 | `bogdancstrike/convo-server` | `server/Dockerfile` | `app-charts/convo/server` |
 | `bogdancstrike/convo-web` | `apps/web/Dockerfile` | `app-charts/convo/web` |
+| `bogdancstrike/convo-keycloak` | `deploy/keycloak/Dockerfile` | `app-charts/convo/keycloak` |
 
 `VERSION` is the image tag published from the default branch; bump it (and the charts' `image.tag`)
 to release. The repository secret `DOCKERHUB_TOKEN` must hold a Docker Hub access token.
 
 The web image is the same-origin reverse proxy in both environments. In Kubernetes it runs with
 `CONVO_TLS=off` (ingress terminates TLS) and `UPSTREAM_*` pointing at cluster services; see
-`docs/configuration.md`.
+`docs/configuration.md`. The Keycloak image bakes in the theme, the realm without development users
+and the setup script (`/opt/convo/setup.sh`, run by the chart's post-sync Job).

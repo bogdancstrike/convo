@@ -16,6 +16,8 @@ server {
     # Re-resolve service names (container DNS) so a recreated container is reached without restarting
     # nginx; upstreams are set through variables below for that reason.
     include /etc/nginx/convo/resolver.conf;
+    # Keycloak's admin console is not served on the public origin when CONVO_KEYCLOAK_ADMIN=off.
+    include /etc/nginx/convo/keycloak-admin.conf;
 
     # Backend API
     location /v1/ws {

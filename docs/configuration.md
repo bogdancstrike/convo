@@ -136,7 +136,9 @@ The repository contains no fixed addresses. The development certificate covers l
 hostname and the optional IP; it is renewed if a SAN changes, preserving the private key.
 The web image renders its nginx site at start (`20-convo-config.sh`): `UPSTREAM_SERVER`,
 `UPSTREAM_KEYCLOAK`, `UPSTREAM_LIVEKIT`, `UPSTREAM_S3` (Compose service names by default) and
-`CONVO_TLS=off` for plain HTTP on `CONVO_HTTP_LISTEN` (8080) behind a TLS-terminating ingress.
+`CONVO_TLS=off` for plain HTTP on `CONVO_HTTP_LISTEN` (8080) behind a TLS-terminating ingress, and
+`CONVO_KEYCLOAK_ADMIN=off` to hide Keycloak's admin console on the public origin. The server reads
+`VALKEY_PASSWORD` and `VALKEY_DATABASE` for a shared Redis/Valkey.
 Refresh the debug APK's exact certificate pin after regenerating the development certificate.
 Keycloak's passwordless RP ID is `convo.doncik.ro`; changing the RP ID requires a deliberate
 realm update and new passkey enrollment, because existing passkeys are bound to their RP ID.
