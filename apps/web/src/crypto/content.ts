@@ -111,6 +111,10 @@ export interface AckRequest {
   revision: number;
   reviewers: string[];
   audience: string[];
+  /** Optional due time (ms): later responses are still accepted but marked late. */
+  due?: number;
+  /** Optional closing time (ms): the request closes and new responses are rejected. */
+  expires?: number;
 }
 
 /**
@@ -334,7 +338,13 @@ function isIdList(value: unknown, max: number): value is string[] {
 
 function isAckRequest(value: unknown): value is AckRequest {
   return isObject(value) && typeof value.requestId === 'string' && ID.test(value.requestId) && Number.isSafeInteger(value.revision) && (value.revision as number) >= 1
-    && isIdList(value.reviewers, 10) && (value.reviewers as string[]).length >= 1 && isIdList(value.audience, 5000);
+    && isIdList(value.reviewers, 10) && (value.reviewers as string[]).length >= 1 && isIdList(value.audience, 5000)
+    && (value.due === undefined || isTime(value.due)) && (value.expires === undefined || isTime(value.expires))
+    && (value.due === undefined || value.expires === undefined || (value.due as number) <= (value.expires as number));
+}
+
+function isTime(value: unknown): boolean {
+  return Number.isSafeInteger(value) && (value as number) > 0;
 }
 
 function isAckResponse(value: unknown): value is AckResponse {

@@ -88,6 +88,17 @@ export interface ClientEvents extends Record<string, unknown> {
 const TYPING_TTL_SECONDS = 10;
 const OUTBOX_RETRY_MS = 15_000;
 
+/** Optional deadlines for an acknowledgement request (epoch ms). */
+export interface AckOptions {
+  due?: number;
+  expires?: number;
+}
+
+/** Whether an acknowledgement request no longer takes responses (closing time passed). */
+export function ackClosed(request: AckRequest, now = Date.now()): boolean {
+  return request.expires !== undefined && now > request.expires;
+}
+
 export class EnclaveClient extends Emitter<ClientEvents> {
   readonly socket: GatewaySocket;
   private readonly profileCache = new Map<string, UserProfile>();
@@ -377,7 +388,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    *
    * @throws Error if the body is empty or exceeds 64 KiB
    */
-  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck = false): Promise<void> {
+  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck: boolean | AckOptions = false): Promise<void> {
     await this.sendMessage(conversationId, { body, quote, mentions, requestAck });
   }
 
@@ -532,7 +543,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -556,7 +567,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       expireTimer: this.conversationCache.get(conversationId)?.expireSeconds || undefined,
       // Mentions only make sense in groups and only for current members.
       mentions: group && content.mentions?.length ? [...new Set(content.mentions)].filter((id) => recipients.includes(id)).slice(0, 50) : undefined,
-      ackRequest: content.requestAck && group ? this.newAckRequest(group, recipients) : undefined,
+      ackRequest: content.requestAck && group ? this.newAckRequest(group, recipients, content.requestAck === true ? {} : content.requestAck) : undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -1488,7 +1499,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     } else {
       if (!request.reviewers.includes(this.accountId) || !request.audience.includes(sender)) return;
       if ((target.acks?.[sender]?.revision ?? -1) >= ack.contentRevision) return; // dedupe across devices/retries
-      ops.push(this.repos.putMessage({ ...target, acks: { ...target.acks, [sender]: { at: envelope.serverTimestamp, revision: ack.contentRevision } } }));
+      // The server's acceptance time decides: closed requests take no new responses, late ones are marked.
+      const at = envelope.serverTimestamp;
+      if (request.expires !== undefined && at > request.expires) return;
+      const late = request.due !== undefined && at > request.due ? { late: true } : {};
+      ops.push(this.repos.putMessage({ ...target, acks: { ...target.acks, [sender]: { at, revision: ack.contentRevision, ...late } } }));
     }
     changed.add(ack.conversationId);
   }
@@ -1502,6 +1517,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (!request || !request.audience.includes(this.accountId) || message.deleted) throw new Error('nothing to acknowledge');
     const revision = message.revision ?? 0;
     if (message.myAck?.revision === revision) return;
+    if (ackClosed(request)) throw new Error('acknowledgement request closed');
     const ack: AckResponse = { requestId: request.requestId, requestRevision: request.revision, conversationId: message.conversationId,
       messageId: message.id, authorId: message.authorId, contentRevision: revision, timestamp: Date.now() };
     const reviewers = request.reviewers.filter((id) => id !== this.accountId);
@@ -1523,11 +1539,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * Request for an announcement in a community root this account manages: reviewers are the
    * publisher and the community owner(s); the audience is everyone else in the community now.
    */
-  private newAckRequest(group: GroupRecord, recipients: string[]): AckRequest {
+  private newAckRequest(group: GroupRecord, recipients: string[], options: AckOptions): AckRequest {
     const role = group.members.find((m) => m.accountId === this.accountId)?.role;
     if (!group.community || !group.adminOnly || (role !== 'owner' && role !== 'admin')) throw new Error('acknowledgements are for community announcements');
     const owners = group.members.filter((m) => m.role === 'owner').map((m) => m.accountId);
-    return { requestId: newMessageId(), revision: 1, reviewers: [...new Set([this.accountId, ...owners])].slice(0, 10), audience: recipients.slice(0, 5000) };
+    const { due, expires } = options;
+    if (expires !== undefined && (expires <= Date.now() || (due !== undefined && due > expires))) throw new Error('invalid acknowledgement times');
+    return { requestId: newMessageId(), revision: 1, reviewers: [...new Set([this.accountId, ...owners])].slice(0, 10), audience: recipients.slice(0, 5000),
+      ...(due !== undefined ? { due } : {}), ...(expires !== undefined ? { expires } : {}) };
   }
 
   /** Accept a request only in a community root, from an owner/admin, naming owners/admins as reviewers. */

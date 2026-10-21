@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { EnclaveClient } from '../../core/client';
+import { ackClosed, type EnclaveClient } from '../../core/client';
 import type { ChatMessage } from '../../core/model';
 import { Icon } from '../components/Icon';
 import { useI18n } from '../i18n/i18n';
@@ -26,9 +26,19 @@ export function AckBox({ client, message }: { client: EnclaveClient; message: Ch
   const reviewer = request.reviewers.includes(client.accountId);
   const member = request.audience.includes(client.accountId);
   const responded = request.audience.filter((id) => message.acks?.[id]?.revision === revision);
+  const now = Date.now();
+  const closed = ackClosed(request, now);
+  const overdue = request.due !== undefined && now > request.due;
+  const when = (ms: number) => new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   return (
-    <div className="ack-box" data-testid="ack-box">
+    <div className="ack-box" data-testid="ack-box" data-closed={closed || undefined}>
       <p className="ack-title"><Icon name="check" size={14} /> {t('ack.requested')}</p>
+      {closed ? <p className="muted-text" data-testid="ack-closed">{t('ack.closed')}</p> : (
+        <>
+          {request.due !== undefined && <p className={overdue ? 'ack-late' : 'muted-text'} data-testid="ack-due-at">{t(overdue ? 'ack.overdue' : 'ack.dueAt', { when: when(request.due) })}</p>}
+          {request.expires !== undefined && <p className="muted-text" data-testid="ack-closes-at">{t('ack.closesAt', { when: when(request.expires) })}</p>}
+        </>
+      )}
       {member && (() => {
         const mine = message.myAck;
         const current = mine?.revision === revision;
@@ -39,7 +49,7 @@ export function AckBox({ client, message }: { client: EnclaveClient; message: Ch
               <p className="ack-state" data-testid="ack-state" data-state={mine!.pending.length ? 'pending' : 'sent'}>
                 {mine!.pending.length ? t('ack.pending') : t('ack.sent')}
               </p>
-            ) : (
+            ) : closed ? null : (
               <button className="btn btn-primary" disabled={busy} data-testid="ack-button"
                 onClick={() => { setBusy(true); void client.acknowledge(message).finally(() => setBusy(false)); }}>{t('ack.action')}</button>
             )}
@@ -55,9 +65,12 @@ export function AckBox({ client, message }: { client: EnclaveClient; message: Ch
           {showList && (
             <ul className="ack-list" data-testid="ack-list">
               {request.audience.map((id) => (
-                <li key={id} data-state={responded.includes(id) ? 'acknowledged' : 'pending'}>
+                <li key={id} data-state={responded.includes(id) ? (message.acks?.[id]?.late ? 'late' : 'acknowledged') : 'pending'}>
                   <span>{names[id] ?? '…'}</span>
-                  <span className="muted-text">{responded.includes(id) ? t('ack.acknowledged') : message.acks?.[id] ? t('ack.outdated') : t('ack.noResponse')}</span>
+                  <span className={!responded.includes(id) && overdue ? 'ack-late' : 'muted-text'}>
+                    {responded.includes(id) ? t(message.acks?.[id]?.late ? 'ack.late' : 'ack.acknowledged')
+                      : message.acks?.[id] ? t('ack.outdated') : t(overdue ? 'ack.lateNoResponse' : 'ack.noResponse')}
+                  </span>
                 </li>
               ))}
             </ul>

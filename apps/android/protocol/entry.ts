@@ -138,7 +138,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'directory': return client.searchDirectory(String(args.query));
     case 'account': return client.account(String(args.id));
     case 'newChat': { const account = args.id === client.accountId ? { accountId: client.accountId, username: client.device.username, displayName: client.device.displayName } : await client.account(args.id); if (!account) throw new Error('account unavailable'); return client.openConversation(account); }
-    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, args.requestAck === true);
+    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, ackOptions(args.requestAck));
     case 'acknowledge': return client.acknowledge(await target(args));
     case 'canRequestAck': {
       const record = await client.groupRecord(String(args.id));
@@ -266,3 +266,12 @@ window.ConvoCore = { command(json: string) {
 void (async () => { context = await openContext(); await startClient(); })().catch(() => emit('phase', { name: 'error' }));
 
 setInterval(() => { if (client && document.visibilityState === 'visible') void client.lastSeenHeartbeat().catch(() => undefined); }, 20000);
+
+/** Acknowledgement request from the composer: false, true, or `{ due?, expires? }` (epoch ms). */
+function ackOptions(value: unknown): boolean | { due?: number; expires?: number } {
+  if (value === true) return true;
+  if (!value || typeof value !== 'object') return false;
+  const { due, expires } = value as Record<string, unknown>;
+  const time = (v: unknown) => (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : undefined);
+  return { ...(time(due) ? { due: time(due) } : {}), ...(time(expires) ? { expires: time(expires) } : {}) };
+}

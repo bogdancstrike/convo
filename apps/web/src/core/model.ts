@@ -72,7 +72,7 @@ export interface ChatMessage {
   /** Community announcement: acknowledgement request (validated author/reviewers). */
   ackRequest?: import('../crypto/content').AckRequest;
   /** Reviewer only: responses received (account → time and acknowledged content revision). */
-  acks?: Record<string, { at: number; revision: number }>;
+  acks?: Record<string, { at: number; revision: number; late?: boolean }>;
   /** Audience member: own response (content revision; reviewers still waiting for delivery). */
   myAck?: { revision: number; at: number; pending: string[] };
 }

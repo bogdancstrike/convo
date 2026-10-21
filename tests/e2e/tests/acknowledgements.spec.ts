@@ -65,5 +65,16 @@ test('members acknowledge an announcement explicitly; edits ask again', async ({
     await expect(bobEdited.getByTestId('ack-updated')).toBeVisible({ timeout: 30_000 });
     await bobEdited.getByTestId('ack-button').click();
     await expect(message(owner, 'New travel policy applies from Tuesday').getByTestId('ack-count')).toHaveText('Acknowledged 1 of 2', { timeout: 30_000 });
+
+    // Optional deadlines: the member sees when it is due and when responses close.
+    await owner.getByTestId('request-ack').check();
+    await owner.getByTestId('ack-due').selectOption('1');
+    await owner.getByTestId('ack-expires').selectOption('7');
+    await send(owner, 'Quarterly security training');
+    const bobTraining = message(bob, 'Quarterly security training');
+    await expect(bobTraining.getByTestId('ack-due-at')).toContainText('Due', { timeout: 30_000 });
+    await expect(bobTraining.getByTestId('ack-closes-at')).toContainText('Closes');
+    await bobTraining.getByTestId('ack-button').click();
+    await expect(message(owner, 'Quarterly security training').getByTestId('ack-count')).toHaveText('Acknowledged 1 of 2', { timeout: 30_000 });
   } finally { await closeAll(owner, bob, carol); }
 });

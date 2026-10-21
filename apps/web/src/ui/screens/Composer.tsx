@@ -65,6 +65,9 @@ export function Composer({
   // Community announcements: owners/admins may ask members for an explicit acknowledgement.
   const [canRequestAck, setCanRequestAck] = useState(false);
   const [requestAck, setRequestAck] = useState(false);
+  // Optional deadlines, in days from sending (0 = none).
+  const [ackDue, setAckDue] = useState(0);
+  const [ackExpires, setAckExpires] = useState(0);
   useEffect(() => {
     if (!conversation.adminOnly) return;
     void client.groupRecord(conversation.id).then((g) => setCanRequestAck(!!g?.community
@@ -140,9 +143,13 @@ export function Composer({
           current?.kind === 'reply'
             ? { messageId: current.target.id, authorId: current.target.authorId, excerpt: (current.target.body ?? '').slice(0, 120) }
             : undefined;
-        await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), requestAck);
+        const day = 24 * 60 * 60 * 1000;
+        const ack = requestAck && { ...(ackDue ? { due: Date.now() + ackDue * day } : {}), ...(ackExpires ? { expires: Date.now() + ackExpires * day } : {}) };
+        await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), ack);
         setPicked([]);
         setRequestAck(false);
+        setAckDue(0);
+        setAckExpires(0);
       }
       void client.sendTyping(conversation.id, 'stopped');
     } catch (e) {
@@ -282,7 +289,24 @@ export function Composer({
         </div>
       )}
       {canRequestAck && mode?.kind !== 'edit' && (
-        <label className="ack-toggle"><input type="checkbox" checked={requestAck} onChange={(e) => setRequestAck(e.target.checked)} data-testid="request-ack" /> {t('ack.requestToggle')}</label>
+        <div className="ack-toggle">
+          <label><input type="checkbox" checked={requestAck} onChange={(e) => setRequestAck(e.target.checked)} data-testid="request-ack" /> {t('ack.requestToggle')}</label>
+          {requestAck && (
+            <>
+              <label>{t('ack.dueLabel')}{' '}
+                <select value={ackDue} onChange={(e) => { const v = Number(e.target.value); setAckDue(v); if (ackExpires && v > ackExpires) setAckExpires(v); }} data-testid="ack-due">
+                  <option value={0}>{t('ack.none')}</option><option value={1}>{t('ack.in1d')}</option><option value={3}>{t('ack.in3d')}</option><option value={7}>{t('ack.in7d')}</option>
+                </select>
+              </label>
+              <label>{t('ack.expiresLabel')}{' '}
+                <select value={ackExpires} onChange={(e) => setAckExpires(Number(e.target.value))} data-testid="ack-expires">
+                  <option value={0}>{t('ack.never')}</option>
+                  {[1, 3, 7, 30].filter((d) => d >= ackDue).map((d) => <option key={d} value={d}>{t(d === 1 ? 'ack.in1d' : d === 3 ? 'ack.in3d' : d === 7 ? 'ack.in7d' : 'ack.in30d')}</option>)}
+                </select>
+              </label>
+            </>
+          )}
+        </div>
       )}
       <div className="composer">
         {recording ? (
