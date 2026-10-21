@@ -63,7 +63,7 @@ class SecurityConfig {
             route(HttpMethod.DELETE, "/v1/provisioning/sessions/{provisioningId}"));
 
     /** Routes that need no authentication. */
-    static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws"};
+    static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws", "/v1/device-nonces"};
 
     /**
      * Organization administration ({@code /v1/admin/**}): Keycloak bearer token carrying the admin

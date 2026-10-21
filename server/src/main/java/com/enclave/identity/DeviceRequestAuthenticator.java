@@ -16,4 +16,14 @@ public interface DeviceRequestAuthenticator {
      *     {@code DEVICE_REVOKED} on failure
      */
     AuthenticatedDevice authenticate(SignedDeviceRequest request);
+
+    /** A fresh single-use nonce for an authenticated device (returned with every response). */
+    String issueNonce(com.enclave.contracts.DeviceAddress device);
+
+    /**
+     * Fresh nonces for a device that has none left (unauthenticated, bounded per device).
+     *
+     * @return nonces, or empty when the device is unknown or inactive
+     */
+    java.util.List<String> issueNonces(String deviceAddress);
 }

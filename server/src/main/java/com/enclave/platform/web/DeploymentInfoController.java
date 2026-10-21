@@ -16,15 +16,21 @@ import org.springframework.web.bind.annotation.RestController;
 class DeploymentInfoController {
 
     /** API protocol versions this server supports (N and N-1 policy, OPS-03). */
-    static final List<String> API_VERSIONS = List.of("v1");
 
     private final DeploymentProperties deployment;
     private final SecurityProperties security;
     private final AttachmentPolicy attachments;
     private final MessagePolicy messages;
 
+    /**
+     * {@code v1.2} = v1 REST paths with device proof profile V2 (server nonces, PRIV-02). While
+     * nonces are required, plain {@code v1} clients are told to update instead of failing silently.
+     */
+    private final List<String> apiVersions;
+
     DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security, AttachmentPolicy attachments,
-            MessagePolicy messages) {
+            MessagePolicy messages, @org.springframework.beans.factory.annotation.Value("${enclave.identity.device-auth.require-nonce:true}") boolean requireNonce) {
+        this.apiVersions = requireNonce ? List.of("v1.2") : List.of("v1", "v1.2");
         this.deployment = deployment;
         this.security = security;
         this.attachments = attachments;
@@ -34,7 +40,7 @@ class DeploymentInfoController {
     @GetMapping("/v1/deployment-info")
     DeploymentInfo info() {
         String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
-        return new DeploymentInfo(deployment.id(), deployment.displayName(), API_VERSIONS,
+        return new DeploymentInfo(deployment.id(), deployment.displayName(), apiVersions,
                 new OidcInfo(deployment.endpointFor(security.oidc().issuer(), origin), security.oidc().publicClientId()), new Limits(attachments.maxFileBytes(),
                         messages.editWindow().toMillis(), messages.channelEditWindow().toMillis(), messages.editDeliveryGrace().toMillis()));
     }

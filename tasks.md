@@ -215,7 +215,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | JIT account provisioning from `(issuer, sub)`, handle derivation with diacritic folding | |
 | ✅ | Device reservations (never-reused IDs, 10-min single-use challenge) | |
 | ✅ | First-device registration with signed enrollment transcript, idempotent retry | |
-| ✅ | Device proof-of-possession request signatures (ECDSA P-256, replay cache) | client-chosen request ID instead of server nonce (PRIV-02 follow-up) |
+| ✅ | Device proof-of-possession request signatures (ECDSA P-256, replay cache) and single-use server nonces (profile V2, PRIV-02) | |
 | ✅ | Signed/one-time prekey upload, status, atomic single-use claims, KEYS_LOW | Kyber prekeys pending |
 | ✅ | Directory search by handle, device rosters, own-device list/unlink/self-revoke | |
 
@@ -309,7 +309,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Communities: ack due/expiry/custom reviewers, membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
-| Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
+| Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
 
 ## Web UX refresh (ADR-0003) — 2026-10-20
 

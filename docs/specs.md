@@ -2011,7 +2011,7 @@ recorded product decision. Progress per task lives in the repository root `tasks
 | Area | Implemented | Deviation / interim status | Record |
 |---|---|---|---|
 | Backend runtime | Spring Boot 4.1 + Spring Modulith 2.1, modules `identity`, `messaging`, `groups`, `attachments`, `platform`, shared `contracts`; boundaries verified in CI | Modules are packages of one Gradle project (not separate Gradle modules) | ARF §11 |
-| Device authentication (§4.2) | ECDSA P-256 proof-of-possession on every device request; shared Java/TS vectors | Single-use **client-chosen** request ID + ≤ 5 min expiry instead of a server-issued nonce | PRIV-02 follow-up |
+| Device authentication (§4.2) | ECDSA P-256 proof-of-possession on every device request (profile `ENCLAVE-REQ-V2`: request ID + single-use server-issued nonce, consumed atomically); shared Java/TS vectors | Browser keys are non-extractable WebCrypto keys, not hardware-bound; profile pending independent review | PRIV-02 |
 | 1:1 encryption (§5) | Signal sessions in the browser, multi-device fan-out, DEVICE_MISMATCH/STALE handling, idempotent submissions | TypeScript Signal library (X3DH, no PQXDH/Kyber) until the Rust/WASM core passes FND-02 | [ADR-0001](decisions/0001-interim-browser-signal.md) |
 | Groups (§6) | MLS (RFC 9420) via `ts-mls`, DS with epoch CAS, ACL mirror, Welcome/commit/application fan-out, authenticated senders | No credential binding to the account IK, no reviewed role profile / pending-removal gate yet | GRP-01 |
 | Linking (§4.4) | Transcript-bound X25519/HKDF/AES-GCM ProvisionMessage, single-use codes, comparison code | Approve-from-list with code comparison; QR scan not yet | ID-02 |

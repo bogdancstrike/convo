@@ -27,7 +27,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>{@code X-Enclave-Request-Id}: single-use request ID</li>
  *   <li>{@code X-Enclave-Expires}: epoch milliseconds</li>
  *   <li>{@code X-Enclave-Signature}: base64url P1363 signature of the canonical string</li>
+ *   <li>{@code X-Enclave-Nonce}: single-use server-issued nonce (profile V2)</li>
  * </ul>
+ * Every authenticated response carries {@code X-Enclave-Next-Nonce} for the device's next request.
  * Requests without the scheme pass through unauthenticated and are rejected by authorization rules.
  */
 class DeviceSignatureFilter extends OncePerRequestFilter {
@@ -69,7 +71,9 @@ class DeviceSignatureFilter extends OncePerRequestFilter {
                     authorization.substring(SCHEME.length()).strip(),
                     request.getHeader("X-Enclave-Request-Id"),
                     parseLong(request.getHeader("X-Enclave-Expires")),
-                    Base64Url.decode(request.getHeader("X-Enclave-Signature"), "signature")));
+                    Base64Url.decode(request.getHeader("X-Enclave-Signature"), "signature"),
+                    request.getHeader("X-Enclave-Nonce")));
+            response.setHeader("X-Enclave-Next-Nonce", authenticator.issueNonce(device.address()));
             var token = new PreAuthenticatedAuthenticationToken(device, null,
                     List.of(new SimpleGrantedAuthority(DEVICE_AUTHORITY)));
             SecurityContextHolder.getContext().setAuthentication(token);

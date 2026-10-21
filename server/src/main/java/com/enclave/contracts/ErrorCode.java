@@ -15,6 +15,8 @@ public enum ErrorCode {
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "Invalid request"),
     /** Missing or invalid authentication. */
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "Authentication required"),
+    /** The device-proof nonce is unknown, used or expired: fetch fresh nonces and retry once. */
+    NONCE_INVALID(HttpStatus.UNAUTHORIZED, "Device nonce invalid"),
     /** Authenticated caller is not allowed to perform the action. */
     FORBIDDEN(HttpStatus.FORBIDDEN, "Forbidden"),
     /** Referenced resource does not exist or is not visible to the caller. */

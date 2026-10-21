@@ -37,3 +37,16 @@ describe('contract vectors: device-auth-v1', () => {
     expect(await verify(vectors.signingKeySpki, transcript, e.signature)).toBe(true);
   });
 });
+
+const v2 = JSON.parse(readFileSync(resolve(__dirname, '../../../../contracts/vectors/device-auth-v2.json'), 'utf8'));
+
+describe('contract vectors: device-auth-v2 (server nonce)', () => {
+  it('binds the server nonce in the canonical string', async () => {
+    const r = v2.deviceRequest;
+    const canonical = await canonicalRequest(r.method, r.pathAndQuery, fromBase64Url(r.body), r.deviceAddress, r.requestId, r.expiresAtMillis, r.nonce);
+    expect(canonical).toBe(r.canonical);
+    expect(await verify(v2.signingKeySpki, canonical, r.signature)).toBe(true);
+    const other = await canonicalRequest(r.method, r.pathAndQuery, fromBase64Url(r.body), r.deviceAddress, r.requestId, r.expiresAtMillis, 'A'.repeat(32));
+    expect(await verify(v2.signingKeySpki, other, r.signature)).toBe(false);
+  });
+});

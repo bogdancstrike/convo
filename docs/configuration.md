@@ -55,6 +55,8 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `key-packages.max-per-upload` / `max-stored` / `max-bytes` / `max-accounts-per-claim` | `100` / `200` / `8192` / `100` | MLS KeyPackage limits |
 | `device-auth.max-signature-lifetime` | `5m` | Max signed-request validity |
 | `device-auth.clock-skew` | `30s` | |
+| `device-auth.require-nonce` | `true` | Refuse proof profile V1 (no server nonce); `deployment-info` then advertises only `v1.2` so old clients show "Update required" |
+| `device-auth.nonce-ttl` / `nonce-batch` / `max-outstanding-nonces` | `2m` / `8` / `64` | Server-issued single-use nonces (PRIV-02): lifetime, batch from `POST /v1/device-nonces`, live nonces kept per device |
 | `device-auth.purge-interval` | `PT1H` | Replay-cache cleanup |
 | `reservation-purge-interval` | `PT6H` | |
 

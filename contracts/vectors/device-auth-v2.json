@@ -1,0 +1,15 @@
+{
+  "description": "Device request proof profile ENCLAVE-REQ-V2 (PRIV-02): V1 plus a single-use server nonce after the request ID. Signed with WebCrypto ECDSA P-256 / SHA-256 (IEEE P1363).",
+  "signingKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECrku78N6Mr7wGzTonOVNRDnRJkkaR0Drunr5O1ad0OAJLm7aYXiqsNAbTqcFXnuJdPXuVLF5L0O1xd-RHR2TvA",
+  "deviceRequest": {
+    "method": "POST",
+    "pathAndQuery": "/v1/messages/9f1d2c3b-0000-4000-8000-000000000001?urgent=true",
+    "deviceAddress": "0b5e2c1a-7d3f-4e6a-9b8c-112233445566.2",
+    "requestId": "reqV2-0123456789abcdef",
+    "nonce": "n0nceAbCdEfGhIjKlMnOpQrStUvWxYz1",
+    "expiresAtMillis": 1792573200000,
+    "body": "eyJoZWxsbyI6IndvcmxkIn0",
+    "canonical": "ENCLAVE-REQ-V2\nPOST\n/v1/messages/9f1d2c3b-0000-4000-8000-000000000001?urgent=true\nk6I5cakU5erL8KjSUVTNownDwccvu5kU1Hxg88toFYg\n0b5e2c1a-7d3f-4e6a-9b8c-112233445566.2\nreqV2-0123456789abcdef\nn0nceAbCdEfGhIjKlMnOpQrStUvWxYz1\n1792573200000",
+    "signature": "TPQcHMiB00eFKNd432VK1uErtDJuJ5J5coqnzt0C3dMm-xlfhko7XSywM-IdZ_VzBWb0ysKUFQZ9ib81dzD6xA"
+  }
+}

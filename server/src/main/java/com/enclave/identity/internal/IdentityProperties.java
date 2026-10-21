@@ -63,8 +63,16 @@ public record IdentityProperties(
      *
      * @param maxSignatureLifetime maximum distance between now and the signed expiry
      * @param clockSkew tolerated client clock skew
+     * @param requireNonce reject the legacy V1 profile (no server-issued nonce)
+     * @param nonceTtl lifetime of an issued nonce
+     * @param nonceBatch nonces returned by one {@code POST /v1/device-nonces}
+     * @param maxOutstandingNonces live nonces kept per device (oldest dropped beyond this)
      */
     public record DeviceAuth(
             @DefaultValue("5m") @NotNull Duration maxSignatureLifetime,
-            @DefaultValue("30s") @NotNull Duration clockSkew) {}
+            @DefaultValue("30s") @NotNull Duration clockSkew,
+            @DefaultValue("true") boolean requireNonce,
+            @DefaultValue("2m") @NotNull Duration nonceTtl,
+            @DefaultValue("8") @Min(1) @Max(64) int nonceBatch,
+            @DefaultValue("64") @Min(8) @Max(1024) int maxOutstandingNonces) {}
 }

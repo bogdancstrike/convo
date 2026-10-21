@@ -17,7 +17,8 @@ export interface DeploymentInfo {
 }
 
 /** API version implemented by this client. */
-export const CLIENT_API_VERSION = 'v1';
+/** v1 REST paths with device proof profile V2 (single-use server nonces, PRIV-02). */
+export const CLIENT_API_VERSION = 'v1.2';
 
 /**
  * Loads deployment metadata from the same origin.
