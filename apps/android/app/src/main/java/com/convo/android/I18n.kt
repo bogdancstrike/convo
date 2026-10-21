@@ -30,6 +30,7 @@ object Strings {
         " End-to-end encrypted" to " Criptat integral",
         " Securing call…" to " Se securizează apelul…",
         "Accept" to "Răspunde",
+        "{count} unread messages" to "{count} mesaje necitite", "Jump to latest messages" to "Mergi la cele mai noi mesaje",
         "Select" to "Selectează", "{count} selected" to "{count} selectate", "Copied" to "Copiat", "Forwarded" to "Redirecționat", "Star" to "Marchează", "Other participants keep their copies." to "Ceilalți participanți își păstrează copiile.",
         "Background connection" to "Conexiune în fundal", "Convo is connected" to "Convo este conectat", "Messages and calls arrive in the background." to "Mesajele și apelurile sosesc în fundal.",
         "Keeps Convo connected so messages and calls arrive while the app is in the background" to "Menține Convo conectat ca mesajele și apelurile să sosească în fundal",

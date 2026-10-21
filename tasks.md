@@ -97,7 +97,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Full regression 2026-10-21 (later): 67 passed, 1 flaky (Firefox last-seen timing), 4 skipped.
 - First-unread navigation (FEAT-03, web): chats open at an "N unread messages" divider (anchor
   frozen at open), a jump-to-latest button with a new-message count appears when scrolled up.
-  `unread-navigation.spec.ts` Chromium/Firefox. Android equivalent pending.
+  `unread-navigation.spec.ts` Chromium/Firefox. Android: same divider, start position and
+  jump-to-latest button with new-message badge; verified on emulator with 30 unread messages.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 

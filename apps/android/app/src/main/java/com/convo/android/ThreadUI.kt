@@ -78,10 +78,43 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 val at = messages.indexOfFirst { it.optString("authorId") == target.optString("authorId") && it.optString("id") == target.optString("id") }
                 if (at >= 0) scope.launch { listState.animateScrollToItem(at + 1) } // +1: encryption header item
             }
-            LaunchedEffect(messages.size) { if (messages.isNotEmpty()) if (app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }
+            // First-unread navigation: start at the "N unread messages" divider (anchor fixed at open),
+            // follow new messages only when already at the bottom, otherwise count them on the jump button.
+            val unreadAtOpen = remember(id) { conversation.optInt("unread") }
+            var anchor by remember(id) { mutableStateOf<String?>(null) }
+            var positioned by remember(id) { mutableStateOf(false) }
+            var lastSize by remember(id) { mutableIntStateOf(0) }
+            var newBelow by remember(id) { mutableIntStateOf(0) }
+            val animate = app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false
+            LaunchedEffect(messages.size) {
+                if (messages.isEmpty()) return@LaunchedEffect
+                if (!positioned) {
+                    positioned = true
+                    val incoming = messages.filter { it.optString("direction") == "in" && !it.has("notice") }
+                    anchor = if (unreadAtOpen > 0) incoming.getOrNull(maxOf(0, incoming.size - unreadAtOpen))?.let { "${it.optString("authorId")}/${it.optString("id")}" } else null
+                    val at = messages.indexOfFirst { "${it.optString("authorId")}/${it.optString("id")}" == anchor }
+                    listState.scrollToItem(if (at >= 0) at + 1 else messages.size)
+                } else {
+                    val wasAtBottom = (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= lastSize - 1
+                    if (wasAtBottom) { if (animate) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }
+                    else if (messages.size > lastSize) newBelow += messages.size - lastSize
+                }
+                lastSize = messages.size
+            }
+            val canScrollDown by remember { derivedStateOf { listState.canScrollForward } }
+            LaunchedEffect(canScrollDown) { if (!canScrollDown) newBelow = 0 }
             LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("Your personal messages are end-to-end encrypted", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(messages, key = { "${it.optString("authorId")}/${it.optString("id")}" }) { message -> MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }) }
+                items(messages, key = { "${it.optString("authorId")}/${it.optString("id")}" }) { message ->
+                    if (anchor == "${message.optString("authorId")}/${message.optString("id")}") Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
+                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface) { RawText(tr("{count} unread messages").replace("{count}", "$unreadAtOpen"), Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium) }
+                    }
+                    MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }) }
+            }
+            if (canScrollDown) Row(Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 4.dp), horizontalArrangement = Arrangement.End) {
+                BadgedBox(badge = { if (newBelow > 0) Badge { Text("$newBelow") } }) {
+                    SmallFloatingActionButton({ scope.launch { if (animate) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }; newBelow = 0 }) { Icon(Icons.Outlined.KeyboardArrowDown, "Jump to latest messages") }
+                }
             }
             if (!starredOnly) {
                 if (conversation.optBoolean("blocked")) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
