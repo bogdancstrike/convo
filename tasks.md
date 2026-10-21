@@ -127,6 +127,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
   rules; emulator-verified save → welcome card).
+- Fast accessible actions (specs §30.8): web shortcuts on a focused message (Enter menu, R reply,
+  E edit, S star, F forward, I info, Delete → confirmation, ↑/↓ move), never in text fields, IME
+  composition or with modifiers, listed in Settings → Chats; focus returns to the message after the
+  menu closes. Android swipe-right-to-reply (horizontal drags only, haptic at threshold, honours
+  reduced motion; "Reply" menu item remains). `shortcuts.spec.ts` (Chromium/Firefox), emulator.
 - Member search & groups in common (specs §30.8): group info has a local roster search
   (case/Romanian-diacritic-insensitive), All/Admins filters (owners included) and an accessible
   "N of M members" count on web and Android; direct-chat info on web also lists groups in common

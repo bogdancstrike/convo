@@ -1,6 +1,12 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package com.convo.android
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+
+import androidx.compose.material.icons.automirrored.outlined.Reply
+
+import androidx.compose.ui.draw.alpha
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -175,7 +181,31 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         val key = "${message.optString("authorId")}/${message.optString("id")}"
         val selecting = app.selection != null
         if (selecting) Checkbox(key in app.selection.orEmpty(), { app.toggleSelected(key) }, Modifier.align(Alignment.CenterVertically))
-        Card(Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { if (selecting) app.toggleSelected(key) }, onLongClick = { if (selecting) app.toggleSelected(key) else menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
+        // Swipe right to reply (specs §30.8): horizontal drags only, so scrolling is unaffected; the
+        // "Reply" menu item remains the non-gesture alternative.
+        val dragX = remember(key) { androidx.compose.animation.core.Animatable(0f) }
+        val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
+        val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+        val scope = rememberCoroutineScope()
+        val animate = app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false
+        if (dragX.value > 8f) Icon(Icons.AutoMirrored.Outlined.Reply, "Reply", Modifier.align(Alignment.CenterVertically).padding(end = 4.dp).alpha((dragX.value / threshold).coerceIn(0f, 1f)))
+        Card(Modifier.widthIn(max = 320.dp)
+            .offset { androidx.compose.ui.unit.IntOffset(dragX.value.toInt(), 0) }
+            .pointerInput(key, selecting) {
+                if (selecting || message.optBoolean("deleted")) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (dragX.value >= threshold) onReply(message)
+                        scope.launch { if (animate) dragX.animateTo(0f) else dragX.snapTo(0f) }
+                    },
+                    onDragCancel = { scope.launch { dragX.snapTo(0f) } },
+                ) { change, amount ->
+                    val next = (dragX.value + amount).coerceIn(0f, threshold * 1.4f)
+                    if (dragX.value < threshold && next >= threshold) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    change.consume(); scope.launch { dragX.snapTo(next) }
+                }
+            }
+            .combinedClickable(onClick = { if (selecting) app.toggleSelected(key) }, onLongClick = { if (selecting) app.toggleSelected(key) else menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (conversation.startsWith("g:") && !outgoing) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { RawText(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }

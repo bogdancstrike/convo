@@ -57,6 +57,7 @@ export function MessageBubble({
 }) {
   const { t, time, date } = useI18n();
   const [menu, setMenu] = useState(false);
+  const [deleteFirst, setDeleteFirst] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const own = m.authorId === client.accountId;
@@ -91,10 +92,28 @@ export function MessageBubble({
           onTouchEnd={endPress}
           onTouchMove={endPress}
           onKeyDown={(e) => {
-            if (!system && e.target === e.currentTarget && (e.key === 'Enter' || e.key === 'ContextMenu')) {
-              e.preventDefault();
-              setMenu(true);
-            }
+            // Shortcuts act only on the focused message itself (never in text fields, during IME
+            // composition or with modifiers); destructive actions still go through confirmation.
+            if (system || e.target !== e.currentTarget || e.nativeEvent.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            const go = (direction: 1 | -1) => {
+              const list = e.currentTarget.closest('.messages') ?? document;
+              const all = [...list.querySelectorAll<HTMLElement>('.bubble[tabindex="0"]:not(.system)')];
+              all[all.indexOf(e.currentTarget) + direction]?.focus();
+            };
+            const handled = ({
+              Enter: () => setMenu(true), ContextMenu: () => setMenu(true),
+              r: () => !m.deleted && actions.onReply(m),
+              e: () => client.canEdit(m) && actions.onEdit(m),
+              s: () => !m.deleted && void client.setStarred(m, !m.starred),
+              f: () => !m.deleted && actions.onForward(m),
+              i: () => own && actions.onInfo(m),
+              Delete: () => { setDeleteFirst(true); setMenu(true); },
+              ArrowUp: () => go(-1), ArrowDown: () => go(1),
+            } as Record<string, () => unknown>)[key];
+            if (!handled) return;
+            e.preventDefault();
+            handled();
           }}
         >
           {!system && (
@@ -169,7 +188,7 @@ export function MessageBubble({
             </button>
           )}
         </div>
-        {menu && <MessageMenu client={client} message={m} anchor={bubbleRef} onClose={() => setMenu(false)} actions={actions} />}
+        {menu && <MessageMenu client={client} message={m} anchor={bubbleRef} onClose={() => { setMenu(false); setDeleteFirst(false); bubbleRef.current?.focus(); }} actions={actions} startWithDelete={deleteFirst} />}
       </div>
     </>
   );
@@ -205,10 +224,10 @@ export function StatusTicks({ status }: { status: MessageStatus }) {
 }
 
 /** Message menu: quick reactions (+ full picker) and actions. */
-function MessageMenu({ client, message: m, onClose, actions, anchor }: { client: EnclaveClient; message: ChatMessage; onClose: () => void; actions: MessageActions; anchor: RefObject<HTMLDivElement | null> }) {
+function MessageMenu({ client, message: m, onClose, actions, anchor, startWithDelete = false }: { client: EnclaveClient; message: ChatMessage; onClose: () => void; actions: MessageActions; anchor: RefObject<HTMLDivElement | null>; startWithDelete?: boolean }) {
   const { t } = useI18n();
   const [picker, setPicker] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(startWithDelete);
   const root = useRef<HTMLDivElement>(null);
   const { refs, floatingStyles } = useFloating({ strategy: 'fixed', placement: m.direction === 'out' ? 'left-start' : 'right-start',
     middleware: [offset(10), flip({ fallbackPlacements: m.direction === 'out' ? ['right-start'] : ['left-start'] }), shift({ padding: 8, crossAxis: true })], whileElementsMounted: autoUpdate });

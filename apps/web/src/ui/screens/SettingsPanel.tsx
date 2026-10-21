@@ -208,6 +208,14 @@ function ChatsPage({ settings, update }: { settings: SettingsModel; update: (p: 
         <Switch checked={settings.animations} onChange={(animations) => update({ animations })} label={t('settings.animations')} description={t('settings.animationsHelp')} testId="toggle-animations" />
         <Switch checked={settings.enterToSend} onChange={(enterToSend) => update({ enterToSend })} label={t('settings.enterToSend')} />
       </Card>
+      <Card title={t('shortcuts.title')}>
+        <p className="muted-text">{t('shortcuts.help')}</p>
+        <dl className="shortcut-list" data-testid="shortcut-list">
+          {(['menu', 'reply', 'edit', 'star', 'forward', 'info', 'delete', 'move'] as const).map((k) => (
+            <div key={k}><dt><kbd>{t(`shortcuts.key.${k}`)}</kbd></dt><dd>{t(`shortcuts.${k}`)}</dd></div>
+          ))}
+        </dl>
+      </Card>
     </>
   );
 }

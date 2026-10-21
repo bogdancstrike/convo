@@ -2377,3 +2377,10 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 
 /* Member search (specs §30.8) */
 .member-search { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); }
+
+/* Keyboard shortcuts list */
+.shortcut-list { display: grid; gap: var(--space-1); margin: 0; }
+.shortcut-list > div { display: flex; gap: var(--space-3); align-items: baseline; }
+.shortcut-list dt { min-width: 64px; }
+.shortcut-list dd { margin: 0; }
+kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-canvas); }
