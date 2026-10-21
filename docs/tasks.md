@@ -35,15 +35,15 @@ broader launch tasks, independent security review or complete Android/web parity
 - [ ] Complete native/web feature, button, layout, motion, localization and accessibility parity;
   remaining native group/channel/media operations and physical-device acceptance. All-media entry,
   requested footer, Save feedback, update/restart history and process-recreation download are adb verified.
-- [ ] Implement/test backend-configured attachment policy end to end (default 100 MiB).
-- [ ] Implement/test matching edit windows and revision-aware receipts across backend/web/Android.
-- [ ] Add All Media to Settings and media auto-download/gallery-saving preferences on both clients.
+- [x] Implement/test backend-configured attachment policy end to end (default 100 MiB).
+- [x] Implement/test matching edit windows and revision-aware receipts across backend/web/Android.
+- [x] Add All Media to Settings and media auto-download/gallery-saving preferences on both clients.
 - [x] Mobile-friendly Keycloak theme; full-width desktop/phone layout in both themes; hostname/TLS
   on ports 443/8443 for `convo.doncik.ro`; real WebAuthn registration and passwordless assertion.
-- [ ] Expose passkey enrollment/management after sign-in directly from Convo Settings.
-- [ ] Native app lock and hidden conversation locks using system biometric/PIN, gated by confirmed Keycloak passwordless enrollment; never store fingerprints/PINs in Convo.
+- [x] Expose passkey enrollment/management after sign-in directly from Convo Settings.
+- [x] Native app lock and hidden conversation locks using system biometric/PIN, gated by confirmed Keycloak passwordless enrollment; never store fingerprints/PINs in Convo.
 - [ ] Reviewed native core/Keystore/SQLCipher, lifecycle/background delivery, physical device
-  certification and iOS. Calls remain an explicitly requested placeholder.
+  certification and iOS. (Calls are implemented: ADR-0006.)
 
 Validation checkpoint: 123 web unit tests and backend tests passed before `89ef009`. A subsequent
 full LAN Chromium/Firefox suite passed 39/40 tests; the remaining Firefox safety-number test
