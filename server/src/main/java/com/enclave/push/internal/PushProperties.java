@@ -17,6 +17,8 @@ import org.springframework.validation.annotation.Validated;
  * @param minInterval at most one wake per device per interval
  * @param urgentMinInterval at most one urgent wake (call ring) per device per interval
  * @param timeout HTTP timeout for one wake
+ * @param maxAttempts attempts per wake (transport errors, 429 and 5xx are retried)
+ * @param retryBackoff delay before the first retry; doubles per attempt
  */
 @Validated
 @ConfigurationProperties("enclave.push")
@@ -26,4 +28,6 @@ public record PushProperties(
         @DefaultValue("") String internalOrigin,
         @DefaultValue("30s") @NotNull Duration minInterval,
         @DefaultValue("3s") @NotNull Duration urgentMinInterval,
-        @DefaultValue("5s") @NotNull Duration timeout) {}
+        @DefaultValue("5s") @NotNull Duration timeout,
+        @DefaultValue("4") @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(10) int maxAttempts,
+        @DefaultValue("2s") @NotNull Duration retryBackoff) {}

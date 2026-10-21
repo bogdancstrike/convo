@@ -228,9 +228,11 @@ class MainActivity : FragmentActivity() {
         sendPushEndpoint()
     }
 
+    private var sentPushEndpoint: String? = null
     private fun sendPushEndpoint() {
         val endpoint = PushRegistration.endpoint(this)
-        if (endpoint != null && !PushRegistration.synced(this)) call("setPushEndpoint", obj("endpoint" to endpoint), quiet = true) { if (it != null) PushRegistration.markSynced(this) }
+        // Once per process (and on every new endpoint): the server may have dropped a stale one.
+        if (endpoint != null && (!PushRegistration.synced(this) || sentPushEndpoint != endpoint)) call("setPushEndpoint", obj("endpoint" to endpoint), quiet = true) { sentPushEndpoint = endpoint; PushRegistration.markSynced(this) }
     }
     /** Notification tap: open that chat (lock rules apply in openChat). */
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) } }

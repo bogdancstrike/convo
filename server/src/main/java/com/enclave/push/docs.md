@@ -19,6 +19,12 @@ Content-free wake-ups for devices without a live connection, through a self-host
    shows a ringing, full-screen-capable "Incoming call" notification without the caller; opening
    it connects, decrypts the ring and shows the real call screen.
 
+Delivery: transport errors, 429 and 5xx are retried with exponential backoff (`max-attempts`,
+default 4; `retry-backoff`, default 2 s, doubling). 404/410 mean the distributor dropped the
+topic: the endpoint is forgotten and the app re-registers it on its next start (it re-sends its
+endpoint once per process). Other 4xx are not retried. Retries are in memory: a server restart
+during the ~14 s retry window loses that wake (the message itself is safe in the mailbox).
+
 Presence: closing a device's last socket on a replica deletes its Valkey presence key
 (compare-and-delete), so a killed app counts as offline immediately rather than after the
 90 s TTL.

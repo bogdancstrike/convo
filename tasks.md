@@ -97,7 +97,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   wake while connected. Call ringing via push: rings are sent `urgent`; an urgent wake shows a
   ringing generic "Incoming call" (full-screen intent); verified: killed app → web call → ring
   notification → tap → Accept → connected, encrypted. Socket close clears presence at once.
-  FCM (Google devices without a distributor) remains open.
+  Failed wakes are retried with backoff (verified by stopping ntfy during a send); vanished
+  endpoints are forgotten and re-registered by the app. FCM (Google devices without a
+  distributor) remains open.
 - Batch selection (FEAT-02): select up to 100 messages to copy, star, forward to one chat or
   delete for me (confirmed, partial outcomes reported). Web (`selection.spec.ts`) and Android
   (message menu → Select); emulator verified.
@@ -254,7 +256,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Albums, voice notes, resumable uploads | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
 | Group leave/roles/invites, communities | GRP-03, COM-01/02 |
-| FCM fallback, durable push intents (outbox + retries) | MSG-02 |
+| FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |
 
