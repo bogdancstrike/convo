@@ -29,8 +29,13 @@ class AdminController {
     private final AdminActions actions;
     private final AuditCheckpoints checkpoints;
 
-    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints) {
+    private final AdminProperties properties;
+    private final java.time.Clock clock;
+
+    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints, AdminProperties properties, java.time.Clock clock) {
         this.checkpoints = checkpoints;
+        this.properties = properties;
+        this.clock = clock;
         this.identity = identity;
         this.audit = audit;
         this.actions = actions;
@@ -49,16 +54,19 @@ class AdminController {
 
     @PostMapping("/accounts/{accountId}/disable")
     AuditLog.Entry disable(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @Valid @RequestBody Reason body) {
+        requireRecentSignIn(admin);
         return actions.setDisabled(actor(admin), accountId, true, body.reason());
     }
 
     @PostMapping("/accounts/{accountId}/enable")
     AuditLog.Entry enable(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @Valid @RequestBody Reason body) {
+        requireRecentSignIn(admin);
         return actions.setDisabled(actor(admin), accountId, false, body.reason());
     }
 
     @PostMapping("/accounts/{accountId}/devices/{deviceId}/revoke")
     AuditLog.Entry revoke(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @PathVariable int deviceId, @Valid @RequestBody Reason body) {
+        requireRecentSignIn(admin);
         return actions.revokeDevice(actor(admin), accountId, deviceId, body.reason());
     }
 
@@ -86,6 +94,15 @@ class AdminController {
     AuditLog.FullVerification checkpointNow() throws java.io.IOException {
         checkpoints.checkpoint();
         return verify();
+    }
+
+    /** Step-up: the IdP sign-in behind this token ({@code auth_time}) must be recent. */
+    private void requireRecentSignIn(Jwt admin) {
+        Object claim = admin.getClaim("auth_time");
+        long authTime = claim instanceof Number n ? n.longValue() : claim instanceof java.time.Instant i ? i.getEpochSecond() : 0;
+        if (authTime == 0 || java.time.Instant.ofEpochSecond(authTime).plus(properties.stepUpMaxAge()).isBefore(clock.instant())) {
+            throw new EnclaveException(ErrorCode.STEP_UP_REQUIRED, "sign in again to confirm this action");
+        }
     }
 
     private void requireAccount(UUID accountId) {

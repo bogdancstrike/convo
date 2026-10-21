@@ -16,4 +16,8 @@ whose `realm_access.roles` contains `enclave.admin.role` (default `convo-admin`)
 signature is involved. The web console is `apps/web/admin.html`, served at `/admin`; production
 deployments should serve it from a separate origin.
 
-Not yet: scoped/limited admin roles, step-up authentication, signed policies, and auditing of read-only lookups/denials.
+Step-up: disable/enable/revoke require the token's `auth_time` to be within
+`enclave.admin.step-up-max-age` (default 10 min); otherwise `STEP_UP_REQUIRED` and the console
+sends the admin through sign-in again.
+
+Not yet: scoped/limited admin roles, signed policies, and auditing of read-only lookups/denials.

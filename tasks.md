@@ -131,7 +131,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   `convo-admin`; account search, disable/enable and device revoke with mandatory reasons, each
   committed with a hash-chained audit entry (V18) and a verify endpoint. No access to chat data.
   Chain heads are checkpointed to an independent append-only file (volume `audit-checkpoints`);
-  verification also compares the database against every checkpoint.
+  verification also compares the database against every checkpoint. Step-up: sensitive actions
+  need a sign-in at most 10 minutes old (`STEP_UP_REQUIRED`, unit-tested).
   `admin.spec.ts` Chromium/Firefox (role required, disabled device denied, chain intact).
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.

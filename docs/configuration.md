@@ -98,6 +98,7 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `enclave.groups.invite-ttl` / `max-join-requests` | `ENCLAVE_GROUPS_INVITE_TTL` / `ENCLAVE_GROUPS_MAX_JOIN_REQUESTS` | `7d` / `200` | Invite link lifetime and pending join requests per group. |
 | `enclave.admin.role` | `ENCLAVE_ADMIN_ROLE` | `convo-admin` | Keycloak realm role required for `/v1/admin/**` and the `/admin` console. `CONVO_ADMIN_USERNAMES` (Compose, default `bogdan`) lists dev users that `keycloak-setup` grants it. |
 | `enclave.admin.checkpoint-file` / `checkpoint-interval` | `ENCLAVE_ADMIN_CHECKPOINT_FILE` / `ENCLAVE_ADMIN_CHECKPOINT_INTERVAL` | empty (Compose: `/var/lib/convo/audit/checkpoints.log` on volume `audit-checkpoints`) / `15m` | Independent audit chain checkpoints; verification fails if the database disagrees with any of them. |
+| `enclave.admin.step-up-max-age` | `ENCLAVE_ADMIN_STEP_UP_MAX_AGE` | `10m` | Sensitive admin actions require an IdP sign-in at most this old (`STEP_UP_REQUIRED` otherwise). |
 | `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
 | `retention` | | `30d` | Object lifetime |
 | `purge-interval` | | `PT1H` | |

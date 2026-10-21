@@ -14,13 +14,15 @@ import org.springframework.validation.annotation.Validated;
  * @param checkpointFile append-only file (ideally on separate, write-once storage) that receives the
  *     audit chain head; empty disables checkpointing
  * @param checkpointInterval how often a new head is written when the chain grew
+ * @param stepUpMaxAge sensitive actions require an IdP sign-in (token {@code auth_time}) at most this old
  */
 @Validated
 @ConfigurationProperties("enclave.admin")
 public record AdminProperties(
         @DefaultValue("convo-admin") String role,
         @DefaultValue("") String checkpointFile,
-        @DefaultValue("15m") @NotNull Duration checkpointInterval) {
+        @DefaultValue("15m") @NotNull Duration checkpointInterval,
+        @DefaultValue("10m") @NotNull Duration stepUpMaxAge) {
 
     Path checkpointPath() { return checkpointFile.isBlank() ? null : Path.of(checkpointFile); }
 }

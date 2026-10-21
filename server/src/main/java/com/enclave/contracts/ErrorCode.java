@@ -37,6 +37,8 @@ public enum ErrorCode {
     ENROLLMENT_INVALID(HttpStatus.CONFLICT, "Enrollment no longer valid"),
     /** Account is disabled by the organization. */
     ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "Account disabled"),
+    /** A sensitive action needs a fresh sign-in (step-up authentication). */
+    STEP_UP_REQUIRED(HttpStatus.UNAUTHORIZED, "Recent sign-in required"),
 
     // --- messaging -----------------------------------------------------------------------------
     /** Recipient device list changed; body carries missing/extra/stale device IDs. */

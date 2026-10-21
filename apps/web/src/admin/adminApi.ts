@@ -45,7 +45,10 @@ export class AdminApi {
       method, headers: { Authorization: `Bearer ${user.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined, cache: 'no-store',
     });
-    if (!response.ok) throw new AdminError(response.status);
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({})) as { code?: string };
+      throw new AdminError(response.status, problem.code);
+    }
     return response.json() as Promise<T>;
   }
 
@@ -59,5 +62,5 @@ export class AdminApi {
 }
 
 export class AdminError extends Error {
-  constructor(readonly status: number) { super(`admin request failed: ${status}`); this.name = 'AdminError'; }
+  constructor(readonly status: number, readonly code?: string) { super(`admin request failed: ${status}`); this.name = 'AdminError'; }
 }

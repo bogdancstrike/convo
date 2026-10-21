@@ -12,8 +12,10 @@ export function AdminApp() {
   const [tab, setTab] = useState<'accounts' | 'audit'>('accounts');
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { void AdminApi.create().then(async (a) => { setApi(a); setAdmin(await a.session()); }).catch(() => setError('The server is unreachable.')); }, []);
-  const fail = useCallback((e: unknown) => setError(e instanceof AdminError && e.status === 403 ? 'Your account does not have the Convo administrator role.'
-    : e instanceof AdminError && e.status === 401 ? 'Your session expired. Sign in again.' : 'The request failed.'), []);
+  const [stepUp, setStepUp] = useState(false);
+  const fail = useCallback((e: unknown) => { setStepUp(e instanceof AdminError && e.code === 'STEP_UP_REQUIRED'); setError(e instanceof AdminError && e.code === 'STEP_UP_REQUIRED' ? 'For your protection, sign in again to confirm this change.'
+    : e instanceof AdminError && e.status === 403 ? 'Your account does not have the Convo administrator role.'
+    : e instanceof AdminError && e.status === 401 ? 'Your session expired. Sign in again.' : 'The request failed.'); }, []);
   if (admin === undefined) return <main className="admin"><p role="status">Loading…</p>{error && <p role="alert">{error}</p>}</main>;
   if (!admin || !api) {
     return (
@@ -38,6 +40,7 @@ export function AdminApp() {
         <button className="btn" onClick={() => void api.signOut().then(() => setAdmin(null))}>Sign out</button>
       </header>
       {error && <p role="alert" className="failed" data-testid="admin-error">{error}</p>}
+      {stepUp && <button className="btn btn-primary" onClick={() => void api.signIn()} data-testid="admin-step-up">Sign in again</button>}
       {tab === 'accounts' ? <Accounts api={api} onError={fail} /> : <Audit api={api} onError={fail} />}
     </main>
   );
