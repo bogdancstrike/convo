@@ -23,6 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 class AuditLog {
     record Entry(long seq, Instant at, String actor, String action, String target, String reason, String hash) {}
     record Verification(boolean valid, long entries, String head, Long firstBrokenSeq) {}
+    /** Verification plus comparison with independent checkpoints ({@code checkpointMismatchSeq} = first disagreeing one). */
+    record FullVerification(boolean valid, long entries, String head, Long firstBrokenSeq, int checkpointsChecked, Long checkpointMismatchSeq) {}
+
+    /** Head hash after each entry (index = seq - 1), for checkpoint comparison. */
+    @Transactional(readOnly = true)
+    List<String> heads() {
+        return jdbc.sql("SELECT hash FROM admin_audit ORDER BY seq").query((rs, i) -> HexFormat.of().formatHex(rs.getBytes(1))).list();
+    }
 
     static final byte[] GENESIS = new byte[32];
     private final JdbcClient jdbc;

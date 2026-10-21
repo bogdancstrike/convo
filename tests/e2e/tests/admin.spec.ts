@@ -52,6 +52,8 @@ test('an organization admin disables and re-enables an account; the audit chain 
     await expect(admin.getByTestId('admin-audit-entry').filter({ hasText: `review closed ${memberU.username}` })).toContainText('account.enable');
     await admin.getByTestId('admin-verify').click();
     await expect(admin.getByTestId('admin-verification')).toContainText('Chain intact');
+    await admin.getByTestId('admin-checkpoint').click();
+    await expect(admin.getByTestId('admin-verification')).toContainText(/independent checkpoint\(s\) match/);
 
     // Re-enabled accounts work again.
     await member.reload({ waitUntil: 'domcontentloaded' });

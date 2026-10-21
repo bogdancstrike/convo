@@ -130,6 +130,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Admin console (ADM-01, first slice): `admin` module + `/admin` page for Keycloak role
   `convo-admin`; account search, disable/enable and device revoke with mandatory reasons, each
   committed with a hash-chained audit entry (V18) and a verify endpoint. No access to chat data.
+  Chain heads are checkpointed to an independent append-only file (volume `audit-checkpoints`);
+  verification also compares the database against every checkpoint.
   `admin.spec.ts` Chromium/Firefox (role required, disabled device denied, chain intact).
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.

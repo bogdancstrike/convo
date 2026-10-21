@@ -7,7 +7,8 @@ COPY src src
 RUN gradle bootJar --no-daemon -q -x test
 
 FROM eclipse-temurin:21-jre
-RUN groupadd --system --gid 10001 enclave && useradd --system --uid 10001 --gid enclave enclave
+RUN groupadd --system --gid 10001 enclave && useradd --system --uid 10001 --gid enclave enclave \
+  && mkdir -p /var/lib/convo/audit && chown 10001:10001 /var/lib/convo/audit
 WORKDIR /app
 COPY --from=build /src/build/libs/enclave-server.jar /app/enclave-server.jar
 USER 10001

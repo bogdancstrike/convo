@@ -27,8 +27,10 @@ class AdminController {
     private final IdentityAdminApi identity;
     private final AuditLog audit;
     private final AdminActions actions;
+    private final AuditCheckpoints checkpoints;
 
-    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions) {
+    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints) {
+        this.checkpoints = checkpoints;
         this.identity = identity;
         this.audit = audit;
         this.actions = actions;
@@ -67,8 +69,23 @@ class AdminController {
 
     /** Recomputes the chain; export {@code head} to an independent store to detect later rewrites. */
     @GetMapping("/audit/verify")
-    AuditLog.Verification verify() {
-        return audit.verify();
+    AuditLog.FullVerification verify() throws java.io.IOException {
+        var chain = audit.verify();
+        var heads = audit.heads();
+        Long mismatch = null; int checked = 0;
+        for (var checkpoint : checkpoints.read()) {
+            checked++;
+            String actual = checkpoint.seq() >= 1 && checkpoint.seq() <= heads.size() ? heads.get((int) checkpoint.seq() - 1) : null;
+            if (!checkpoint.head().equals(actual)) { mismatch = checkpoint.seq(); break; }
+        }
+        return new AuditLog.FullVerification(chain.valid() && mismatch == null, chain.entries(), chain.head(), chain.firstBrokenSeq(), checked, mismatch);
+    }
+
+    /** Writes a checkpoint now (e.g. right after an incident review). */
+    @PostMapping("/audit/checkpoint")
+    AuditLog.FullVerification checkpointNow() throws java.io.IOException {
+        checkpoints.checkpoint();
+        return verify();
     }
 
     private void requireAccount(UUID accountId) {

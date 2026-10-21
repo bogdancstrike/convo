@@ -9,7 +9,7 @@ import { loadDeploymentInfo } from '../config/deployment';
 export interface AccountSummary { accountId: string; username: string; displayName: string | null; status: string; activeDevices: number }
 export interface DeviceSummary { deviceId: number; platform: string; createdAt: string; lastSeenDay: string | null }
 export interface AuditEntry { seq: number; at: string; actor: string; action: string; target: string; reason: string; hash: string }
-export interface AuditVerification { valid: boolean; entries: number; head: string; firstBrokenSeq: number | null }
+export interface AuditVerification { valid: boolean; entries: number; head: string; firstBrokenSeq: number | null; checkpointsChecked: number; checkpointMismatchSeq: number | null }
 
 export class AdminApi {
   private constructor(private readonly users: UserManager) {}
@@ -55,6 +55,7 @@ export class AdminApi {
   revoke(accountId: string, deviceId: number, reason: string) { return this.call<AuditEntry>('POST', `/accounts/${accountId}/devices/${deviceId}/revoke`, { reason }); }
   audit() { return this.call<AuditEntry[]>('GET', '/audit?limit=200'); }
   verify() { return this.call<AuditVerification>('GET', '/audit/verify'); }
+  checkpoint() { return this.call<AuditVerification>('POST', '/audit/checkpoint'); }
 }
 
 export class AdminError extends Error {

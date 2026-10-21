@@ -106,6 +106,9 @@ services:
   server:
     build: ./server
     image: enclave/server:dev
+    volumes:
+      # Audit chain checkpoints (ADM-01). Production: mount write-once/off-host storage here.
+      - audit-checkpoints:/var/lib/convo/audit
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/enclave
       DB_USER: enclave
@@ -124,6 +127,7 @@ services:
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ENABLED: "true"
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_ADMIN_URL: http://keycloak:8080/auth
       ENCLAVE_IDENTITY_CREDENTIAL_STATUS_CLIENT_SECRET: ${CONVO_CREDENTIAL_STATUS_SECRET:-}
+      ENCLAVE_ADMIN_CHECKPOINT_FILE: /var/lib/convo/audit/checkpoints.log
       ENCLAVE_CALLS_ENABLED: "true"
       ENCLAVE_CALLS_API_SECRET: ${CONVO_LIVEKIT_SECRET:-convo-dev-livekit-secret-change-me-0123}
     depends_on:
@@ -222,6 +226,7 @@ services:
       web: { condition: service_healthy }
 
 volumes:
+  audit-checkpoints:
   keycloak-data:
   web-tls:
   pgadmin-data:

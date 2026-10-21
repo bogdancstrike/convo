@@ -97,6 +97,7 @@ Values are validated at start-up; an invalid value prevents the server from star
 | `enclave.calls.enabled` / `api-key` / `api-secret` / `livekit-path` / `token-ttl` / `max-call-age` / `max-group-participants` | `ENCLAVE_CALLS_*`; secret from `CONVO_LIVEKIT_SECRET` | disabled, `convo`, –, `/rtc`, `10m`, `12h`, `16` | LiveKit room tokens (ADR-0006). The same secret configures the `livekit` service; `CONVO_TURN_PASSWORD` configures coturn. |
 | `enclave.groups.invite-ttl` / `max-join-requests` | `ENCLAVE_GROUPS_INVITE_TTL` / `ENCLAVE_GROUPS_MAX_JOIN_REQUESTS` | `7d` / `200` | Invite link lifetime and pending join requests per group. |
 | `enclave.admin.role` | `ENCLAVE_ADMIN_ROLE` | `convo-admin` | Keycloak realm role required for `/v1/admin/**` and the `/admin` console. `CONVO_ADMIN_USERNAMES` (Compose, default `bogdan`) lists dev users that `keycloak-setup` grants it. |
+| `enclave.admin.checkpoint-file` / `checkpoint-interval` | `ENCLAVE_ADMIN_CHECKPOINT_FILE` / `ENCLAVE_ADMIN_CHECKPOINT_INTERVAL` | empty (Compose: `/var/lib/convo/audit/checkpoints.log` on volume `audit-checkpoints`) / `15m` | Independent audit chain checkpoints; verification fails if the database disagrees with any of them. |
 | `upload-url-ttl` / `download-url-ttl` | | `15m` / `5m` | |
 | `retention` | | `30d` | Object lifetime |
 | `purge-interval` | | `PT1H` | |

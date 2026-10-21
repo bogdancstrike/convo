@@ -96,8 +96,10 @@ function Audit({ api, onError }: { api: AdminApi; onError: (e: unknown) => void 
     <section>
       <p className="muted-text">Every administrative change with its reason. Each entry's hash covers the previous one; store the chain head elsewhere to detect database rewrites.</p>
       <button className="btn btn-primary" onClick={() => void api.verify().then(setVerification).catch(onError)} data-testid="admin-verify">Verify chain</button>
+      <button className="btn" onClick={() => void api.checkpoint().then(setVerification).catch(onError)} data-testid="admin-checkpoint">Write checkpoint now</button>
       {verification && <p role="status" data-testid="admin-verification" className={verification.valid ? '' : 'failed'}>
-        {verification.valid ? `Chain intact: ${verification.entries} entries, head ${verification.head.slice(0, 16)}…` : `Chain broken at entry ${verification.firstBrokenSeq}`}</p>}
+        {verification.valid ? `Chain intact: ${verification.entries} entries, head ${verification.head.slice(0, 16)}…, ${verification.checkpointsChecked} independent checkpoint(s) match`
+          : verification.checkpointMismatchSeq ? `Database disagrees with the independent checkpoint at entry ${verification.checkpointMismatchSeq}` : `Chain broken at entry ${verification.firstBrokenSeq}`}</p>}
       <table className="admin-table">
         <thead><tr><th>#</th><th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Reason</th></tr></thead>
         <tbody>{entries.map((e) => <tr key={e.seq} data-testid="admin-audit-entry"><td>{e.seq}</td><td>{new Date(e.at).toLocaleString()}</td><td>{e.actor}</td><td>{e.action}</td><td>{e.target}</td><td>{e.reason}</td></tr>)}</tbody>
