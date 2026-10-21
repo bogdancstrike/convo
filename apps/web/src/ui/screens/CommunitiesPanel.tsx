@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CommunityGroup, CommunityView, EnclaveClient } from '../../core/client';
+import type { CommunityGroup, CommunityView, EnclaveClient, OnboardingView } from '../../core/client';
+import { OnboardingEditor, WelcomeCard } from './Onboarding';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { useI18n } from '../i18n/i18n';
@@ -103,6 +104,8 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
   const [groups, setGroups] = useState<CommunityGroup[] | null>(null);
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [onboarding, setOnboarding] = useState<OnboardingView | undefined>();
   const [error, setError] = useState<string | null>(null);
   const manager = community.role === 'owner' || community.role === 'admin';
   // Re-render when secure group state arrives: a group the server lists as joined opens only
@@ -110,7 +113,11 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
   const [, setVersion] = useState(0);
   useEffect(() => client.on('conversations', () => setVersion((v) => v + 1)), [client]);
   const ready = (conversationId: string) => !!client.conversation(conversationId);
-  const load = useCallback(() => void client.communityGroups(community).then(setGroups).catch(() => setError(t('community.loadFailed'))), [client, community, t]);
+  const load = useCallback(() => {
+    void client.communityGroups(community).then(setGroups).catch(() => setError(t('community.loadFailed')));
+    void client.onboarding(community).then(setOnboarding).catch(() => undefined);
+  }, [client, community, t]);
+  const askToJoin = (groupId: string) => { setError(null); void client.requestCommunityGroup(community, groupId).then(() => setRequested((r) => new Set(r).add(groupId))).catch(() => setError(t('community.actionFailed'))); };
   useEffect(() => { load(); return client.on('groups', load); }, [client, load]);
   const act = (work: Promise<unknown>) => { setError(null); void work.then(load).catch(() => setError(t('community.actionFailed'))); };
 
@@ -122,6 +129,8 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
       </header>
       <div className="panel-body">
         {community.description && <p className="community-description" data-testid="community-about">{community.description}</p>}
+        {onboarding && !editing && <WelcomeCard client={client} community={community} view={onboarding} groups={groups ?? []} onAskToJoin={askToJoin} />}
+        {manager && editing && <OnboardingEditor client={client} community={community} view={onboarding} groups={groups ?? []} onClose={() => { setEditing(false); load(); }} />}
         <ul className="list">
           <li>
             <button className="row" disabled={!ready(community.conversationId)} onClick={() => onOpenChat(community.conversationId)} data-testid="community-announcements">
@@ -130,6 +139,15 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
                 <span className="row-preview">{t(manager ? 'community.announcementsAdmin' : 'community.announcementsMember')}</span></span>
             </button>
           </li>
+          {manager && !editing && (
+            <li>
+              <button className="row action" onClick={() => setEditing(true)} data-testid="edit-onboarding">
+                <span className="action-icon"><Icon name="note" /></span>
+                <span className="row-main"><span className="row-title">{t('onboarding.edit')}</span>
+                  <span className="row-preview">{t('onboarding.editHelp')}</span></span>
+              </button>
+            </li>
+          )}
           {manager && (
             <li>
               <button className="row action" onClick={() => onOpenChat(community.conversationId, true)} data-testid="community-invite">
@@ -156,10 +174,7 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
                 {g.canAccept && <button className="btn btn-primary" onClick={() => act(client.acceptCommunityLink(community, g.groupId))} data-testid="community-accept">{t('community.accept')}</button>}
                 {g.status === 'active' && !g.member && g.visibility === 'discoverable' && (requested.has(g.groupId)
                   ? <span className="muted-text" data-testid="community-requested">{t('community.requested')}</span>
-                  : <button className="btn btn-primary" data-testid="community-join" onClick={() => {
-                    setError(null);
-                    void client.requestCommunityGroup(community, g.groupId).then(() => setRequested((r) => new Set(r).add(g.groupId))).catch(() => setError(t('community.actionFailed')));
-                  }}>{t('community.askToJoin')}</button>)}
+                  : <button className="btn btn-primary" data-testid="community-join" onClick={() => askToJoin(g.groupId)}>{t('community.askToJoin')}</button>)}
                 {(manager || g.canAccept) && <button className="btn btn-ghost" onClick={() => act(client.unlinkCommunityGroup(community, g.groupId))} data-testid="community-unlink">{t('community.unlink')}</button>}
               </span>
             </li>

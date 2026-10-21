@@ -201,6 +201,13 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'linkCommunityGroup': return client.linkGroupToCommunity(await community(args.id), String(args.conversationId), args.visibility === 'private' ? 'private' : 'discoverable');
     case 'acceptCommunityLink': return client.acceptCommunityLink(await community(args.id), String(args.groupId));
     case 'unlinkCommunityGroup': return client.unlinkCommunityGroup(await community(args.id), String(args.groupId));
+    case 'onboarding': return client.onboarding(await community(args.id));
+    case 'saveOnboarding': return client.saveOnboarding(await community(args.id), {
+      welcome: String(args.welcome ?? ''), rules: String(args.rules ?? ''), ackRequired: args.ackRequired === true,
+      recommended: Array.isArray(args.recommended) ? args.recommended.map(String) : [],
+      checklist: Array.isArray(args.checklist) ? args.checklist.map((i: Record<string, unknown>) => ({ id: String(i.id), label: String(i.label), required: i.required === true })) : [] });
+    case 'setChecklistItem': return client.setChecklistItem(await community(args.id), String(args.itemId), args.done === true);
+    case 'acknowledgeRules': return client.acknowledgeRules(await community(args.id));
     case 'requestCommunityGroup': return client.requestCommunityGroup(await community(args.id), String(args.groupId));
     case 'rotateCallKey': return client.rotateCallKey(String(args.conversationId), String(args.callId), Number(args.after));
     case 'endCall': return client.endCall(String(args.callId), String(args.conversationId), Boolean(args.answered));

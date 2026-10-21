@@ -19,6 +19,10 @@ export const RecordNs = {
   knownDevices: 'known-devices',
   /** Device-local call history (`CallLogEntry`). */
   callLog: 'call-log',
+  /** Private community onboarding progress per root group (`OnboardingProgress`). */
+  onboarding: 'onboarding',
+  /** Reviewer only: rules acknowledgements per root group (current version only). */
+  rulesAcks: 'rules-acks',
 } as const;
 
 export class Repositories {

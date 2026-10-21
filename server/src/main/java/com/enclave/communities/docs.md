@@ -33,8 +33,16 @@ each reviewer plus own-device sync (no server endpoint, no feed post, independen
 reviewers accept it only from the audience for the current request revision and count it only for
 the current content revision, so edits ask again. The server sees ordinary pairwise envelopes.
 
+Newcomer onboarding (§30.7) is also client-only E2EE: `CommunityMeta.onboarding` holds a
+versioned package (welcome, rules text + digest + version, optional rules acknowledgement with
+reviewers, recommended discoverable groups, ≤ 20 checklist items), valid only from a current root
+owner/admin. The rules version advances only when the rules text changes. Checklist progress is a
+private record synced to own devices (`sync.onboarding`, higher mutation counter wins); rules
+acknowledgements are a typed `rulesAck` (version + digest) to the named reviewers, who keep only
+the current version's responses. Recommendations never enroll anyone.
+
 Not yet (later COM slices): due dates/expiry/withdrawal and custom reviewer selection for
-acknowledgements, newcomer onboarding (§30.7),
+acknowledgements,
 parent-removal delegation and tracked membership operations (§30.3), owner-transfer rules for
 community leave.
 

@@ -145,6 +145,8 @@ export interface SyncMessage {
   sent?: { destination: string; data: DataMessage };
   /** Read cursor of a conversation advanced on another device. */
   read?: { conversationId: string; upTo: number };
+  /** Private onboarding checklist progress (own devices only; higher counter wins). */
+  onboarding?: { conversationId: string; itemId: string; done: boolean; counter: number };
 }
 
 /**
@@ -165,6 +167,29 @@ export interface GroupMeta {
 export interface CommunityMeta {
   description: string;
   links: { groupId: string; name: string }[];
+  /** Newcomer onboarding package (specs §30.7), edited by root owners/admins. */
+  onboarding?: OnboardingPackage;
+}
+
+/** Versioned onboarding package. `revision` changes on every edit; rules keep their own version. */
+export interface OnboardingPackage {
+  revision: number;
+  /** Account that published this revision (must be a root owner/admin). */
+  editor: string;
+  welcome: string;
+  rules?: { version: number; text: string; digest: string; ackRequired: boolean; reviewers: string[] };
+  /** Recommended linked groups (discoverable ones only; never auto-joined). */
+  recommended: string[];
+  checklist: { id: string; label: string; required: boolean }[];
+  contact?: string;
+}
+
+/** Explicit acknowledgement of a community's rules version, sent to the named reviewers. */
+export interface RulesAck {
+  conversationId: string;
+  version: number;
+  digest: string;
+  timestamp: number;
 }
 
 /**
@@ -201,7 +226,8 @@ export type Content =
   | { v: number; kind: 'call'; call: CallMessage }
   | { v: number; kind: 'groupMeta'; groupMeta: GroupMeta }
   | { v: number; kind: 'profile'; profile: UserProfile }
-  | { v: number; kind: 'ack'; ack: AckResponse };
+  | { v: number; kind: 'ack'; ack: AckResponse }
+  | { v: number; kind: 'rulesAck'; rulesAck: RulesAck };
 
 /** Content this client cannot interpret. */
 export interface UnknownContent {
@@ -244,6 +270,11 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       if (parsed.sync.sent !== undefined && (!isObject(parsed.sync.sent) || !isDataMessage(parsed.sync.sent.data))) {
         throw new Error('malformed sync transcript');
       }
+      if (parsed.sync.onboarding !== undefined) {
+        const o = parsed.sync.onboarding;
+        if (!isObject(o) || typeof o.conversationId !== 'string' || typeof o.itemId !== 'string' || !ID.test(o.itemId)
+          || typeof o.done !== 'boolean' || !Number.isSafeInteger(o.counter)) throw new Error('malformed onboarding sync');
+      }
       return parsed as unknown as Content;
     case 'typing':
       return parsed as unknown as Content;
@@ -252,6 +283,9 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       return parsed as unknown as Content;
     case 'ack':
       if (!isAckResponse(parsed.ack)) throw new Error('malformed acknowledgement');
+      return parsed as unknown as Content;
+    case 'rulesAck':
+      if (!isRulesAck(parsed.rulesAck)) throw new Error('malformed rules acknowledgement');
       return parsed as unknown as Content;
     case 'groupMeta':
       if (
@@ -300,7 +334,29 @@ function isAckResponse(value: unknown): value is AckResponse {
 function isCommunityMeta(value: unknown): value is CommunityMeta {
   return isObject(value) && typeof value.description === 'string' && value.description.length <= 1000 && Array.isArray(value.links)
     && value.links.length <= 50 && value.links.every((l) => isObject(l) && typeof l.groupId === 'string' && /^[A-Za-z0-9_-]{43}$/.test(l.groupId)
-      && typeof l.name === 'string' && l.name.length > 0 && l.name.length <= 128);
+      && typeof l.name === 'string' && l.name.length > 0 && l.name.length <= 128)
+    && (value.onboarding === undefined || isOnboarding(value.onboarding));
+}
+
+const GROUP_ID = /^[A-Za-z0-9_-]{43}$/;
+function isOnboarding(value: unknown): value is OnboardingPackage {
+  if (!isObject(value) || !Number.isSafeInteger(value.revision) || typeof value.editor !== 'string' || !ID.test(value.editor)) return false;
+  if (typeof value.welcome !== 'string' || value.welcome.length > 4000) return false;
+  if (value.contact !== undefined && (typeof value.contact !== 'string' || value.contact.length > 200)) return false;
+  if (!Array.isArray(value.recommended) || value.recommended.length > 20 || !value.recommended.every((g) => typeof g === 'string' && GROUP_ID.test(g))) return false;
+  if (!Array.isArray(value.checklist) || value.checklist.length > 20 || !value.checklist.every((i) => isObject(i) && typeof i.id === 'string' && ID.test(i.id)
+    && typeof i.label === 'string' && i.label.length > 0 && i.label.length <= 120 && typeof i.required === 'boolean')) return false;
+  if (value.rules !== undefined) {
+    const r = value.rules;
+    if (!isObject(r) || !Number.isSafeInteger(r.version) || (r.version as number) < 1 || typeof r.text !== 'string' || r.text.length > 8000
+      || typeof r.digest !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(r.digest) || typeof r.ackRequired !== 'boolean' || !isIdList(r.reviewers, 10)) return false;
+  }
+  return true;
+}
+
+function isRulesAck(value: unknown): value is RulesAck {
+  return isObject(value) && typeof value.conversationId === 'string' && /^g:[A-Za-z0-9_-]{43}$/.test(value.conversationId)
+    && Number.isSafeInteger(value.version) && typeof value.digest === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value.digest) && Number.isFinite(value.timestamp);
 }
 
 function isRevision(value: unknown): value is number {

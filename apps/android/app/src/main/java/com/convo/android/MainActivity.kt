@@ -259,6 +259,7 @@ class MainActivity : FragmentActivity() {
             route == "thread" && threadSearch -> threadSearch = false
             route.startsWith("contact-media:") -> route = route.replace("contact-media:", "contact:")
             route.startsWith("contact:") -> route = "info"
+            route.startsWith("community-onboarding:") -> route = "community:" + route.substringAfter(':')
             route == "new-community" || route.startsWith("community:") -> route = "list"
             route in listOf("media", "starred", "appearance", "members") -> route = "info"
             route == "info" -> route = "thread"

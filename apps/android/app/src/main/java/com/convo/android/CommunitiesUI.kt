@@ -64,12 +64,14 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
 @Composable fun CommunityDetail(app: MainActivity, communityId: String) {
     var community by remember(communityId) { mutableStateOf<JSONObject?>(null) }
     var groups by remember(communityId) { mutableStateOf<List<JSONObject>?>(null) }
+    var onboarding by remember(communityId) { mutableStateOf<JSONObject?>(null) }
     var requested by remember(communityId) { mutableStateOf(setOf<String>()) }
     var adding by remember { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
     LaunchedEffect(communityId, app.snapshot, refresh) {
         app.call("communities", quiet = true) { v -> community = (v as? JSONArray)?.objects()?.find { it.optString("communityId") == communityId } }
         app.call("communityGroups", obj("id" to communityId), quiet = true) { v -> groups = (v as? JSONArray)?.objects().orEmpty() }
+        app.call("onboarding", obj("id" to communityId), quiet = true) { v -> onboarding = v as? JSONObject }
     }
     val c = community ?: run { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; return }
     val manager = c.optString("role") in listOf("owner", "admin")
@@ -82,10 +84,14 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                 RawText(c.optString("name").ifBlank { tr("Community") }, style = MaterialTheme.typography.headlineSmall)
                 if (c.optString("description").isNotBlank()) RawText(c.optString("description"), style = MaterialTheme.typography.bodyMedium)
             }
+            onboarding?.let { view -> WelcomeCard(app, communityId, JSONObject(view.toString()).put("communityName", c.optString("name")), groups.orEmpty(), { refresh++ }) { gid ->
+                app.call("requestCommunityGroup", obj("id" to communityId, "groupId" to gid)) { requested = requested + gid } } }
             val root = c.optString("conversationId")
             ListItem(headlineContent = { Text("Announcements") }, supportingContent = { Text(if (manager) "Post updates to everyone in the community" else "Updates from the community admins") },
                 leadingContent = { Icon(Icons.Outlined.Campaign, null) },
                 modifier = Modifier.clickable(enabled = ready(root)) { app.openChatFrom(root) }.testTag("community-announcements"))
+            if (manager) ListItem(headlineContent = { Text("Welcome & rules") }, supportingContent = { Text("What new members see first; encrypted for members only") },
+                leadingContent = { Icon(Icons.Outlined.Campaign, null) }, modifier = Modifier.clickable { app.route = "community-onboarding:$communityId" })
             if (manager) ListItem(headlineContent = { Text("Invite members") }, supportingContent = { Text("Share the announcements’ invite link; you approve each request.") },
                 leadingContent = { Icon(Icons.Outlined.Link, null) }, modifier = Modifier.clickable(enabled = ready(root)) { app.openChatFrom(root); app.route = "info" })
             Text("Groups in this community", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
@@ -138,5 +144,144 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                 }
             }
         }, confirmButton = { TextButton(onClick = { adding = false }) { Text("Cancel") } })
+    }
+}
+
+/** Standard checklist item labels (stable IDs shared with the web client). */
+internal val presetItems = mapOf("read-description" to "Read the community description", "ack-rules" to "Acknowledge the rules",
+    "choose-groups" to "Choose discussion groups", "notifications" to "Set notification preferences")
+
+/**
+ * Newcomer welcome (specs §30.7) on Android: welcome text, versioned rules with an explicit
+ * acknowledgement to the named reviewers, recommended groups (ask to join) and a private
+ * checklist synced only to own devices. Completion grants nothing.
+ */
+@Composable fun WelcomeCard(app: MainActivity, communityId: String, view: JSONObject, groups: List<JSONObject>, onChanged: () -> Unit, onAskToJoin: (String) -> Unit) {
+    val pkg = view.optJSONObject("pkg") ?: return
+    val progress = view.optJSONObject("progress")
+    val reviewer = view.optBoolean("reviewer")
+    val rules = pkg.optJSONObject("rules")
+    val rulesVersion = rules?.optInt("version") ?: 0
+    val acked = progress?.optJSONObject("rulesAck")
+    val rulesCurrent = rules != null && acked?.optInt("version") == rulesVersion
+    val needsRules = rules?.optBoolean("ackRequired") == true && !rulesCurrent && !reviewer
+    val outdated = needsRules && acked != null
+    val ticks = remember(communityId) { mutableStateMapOf<String, Boolean>() }
+    fun done(id: String) = ticks[id] ?: if (id == "ack-rules") reviewer || rulesCurrent else progress?.optJSONObject("items")?.optJSONObject(id)?.optBoolean("done") == true
+    val checklist = pkg.optJSONArray("checklist")?.objects().orEmpty()
+    val complete = checklist.filter { it.optBoolean("required") && (it.optString("id") != "ack-rules" || rules?.optBoolean("ackRequired") == true) }.all { done(it.optString("id")) }
+    var expanded by remember(communityId) { mutableStateOf(false) }
+    if (complete && !needsRules && !expanded) {
+        TextButton(onClick = { expanded = true }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("You’re all set · show welcome") }
+        return
+    }
+    Card(Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RawText(tr("Welcome to {name}").replace("{name}", view.optString("communityName").ifBlank { tr("Community") }), style = MaterialTheme.typography.titleMedium)
+            if (pkg.optString("welcome").isNotBlank()) RawText(pkg.optString("welcome"))
+            if (outdated) Text("Updated rules — review and acknowledge", color = MaterialTheme.colorScheme.primary)
+            if (rules != null) {
+                RawText(tr("Community rules (version {version})").replace("{version}", "$rulesVersion"), style = MaterialTheme.typography.titleSmall)
+                RawText(rules.optString("text"))
+                if (rules.optBoolean("ackRequired")) when {
+                    reviewer -> Text("You receive members’ rules acknowledgements.", style = MaterialTheme.typography.bodySmall)
+                    rulesCurrent -> RawText(tr("You acknowledged rules version {version}").replace("{version}", "$rulesVersion"))
+                    else -> Button(onClick = { app.call("acknowledgeRules", obj("id" to communityId)) { onChanged() } }) { RawText(tr("I acknowledge the rules (version {version})").replace("{version}", "$rulesVersion")) }
+                }
+            }
+            val recommended = pkg.optJSONArray("recommended")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+                .mapNotNull { id -> groups.find { it.optString("groupId") == id && it.optString("status") == "active" && it.optString("visibility") == "discoverable" } }
+            if (recommended.isNotEmpty()) {
+                Text("Recommended groups", style = MaterialTheme.typography.titleSmall)
+                recommended.forEach { g ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        RawText(g.optString("name").ifBlank { tr("Private group") })
+                        if (g.optBoolean("member")) Text("You’re a member", style = MaterialTheme.typography.bodySmall) else TextButton(onClick = { onAskToJoin(g.optString("groupId")) }) { Text("Ask to join") }
+                    }
+                }
+            }
+            if (checklist.isNotEmpty()) {
+                Text("Getting started", style = MaterialTheme.typography.titleSmall)
+                checklist.forEach { item ->
+                    val id = item.optString("id")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(done(id), { value -> ticks[id] = value; app.call("setChecklistItem", obj("id" to communityId, "itemId" to id, "done" to value), quiet = true) }, enabled = id != "ack-rules")
+                        RawText(presetItems[id]?.let { tr(it) } ?: item.optString("label"), Modifier.weight(1f))
+                        Text(if (item.optBoolean("required")) "Required" else "Optional", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Text("Your checklist progress stays on your devices; admins can’t see it.", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { expanded = false; ticks.clear(); onChanged() }) { Text("Continue later") }
+        }
+    }
+}
+
+/** Admin editor for the onboarding package (Android parity with the web editor). */
+@Composable fun OnboardingEditor(app: MainActivity, communityId: String) {
+    var view by remember(communityId) { mutableStateOf<JSONObject?>(null) }
+    var groups by remember(communityId) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var loaded by remember(communityId) { mutableStateOf(false) }
+    var welcome by remember(communityId) { mutableStateOf("") }; var rules by remember(communityId) { mutableStateOf("") }
+    var ackRequired by remember(communityId) { mutableStateOf(false) }
+    val recommended = remember(communityId) { mutableStateListOf<String>() }
+    val checklist = remember(communityId) { mutableStateListOf<JSONObject>() }
+    var custom by remember { mutableStateOf("") }; var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(communityId) {
+        app.call("communityGroups", obj("id" to communityId), quiet = true) { v -> groups = (v as? JSONArray)?.objects().orEmpty() }
+        app.call("onboarding", obj("id" to communityId), quiet = true) { v ->
+            val pkg = (v as? JSONObject)?.optJSONObject("pkg"); view = v as? JSONObject
+            welcome = pkg?.optString("welcome").orEmpty(); rules = pkg?.optJSONObject("rules")?.optString("text").orEmpty()
+            ackRequired = pkg?.optJSONObject("rules")?.optBoolean("ackRequired") == true
+            pkg?.optJSONArray("recommended")?.let { a -> (0 until a.length()).forEach { recommended.add(a.optString(it)) } }
+            val items = pkg?.optJSONArray("checklist")?.objects()
+            if (items != null) checklist.addAll(items) else listOf("read-description" to true, "ack-rules" to true, "choose-groups" to false)
+                .forEach { (id, required) -> checklist.add(JSONObject().put("id", id).put("label", tr(presetItems.getValue(id))).put("required", required)) }
+            loaded = true
+        }
+    }
+    if (!loaded) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; return }
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { OutlinedTextField(welcome, { welcome = it.take(4000) }, label = { Text("Welcome message") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) }
+        item { OutlinedTextField(rules, { rules = it.take(8000) }, label = { Text("Community rules") }, minLines = 4, modifier = Modifier.fillMaxWidth()) }
+        item { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ackRequired, { ackRequired = it }); Text("Ask members to acknowledge the rules") } }
+        view?.let { v -> val r = v.optJSONObject("pkg")?.optJSONObject("rules")
+            if (v.optBoolean("reviewer") && r?.optBoolean("ackRequired") == true) item {
+                RawText(tr("Rules version {version}: acknowledged by {done} of {total}").replace("{version}", "${r.optInt("version")}")
+                    .replace("{done}", "${v.optJSONArray("rulesAcknowledged")?.length() ?: 0}").replace("{total}", "${v.optJSONArray("audience")?.length() ?: 0}"), style = MaterialTheme.typography.bodySmall)
+            } }
+        val discoverable = groups.filter { it.optString("status") == "active" && it.optString("visibility") == "discoverable" }
+        if (discoverable.isNotEmpty()) {
+            item { Text("Recommended groups", style = MaterialTheme.typography.titleSmall) }
+            items(discoverable, key = { "rec-" + it.optString("groupId") }) { g -> val id = g.optString("groupId")
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(id in recommended, { if (it) recommended.add(id) else recommended.remove(id) }); RawText(g.optString("name").ifBlank { tr("Private group") }) } }
+        }
+        item { Text("Getting started", style = MaterialTheme.typography.titleSmall) }
+        items(presetItems.keys.toList(), key = { "preset-$it" }) { id ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checklist.any { it.optString("id") == id }, { on -> if (on) checklist.add(JSONObject().put("id", id).put("label", tr(presetItems.getValue(id))).put("required", false)) else checklist.removeAll { it.optString("id") == id } })
+                Text(presetItems.getValue(id))
+            }
+        }
+        items(checklist.toList(), key = { "req-" + it.optString("id") }) { item ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(item.optBoolean("required"), { on -> val i = checklist.indexOfFirst { it.optString("id") == item.optString("id") }; if (i >= 0) checklist[i] = JSONObject(item.toString()).put("required", on) })
+                Spacer(Modifier.width(8.dp)); RawText(tr("Required: {item}").replace("{item}", item.optString("label")), Modifier.weight(1f))
+                if (item.optString("id") !in presetItems) TextButton(onClick = { checklist.removeAll { it.optString("id") == item.optString("id") } }) { Text("Remove") }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(custom, { custom = it.take(120) }, label = { Text("Add your own checklist item") }, singleLine = true, modifier = Modifier.weight(1f))
+                TextButton(enabled = custom.isNotBlank() && checklist.size < 20, onClick = { checklist.add(JSONObject().put("id", "c-" + java.util.UUID.randomUUID().toString().take(8)).put("label", custom.trim()).put("required", false)); custom = "" }) { Text("Add") }
+            }
+        }
+        item {
+            Button(enabled = !busy, modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), onClick = {
+                busy = true
+                app.call("saveOnboarding", obj("id" to communityId, "welcome" to welcome, "rules" to rules, "ackRequired" to (ackRequired && rules.isNotBlank()),
+                    "recommended" to JSONArray(recommended.toList()), "checklist" to JSONArray(checklist.map { JSONObject(it.toString()) }))) { busy = false; if (it != null) app.route = "community:$communityId" }
+            }) { Text("Save") }
+        }
     }
 }

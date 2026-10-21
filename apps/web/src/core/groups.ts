@@ -154,7 +154,10 @@ export class GroupManager {
     if (!record || record.left) return record;
     try {
       const view = await this.api.group(groupId);
-      const updated = { ...record, members: view.members, adminOnly: view.adminOnly, departed: view.departed ?? [] };
+      // Re-read after the network call: E2EE metadata (name, community, version) may have changed
+      // meanwhile; only the server-mirrored fields are replaced here.
+      const latest = await this.record(groupId) ?? record;
+      const updated = { ...latest, members: view.members, adminOnly: view.adminOnly, departed: view.departed ?? [] };
       await this.store.put(GroupNs.group, groupId, updated);
       return updated;
     } catch (error) {

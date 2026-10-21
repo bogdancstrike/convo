@@ -21,11 +21,13 @@ import {
   type GroupMeta,
   type AckRequest,
   type AckResponse,
+  type OnboardingPackage,
+  type RulesAck,
 } from '../crypto/content';
 import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
 import { Mutex } from '../lib/mutex';
-import { utf8, fromBase64Url, toBase64Url } from '../lib/bytes';
+import { utf8, fromBase64Url, sha256, toBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import { downloadAttachment, prepareFile, uploadAttachment, type PreparedFile, type UploadResume } from './attachments';
 import { replenishPreKeys } from './enrollment';
@@ -1373,6 +1375,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
           const { destination, data } = content.sync.sent;
           await this.applyData(destination, this.accountId, 'out', data, envelope, ops, changed);
         }
+        if (content.sync.onboarding) await this.applyOnboardingSync(content.sync.onboarding, ops);
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
           if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined, mentioned: undefined });
@@ -1414,6 +1417,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         return this.applyCall(content.call, sender, undefined, envelope, ops);
       case 'ack':
         await this.applyAck(sender, content.ack, envelope, ops, changed);
+        return followUps;
+      case 'rulesAck':
+        await this.applyRulesAck(sender, content.rulesAck, envelope, ops);
         return followUps;
     }
   }
@@ -1483,8 +1489,114 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     return manager(authorId) && request.reviewers.every(manager) && !request.audience.includes(authorId);
   }
 
+  // --- community onboarding (specs §30.7) -------------------------------------------------
+
+  /**
+   * Publishes the onboarding package (root owners/admins). The rules version advances only when
+   * the rules text changes, so welcome/recommendation edits keep existing acknowledgements valid.
+   */
+  async saveOnboarding(community: CommunityView, draft: { welcome: string; rules: string; ackRequired: boolean; recommended: string[];
+    checklist: { id: string; label: string; required: boolean }[]; contact?: string }): Promise<void> {
+    const root = await this.groups.record(community.rootGroupId);
+    const role = root?.members.find((m) => m.accountId === this.accountId)?.role;
+    if (!root || (role !== 'owner' && role !== 'admin')) throw new Error('only community admins edit onboarding');
+    const previous = root.community?.onboarding;
+    const text = draft.rules.trim();
+    const digest = text ? toBase64Url(await sha256(utf8(text))) : undefined;
+    const owners = root.members.filter((m) => m.role === 'owner').map((m) => m.accountId);
+    const rules = text && digest ? {
+      version: previous?.rules?.digest === digest ? previous.rules.version : (previous?.rules?.version ?? 0) + 1,
+      text, digest, ackRequired: draft.ackRequired, reviewers: [...new Set([this.accountId, ...owners])].slice(0, 10) } : undefined;
+    const onboarding: OnboardingPackage = { revision: (previous?.revision ?? 0) + 1, editor: this.accountId, welcome: draft.welcome.trim().slice(0, 4000),
+      ...(rules ? { rules } : {}), recommended: draft.recommended.slice(0, 20), checklist: draft.checklist.slice(0, 20), ...(draft.contact?.trim() ? { contact: draft.contact.trim().slice(0, 200) } : {}) };
+    await this.updateCommunityMeta(community.rootGroupId, (c) => ({ ...c, onboarding }));
+  }
+
+  /** Onboarding package (validated), this account's private progress, and reviewer counts. */
+  async onboarding(community: CommunityView): Promise<OnboardingView | undefined> {
+    const root = await this.groups.record(community.rootGroupId);
+    const pkg = root?.community?.onboarding;
+    if (!root || !pkg) return undefined;
+    const editorRole = root.members.find((m) => m.accountId === pkg.editor)?.role;
+    if (editorRole !== 'owner' && editorRole !== 'admin') return undefined; // not from a current editor
+    const progress = await this.repos.store.get<OnboardingProgress>(RecordNs.onboarding, community.rootGroupId) ?? { items: {} };
+    const reviewer = !!pkg.rules?.reviewers.includes(this.accountId);
+    const acks = reviewer ? await this.repos.store.get<{ version: number; accounts: Record<string, number> }>(RecordNs.rulesAcks, community.rootGroupId) : undefined;
+    const audience = root.members.map((m) => m.accountId).filter((id) => id !== this.accountId && !pkg.rules?.reviewers.includes(id));
+    return { pkg, progress, reviewer,
+      rulesAcknowledged: reviewer && acks?.version === pkg.rules?.version ? Object.keys(acks!.accounts).filter((id) => audience.includes(id)) : [],
+      audience };
+  }
+
+  /** Ticks/unticks a private checklist item; synced to own devices only. */
+  async setChecklistItem(community: CommunityView, itemId: string, done: boolean): Promise<void> {
+    const update = await this.mutex.run(async () => {
+      const progress = await this.repos.store.get<OnboardingProgress>(RecordNs.onboarding, community.rootGroupId) ?? { items: {} };
+      const counter = (progress.items[itemId]?.counter ?? 0) + 1;
+      await this.repos.store.put(RecordNs.onboarding, community.rootGroupId, { ...progress, items: { ...progress.items, [itemId]: { done, counter } } });
+      return { conversationId: community.conversationId, itemId, done, counter };
+    });
+    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'sync', sync: { onboarding: update } }, false);
+    this.emit('groups', community.rootGroupId);
+  }
+
+  /** Explicitly acknowledges the current rules version (only the named reviewers receive it). */
+  async acknowledgeRules(community: CommunityView): Promise<void> {
+    const view = await this.onboarding(community);
+    const rules = view?.pkg.rules;
+    if (!rules?.ackRequired) throw new Error('no rules to acknowledge');
+    const rulesAck: RulesAck = { conversationId: community.conversationId, version: rules.version, digest: rules.digest, timestamp: Date.now() };
+    const reviewers = rules.reviewers.filter((id) => id !== this.accountId);
+    await this.mutex.run(async () => {
+      const progress = await this.repos.store.get<OnboardingProgress>(RecordNs.onboarding, community.rootGroupId) ?? { items: {} };
+      await this.repos.store.put(RecordNs.onboarding, community.rootGroupId, { ...progress, rulesAck: { version: rules.version, pending: reviewers } });
+      for (const reviewer of reviewers) await this.enqueue(reviewer, { v: CONTENT_VERSION, kind: 'rulesAck', rulesAck }, false);
+      await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'rulesAck', rulesAck }, false);
+    });
+    this.emit('groups', community.rootGroupId);
+  }
+
+  private async applyOnboardingSync(update: { conversationId: string; itemId: string; done: boolean; counter: number }, ops: StoreOp[]): Promise<void> {
+    const rootGroupId = groupIdOf(update.conversationId);
+    if (!rootGroupId) return;
+    const progress = await this.repos.store.get<OnboardingProgress>(RecordNs.onboarding, rootGroupId) ?? { items: {} };
+    if ((progress.items[update.itemId]?.counter ?? 0) >= update.counter) return; // older or duplicate mutation
+    ops.push({ type: 'put', ns: RecordNs.onboarding, id: rootGroupId, value: { ...progress, items: { ...progress.items, [update.itemId]: { done: update.done, counter: update.counter } } } });
+    this.emit('groups', rootGroupId);
+  }
+
+  /** Reviewers keep responses for the current rules version only (bounded retention). */
+  private async applyRulesAck(sender: string, ack: RulesAck, envelope: EnvelopeDto, ops: StoreOp[]): Promise<void> {
+    const rootGroupId = groupIdOf(ack.conversationId);
+    const root = rootGroupId ? await this.groups.record(rootGroupId) : undefined;
+    const rules = root?.community?.onboarding?.rules;
+    if (!rootGroupId || !root || !rules || rules.version !== ack.version || rules.digest !== ack.digest) return;
+    if (sender === this.accountId) {
+      const progress = await this.repos.store.get<OnboardingProgress>(RecordNs.onboarding, rootGroupId) ?? { items: {} };
+      if ((progress.rulesAck?.version ?? 0) >= ack.version && !progress.rulesAck?.pending.length) return;
+      ops.push({ type: 'put', ns: RecordNs.onboarding, id: rootGroupId, value: { ...progress, rulesAck: { version: ack.version, pending: [] } } });
+    } else {
+      if (!rules.reviewers.includes(this.accountId) || !root.members.some((m) => m.accountId === sender)) return;
+      const current = await this.repos.store.get<{ version: number; accounts: Record<string, number> }>(RecordNs.rulesAcks, rootGroupId);
+      const accounts = current?.version === ack.version ? current.accounts : {};
+      if (accounts[sender]) return;
+      ops.push({ type: 'put', ns: RecordNs.rulesAcks, id: rootGroupId, value: { version: ack.version, accounts: { ...accounts, [sender]: envelope.serverTimestamp } } });
+    }
+    this.emit('groups', rootGroupId);
+  }
+
   /** Clears a reviewer from the pending list once their response was accepted by the server. */
   private async ackDelivered(item: OutboxItem): Promise<void> {
+    if (item.content.kind === 'rulesAck' && item.destination !== this.accountId) {
+      // Runs inside the outbox's exclusive section (the client mutex, not re-entrant): no mutex here.
+      const rootGroupId = groupIdOf(item.content.rulesAck.conversationId)!;
+      const progress = await this.repos.store.get<OnboardingProgress>(RecordNs.onboarding, rootGroupId);
+      if (progress?.rulesAck?.pending.includes(item.destination)) {
+        await this.repos.store.put(RecordNs.onboarding, rootGroupId, { ...progress, rulesAck: { ...progress.rulesAck, pending: progress.rulesAck.pending.filter((id) => id !== item.destination) } });
+        this.emit('groups', rootGroupId);
+      }
+      return;
+    }
     if (item.content.kind !== 'ack' || item.destination === this.accountId) return;
     const ack = item.content.ack;
     const target = await this.repos.message(ack.conversationId, ack.authorId, ack.messageId);
@@ -1750,8 +1862,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     void this.outbox.flush();
   }
 
+  /** Outbox callback. Runs inside the outbox's exclusive section, i.e. the client mutex: never call `mutex.run` from here. */
   private async onOutboxAccepted(item: OutboxItem): Promise<void> {
-    if (item.content.kind === 'ack') { await this.ackDelivered(item); return; }
+    if (item.content.kind === 'ack' || item.content.kind === 'rulesAck') { await this.ackDelivered(item); return; }
     await this.updateStatus(item, 'sent');
   }
 
@@ -1899,6 +2012,25 @@ export interface CommunityView extends CommunityDto {
   conversationId: string;
   name: string;
   description: string;
+}
+
+/** Private onboarding progress (own devices only). */
+export interface OnboardingProgress {
+  items: Record<string, { done: boolean; counter: number }>;
+  /** Rules version this account acknowledged; reviewers still waiting for delivery. */
+  rulesAck?: { version: number; pending: string[] };
+}
+
+/** What the community overview needs for onboarding. */
+export interface OnboardingView {
+  pkg: OnboardingPackage;
+  progress: OnboardingProgress;
+  /** This account is a named rules reviewer. */
+  reviewer: boolean;
+  /** Reviewer only: audience members who acknowledged the current rules version. */
+  rulesAcknowledged: string[];
+  /** Members asked to acknowledge (everyone except reviewers and this account). */
+  audience: string[];
 }
 
 /** A linked group with its E2EE label when known. */

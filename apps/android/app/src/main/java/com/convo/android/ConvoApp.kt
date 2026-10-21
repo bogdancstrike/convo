@@ -102,6 +102,7 @@ import org.json.JSONObject
                 app.route == "new-channel" -> "New channel"
                 app.route == "new-community" -> "New community"
                 app.route.startsWith("community:") -> "Community"
+                app.route.startsWith("community-onboarding:") -> "Welcome & rules"
                 app.route != "list" -> when (app.route) { "storage" -> "Storage and data"; "notifications" -> "Notifications"; "recovery" -> "History and recovery"; "profile" -> "Your profile"; "all-media" -> "All Media"; else -> app.route.replaceFirstChar { it.uppercase() } }
                 else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
             }
@@ -143,6 +144,7 @@ import org.json.JSONObject
                     route == "appearance" -> WallpaperPicker(app, perChat = true)
                     route == "new-community" -> NewCommunity(app)
                     route.startsWith("community:") -> CommunityDetail(app, route.substringAfter(':'))
+                    route.startsWith("community-onboarding:") -> OnboardingEditor(app, route.substringAfter(':'))
                     tab == "Settings" -> NativeSettings(app)
                     tab == "Calls" -> CallsTab(app)
                     tab == "Communities" -> CommunitiesTab(app)

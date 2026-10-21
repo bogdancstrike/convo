@@ -117,7 +117,16 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   announcement invalidates earlier responses ("Updated — please acknowledge again"). Web
   `acknowledgements.spec.ts` (Chromium/Firefox, repeated); Android emulator acknowledged a web
   announcement and the reviewer count updated. Not yet: due/expiry/withdraw, custom reviewers.
-  Onboarding and parent-removal delegation are next.
+- Community onboarding (specs §30.7): admins edit "Welcome & rules" (welcome text, rules with
+  optional acknowledgement, recommended groups, checklist presets + custom, required/optional);
+  members get a welcome card with a private checklist (own-device sync), versioned rules
+  acknowledgement to the named reviewers ("Updated rules — review and acknowledge" on a new
+  version; other progress kept), recommendations via ask-to-join, "Continue later"/"You're all
+  set". Web `onboarding.spec.ts` (repeated, 4 workers); Android member flow emulator-verified
+  (tick + rules ack → reviewer count). Fixed on the way: a re-entrant mutex deadlock in the
+  outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
+  merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
+  rules; emulator-verified save → welcome card). Parent-removal delegation is next.
 - Browser passphrase lock (WEB-01): Settings → Privacy → Browser passphrase wraps the storage
   keys with Argon2id (64 MiB, t=3; `hash-wasm`); first activation re-seals the whole local store
   and adds an outer pseudonym layer. Locked start shows only the unlock screen (wrong passphrase,
@@ -290,7 +299,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Communities: onboarding, removal delegation, ack due/expiry/custom reviewers | COM-01/02 |
+| Communities: removal delegation, ack due/expiry/custom reviewers | COM-01/02 |
 | FCM fallback (push retries are in memory, not durable across restarts) | MSG-02 |
 | Admin console (first slice done), scoped roles, step-up, signed policies | ADM-01 |
 | Server-issued nonces for device proofs, Kyber prekeys | PRIV-02, FND-02 |

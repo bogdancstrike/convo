@@ -71,3 +71,16 @@ it('never resurrects a locally deleted message when a delayed archive update rep
   expect(await repos.isLocallyDeleted(next)).toBeUndefined();
   await source.destroy();
 });
+
+it('keeps acknowledgement state when an older archived copy is merged', async () => {
+  const { mergeArchivedMessage } = await import('./history');
+  const base = { conversationId: 'g:x', id: 'm1', authorId: 'owner', direction: 'in' as const, sentAt: 1, sort: 1, reactions: {}, body: 'policy',
+    ackRequest: { requestId: 'r1', revision: 1, reviewers: ['owner'], audience: ['me'] } };
+  const local = { ...base, myAck: { revision: 0, at: 5, pending: [] }, acks: { a: { at: 4, revision: 0 } } };
+  const merged = mergeArchivedMessage(local, base);
+  expect(merged.myAck).toEqual({ revision: 0, at: 5, pending: [] });
+  expect(merged.acks).toEqual({ a: { at: 4, revision: 0 } });
+  const edited = mergeArchivedMessage(local, { ...base, body: 'policy v2', revision: 1, editedAt: 9 });
+  expect(edited.body).toBe('policy v2');
+  expect(edited.myAck?.revision).toBe(0); // still the old response: the UI asks again
+});

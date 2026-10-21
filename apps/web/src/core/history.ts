@@ -20,8 +20,14 @@ export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming
   if (!existing) return incoming;
   const newer = (a: ChatMessage, b: ChatMessage) => (a.revision ?? 0) !== (b.revision ?? 0) ? (a.revision ?? 0) > (b.revision ?? 0) : (a.editedAt ?? 0) > (b.editedAt ?? 0);
   const content = existing.deleted || (!incoming.deleted && newer(existing, incoming)) ? existing : incoming;
+  // Acknowledgement state is not content: keep the newest own response and every reviewer record.
+  const myAck = [existing.myAck, incoming.myAck].filter((x): x is NonNullable<ChatMessage['myAck']> => !!x)
+    .sort((x, y) => y.revision - x.revision || x.pending.length - y.pending.length)[0];
+  const acks: NonNullable<ChatMessage['acks']> = { ...incoming.acks };
+  for (const [id, ack] of Object.entries(existing.acks ?? {})) if (!acks[id] || acks[id].revision < ack.revision) acks[id] = ack;
+  const ackState = { ...(myAck ? { myAck } : {}), ...(Object.keys(acks).length ? { acks } : {}), ackRequest: existing.ackRequest ?? incoming.ackRequest };
   if ((existing.revision ?? 0) !== (incoming.revision ?? 0) && !content.deleted) {
-    return { ...content, recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
+    return { ...content, ...ackState, recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
       serverAt: existing.serverAt ?? incoming.serverAt };
   }
   const status = STATUS_RANK[existing.status ?? 'sent'] > STATUS_RANK[incoming.status ?? 'sent'] ? existing.status : incoming.status;
@@ -31,7 +37,7 @@ export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming
     receipts[id] = { deliveredAt: Math.max(a?.deliveredAt ?? 0, b?.deliveredAt ?? 0) || undefined,
       readAt: Math.max(a?.readAt ?? 0, b?.readAt ?? 0) || undefined };
   }
-  return { ...content, status, ...(Object.keys(receipts).length ? { receipts } : {}), recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
+  return { ...content, ...ackState, status, ...(Object.keys(receipts).length ? { receipts } : {}), recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
     serverAt: existing.serverAt ?? incoming.serverAt };
 }
 

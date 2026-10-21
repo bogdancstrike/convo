@@ -2360,3 +2360,17 @@ a.btn { display: inline-flex; align-items: center; width: fit-content; text-deco
 .ack-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .ack-list li { display: flex; justify-content: space-between; gap: var(--space-2); }
 .ack-toggle { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) var(--space-1); font-size: 0.85rem; }
+
+/* Community onboarding (specs §30.7) */
+.welcome-card, .onboarding-editor { display: grid; gap: var(--space-2); margin: var(--space-2) var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid var(--c-border); border-radius: var(--radius-md); background: var(--c-panel); }
+.welcome-card h3, .onboarding-editor h3 { margin: 0; font-size: 1rem; }
+.welcome-text { white-space: pre-wrap; margin: 0; }
+.welcome-rules summary { cursor: pointer; font-weight: 600; }
+.welcome-section h4 { margin: var(--space-2) 0 var(--space-1); font-size: 0.85rem; }
+.welcome-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.welcome-checklist li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.welcome-checklist label { display: flex; gap: var(--space-2); align-items: center; }
+.welcome-checklist .chip { font-size: 0.72rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--c-border); }
+.welcome-checklist .chip.required { border-color: var(--c-accent); color: var(--c-accent-text); }
+.welcome-collapsed { display: grid; gap: var(--space-1); padding: 0 var(--space-4); }
+.onboarding-editor textarea { font: inherit; padding: var(--space-2); border: 1px solid var(--c-border); border-radius: var(--radius-md); background: var(--c-canvas); color: var(--c-text-primary); }
