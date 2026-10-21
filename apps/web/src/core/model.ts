@@ -51,7 +51,7 @@ export interface ChatMessage {
   /** Deadline after which this device deletes the message. */
   expiresAt?: number;
   /** System notice instead of content (e.g. disappearing timer changed). */
-  notice?: { kind: 'timer'; seconds: number } | { kind: 'left' };
+  notice?: { kind: 'timer'; seconds: number } | { kind: 'left' } | { kind: 'device'; change: 'added' | 'removed'; deviceId: number; platform: string };
   /** Content revision: 0/undefined for the original text, incremented by each accepted edit. */
   revision?: number;
   /** Server time of the envelope that delivered the original (anchors the edit window). */

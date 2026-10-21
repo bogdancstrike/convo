@@ -299,7 +299,10 @@ fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds
 @Composable fun TimerNotice(app: MainActivity, message: JSONObject, seconds: Long, kind: String = "timer") {
     val own = message.optString("authorId") == app.snapshot.optString("accountId")
     val who = if (own) tr("You") else app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == message.optString("authorId") }?.optString("title") ?: message.optString("authorId").take(8)
-    val text = if (kind == "left") tr("{who} left").replace("{who}", who) else if (seconds > 0) tr("{who} set disappearing messages to {duration}").replace("{who}", who).replace("{duration}", timerLabel(seconds))
+    val notice = message.optJSONObject("notice")
+    val device = notice?.let { "${when (it.optString("platform")) { "android" -> "Android"; "ios" -> "iOS"; else -> "Web" }} (#${it.optInt("deviceId")})" } ?: ""
+    val text = if (kind == "device") (if (notice?.optString("change") == "added") tr("Security: a new device was linked to your account — {device}. If this wasn’t you, unlink it in Settings → Devices.") else tr("Security: {device} was removed from your account.")).replace("{device}", device)
+        else if (kind == "left") tr("{who} left").replace("{who}", who) else if (seconds > 0) tr("{who} set disappearing messages to {duration}").replace("{who}", who).replace("{duration}", timerLabel(seconds))
         else tr("{who} turned off disappearing messages").replace("{who}", who)
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center) {
         Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surface) {

@@ -173,7 +173,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | X25519 → HKDF → AES-GCM channel bound to `ENCLAVE-PROVISION-V1` transcript (AAD) | WebCrypto X25519 |
 | ✅ | 12-digit comparison code on both screens; approve/decline in Settings | QR scan alternative pending |
 | ✅ | Shared enrollment completion path (primary + linked), linked devices restore the account encrypted archive | legacy old-origin migration pending |
-| 🟡 | Own-device notices on link (`DEVICE_LIST_CHANGED` directive refreshes device list) | persistent security notice UI pending |
+| ✅ | Own-device notices on link/removal: persistent security notices in Note to self (deterministic IDs, archive-safe) | web + Android, linking E2E |
 
 ## Attachments (FEAT-01)
 
@@ -220,7 +220,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| QR display/scan for linking, persistent own-device security notices | ID-02 |
+| QR display/scan for linking | ID-02 |
 | Albums, voice notes, resumable uploads | FEAT-01 |
 | Passphrase lock for browser storage | WEB-01 |
 | Group leave/roles/invites, communities | GRP-03, COM-01/02 |

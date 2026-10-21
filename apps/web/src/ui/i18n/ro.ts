@@ -529,6 +529,8 @@ export const ro: Record<MessageKey, string> = {
   'group.confirmBan': 'Elimini și interzici pe {name}? Nu va putea cere să intre sau fi adăugat din nou până la ridicarea interdicției.',
   'group.banned': 'Interziși ({count})',
   'group.unban': 'Ridică interdicția',
+  'security.deviceAdded': 'Securitate: un dispozitiv nou a fost conectat la cont — {device}. Dacă nu ai fost tu, deconectează-l din Setări → Dispozitive.',
+  'security.deviceRemoved': 'Securitate: {device} a fost eliminat din cont.',
   'settings.chats.hint': 'Temă, limbă, Enter pentru trimitere',
   'settings.privacy.hint': 'Autentificare fără parolă, conversații blocate, confirmări',
   'settings.devices.hint': 'Dispozitive conectate și cereri de conectare',

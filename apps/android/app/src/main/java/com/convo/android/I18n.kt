@@ -30,6 +30,8 @@ object Strings {
         " End-to-end encrypted" to " Criptat integral",
         " Securing call…" to " Se securizează apelul…",
         "Accept" to "Răspunde",
+        "Security: a new device was linked to your account — {device}. If this wasn’t you, unlink it in Settings → Devices." to "Securitate: un dispozitiv nou a fost conectat la cont — {device}. Dacă nu ai fost tu, deconectează-l din Setări → Dispozitive.",
+        "Security: {device} was removed from your account." to "Securitate: {device} a fost eliminat din cont.",
         "Remove and ban" to "Elimină și interzice", "Remove and ban?" to "Elimini și interzici?", "Unban" to "Ridică interdicția", "Banned ({count})" to "Interziși ({count})",
         "They cannot ask to join or be added again until unbanned." to "Nu va putea cere să intre sau fi adăugat din nou până la ridicarea interdicției.",
         "Invite link" to "Link de invitație", "Create invite link" to "Creează link de invitație", "Share" to "Distribuie", "Reset links" to "Resetează linkurile", "Links reset" to "Linkuri resetate",

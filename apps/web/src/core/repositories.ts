@@ -13,6 +13,8 @@ export const RecordNs = {
   pendingEnrollment: 'pending-enrollment',
   localDeletedMessage: 'local-deleted-message',
   localHiddenConversation: 'local-hidden-conversation',
+  /** Last seen own-device list, for security notices on change. */
+  knownDevices: 'known-devices',
   /** Device-local call history (`CallLogEntry`). */
   callLog: 'call-log',
 } as const;

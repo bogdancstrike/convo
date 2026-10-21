@@ -25,11 +25,18 @@ export function TimerNotice({ client, message, showDay }: { client: EnclaveClien
   return (
     <>
       {showDay && <div className="day-separator">{date(message.sort)}</div>}
-      <div className="system-notice" role="status" data-testid="timer-notice">
-        {notice?.kind === 'left' ? <Icon name="logout" size={14} /> : <Icon name="clock" size={14} />}
-        {notice?.kind === 'left' ? t('group.leftNotice', { who })
+      <div className={`system-notice${notice?.kind === 'device' ? ' security' : ''}`} role="status" data-testid={notice?.kind === 'device' ? 'security-notice' : 'timer-notice'}>
+        {notice?.kind === 'device' ? <Icon name="shield" size={14} /> : notice?.kind === 'left' ? <Icon name="logout" size={14} /> : <Icon name="clock" size={14} />}
+        {notice?.kind === 'device' ? t(notice.change === 'added' ? 'security.deviceAdded' : 'security.deviceRemoved', { device: deviceLabel(notice.platform, notice.deviceId) })
+          : notice?.kind === 'left' ? t('group.leftNotice', { who })
           : seconds ? t('timer.noticeOn', { who, duration: timerLabel(seconds, t) }) : t('timer.noticeOff', { who })}
       </div>
     </>
   );
+}
+
+/** "Android (device 3)" / "Web (device 2)". */
+function deviceLabel(platform: string, id: number): string {
+  const name = platform === 'android' ? 'Android' : platform === 'ios' ? 'iOS' : 'Web';
+  return `${name} (#${id})`;
 }

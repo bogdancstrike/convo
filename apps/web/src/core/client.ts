@@ -149,6 +149,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     await this.repos.store.pruneProcessed();
     // Disappearing messages: sweep now and then periodically while the client runs.
     void this.sweepExpired().catch(() => undefined);
+    void this.checkDeviceChanges().catch(() => undefined);
     this.expiryTimer = setInterval(() => void this.sweepExpired().catch(() => undefined), 30_000);
     this.socket.on('state', (state) => {
       this.emit('connection', state);
@@ -876,6 +877,38 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   joinRequests(conversationId: string) { return this.api.joinRequests(groupIdOf(conversationId)!); }
   declineJoinRequest(conversationId: string, accountId: string): Promise<void> { return this.api.declineJoin(groupIdOf(conversationId)!, accountId); }
 
+  /**
+   * Security notices (ID-02): compares this account's device list with the last one seen and
+   * records "device linked/removed" notices in Note to self. Notice IDs are deterministic, so every
+   * own device writes the same entries and the archive does not duplicate them. The first run only
+   * records a baseline.
+   */
+  async checkDeviceChanges(): Promise<void> {
+    const devices = await this.api.devices();
+    await this.mutex.run(async () => {
+      const known = await this.repos.store.get<{ id: number; platform: string }[]>(RecordNs.knownDevices, 'self');
+      const current = devices.map((d) => ({ id: d.deviceId, platform: d.platform }));
+      const ops: StoreOp[] = [{ type: 'put', ns: RecordNs.knownDevices, id: 'self', value: current }];
+      if (known) {
+        const now = Date.now();
+        const changes = [
+          ...current.filter((d) => !known.some((k) => k.id === d.id)).map((d) => ({ ...d, change: 'added' as const })),
+          ...known.filter((k) => !current.some((d) => d.id === k.id)).map((d) => ({ ...d, change: 'removed' as const })),
+        ];
+        if (changes.length) {
+          const note = await this.ensureConversation(this.accountId, ops);
+          for (const [i, c] of changes.entries()) {
+            ops.push(this.repos.putMessage({ conversationId: note.id, id: `device-${c.change}-${c.id}`, authorId: this.accountId, direction: 'out',
+              sentAt: now + i, sort: now + i, reactions: {}, notice: { kind: 'device', change: c.change, deviceId: c.id, platform: c.platform } }));
+          }
+          this.stage(ops, { ...this.conversationCache.get(note.id)!, lastActivity: now, unread: this.conversationCache.get(note.id)!.unread + changes.length });
+        }
+      }
+      await this.repos.store.commit(ops);
+      if (known && ops.length > 1) { this.emit('messages', this.accountId); this.emitConversations(); }
+    });
+  }
+
   /** Remaining members remove the MLS leaves of people who left (first one wins; races retry later). */
   private async completeDepartures(groupId: string, departed: string[]): Promise<void> {
     for (const accountId of departed) {
@@ -1475,6 +1508,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         break;
       case 'DEVICE_LIST_CHANGED':
         this.emit('devices', undefined);
+        await this.checkDeviceChanges().catch(() => undefined);
         await this.syncOwnDevicesInGroups().catch(() => undefined);
         break;
       case 'REVOKED':

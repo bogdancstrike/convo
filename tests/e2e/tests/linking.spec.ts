@@ -47,5 +47,9 @@ test('link a second browser with code comparison, then fan-out reaches both devi
   await expect(message(dan, 'answering from my second browser')).toBeVisible();
   await expect(message(anaLaptop, 'answering from my second browser')).toBeVisible();
 
+  // ID-02 security notice: the original device records the new link in Note to self.
+  await anaLaptop.getByTestId('nav-chats').click();
+  await anaLaptop.getByTestId('new-chat').click(); await anaLaptop.getByTestId('note-to-self').click();
+  await expect(anaLaptop.getByTestId('security-notice')).toContainText('a new device was linked to your account — Web (#2)', { timeout: 20_000 });
   await closeAll(anaLaptop, anaSecond, dan);
 });
