@@ -12,7 +12,7 @@ import { LastSeen } from '../components/LastSeen';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { Menu } from '../components/Popover';
-import { useAccount, useGroupRecord, useMessages, useTyping, useSettings } from '../hooks';
+import { useGroupRecord, useMessages, useTyping, useSettings } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { fold } from './ChatListPanel';
 import { Composer, type ComposerMode } from './Composer';
@@ -52,7 +52,6 @@ export function Thread({
   const messages = useMessages(client, conversation.id);
   const typing = useTyping(client, conversation.id);
   const record = useGroupRecord(client, conversation.kind === 'group' ? conversation.id : null);
-  const peer = useAccount(client, conversation.kind === 'direct' ? conversation.id : undefined);
   const [memberNames, setMemberNames] = useState('');
   const [mode, setMode] = useState<ComposerMode>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -177,9 +176,7 @@ export function Thread({
     : group
       ? memberNames
       : conversation.kind === 'direct'
-        ? peer
-          ? [`@${peer.username}`, peer.phone].filter(Boolean).join(' · ')
-          : t('header.clickForInfo')
+        ? '' // name + last seen only; handle and phone are in contact info
         : t('thread.noteHint');
 
   const menu = [{ label: t('select.start'), icon: 'check' as const, onSelect: () => setSelection(new Set()), testId: 'menu-select' },
@@ -239,7 +236,7 @@ export function Thread({
         <Avatar id={conversation.id} name={title} size={40} group={group} />
         <button className="who" onClick={onInfo} data-testid="thread-info">
           <h2 data-testid="thread-title">{title}</h2>
-          <span className={`sub${typing ? ' typing-sub' : ''}`}>{subtitle}</span>
+          {subtitle && <span className={`sub${typing ? ' typing-sub' : ''}`}>{subtitle}</span>}
           {!typing && conversation.kind === 'direct' && <LastSeen client={client} accountId={conversation.id} />}
         </button>
         {conversation.kind === 'direct' && (
