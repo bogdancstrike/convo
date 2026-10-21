@@ -14,7 +14,8 @@
 Kotlin alternative below with an explicitly interim bundled headless browser protocol adapter;
 it does not implement the proposed Rust/SQLCipher core or claim production certification.
 Android↔web decryption, process restart/APK replacement and linked-browser history restore have
-been verified on emulator-5554. See [the current client README](../apps/android/README.md) for
+been verified on emulator-5554. The optional native foreground WebSocket fallback from §5 exists ("Stay connected in the
+background"). See [the current client README](../apps/android/README.md) for
 build commands and remaining parity/security work. Planned launch requirements below still apply.
 
 ## 1. Release scope

@@ -87,7 +87,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   silent, groups can be set to "mentions only" (verified structured mentions). Web Notification
   API (`notifications.spec.ts`, Chromium/Firefox) and Android channel + POST_NOTIFICATIONS with a
   generic lock-screen version and tap-to-open; verified on emulator while running in the
-  foreground. Background delivery without a running process still needs UnifiedPush/FCM.
+  foreground. Optional Android "Stay connected in the background" foreground service
+  (`remoteMessaging`, visible ongoing notification) keeps delivery working in the background —
+  verified: a message sent while Convo was on the home screen produced a notification. Push
+  (UnifiedPush/FCM) for a fully stopped app remains open.
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 

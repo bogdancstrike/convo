@@ -122,7 +122,7 @@ class MainActivity : FragmentActivity() {
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
-                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus() }
+                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") refreshCredentialStatus(); ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
                 "alert" -> MessageNotifications.show(this, value)
                 "callLog" -> callLogVersion++
@@ -202,6 +202,10 @@ class MainActivity : FragmentActivity() {
     override fun onStop() { super.onStop(); isInForeground = false; locks.onBackground() }
     override fun onResume() { super.onResume(); if (phase == "ready") refreshCredentialStatus() }
     var isInForeground = false; private set
+    /** Device-local opt-in for [ConnectionService]. */
+    var stayConnected: Boolean
+        get() = getPreferences(MODE_PRIVATE).getBoolean("stayConnected", false)
+        set(value) { getPreferences(MODE_PRIVATE).edit().putBoolean("stayConnected", value).apply(); ConnectionService.sync(this, value && phase == "ready") }
     override fun onStart() { super.onStart(); isInForeground = true }
     /** Notification tap: open that chat (lock rules apply in openChat). */
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) } }
@@ -280,7 +284,7 @@ class MainActivity : FragmentActivity() {
             } catch (_: Exception) { runOnUiThread { discovering = false; error = "Could not read contacts. Manual search is still available." } }
         }
     }
-    override fun onDestroy() { calls.release(); bridge.destroy(); auth.dispose(); io.shutdown(); super.onDestroy() }
+    override fun onDestroy() { ConnectionService.sync(this, false); calls.release(); bridge.destroy(); auth.dispose(); io.shutdown(); super.onDestroy() }
 }
 fun obj(vararg pairs: Pair<String, Any?>) = JSONObject().apply { pairs.forEach { put(it.first, it.second ?: JSONObject.NULL) } }
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }

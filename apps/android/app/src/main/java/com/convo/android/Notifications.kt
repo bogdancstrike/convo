@@ -72,6 +72,10 @@ object MessageNotifications {
             if (on && !MessageNotifications.permitted(app)) app.requestNotificationPermission { granted -> if (granted) app.call("settings", obj("patch" to obj("notifications" to true))) else app.error = "Notifications are blocked for Convo in Android settings." }
             else app.call("settings", obj("patch" to obj("notifications" to on)))
         }
+        var stay by remember { mutableStateOf(app.stayConnected) }
+        PrivacySwitch("Stay connected in the background", "Keeps a small ongoing notification so messages and calls arrive while Convo is in the background. Uses more battery.", stay) { on ->
+            stay = on; app.stayConnected = on
+        }
         Text("Preview", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("generic" to "Hidden", "sender" to "Sender", "full" to "Sender and text").forEach { (value, label) ->
