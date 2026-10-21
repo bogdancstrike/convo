@@ -1157,6 +1157,30 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     await this.communityGroups(community); // publishes the label when already active
   }
 
+  /** Members of the community (its announcement channel), for picking people for a new group. */
+  async communityMembers(community: CommunityView): Promise<{ accountId: string; name: string }[]> {
+    const root = await this.groups.record(community.rootGroupId);
+    const ids = (root?.members ?? []).map((m) => m.accountId).filter((id) => id !== this.accountId);
+    return Promise.all(ids.map(async (accountId) => ({ accountId, name: await this.displayName(accountId) })));
+  }
+
+  /**
+   * Creates a group directly inside a community (as on WhatsApp): a new MLS group with the picked
+   * community members, linked at once (the creator owns both, so no acceptance is needed).
+   * Members not picked can find a discoverable group in the community and ask to join.
+   */
+  async createCommunityGroup(community: CommunityView, draft: { name: string; description?: string; memberIds: string[];
+    visibility: 'discoverable' | 'private'; delegation: boolean }): Promise<Conversation> {
+    if (community.role !== 'owner' && community.role !== 'admin') throw new Error('only community admins create groups here');
+    const allowed = new Set((await this.communityMembers(community)).map((m) => m.accountId));
+    const accounts = (await Promise.all(draft.memberIds.filter((id) => allowed.has(id)).map((id) => this.lookupAccount(id))))
+      .filter((a): a is AccountDto => !!a);
+    const conversation = await this.createGroup(draft.name, accounts);
+    if (draft.description?.trim()) await this.updateGroupInfo(conversation.id, { description: draft.description.trim() });
+    await this.linkGroupToCommunity(community, conversation.id, draft.visibility, draft.delegation);
+    return conversation;
+  }
+
   /** The group owner accepts a link; `delegation` lets community removal also remove members here. */
   acceptCommunityLink(community: CommunityView, groupId: string, delegation = false): Promise<void> { return this.api.acceptCommunityLink(community.communityId, groupId, delegation); }
 

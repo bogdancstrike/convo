@@ -67,6 +67,7 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
     var onboarding by remember(communityId) { mutableStateOf<JSONObject?>(null) }
     var requested by remember(communityId) { mutableStateOf(setOf<String>()) }
     var adding by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
     LaunchedEffect(communityId, app.snapshot, refresh) {
         app.call("communities", quiet = true) { v -> community = (v as? JSONArray)?.objects()?.find { it.optString("communityId") == communityId } }
@@ -81,9 +82,15 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
     val follow = remember(communityId) { mutableStateMapOf<String, Boolean>() }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                RawText(c.optString("name").ifBlank { tr("Community") }, style = MaterialTheme.typography.headlineSmall)
-                if (c.optString("description").isNotBlank()) RawText(c.optString("description"), style = MaterialTheme.typography.bodyMedium)
+            val active = groups.orEmpty().filter { it.optString("status") == "active" }
+            Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                PersonAvatar(app, c.optString("conversationId"), c.optString("name").ifBlank { "?" }, 64, group = true)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    RawText(c.optString("name").ifBlank { tr("Community") }, style = MaterialTheme.typography.headlineSmall)
+                    RawText(tr("{groups} groups · you’re in {joined}").replace("{groups}", "${active.size}").replace("{joined}", "${active.count { it.optBoolean("member") }}"),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (c.optString("description").isNotBlank()) RawText(c.optString("description"), style = MaterialTheme.typography.bodyMedium)
+                }
             }
             onboarding?.let { view -> WelcomeCard(app, communityId, JSONObject(view.toString()).put("communityName", c.optString("name")), groups.orEmpty(), { refresh++ }) { gid ->
                 app.call("requestCommunityGroup", obj("id" to communityId, "groupId" to gid)) { requested = requested + gid } } }
@@ -95,7 +102,13 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                 leadingContent = { Icon(Icons.Outlined.Campaign, null) }, modifier = Modifier.clickable { app.route = "community-onboarding:$communityId" })
             if (manager) ListItem(headlineContent = { Text("Invite members") }, supportingContent = { Text("Share the announcements’ invite link; you approve each request.") },
                 leadingContent = { Icon(Icons.Outlined.Link, null) }, modifier = Modifier.clickable(enabled = ready(root)) { app.openChatFrom(root); app.route = "info" })
-            Text("Groups in this community", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Groups in this community", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                if (manager) {
+                    Button(onClick = { creating = true }, modifier = Modifier.testTag("community-new-group")) { Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(4.dp)); Text("New group") }
+                    TextButton(onClick = { adding = true }) { Text("Add existing") }
+                }
+            }
         }
         items(groups.orEmpty(), key = { it.optString("groupId") }) { g ->
             val groupId = g.optString("groupId"); val conversation = g.optString("conversationId")
@@ -123,11 +136,9 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                 },
                 modifier = Modifier.clickable(enabled = open) { app.openChatFrom(conversation) })
         }
-        if (groups?.isEmpty() == true) item { Text(if (manager) "No groups yet. Add a group you’re in." else "No groups to show yet.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) }
-        if (manager) item {
-            TextButton(onClick = { adding = true }, modifier = Modifier.padding(8.dp)) { Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(6.dp)); Text("Add a group") }
-        }
+        if (groups?.isEmpty() == true) item { Text(if (manager) "No groups yet. Create one for a team or topic, or add a group you’re already in." else "No groups to show yet.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) }
     }
+    if (creating) NewCommunityGroupDialog(app, communityId, onDismiss = { creating = false }) { conversationId -> creating = false; refresh++; app.openChatFrom(conversationId) }
     if (adding) {
         val linked = groups.orEmpty().map { it.optString("conversationId") }.toSet()
         val candidates = conversations.filter { it.optString("kind") == "group" && !it.optBoolean("left") && it.optString("id") != c.optString("conversationId") && it.optString("id") !in linked }
@@ -150,6 +161,47 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
             }
         }, confirmButton = { TextButton(onClick = { adding = false }) { Text("Cancel") } })
     }
+}
+
+/**
+ * Creates a group inside the community (WhatsApp-style): name, optional description, people from
+ * the community, who can find it. Linked at once because the creator owns both.
+ */
+@Composable fun NewCommunityGroupDialog(app: MainActivity, communityId: String, onDismiss: () -> Unit, onCreated: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var visibility by remember { mutableStateOf("discoverable") }
+    var delegation by remember { mutableStateOf(true) }
+    var members by remember { mutableStateOf<List<JSONObject>?>(null) }
+    val picked = remember { mutableStateListOf<String>() }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(communityId) { app.call("communityMembers", obj("id" to communityId), quiet = true) { v -> members = (v as? JSONArray)?.objects().orEmpty() } }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("New group in this community") }, text = {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.heightIn(max = 520.dp)) {
+            item { OutlinedTextField(name, { name = it.take(128) }, label = { Text("Group name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("community-group-name")) }
+            item { OutlinedTextField(description, { description = it.take(2000) }, label = { Text("Description (optional)") }, maxLines = 3, modifier = Modifier.fillMaxWidth()) }
+            item { RawText(tr("Add people from the community ({count} selected)").replace("{count}", "${picked.size}"), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp)) }
+            if (members?.isEmpty() == true) item { Text("No other members yet. Invite people to the community first; they can ask to join the group later.", style = MaterialTheme.typography.bodySmall) }
+            items(members.orEmpty(), key = { it.optString("accountId") }) { m ->
+                val id = m.optString("accountId")
+                Row(Modifier.fillMaxWidth().clickable { if (id in picked) picked.remove(id) else picked.add(id) }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(id in picked, { if (it) picked.add(id) else picked.remove(id) })
+                    PersonAvatar(app, id, m.optString("name"), 28); Spacer(Modifier.width(8.dp)); RawText(m.optString("name"))
+                }
+            }
+            item { Text("Who can find it", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp)) }
+            items(listOf("discoverable" to "Visible in the community — members can see it and ask to join", "private" to "Hidden — members join by invitation")) { (value, label) ->
+                Row(Modifier.fillMaxWidth().selectable(visibility == value) { visibility = value }, verticalAlignment = Alignment.CenterVertically) { RadioButton(visibility == value, { visibility = value }); Text(label, style = MaterialTheme.typography.bodySmall) }
+            }
+            item { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delegation, { delegation = it }); Text("Also remove people from this group when they leave the community", style = MaterialTheme.typography.bodySmall) } }
+        }
+    }, confirmButton = {
+        Button(enabled = !busy && name.isNotBlank(), onClick = {
+            busy = true
+            app.call("createCommunityGroup", obj("id" to communityId, "name" to name.trim(), "description" to description.trim(), "memberIds" to JSONArray(picked.toList()),
+                "visibility" to visibility, "delegation" to delegation)) { v -> busy = false; (v as? JSONObject)?.optString("id")?.takeIf { it.isNotBlank() }?.let(onCreated) }
+        }, modifier = Modifier.testTag("community-create-group-submit")) { Text(if (busy) "Creating…" else "Create group") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 /** Standard checklist item labels (stable IDs shared with the web client). */

@@ -124,45 +124,59 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
   useEffect(() => { load(); return client.on('groups', load); }, [client, load]);
   const act = (work: Promise<unknown>) => { setError(null); void work.then(load).catch(() => setError(t('community.actionFailed'))); };
 
+  const [creating, setCreating] = useState(false);
+  const active = (groups ?? []).filter((g) => g.status === 'active');
+  const joined = active.filter((g) => g.member).length;
+
   return (
     <>
       <header className="panel-header sub">
         <button className="icon-btn" onClick={onBack} aria-label={t('thread.back')}><Icon name="back" /></button>
         <h2 data-testid="community-title">{community.name || t('community.unnamed')}</h2>
       </header>
-      <div className="panel-body">
-        {community.description && <p className="community-description" data-testid="community-about">{community.description}</p>}
+      <div className="panel-body community-detail">
+        <section className="community-hero">
+          <Avatar id={community.conversationId} name={community.name || '?'} size={72} group />
+          <div className="community-hero-text">
+            <p className="community-hero-name">{community.name || t('community.unnamed')}</p>
+            <p className="muted-text">{t('community.summary', { groups: active.length, joined })}{manager ? ` · ${t(community.role === 'owner' ? 'community.youOwner' : 'community.youAdmin')}` : ''}</p>
+            {community.description && <p className="community-description" data-testid="community-about">{community.description}</p>}
+          </div>
+        </section>
         {onboarding && !editing && <WelcomeCard client={client} community={community} view={onboarding} groups={groups ?? []} onAskToJoin={askToJoin} />}
         {manager && editing && <OnboardingEditor client={client} community={community} view={onboarding} groups={groups ?? []} onClose={() => { setEditing(false); load(); }} />}
-        <ul className="list">
-          <li>
-            <button className="row" disabled={!ready(community.conversationId)} onClick={() => onOpenChat(community.conversationId)} data-testid="community-announcements">
-              <span className="action-icon"><Icon name="channels" /></span>
-              <span className="row-main"><span className="row-title">{t('community.announcements')}</span>
-                <span className="row-preview">{t(manager ? 'community.announcementsAdmin' : 'community.announcementsMember')}</span></span>
+
+        <button className="community-announcements-card" disabled={!ready(community.conversationId)} onClick={() => onOpenChat(community.conversationId)} data-testid="community-announcements">
+          <span className="action-icon"><Icon name="channels" /></span>
+          <span className="row-main"><span className="row-title">{t('community.announcements')}</span>
+            <span className="community-wrap">{t(manager ? 'community.announcementsAdmin' : 'community.announcementsMember')}</span></span>
+          <Icon name="next" size={18} />
+        </button>
+        {manager && !editing && (
+          <div className="community-tools">
+            <button className="community-tool" onClick={() => setEditing(true)} data-testid="edit-onboarding">
+              <Icon name="note" size={20} /><span className="row-title">{t('onboarding.edit')}</span><span className="community-wrap muted-text">{t('onboarding.editHelp')}</span>
             </button>
-          </li>
-          {manager && !editing && (
-            <li>
-              <button className="row action" onClick={() => setEditing(true)} data-testid="edit-onboarding">
-                <span className="action-icon"><Icon name="note" /></span>
-                <span className="row-main"><span className="row-title">{t('onboarding.edit')}</span>
-                  <span className="row-preview">{t('onboarding.editHelp')}</span></span>
-              </button>
-            </li>
+            <button className="community-tool" onClick={() => onOpenChat(community.conversationId, true)} data-testid="community-invite">
+              <Icon name="link" size={20} /><span className="row-title">{t('community.invite')}</span><span className="community-wrap muted-text">{t('community.inviteHelp')}</span>
+            </button>
+          </div>
+        )}
+
+        <div className="community-section-head">
+          <h3 className="section-title">{t('community.groups')}</h3>
+          {manager && !creating && !adding && (
+            <span className="community-section-actions">
+              <button className="btn btn-primary" onClick={() => setCreating(true)} data-testid="community-new-group"><Icon name="plus" size={16} /> {t('community.newGroup')}</button>
+              <button className="btn btn-ghost" onClick={() => setAdding(true)} data-testid="community-add-group">{t('community.addGroup')}</button>
+            </span>
           )}
-          {manager && (
-            <li>
-              <button className="row action" onClick={() => onOpenChat(community.conversationId, true)} data-testid="community-invite">
-                <span className="action-icon"><Icon name="link" /></span>
-                <span className="row-main"><span className="row-title">{t('community.invite')}</span>
-                  <span className="row-preview">{t('community.inviteHelp')}</span></span>
-              </button>
-            </li>
-          )}
-        </ul>
-        <h3 className="section-title">{t('community.groups')}</h3>
-        <ul className="list" data-testid="community-groups">
+        </div>
+        {manager && creating && <NewCommunityGroup client={client} community={community}
+          onDone={(created) => { setCreating(false); load(); if (created) onOpenChat(created); }} onError={() => setError(t('community.createGroupFailed'))} />}
+        {manager && adding && <AddGroup client={client} community={community} linked={new Set((groups ?? []).map((g) => g.conversationId))}
+          onDone={() => { setAdding(false); load(); }} onError={() => setError(t('community.linkFailed'))} />}
+        <ul className="list community-groups" data-testid="community-groups">
           {(groups ?? []).map((g) => { const open = g.member && ready(g.conversationId); return (
             <li key={g.groupId} className="community-group" data-testid="community-group" data-status={g.status} data-member={open}>
               <button className="row" disabled={!open} onClick={() => open && onOpenChat(g.conversationId)}>
@@ -185,7 +199,12 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
             </li>
           ); })}
         </ul>
-        {groups?.length === 0 && <p className="muted-text">{t(manager ? 'community.noGroupsAdmin' : 'community.noGroups')}</p>}
+        {groups?.length === 0 && !creating && !adding && (
+          <div className="community-empty">
+            <Icon name="group" size={28} />
+            <p>{t(manager ? 'community.noGroupsAdmin' : 'community.noGroups')}</p>
+          </div>
+        )}
         {manager && operations.filter((o) => o.status !== 'completed').length > 0 && (
           <div className="community-ops" data-testid="community-operations">
             <h3 className="section-title">{t('community.operations')}</h3>
@@ -198,12 +217,90 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
             </ul>
           </div>
         )}
-        {manager && !adding && <button className="btn" onClick={() => setAdding(true)} data-testid="community-add-group"><Icon name="plus" size={16} /> {t('community.addGroup')}</button>}
-        {manager && adding && <AddGroup client={client} community={community} linked={new Set((groups ?? []).map((g) => g.conversationId))}
-          onDone={() => { setAdding(false); load(); }} onError={() => setError(t('community.linkFailed'))} />}
         {error && <p role="alert" className="failed" data-testid="community-error">{error}</p>}
       </div>
     </>
+  );
+}
+
+/** Who can find a community group, and whether community removal also removes people from it. */
+function GroupOptions({ visibility, setVisibility, delegation, setDelegation }: {
+  visibility: 'discoverable' | 'private'; setVisibility: (v: 'discoverable' | 'private') => void; delegation: boolean; setDelegation: (d: boolean) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      <fieldset className="community-visibility">
+        <legend>{t('community.visibility')}</legend>
+        {(['discoverable', 'private'] as const).map((v) => (
+          <label key={v} className="community-option" data-selected={visibility === v}>
+            <input type="radio" name="visibility" checked={visibility === v} onChange={() => setVisibility(v)} data-testid={`community-visibility-${v}`} />
+            <span><span className="row-title">{t(`community.${v}Title`)}</span><span className="community-wrap muted-text">{t(`community.${v}Help`)}</span></span>
+          </label>
+        ))}
+      </fieldset>
+      <label className="community-option" data-selected={delegation}>
+        <input type="checkbox" checked={delegation} onChange={(e) => setDelegation(e.target.checked)} data-testid="community-delegation-toggle" />
+        <span><span className="row-title">{t('community.delegationTitle')}</span><span className="community-wrap muted-text">{t('community.delegationHelp')}</span></span>
+      </label>
+    </>
+  );
+}
+
+/**
+ * Creates a group inside the community (WhatsApp-style): name, optional description, people from
+ * the community, who can find it. The creator owns both, so the group is part of the community at once.
+ */
+function NewCommunityGroup({ client, community, onDone, onError }: {
+  client: EnclaveClient; community: CommunityView; onDone: (created?: string) => void; onError: () => void;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [members, setMembers] = useState<{ accountId: string; name: string }[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState('');
+  const [visibility, setVisibility] = useState<'discoverable' | 'private'>('discoverable');
+  const [delegation, setDelegation] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { void client.communityMembers(community).then(setMembers).catch(() => setMembers([])); }, [client, community]);
+  const shown = (members ?? []).filter((m) => m.name.toLowerCase().includes(filter.trim().toLowerCase()));
+  const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const create = () => {
+    setBusy(true);
+    void client.createCommunityGroup(community, { name, description, memberIds: [...picked], visibility, delegation })
+      .then((c) => onDone(c.id)).catch(() => { setBusy(false); onError(); });
+  };
+  return (
+    <div className="community-card" data-testid="community-create-group">
+      <h4>{t('community.newGroupTitle')}</h4>
+      <label className="community-field">{t('community.groupName')}
+        <input className="underline-input" autoFocus maxLength={128} value={name} onChange={(e) => setName(e.target.value)} data-testid="community-group-name" />
+      </label>
+      <label className="community-field">{t('community.groupDescription')}
+        <textarea className="underline-input" rows={2} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} data-testid="community-group-description" />
+      </label>
+      <div className="community-field">
+        <span>{t('community.groupMembers', { count: picked.size })}</span>
+        {(members?.length ?? 0) > 6 && <input className="underline-input" type="search" placeholder={t('community.searchMembers')} value={filter} onChange={(e) => setFilter(e.target.value)} data-testid="community-member-search" />}
+        <ul className="community-member-picker">
+          {shown.map((m) => (
+            <li key={m.accountId}>
+              <label data-selected={picked.has(m.accountId)}>
+                <input type="checkbox" checked={picked.has(m.accountId)} onChange={() => toggle(m.accountId)} data-testid="community-member-pick" />
+                <Avatar id={m.accountId} name={m.name} size={28} /> <span>{m.name}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {members?.length === 0 && <p className="muted-text">{t('community.noOtherMembers')}</p>}
+      </div>
+      <GroupOptions visibility={visibility} setVisibility={setVisibility} delegation={delegation} setDelegation={setDelegation} />
+      <div className="community-card-actions">
+        <button className="btn btn-ghost" onClick={() => onDone()} disabled={busy}>{t('storeLock.cancel')}</button>
+        <button className="btn btn-primary" onClick={create} disabled={busy || !name.trim()} data-testid="community-create-group-submit">{busy ? t('community.creating') : t('community.createGroup')}</button>
+      </div>
+    </div>
   );
 }
 
@@ -216,14 +313,9 @@ function AddGroup({ client, community, linked, onDone, onError }: {
   const [delegation, setDelegation] = useState(true);
   const candidates = client.conversations().filter((c) => c.kind === 'group' && !c.left && c.id !== community.conversationId && !linked.has(c.id));
   return (
-    <div className="community-add" data-testid="community-add">
-      <fieldset className="community-visibility">
-        <legend>{t('community.visibility')}</legend>
-        {(['discoverable', 'private'] as const).map((v) => (
-          <label key={v}><input type="radio" name="visibility" checked={visibility === v} onChange={() => setVisibility(v)} data-testid={`community-visibility-${v}`} /> {t(`community.${v}Help`)}</label>
-        ))}
-      </fieldset>
-      <label className="ack-toggle"><input type="checkbox" checked={delegation} onChange={(e) => setDelegation(e.target.checked)} data-testid="community-delegation-toggle" /> {t('community.delegationHelp')}</label>
+    <div className="community-card community-add" data-testid="community-add">
+      <h4>{t('community.addGroupTitle')}</h4>
+      <GroupOptions visibility={visibility} setVisibility={setVisibility} delegation={delegation} setDelegation={setDelegation} />
       <ul className="list">
         {candidates.map((c) => (
           <li key={c.id}>
@@ -235,7 +327,7 @@ function AddGroup({ client, community, linked, onDone, onError }: {
         ))}
       </ul>
       {candidates.length === 0 && <p className="muted-text">{t('community.noCandidates')}</p>}
-      <button className="btn btn-ghost" onClick={onDone}>{t('storeLock.cancel')}</button>
+      <div className="community-card-actions"><button className="btn btn-ghost" onClick={onDone}>{t('storeLock.cancel')}</button></div>
     </div>
   );
 }

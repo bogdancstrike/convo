@@ -134,6 +134,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   announcement and the reviewer count updated. Optional due and closing times (web + Android):
   members see both, responses after the due time are marked late, none are accepted after closing
   (server acceptance time decides). Not yet: withdraw, custom reviewer selection.
+- Groups created inside a community (WhatsApp-style, 2026-10-21): community admins create a new
+  group from the community page (name, description, community members to add, visible/hidden,
+  follow community removals); it is linked at once and opens. Redesigned web community page (hero,
+  announcements card, tools, groups section with New group / Add existing) and Android dialog;
+  Android footer labels stay on one line. `communities.spec.ts` (create-in-community test).
 - Community onboarding (specs §30.7): admins edit "Welcome & rules" (welcome text, rules with
   optional acknowledgement, recommended groups, checklist presets + custom, required/optional);
   members get a welcome card with a private checklist (own-device sync), versioned rules

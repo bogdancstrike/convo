@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -126,7 +127,11 @@ import org.json.JSONObject
             }, bottomBar = {
                 if (app.route == "list") NavigationBar {
                     listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Channels" to Icons.Outlined.Campaign, "Communities" to Icons.Outlined.Groups, "Calls" to Icons.Outlined.Call, "Settings" to Icons.Outlined.AccountCircle).forEach { (label, icon) ->
-                        NavigationBarItem(app.selectedTab == label && !mediaOpen, onClick = { if (label == "Media") mediaOpen = true else { app.selectedTab = label; app.route = "list" } }, icon = { if (label == "Settings") PersonAvatar(app, app.snapshot.optString("accountId"), app.snapshot.optJSONObject("device")?.label() ?: "You", 24) else Icon(icon, label) }, label = { Text(if (label == "Settings") "Profile" else label) })
+                        NavigationBarItem(app.selectedTab == label && !mediaOpen, onClick = { if (label == "Media") mediaOpen = true else { app.selectedTab = label; app.route = "list" } }, icon = { if (label == "Settings") PersonAvatar(app, app.snapshot.optString("accountId"), app.snapshot.optJSONObject("device")?.label() ?: "You", 24) else Icon(icon, label) }, label = {
+                            // One line at any width: "Communities" must not wrap under its icon.
+                            Text(if (label == "Settings") "Profile" else label, maxLines = 1, softWrap = false,
+                                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = (-0.1).sp))
+                        })
                     }
                 }
             }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) {

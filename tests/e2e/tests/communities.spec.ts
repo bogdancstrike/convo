@@ -114,3 +114,44 @@ test('communities: create, link groups with consent, discover and ask to join', 
     await expect(carol.getByTestId('composer')).toHaveCount(0);
   } finally { await closeAll(owner, bob, carol); }
 });
+
+test('groups are created directly inside a community, with chosen community members', async ({ browser, request }) => {
+  test.setTimeout(240_000);
+  const [ownerU, bobU, carolU] = await Promise.all(['gowner', 'gbob', 'gcarol'].map((p) => createUser(request, p)));
+  const [owner, bob, carol] = await Promise.all([1, 2, 3].map(() => newPage(browser)));
+  try {
+    for (const [page, user] of [[owner, ownerU], [bob, bobU], [carol, carolU]] as const) await enroll(page, user);
+    const name = `Site ${Date.now() % 10000}`;
+    await owner.getByTestId('nav-communities').click();
+    await owner.getByTestId('new-community').click();
+    await owner.getByTestId('community-name').fill(name);
+    await owner.getByTestId('create-community').click();
+    await expect(owner.getByTestId('community-title')).toHaveText(name, { timeout: 30_000 });
+    await owner.getByTestId('community-invite').click();
+    for (const u of [bobU, carolU]) {
+      await owner.getByTestId('add-member').click();
+      await owner.getByTestId('people-search').fill(u.username);
+      await owner.getByTestId(`pick-${u.username}`).click();
+      await expect(owner.getByTestId(`member-${u.username}`)).toBeVisible({ timeout: 20_000 });
+    }
+    await openCommunity(owner, name);
+
+    // New group in the community: Bob picked, Carol not; visible in the community.
+    await owner.getByTestId('community-new-group').click();
+    await owner.getByTestId('community-group-name').fill('Field team');
+    await owner.getByTestId('community-group-description').fill('Daily coordination');
+    await owner.locator('.community-member-picker label').filter({ hasText: bobU.name }).getByTestId('community-member-pick').check();
+    await owner.getByTestId('community-create-group-submit').click();
+    // It opens straight away and is already part of the community (no acceptance step).
+    await expect(owner.getByTestId('composer')).toBeVisible({ timeout: 30_000 });
+    await send(owner, 'Field team kickoff');
+    await openCommunity(owner, name);
+    await expect(group(owner, 'Field team')).toHaveAttribute('data-status', 'active');
+
+    // Bob was added: he reads the group. Carol can see it in the community and ask to join.
+    await openChat(bob, 'Field team');
+    await expect(bob.getByTestId('message-body').getByText('Field team kickoff')).toBeVisible({ timeout: 30_000 });
+    await openCommunity(carol, name);
+    await expect(group(carol, 'Field team').getByTestId('community-join')).toBeVisible({ timeout: 30_000 });
+  } finally { await closeAll(owner, bob, carol); }
+});
