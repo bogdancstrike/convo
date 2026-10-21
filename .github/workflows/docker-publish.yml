@@ -33,6 +33,10 @@ jobs:
             image: bogdancstrike/convo-web
             context: ./apps/web
             dockerfile: ./apps/web/Dockerfile
+          - name: admin
+            image: bogdancstrike/convo-admin
+            context: ./apps/admin
+            dockerfile: ./apps/admin/Dockerfile
           - name: keycloak
             image: bogdancstrike/convo-keycloak
             context: ./deploy/keycloak

@@ -230,6 +230,20 @@ services:
       keycloak: { condition: service_healthy }
       livekit: { condition: service_started }
 
+  # Organization admin console on its own origin (apps/admin): console, /v1/admin and realm sign-in only.
+  admin:
+    build: ./apps/admin
+    image: enclave/admin:dev
+    ports:
+      - "${CONVO_ADMIN_HTTPS_PORT:-9443}:443"
+    environment:
+      CONVO_HOSTNAME: ${CONVO_ADMIN_HOSTNAME:-convo-admin.doncik.ro}
+    volumes:
+      - admin-tls:/etc/nginx/tls
+    depends_on:
+      server: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+
   e2e:
     profiles: ["e2e"]
     build: ./tests/e2e
@@ -240,6 +254,7 @@ services:
       - "${CONVO_HOSTNAME:-convo.doncik.ro}:host-gateway"
     environment:
       BASE_URL: ${E2E_BASE_URL:-https://localhost:8443}
+      ADMIN_URL: ${E2E_ADMIN_URL:-https://localhost:9443}
       HTTP_PORT: ${ENCLAVE_HTTP_PORT:-8088}
       HTTPS_PORT: ${CONVO_HTTPS_PORT:-8443}
       CI: "true"
@@ -253,6 +268,7 @@ volumes:
   audit-checkpoints:
   keycloak-data:
   web-tls:
+  admin-tls:
   pgadmin-data:
   postgres-data:
   seaweedfs-data:

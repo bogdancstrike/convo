@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntApp, Avatar, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tag, Typography } from 'antd';
 import { AuditOutlined, BarChartOutlined, DashboardOutlined, HeartOutlined, IdcardOutlined, LogoutOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
-import { api, type Me, type Permission } from './api';
+import { AdminError, api, type Me, type Permission } from './api';
 import { session, signIn, signOut } from './auth';
 import { themeConfig } from './theme';
 import { DarkContext } from './components/useDark';
@@ -55,7 +55,8 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
   const [failed, setFailed] = useState(false);
   const [route, navigate] = useHashRoute();
   useEffect(() => { void session().then(setAdmin).catch(() => setAdmin(null)); }, []);
-  useEffect(() => { if (admin) void api.me().then(setMe).catch(() => setFailed(true)); }, [admin]);
+  // A signed-in person without an admin role is refused by the API: show "no role", not an outage.
+  useEffect(() => { if (admin) void api.me().then(setMe).catch((e) => (e instanceof AdminError && (e.status === 403 || e.status === 401) ? setMe({ actor: admin, roles: [], permissions: [] }) : setFailed(true))); }, [admin]);
   const can = useCallback((p: Permission) => !!me?.permissions.includes(p), [me]);
   const visible = useMemo(() => PAGES.filter((p) => can(p.needs)), [can]);
   const [section = '', ...rest] = route.split('/');
@@ -67,8 +68,8 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
   if (failed) return <Result status="error" title="The admin service is unreachable" extra={<Button onClick={() => window.location.reload()}>Retry</Button>} />;
   if (!me) return <div className="signin"><Spin size="large" /></div>;
   if (me.permissions.length === 0) {
-    return <Result status="403" title="No administrator role" data-testid="admin-no-role"
-      subTitle={`${admin} is signed in, but has no Convo administrator role.`} extra={<Button onClick={() => void signOut()}>Sign out</Button>} />;
+    return <div data-testid="admin-no-role"><Result status="403" title="No administrator role"
+      subTitle={`${admin} is signed in, but has no Convo administrator role.`} extra={<Button onClick={() => void signOut()}>Sign out</Button>} /></div>;
   }
   const props = { can, navigate, param: rest.join('/') };
   return (

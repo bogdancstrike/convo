@@ -42,7 +42,7 @@ export function RecoverySettings({ client }: { client: EnclaveClient }) {
   return <section className="settings-card recovery-settings"><h3>{t('recovery.title')}</h3><p className="muted-text">{t('recovery.setupBody')}</p>
     <div className="history-state" role="status" data-testid="history-status"><Icon name={history === 'synced' ? 'check' : 'clock'} size={18} />{t(`history.${history}`)}</div>
     <button className="btn btn-ghost" disabled={history === 'syncing'} onClick={() => void client.syncHistory()} data-testid="sync-history">{t('history.sync')}</button>
-    <p>{t(configured ? 'recovery.configured' : 'recovery.notConfigured')}</p>
+    <p data-testid="recovery-state" data-configured={configured}>{t(configured ? 'recovery.configured' : 'recovery.notConfigured')}</p>
     {code ? <><p>{t('recovery.saveCode')}</p><textarea className="recovery-code" readOnly value={code} aria-label={t('recovery.code')} data-testid="recovery-code" />
       <button className="btn" onClick={() => {
         const url = URL.createObjectURL(new Blob([`Convo recovery code\n${code}\nKeep this code offline and private.\n`], { type: 'text/plain' }));

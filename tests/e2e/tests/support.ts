@@ -136,3 +136,28 @@ export async function messageMenu(page: Page, text: string) {
   await bubble.getByTestId('message-body').click({ button: 'right' });
   return page.getByTestId('message-menu-panel');
 }
+
+/** Origin of the admin console (separate from the messenger). */
+export const ADMIN_URL = process.env.ADMIN_URL ?? 'https://localhost:9443';
+
+/** Signs in to the admin console on its own origin. */
+export async function adminSignIn(page: Page, user: { username: string; password: string }): Promise<void> {
+  await page.goto(ADMIN_URL);
+  await page.getByTestId('admin-sign-in').click();
+  await page.locator('#username').fill(user.username);
+  await page.locator('#password').fill(user.password);
+  await page.locator('#kc-login').click();
+  await expect(page.getByTestId('admin-name').or(page.getByTestId('admin-no-role'))).toBeVisible({ timeout: 30_000 });
+}
+
+/** Fills the admin console's reason dialog and confirms (every change needs a reason). */
+export async function confirmReason(page: Page, reason: string): Promise<void> {
+  await page.getByTestId('reason-input').fill(reason);
+  await page.getByTestId('reason-confirm').click();
+}
+
+/** Opens an admin console page by URL (closes any open drawer). */
+export async function adminGo(page: Page, route: string): Promise<void> {
+  await page.goto(`${ADMIN_URL}/#/${route}`);
+  await expect(page.getByTestId('admin-name')).toBeVisible({ timeout: 30_000 });
+}
