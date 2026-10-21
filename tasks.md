@@ -6,7 +6,29 @@ file tracks what is actually built, verified, and what is still missing.
 
 Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
-## Active checkpoint — 2026-10-21
+## Active checkpoint — 2026-10-22
+
+- [x] Admin console on its own origin (`convo-admin.doncik.ro`, `apps/admin`, React 18 + Ant Design
+  5 + ECharts + React Flow): overview, people (activity, devices, sign-in, security), sign-in
+  accounts (create with one-time password, reset, required actions, sign out, block, roles,
+  audit), activity (days used per platform, senders vs readers, levels, weekday), roles &
+  permissions (holders, permission map, access flow), audit (search, verify, checkpoint, export),
+  health (push, redrive). Every change audited with a reason; step-up and no self-changes;
+  `convo-admin-ops` Keycloak client limited to user management. `/admin` removed from the
+  messenger. e2e `admin*.spec.ts`, server unit tests, production smoke checks of the origin.
+- [x] Statistics: encrypted items and "used Convo" per account/day/platform (V25, V26; 90 days;
+  `enclave.admin.activity.enabled`).
+- [x] Calls in production: diagnosed (callers outside the LAN have no media path until the router
+  forwards UDP 50000–50100 / TCP 7881 / coturn ports and `turn.doncik.ro` resolves); LiveKit
+  offers only the LAN interface; dropped calls end with an explanation (web + Android, e2e).
+- [x] Push in production: ntfy accepts anonymous `up*` topics; deployment info advertises push
+  servers; Android Settings → Notifications shows background delivery status and fixes.
+- [x] docs/SECURITY.md: full security description, ports/firewall, forensic analysis (Son et al.
+  2022) with recommendations (Keystore-bound and PRF-bound store keys, per-chat keys).
+- [ ] Open from this checkpoint: router forwards + `turn.doncik.ro` DNS (user), Web Push for closed
+  browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4), diagrams for docs.
+
+## Active checkpoint — 2026-10-21 (earlier)
 
 - [x] 2026-10-21 Deployment: hostname `convo.doncik.ro`, no fixed IPs in the repo (`CONVO_SERVER_IP`
   required from `.env`); web image runs behind a Kubernetes ingress (`CONVO_TLS=off`, `UPSTREAM_*`,
