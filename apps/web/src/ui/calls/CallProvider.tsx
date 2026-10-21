@@ -1,5 +1,5 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { RING_TIMEOUT_MS, type CallInvite } from '../../core/calls';
+import { rekeyLeader, RING_TIMEOUT_MS, type CallInvite } from '../../core/calls';
 import type { EnclaveClient } from '../../core/client';
 import { CallEncryptionUnsupportedError } from './errors';
 import type { LiveKitCall } from './liveKitCall';
@@ -9,7 +9,7 @@ const CallScreen = lazy(() => import('./CallScreen').then((m) => ({ default: m.C
 import { Ringer } from './ringer';
 
 export type CallPhase = 'incoming' | 'outgoing' | 'connecting' | 'connected' | 'ended';
-export type CallEndReason = 'declined' | 'busy' | 'noAnswer' | 'ended' | 'failed' | 'unsupported' | 'answeredElsewhere';
+export type CallEndReason = 'declined' | 'busy' | 'noAnswer' | 'ended' | 'failed' | 'unsupported' | 'answeredElsewhere' | 'removed';
 
 export interface ActiveCall {
   callId?: string;
@@ -77,13 +77,22 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
     }
   }, [bump, client, finish, patch]);
 
-  const connect = useCallback(async (join: Parameters<LiveKitCall['connect']>[0], key: string, video: boolean) => {
+  /** Group call: after someone leaves, the smallest remaining identity rotates the media key. */
+  const rotateIfLeader = useCallback(async (lk: LiveKitCall) => {
+    const active = current.current;
+    if (!active?.callId || !active.conversationId.startsWith('g:') || media.current !== lk) return;
+    if (rekeyLeader(lk.identities) !== lk.room.localParticipant.identity) return;
+    try { await lk.applyKey(await client.rotateCallKey(active.conversationId, active.callId, lk.generation)); }
+    catch { /* the next departure retries; frames stay encrypted with the previous key */ }
+  }, [client]);
+
+  const connect = useCallback(async (join: Parameters<LiveKitCall['connect']>[0], key: string, video: boolean, generation = 0) => {
     const { LiveKitCall } = await import('./liveKitCall');
-    const lk = new LiveKitCall(onMediaChange);
+    const lk = new LiveKitCall(onMediaChange, () => void rotateIfLeader(lk), () => { if (media.current === lk) void finish('removed'); });
     media.current = lk;
-    await lk.connect(join, key, video);
+    await lk.connect(join, key, video, generation);
     onMediaChange();
-  }, [onMediaChange]);
+  }, [finish, onMediaChange, rotateIfLeader]);
 
   const start = useCallback((conversationId: string, video: boolean) => {
     if (current.current) return;
@@ -112,7 +121,7 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
     ringer.current.stop();
     patch({ phase: 'connecting' });
     void (async () => {
-      try { await connect(await client.answerCall(active.invite!), active.invite!.key, active.invite!.video); }
+      try { await connect(await client.answerCall(active.invite!), active.invite!.key, active.invite!.video, active.invite!.generation ?? 0); }
       catch (e) { void finish(e instanceof CallEncryptionUnsupportedError ? 'unsupported' : 'failed'); }
     })();
   }, [client, connect, finish, patch]);
@@ -145,6 +154,7 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
       return;
     }
     if (!active || active.callId !== event.callId || active.phase === 'ended') return;
+    if (event.type === 'rekey') { void media.current?.applyKey({ key: event.key, generation: event.generation }); return; }
     const group = active.conversationId.startsWith('g:');
     if (event.fromSelf && active.phase === 'incoming') { void finish('answeredElsewhere'); return; }
     if (event.action === 'decline' && !group) void finish('declined');

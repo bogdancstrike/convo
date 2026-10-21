@@ -35,7 +35,11 @@ class GroupService {
     private final GroupsProperties properties;
     private final Clock clock;
 
-    GroupService(GroupRepository groups, IdentityApi identity, DeliveryApi delivery, GroupsProperties properties, Clock clock) {
+    private final org.springframework.context.ApplicationEventPublisher events;
+
+    GroupService(GroupRepository groups, IdentityApi identity, DeliveryApi delivery, GroupsProperties properties, Clock clock,
+            org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.groups = groups;
         this.identity = identity;
         this.delivery = delivery;
@@ -125,6 +129,7 @@ class GroupService {
         cmd.addDevices().forEach(d -> groups.addDevice(groupId, d));
         cmd.removeDevices().forEach(d -> groups.removeDevice(groupId, d));
         cmd.removeMembers().forEach(a -> { groups.deleteMember(groupId, a); groups.deleteDeparture(groupId, a); });
+        if (!cmd.removeMembers().isEmpty()) events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.copyOf(cmd.removeMembers())));
         cmd.roleChanges().forEach((a, r) -> groups.upsertMember(groupId, a, r));
 
         // Everyone in the pre-commit roster (including removed devices) learns the new epoch.
@@ -182,6 +187,7 @@ class GroupService {
         if (lastOwner && members.size() > 1) throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "make another member owner before leaving");
         groups.deleteMember(groupId, caller.accountId());
         groups.addDeparture(groupId, caller.accountId());
+        events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.of(caller.accountId())));
     }
 
     /** Bans (and the client separately removes) an account; owners can only be banned by owners. */

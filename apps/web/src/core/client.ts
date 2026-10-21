@@ -31,7 +31,7 @@ import { groupConversationId, groupIdOf, isMuted, labelOf, STATUS_RANK, type Cha
 import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
 import { sanitizeAutoDownload } from './mediaPolicy';
 import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './disappearing';
-import { newMediaKey, nextStatus, RING_TIMEOUT_MS, type CallEvent, type CallInvite, type CallJoin, type CallLogEntry } from './calls';
+import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, type CallInvite, type CallJoin, type CallKey, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
@@ -720,6 +720,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     return { join, key };
   }
 
+  /**
+   * Group calls: replaces the media key after a participant left (ADR-0006). The new key goes
+   * through the MLS group, so a member removed from the group cannot decrypt the call any more.
+   * The caller applies the returned key locally right away.
+   */
+  async rotateCallKey(conversationId: string, callId: string, after: number): Promise<CallKey> {
+    if (!groupIdOf(conversationId)) throw new Error('rekey is for group calls');
+    const next: CallKey = { key: newMediaKey(), generation: after + 1 };
+    await this.sendCall(conversationId, { callId, action: 'rekey', key: next.key, generation: next.generation, timestamp: Date.now() });
+    return next;
+  }
+
   /** Answers a ring; other own devices stop ringing when they receive the accept. */
   async answerCall(invite: CallInvite): Promise<CallJoin> {
     const join = await this.api.joinCall(invite.callId);
@@ -797,6 +809,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const fromSelf = author === this.accountId;
     const conversationId = groupConversation ?? (fromSelf ? call.to : author);
     if (!conversationId || conversationId === this.accountId) return [];
+    if (call.action === 'rekey') {
+      if (!groupConversation) return [];
+      const next: CallKey = { key: call.key!, generation: call.generation! };
+      // A not-yet-answered ring joins with the newest key.
+      const invite = this.invites.get(call.callId);
+      if (invite && supersedes({ key: invite.key, generation: invite.generation ?? 0 }, next)) { invite.key = next.key; invite.generation = next.generation; }
+      return [async () => this.emit('call', { type: 'rekey', callId: call.callId, conversationId, ...next, fromSelf })];
+    }
     const existing = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, call.callId);
     if (call.action === 'ring') {
       if (existing) return [];

@@ -17,8 +17,10 @@ export interface CallInvite {
   /** Caller account. */
   from: string;
   video: boolean;
-  /** base64url media key from the E2EE ring. */
+  /** base64url media key from the E2EE ring (or a later rekey). */
   key: string;
+  /** Key generation (group calls; 0 = the ring's key). */
+  generation?: number;
   /** Server time the ring was accepted. */
   at: number;
   group: boolean;
@@ -53,7 +55,25 @@ export interface CallLogEntry {
 /** Events the UI reacts to. */
 export type CallEvent =
   | { type: 'incoming'; invite: CallInvite }
-  | { type: 'remote'; callId: string; conversationId: string; from: string; action: CallMessage['action']; fromSelf: boolean };
+  | { type: 'remote'; callId: string; conversationId: string; from: string; action: CallMessage['action']; fromSelf: boolean }
+  | { type: 'rekey'; callId: string; conversationId: string; key: string; generation: number; fromSelf: boolean };
+
+/** A group call's current media key. */
+export interface CallKey { key: string; generation: number }
+
+/**
+ * Whether `next` supersedes `current`: a higher generation wins; two members rekeying at once with
+ * the same generation converge on the lexicographically smaller key.
+ */
+export function supersedes(current: CallKey | undefined, next: CallKey): boolean {
+  if (!current) return true;
+  return next.generation > current.generation || (next.generation === current.generation && next.key < current.key);
+}
+
+/** The participant that rotates the key after someone leaves: the smallest identity still in the room. */
+export function rekeyLeader(identities: string[]): string | undefined {
+  return [...identities].sort()[0];
+}
 
 /** Next history status for an event (history never moves back from a final state). */
 export function nextStatus(current: CallStatus, action: CallMessage['action'], fromSelf: boolean, direction: 'in' | 'out'): CallStatus {

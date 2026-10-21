@@ -62,6 +62,10 @@ class CallManager(private val app: MainActivity) {
     var micOn by mutableStateOf(true); private set
     var cameraOn by mutableStateOf(false); private set
     private val e2ee = mutableMapOf<String, E2EEState>()
+    private var keyProvider: BaseKeyProvider? = null
+    /** Current group-call media key (generation 0 = the ring's key). */
+    private var keyGeneration = 0
+    private var currentKey: String? = null
     private var events: Job? = null
     private var ringtone: Ringtone? = null
 
@@ -112,6 +116,7 @@ class CallManager(private val app: MainActivity) {
             return
         }
         if (active == null || active.callId != event.optString("callId") || active.phase == "ended") return
+        if (event.optString("type") == "rekey") { applyKey(event.optString("key"), event.optInt("generation")); return }
         val group = active.conversationId.startsWith("g:")
         val action = event.optString("action")
         when {
@@ -130,7 +135,7 @@ class CallManager(private val app: MainActivity) {
             app.call("answerCall", obj("callId" to active.callId), quiet = true) { value ->
                 val result = value as? JSONObject
                 val join = result?.optJSONObject("join")
-                if (join == null) finish("failed") else connect(join, result.optString("key"), active.video)
+                if (join == null) finish("failed") else connect(join, result.optString("key"), active.video, result.optInt("generation"))
             }
         }
     }
@@ -156,17 +161,55 @@ class CallManager(private val app: MainActivity) {
         if (active.callId != null) app.call("endCall", obj("callId" to active.callId, "conversationId" to active.conversationId, "answered" to answered), quiet = true)
     }
 
-    private fun connect(join: JSONObject, key: String, video: Boolean) {
+    /**
+     * Installs a newer media key (ADR-0006 rekey): same ordering rule as the web client (higher
+     * generation wins, ties → smaller key). Older keys stay in the ring for in-flight frames.
+     */
+    private fun applyKey(key: String, generation: Int) {
+        val current = currentKey
+        if (current != null && !(generation > keyGeneration || (generation == keyGeneration && key < current))) return
+        currentKey = key; keyGeneration = generation
+        val index = generation % KEY_RING
+        keyProvider?.setSharedKey(key, index)
+        // The SDK has no public API to move senders to a new index; FrameCryptor.setKeyIndex is
+        // public but the cryptors are private to E2EEManager. Receivers read the index from frames.
+        try {
+            val manager = room?.e2eeManager ?: return
+            val field = manager.javaClass.getDeclaredField("frameCryptors").apply { isAccessible = true }
+            (field.get(manager) as? Map<*, *>)?.values?.forEach { (it as? livekit.org.webrtc.FrameCryptor)?.keyIndex = index }
+            android.util.Log.i("Convo", "Call rekey: generation $generation active")
+        } catch (e: Exception) { android.util.Log.w("Convo", "Call rekey: sender key index not switched (${e.javaClass.simpleName}); previous key stays in use") }
+    }
+
+    /** After someone leaves a group call, the smallest remaining identity rotates the key. */
+    private fun rotateIfLeader() {
+        val active = call ?: return
+        val r = room ?: return
+        if (active.callId == null || !active.conversationId.startsWith("g:")) return
+        val identities = listOf(r.localParticipant.identity?.value) + r.remoteParticipants.values.map { it.identity?.value }
+        if (identities.filterNotNull().minOrNull() != r.localParticipant.identity?.value) return
+        app.call("rotateCallKey", obj("conversationId" to active.conversationId, "callId" to active.callId, "after" to keyGeneration), quiet = true) { value ->
+            (value as? JSONObject)?.let { applyKey(it.optString("key"), it.optInt("generation")) }
+        }
+    }
+
+    private fun connect(join: JSONObject, key: String, video: Boolean, generation: Int = 0) {
         // Loads WebRTC's native library; the frame-cryptor key provider needs it.
         LiveKit.init(app.applicationContext)
         val keyProvider = BaseKeyProvider()
-        keyProvider.setSharedKey(key, 0)
+        this.keyProvider = keyProvider
+        currentKey = null; keyGeneration = 0
+        keyProvider.setSharedKey(key, generation % KEY_RING)
+        currentKey = key; keyGeneration = generation
         val created = LiveKit.create(app.applicationContext, RoomOptions(adaptiveStream = true, dynacast = true, e2eeOptions = E2EEOptions(keyProvider)),
             LiveKitOverrides(okHttpClient = DevelopmentTls(app).okHttp()))
         room = created
         events = app.lifecycleScope.launch {
             created.events.events.collect { event: RoomEvent ->
                 if (event is RoomEvent.TrackE2EEStateEvent) event.publication.sid.let { e2ee[it] = event.state }
+                if (event is RoomEvent.ParticipantDisconnected) rotateIfLeader()
+                // The server removes devices of accounts that are no longer group members.
+                if (event is RoomEvent.Disconnected && event.reason == io.livekit.android.events.DisconnectReason.PARTICIPANT_REMOVED) { finish("removed"); return@collect }
                 version++
                 onRoomChanged()
             }
@@ -217,7 +260,7 @@ class CallManager(private val app: MainActivity) {
 
     fun release() { finish("ended"); call = null }
 
-    companion object { const val RING_TIMEOUT_MS = 45_000L }
+    companion object { const val RING_TIMEOUT_MS = 45_000L; private const val KEY_RING = 16 }
 }
 
 @Composable fun CallScreen(app: MainActivity) {
@@ -234,7 +277,7 @@ class CallManager(private val app: MainActivity) {
         "outgoing" -> "Calling…"
         "connecting" -> "Connecting…"
         "connected" -> formatDuration(now - (call.connectedAt ?: now))
-        else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; else -> "Call ended" }
+        else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; "removed" -> "You are no longer in this group"; else -> "Call ended" }
     }
     Surface(Modifier.fillMaxSize(), color = Color(0xFF0B141A), contentColor = Color(0xFFF2F5F7)) {
         Box(Modifier.fillMaxSize()) {

@@ -177,10 +177,11 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'startCall': return client.startCall(String(args.conversationId), Boolean(args.video));
     case 'answerCall': {
       const invite = client.pendingInvite(String(args.callId)); if (!invite) throw new Error('call unavailable');
-      return { join: await client.answerCall(invite), key: invite.key, video: invite.video };
+      return { join: await client.answerCall(invite), key: invite.key, generation: invite.generation ?? 0, video: invite.video };
     }
     case 'declineCall': { const invite = client.pendingInvite(String(args.callId)); if (invite) await client.declineCall(invite, Boolean(args.busy)); return; }
     case 'missCall': { const invite = client.pendingInvite(String(args.callId)); if (invite) await client.missCall(invite); return; }
+    case 'rotateCallKey': return client.rotateCallKey(String(args.conversationId), String(args.callId), Number(args.after));
     case 'endCall': return client.endCall(String(args.callId), String(args.conversationId), Boolean(args.answered));
     case 'callLog': return client.callLog();
     case 'clearCallLog': return client.clearCallLog();

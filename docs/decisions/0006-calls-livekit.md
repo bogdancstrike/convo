@@ -31,7 +31,14 @@ TURN server or congestion control ourselves would be slow and risky.
 ## Consequences
 
 * The SFU sees metadata (who is in a room, when, packet sizes), not content.
-* A shared per-call key does not provide per-participant forward secrecy inside a call; removing
-  a group member mid-call requires a new call (key rotation is follow-up work).
-* No push: devices ring while Convo is open/connected (background ringing is a release gate in
-  docs/mobile.md §6).
+* A shared per-call key does not provide per-participant forward secrecy inside a call. Group calls
+  rotate it whenever someone leaves the room (2026-10-21): the smallest remaining participant
+  identity sends `rekey` (new key + generation) through the MLS group; the key index is
+  `generation mod 16`, so older frames still decrypt while everyone switches; concurrent rekeys
+  converge (higher generation, then smaller key). Removing or banning a member, or a member
+  leaving the group, publishes `GroupMembersRemoved`; the calls module removes that account's
+  devices from the group's open rooms via LiveKit's RoomService, which triggers the rekey. Since
+  the rekey travels in the MLS group they were removed from, they cannot follow the new key.
+  Android switches sender key indexes through `FrameCryptor.setKeyIndex` on the SDK's private
+  cryptor map (reflection, logged if it fails — it then keeps the previous key, still encrypted).
+* Background ringing uses content-free UnifiedPush wakes (push module, MSG-02).

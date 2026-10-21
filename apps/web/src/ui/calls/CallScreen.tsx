@@ -34,7 +34,7 @@ export function CallScreen({ client }: { client: EnclaveClient }) {
 
   return (
     <div className={`call-screen${showVideo ? ' video' : ''}`} role="dialog" aria-modal="true" aria-label={t('calls.dialog', { name: title })}
-      ref={dialog} data-testid="call-screen" data-phase={call.phase} data-reason={call.reason ?? ''} data-encrypted={media?.encrypted ? 'true' : 'false'}
+      ref={dialog} data-testid="call-screen" data-phase={call.phase} data-reason={call.reason ?? ''} data-encrypted={media?.encrypted ? 'true' : 'false'} data-key-generation={media?.generation ?? 0}
       onKeyDown={(e) => { if (e.key === 'Escape' && call.phase !== 'incoming') hangUp(); }}>
       {showVideo && remotes.length > 0 ? (
         <div className={`call-grid n${Math.min(remotes.length, 4)}`}>

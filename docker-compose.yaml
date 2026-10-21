@@ -132,6 +132,7 @@ services:
       ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncea.ro}:${CONVO_NTFY_PORT:-8091},http://${CONVO_SERVER_IP:-192.168.1.144}:${CONVO_NTFY_PORT:-8091}
       ENCLAVE_PUSH_INTERNAL_ORIGIN: http://ntfy:80
       ENCLAVE_CALLS_ENABLED: "true"
+      ENCLAVE_CALLS_LIVEKIT_URL: http://livekit:7880
       ENCLAVE_CALLS_API_SECRET: ${CONVO_LIVEKIT_SECRET:-convo-dev-livekit-secret-change-me-0123}
     depends_on:
       postgres: { condition: service_healthy }

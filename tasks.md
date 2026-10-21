@@ -100,6 +100,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   Failed wakes are retried with backoff (verified by stopping ntfy during a send); vanished
   endpoints are forgotten and re-registered by the app. FCM (Google devices without a
   distributor) remains open.
+- Group call key rotation (ADR-0006): whenever someone leaves a group call the smallest remaining
+  identity sends an MLS-encrypted `rekey` (generation → key index), web and Android; members
+  removed from / leaving the group are kicked from open call rooms by the server (LiveKit
+  RoomService) and cannot get the new key. Verified: `calls.spec.ts` (removed member dropped,
+  generation advances; leave → rekey) in Chromium/Firefox, and an emulator group call where the
+  Android device applied and led rekeys while the web side stayed encrypted.
 - Resumable uploads (FEAT-01): ciphertext above 8 MiB goes up as S3 multipart parts (V20) gated by
   a per-upload secret; parts are retried, and an interrupted upload is queued with its key/nonce
   seed + session so the resume re-creates identical ciphertext and sends only missing parts.

@@ -19,6 +19,8 @@ import org.springframework.validation.annotation.Validated;
  * @param tokenTtl lifetime of a join token (LiveKit keeps connected participants after expiry)
  * @param maxCallAge after this a call can no longer be joined
  * @param maxGroupParticipants upper bound for group calls
+ * @param livekitUrl LiveKit HTTP API as reachable from the server (room administration, e.g.
+ *     removing a member who left the group); empty disables it
  */
 @Validated
 @ConfigurationProperties("enclave.calls")
@@ -29,7 +31,8 @@ public record CallsProperties(
         @DefaultValue("") String apiSecret,
         @DefaultValue("10m") @NotNull Duration tokenTtl,
         @DefaultValue("12h") @NotNull Duration maxCallAge,
-        @DefaultValue("16") @Min(2) @Max(100) int maxGroupParticipants) {
+        @DefaultValue("16") @Min(2) @Max(100) int maxGroupParticipants,
+        @DefaultValue("") String livekitUrl) {
 
     boolean usable() { return enabled && apiSecret.length() >= 32; }
 }

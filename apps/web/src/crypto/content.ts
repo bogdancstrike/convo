@@ -133,10 +133,15 @@ export interface GroupMeta {
  */
 export interface CallMessage {
   callId: string;
-  action: 'ring' | 'accept' | 'decline' | 'cancel' | 'end' | 'busy';
+  action: 'ring' | 'accept' | 'decline' | 'cancel' | 'end' | 'busy' | 'rekey';
   video?: boolean;
-  /** base64url 32-byte media key (ring only). */
+  /** base64url 32-byte media key (ring and rekey). */
   key?: string;
+  /**
+   * Group calls: key generation (ring = 0). `rekey` replaces the media key after someone left the
+   * room; it travels through the MLS group, so members removed from the group never receive it.
+   */
+  generation?: number;
   /** Direct calls: the callee account, so the caller's other devices know the conversation. */
   to?: string;
   timestamp: number;
@@ -219,13 +224,15 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
   }
 }
 
-const CALL_ACTIONS = new Set(['ring', 'accept', 'decline', 'cancel', 'end', 'busy']);
+const CALL_ACTIONS = new Set(['ring', 'accept', 'decline', 'cancel', 'end', 'busy', 'rekey']);
 function isCallMessage(value: unknown): value is CallMessage {
   return isObject(value) && typeof value.callId === 'string' && /^[0-9a-f-]{36}$/.test(value.callId) && CALL_ACTIONS.has(String(value.action))
     && Number.isFinite(value.timestamp) && (value.video === undefined || typeof value.video === 'boolean')
     && (value.to === undefined || typeof value.to === 'string')
     && (value.key === undefined || (typeof value.key === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value.key)))
-    && (value.action !== 'ring' || typeof value.key === 'string');
+    && (value.generation === undefined || (Number.isSafeInteger(value.generation) && (value.generation as number) >= 0 && (value.generation as number) < 2 ** 31))
+    && (value.action !== 'ring' || typeof value.key === 'string')
+    && (value.action !== 'rekey' || (typeof value.key === 'string' && typeof value.generation === 'number' && value.generation > 0));
 }
 
 function isRevision(value: unknown): value is number {

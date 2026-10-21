@@ -426,6 +426,7 @@ export const ro: Record<MessageKey, string> = {
   'calls.reason.busy': 'Ocupat în alt apel',
   'calls.reason.noAnswer': 'Niciun răspuns',
   'calls.reason.ended': 'Apel încheiat',
+  'calls.reason.removed': 'Nu mai faci parte din acest grup',
   'calls.reason.failed': 'Apelul a eșuat. Verifică conexiunea.',
   'calls.reason.unsupported': 'Acest browser nu poate cripta integral apelurile. Folosește Chrome, Edge sau Firefox actualizat.',
   'calls.reason.answeredElsewhere': 'Ai răspuns pe alt dispozitiv',

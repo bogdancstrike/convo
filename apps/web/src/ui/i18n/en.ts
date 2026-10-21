@@ -424,6 +424,7 @@ export const en = {
   'calls.reason.busy': 'Busy on another call',
   'calls.reason.noAnswer': 'No answer',
   'calls.reason.ended': 'Call ended',
+  'calls.reason.removed': 'You are no longer in this group',
   'calls.reason.failed': 'Call failed. Check your connection.',
   'calls.reason.unsupported': 'This browser can’t encrypt calls end-to-end. Use a current Chrome, Edge or Firefox.',
   'calls.reason.answeredElsewhere': 'Answered on another device',

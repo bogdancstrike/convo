@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -34,6 +35,12 @@ class CallRepository {
     void end(UUID callId, Instant at) {
         jdbc.sql("UPDATE calls SET ended_at = :at WHERE call_id = :id AND ended_at IS NULL")
                 .param("id", callId).param("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC)).update();
+    }
+
+    /** Group calls of a group that may still have participants (not ended, joinable). */
+    List<CallRow> openGroupCalls(byte[] groupId, Instant since) {
+        return jdbc.sql("SELECT * FROM calls WHERE group_id = :g AND ended_at IS NULL AND created_at > :since")
+                .param("g", groupId).param("since", OffsetDateTime.ofInstant(since, ZoneOffset.UTC)).query(CallRepository::map).list();
     }
 
     /** Retention: authorization rows are not a call history; drop them after they can't be joined. */

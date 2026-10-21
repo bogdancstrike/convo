@@ -193,7 +193,7 @@ object Strings {
         "History and recovery" to "Istoric și recuperare",
         "I saved my code" to "Am salvat codul",
         "Incoming video call…" to "Apel video primit…",
-        "Incoming voice call…" to "Apel vocal primit…",
+        "Incoming voice call…" to "Apel vocal primit…", "You are no longer in this group" to "Nu mai faci parte din acest grup",
         "Incoming calls" to "Apeluri primite", "Incoming call" to "Apel primit", "Open Convo to answer" to "Deschide Convo pentru a răspunde",
         "Language" to "Limbă",
         "Light" to "Luminos",

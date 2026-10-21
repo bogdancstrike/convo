@@ -32,12 +32,21 @@ class LiveKitTokens {
      * @return signed token
      */
     String issue(String room, String identity) {
+        return sign(identity, Map.of("room", room, "roomJoin", true, "canPublish", true, "canSubscribe", true, "canPublishData", true), properties.tokenTtl());
+    }
+
+    /** Short-lived server token administering exactly one room (list/remove participants). */
+    String issueAdmin(String room) {
+        return sign("convo-server", Map.of("room", room, "roomAdmin", true), java.time.Duration.ofMinutes(1));
+    }
+
+    private String sign(String subject, Map<String, Object> grant, java.time.Duration ttl) {
         Instant now = clock.instant();
         var claims = new JWTClaimsSet.Builder()
-                .issuer(properties.apiKey()).subject(identity)
-                .notBeforeTime(Date.from(now.minusSeconds(5))).expirationTime(Date.from(now.plus(properties.tokenTtl())))
+                .issuer(properties.apiKey()).subject(subject)
+                .notBeforeTime(Date.from(now.minusSeconds(5))).expirationTime(Date.from(now.plus(ttl)))
                 .jwtID(java.util.UUID.randomUUID().toString())
-                .claim("video", Map.of("room", room, "roomJoin", true, "canPublish", true, "canSubscribe", true, "canPublishData", true))
+                .claim("video", grant)
                 .build();
         try {
             var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);

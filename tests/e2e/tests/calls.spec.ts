@@ -103,8 +103,58 @@ test('group voice call: two members join, the caller sees both, leaving does not
     await carol.getByTestId('call-end').click();
     await expect(owner.getByTestId('remote-audio')).toHaveCount(1, { timeout: 20_000 });
     await expect(screen(bob)).toHaveAttribute('data-phase', 'connected');
+    // Someone left: the remaining participants switch to a new media key (one leader, same generation).
+    for (const page of [owner, bob]) await expect(screen(page)).toHaveAttribute('data-key-generation', '1', { timeout: 20_000 });
+    await expect(screen(bob)).toHaveAttribute('data-encrypted', 'true');
     await owner.getByTestId('call-end').click();
     await bob.getByTestId('call-end').click();
     await expect(screen(bob)).toHaveCount(0, { timeout: 10_000 });
+  } finally { await closeAll(owner, bob, carol); }
+});
+
+test('a member removed from the group is dropped from its ongoing call and the key rotates', async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  const [ownerU, bobU, carolU] = await Promise.all(['rowner', 'rbob', 'rcarol'].map((p) => createUser(request, p)));
+  const [owner, bob, carol] = await Promise.all([1, 2, 3].map(() => newPage(browser)));
+  try {
+    for (const [page, user] of [[owner, ownerU], [bob, bobU], [carol, carolU]] as const) await enroll(page, user);
+    const groupName = `Rekey group ${Date.now() % 10000}`;
+    await owner.getByTestId('new-chat').click();
+    await owner.getByTestId('new-group').click();
+    for (const u of [bobU, carolU]) {
+      await owner.getByTestId('people-search').fill(u.username);
+      await owner.getByTestId(`pick-${u.username}`).click();
+    }
+    await owner.getByTestId('group-next').click();
+    await owner.getByTestId('group-name').fill(groupName);
+    await owner.getByTestId('review-group').click();
+    await owner.getByTestId('create-group').click();
+    await send(owner, 'bob will call');
+    await openChat(bob, groupName);
+    await openChat(carol, groupName);
+
+    // Bob calls, Carol answers; the owner declines and stays outside the call.
+    await bob.getByTestId('start-voice-call').click();
+    await expect(screen(carol)).toHaveAttribute('data-phase', 'incoming', { timeout: 20_000 });
+    await carol.getByTestId('call-accept').click();
+    await expect(screen(owner)).toHaveAttribute('data-phase', 'incoming', { timeout: 20_000 });
+    await owner.getByTestId('call-decline').click();
+    for (const page of [bob, carol]) {
+      await expect(screen(page)).toHaveAttribute('data-phase', 'connected', { timeout: 30_000 });
+      await expect(screen(page)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
+      await expect(screen(page)).toHaveAttribute('data-key-generation', '0');
+    }
+
+    // The owner removes Carol from the group: the server drops her device from the call and Bob
+    // (now the only participant) rotates the key through the MLS group Carol is no longer in.
+    await owner.getByTestId('thread-info').click();
+    owner.once('dialog', (d) => void d.accept());
+    await owner.getByTestId(`member-menu-${carolU.username}`).click();
+    await owner.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await expect(owner.getByTestId(`member-${carolU.username}`)).toHaveCount(0);
+    await expect(screen(carol)).toHaveAttribute('data-reason', 'removed', { timeout: 30_000 });
+    await expect(screen(bob)).toHaveAttribute('data-key-generation', '1', { timeout: 30_000 });
+    await expect(screen(bob)).toHaveAttribute('data-phase', 'connected');
+    await bob.getByTestId('call-end').click();
   } finally { await closeAll(owner, bob, carol); }
 });
