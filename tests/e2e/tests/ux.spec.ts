@@ -87,7 +87,7 @@ test('channel owners publish; members see a read-only channel', async ({ browser
   await expect(message(member, 'Team announcement')).toBeVisible();
   await expect(member.getByTestId('composer')).toHaveCount(0);
   await expect(member.getByText('Only admins can post in this channel')).toBeVisible();
-  await member.reload();
+  await member.reload({ waitUntil: 'domcontentloaded' });
   await expect(member.getByTestId('composer')).toHaveCount(0);
   await expect(message(member, 'Team announcement')).toBeVisible();
   await closeAll(owner, member);

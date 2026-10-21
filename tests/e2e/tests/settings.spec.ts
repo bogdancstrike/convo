@@ -36,7 +36,7 @@ test('Settings overview fits the viewport; categories, profile and confirmed log
   await expect(page.getByTestId('toggle-animations')).toHaveAttribute('aria-checked', 'true');
   await page.getByTestId('toggle-animations').click();
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'off');
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('toggle-animations')).toHaveAttribute('aria-checked', 'false');
   await page.getByTestId('toggle-animations').click();
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'on');
@@ -73,7 +73,7 @@ test('last seen is opt-in and hiding removes the value returned to other account
   await expect(toggle).toHaveAttribute('aria-checked', 'false'); await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
   await expect(observer.getByTestId('last-seen')).toHaveText(/^Last seen today: \d{2}:\d{2}$/);
-  await owner.reload(); await expect(owner.getByTestId('toggle-last-seen')).toHaveAttribute('aria-checked', 'true');
+  await owner.reload({ waitUntil: 'domcontentloaded' }); await expect(owner.getByTestId('toggle-last-seen')).toHaveAttribute('aria-checked', 'true');
   const hidden = observer.waitForResponse((r) => r.url().endsWith('/last-seen') && r.request().method() === 'GET');
   await owner.getByTestId('toggle-last-seen').click();
   await expect(owner.getByTestId('toggle-last-seen')).toHaveAttribute('aria-checked', 'false');

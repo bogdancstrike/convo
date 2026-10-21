@@ -60,7 +60,7 @@ test('send an encrypted photo and file; recipient views and downloads them', asy
   await recipient.getByTestId('open-shared-content').click();
   const gallery = recipient.getByTestId('shared-content');
   await expect(gallery.getByTestId('attachment-image')).toBeVisible();
-  await recipient.reload();
+  await recipient.reload({ waitUntil: 'domcontentloaded' });
   await expect(recipient.getByTestId('shared-content')).toBeVisible();
   await recipient.getByTestId('shared-docs').click();
   const galleryFile = recipient.getByTestId('shared-content').getByTestId('attachment-file');

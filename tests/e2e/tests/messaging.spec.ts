@@ -84,7 +84,7 @@ test.describe('direct encrypted messaging', () => {
     await expect(message(page, 'remember the milk').getByTestId('message-status')).toHaveText('Sent');
 
     // F5 restores the same open chat (URL navigation state + encrypted local storage).
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('splash')).toBeVisible();
     await expect(page.getByTestId('thread-title')).toHaveText('Note to self');
     await expect(message(page, 'remember the milk')).toBeVisible();

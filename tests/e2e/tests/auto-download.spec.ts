@@ -43,7 +43,7 @@ test('photo auto-download can be turned off and the photo loads on tap', async (
     expect(downloads).toBeGreaterThan(0);
 
     // The preference survives a reload (device-local encrypted settings).
-    await recipient.reload();
+    await recipient.reload({ waitUntil: 'domcontentloaded' });
     await expect(recipient.getByTestId('nav-settings')).toBeVisible({ timeout: 45_000 });
     await recipient.getByTestId('nav-settings').click();
     await recipient.getByTestId('settings-card-storage').click();

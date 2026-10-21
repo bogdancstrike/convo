@@ -20,7 +20,7 @@ test('linked browser restores earlier incoming, outgoing and self messages with 
   await expect(message(second, 'sent before linking')).toBeVisible();
   await expect(message(second, 'received before linking')).toBeVisible();
   await openChat(second, 'Note to self'); await expect(message(second, 'self before linking')).toBeVisible();
-  await second.reload(); await expect(message(second, 'self before linking')).toBeVisible();
+  await second.reload({ waitUntil: 'domcontentloaded' }); await expect(message(second, 'self before linking')).toBeVisible();
   await closeAll(second, other);
 });
 

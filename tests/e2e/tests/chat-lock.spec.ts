@@ -61,7 +61,7 @@ test('turn on passwordless in Settings, then lock and unlock a chat with the pas
     const chatUrl = page.url();
     await page.getByTestId('filter-locked').click();
     await page.locator('.chat-row > button.row').first().click();
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('nav-settings')).toBeVisible({ timeout: 45_000 });
     expect(page.url()).not.toBe(chatUrl);
     await expect(page.getByTestId('locked-chat')).toBeVisible();
@@ -84,7 +84,7 @@ test('turn on passwordless in Settings, then lock and unlock a chat with the pas
     await expect(page.getByTestId('toggle-app-lock')).toHaveAttribute('aria-checked', 'true');
     // Failed user verification keeps it locked; nothing behind the lock screen is rendered.
     await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-locked')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('nav-settings')).toHaveCount(0);
     await expect(page.getByText('locked secret 42')).toHaveCount(0);
