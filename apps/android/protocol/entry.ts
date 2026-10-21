@@ -170,6 +170,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'joinRequests': return Promise.all((await client.joinRequests(String(args.id))).map(async (r) => ({ ...r, label: await client!.displayName(r.accountId) })));
     case 'declineJoin': return client.declineJoinRequest(String(args.id), String(args.accountId));
     case 'leaveGroup': return client.leaveGroup(String(args.id));
+    case 'acceptRequest': return client.acceptRequest(String(args.id));
     case 'block': return client.setBlocked(String(args.id), Boolean(args.blocked));
     case 'setDisappearing': return client.setDisappearing(String(args.id), Number(args.seconds));
     case 'startCall': return client.startCall(String(args.conversationId), Boolean(args.video));

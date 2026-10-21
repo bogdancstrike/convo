@@ -123,6 +123,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   encrypted store with a "waiting for connection" placeholder that already has the final message
   ID; uploaded and sent on reconnect (no duplicates). Fixed: binary data must be stored as
   base64url (the store serializes JSON). `offline-upload.spec.ts` Chromium/Firefox.
+- Message requests (FEAT-02): first direct contact from someone new is a request (no read
+  receipts, typing or profile sharing) with Accept/Block; replying accepts. Web
+  (`requests.spec.ts`) and Android (emulator: Request tag, banner, accept).
+- Full regression 2026-10-21 (evening): 80 passed, 0 failed, 0 flaky, 4 skipped (hostname-only).
 - Still open: physical-device/accessibility testing,
   background call ringing (push), remaining UI parity and legacy-origin migration.
 

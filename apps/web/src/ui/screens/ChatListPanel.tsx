@@ -180,6 +180,7 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
           <span className="row-icons">
             {isMuted(c) && <Icon name="mute" size={16} label={t('chats.mute')} />}
             {c.pinned && <Icon name="pin" size={16} label={t('chats.pinned')} />}
+            {c.request && <span className="role-tag" data-testid="request-tag">{t('request.tag')}</span>}
             {c.unread > 0 && (
               <>{c.mentioned && <span className="chat-mention-badge" aria-label={t('mention.badge')} data-testid="mention-badge">@</span>}
               <span className="badge" aria-label={t('chats.unread', { count: c.unread })}>

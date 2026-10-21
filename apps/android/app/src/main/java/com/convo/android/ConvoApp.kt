@@ -188,6 +188,7 @@ import org.json.JSONObject
                     Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), fontWeight = FontWeight.SemiBold)
                     RawText(c.optString("preview").let { p -> if (p in setOf("📷 Photo", "🎤 Voice message", "📎 File")) tr(p) else p }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (c.optBoolean("request")) SuggestionChip({}, label = { Text("Request") }, modifier = Modifier.padding(end = 4.dp))
                 if (c.optBoolean("pinned")) Icon(Icons.Outlined.PushPin, "Pinned", Modifier.size(16.dp))
                 if (c.optBoolean("mentioned") && c.optInt("unread") > 0) RawText("@ ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 if (c.optInt("unread") > 0) Badge { Text(c.optInt("unread").toString()) }

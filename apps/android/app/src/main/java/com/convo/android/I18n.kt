@@ -30,6 +30,7 @@ object Strings {
         " End-to-end encrypted" to " Criptat integral",
         " Securing call…" to " Se securizează apelul…",
         "Accept" to "Răspunde",
+        "Request" to "Cerere", "Accept request" to "Acceptă", "This person is not in your chats yet. Accept to send read receipts and share your profile, or block them." to "Această persoană nu este încă în conversațiile tale. Acceptă pentru a trimite confirmări de citire și a-ți partaja profilul, sau blocheaz-o.",
         "waiting for connection" to "se așteaptă conexiunea", "upload failed" to "încărcarea a eșuat",
         "1 unread message" to "1 mesaj necitit",
         " Scan QR code" to " Scanează codul QR", "QR code with the comparison code" to "Cod QR cu codul de comparare", "Scan the QR code shown on the new device" to "Scanează codul QR afișat pe dispozitivul nou", "No pending link request matches this QR code." to "Nicio cerere de conectare nu corespunde acestui cod QR.",

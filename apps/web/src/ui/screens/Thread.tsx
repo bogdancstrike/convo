@@ -298,6 +298,15 @@ export function Thread({
           <Icon name="chevronDown" size={20} />{newBelow > 0 && <span className="badge" data-testid="jump-latest-count">{newBelow}</span>}
         </button>
       )}
+      {conversation.request && !conversation.blocked && (
+        <div className="request-banner" role="region" aria-label={t('request.title')} data-testid="request-banner">
+          <p>{t('request.body', { name: title })}</p>
+          <div className="request-actions">
+            <button className="btn" onClick={() => { if (window.confirm(t('block.confirm', { name: title }))) void client.setBlocked(conversation.id, true); }} data-testid="request-block">{t('block.block')}</button>
+            <button className="btn btn-primary" onClick={() => void client.acceptRequest(conversation.id)} data-testid="request-accept">{t('request.accept')}</button>
+          </div>
+        </div>
+      )}
       {conversation.blocked && (
         <div className="channel-read-only" role="status" data-testid="blocked-banner"><Icon name="lock" size={16} />{t('block.banner', { name: title })}
           <button className="btn" onClick={() => void client.setBlocked(conversation.id, false)} data-testid="unblock">{t('block.unblock')}</button></div>

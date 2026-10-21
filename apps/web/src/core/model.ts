@@ -88,6 +88,8 @@ export interface Conversation {
   notify?: 'all' | 'mentions';
   /** An unread message mentions this account (cleared when read). */
   mentioned?: boolean;
+  /** Direct chat started by someone new: no read receipts, typing or profile until accepted. */
+  request?: boolean;
   /** Direct chat: this account blocked the peer (their direct content is dropped on arrival). */
   blocked?: boolean;
   /** When `blocked` last changed (last writer wins across own devices). */

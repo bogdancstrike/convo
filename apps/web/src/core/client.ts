@@ -275,7 +275,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     await this.saveConversations([{ ...conversation, unread: 0, revisedUnread: undefined, mentioned: undefined }]);
     const started = unread.filter((m) => m.direction === 'in' && m.expireTimer && !m.expiresAt).map((m) => startExpiry(m, Date.now()));
     if (started.length) await this.repos.store.commit(started.flatMap((m) => [this.repos.putMessage(m), expiryOp(m)!]));
-    if (this.currentSettings.readReceipts && conversation.kind !== 'note') {
+    if (this.currentSettings.readReceipts && conversation.kind !== 'note' && !conversation.request) {
       const seen = new Map<string, ChatMessage>();
       for (const m of [...unread, ...revisedMessages]) if (m && m.direction === 'in' && !m.deleted) seen.set(`${m.authorId}/${m.id}`, m);
       const authors = new Set([...seen.values()].map((m) => m.authorId));
@@ -315,6 +315,16 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       if (!conversation || conversation.kind !== 'direct') throw new Error('only direct chats can be blocked');
       await this.saveConversations([{ ...conversation, blocked: blocked || undefined, blockedChangedAt: Date.now() }]);
     });
+  }
+
+  /** Accepts a message request: normal receipts/typing resume and the profile is shared. */
+  async acceptRequest(conversationId: string): Promise<void> {
+    await this.mutex.run(async () => {
+      const conversation = this.conversationCache.get(conversationId);
+      if (conversation?.request) await this.saveConversations([{ ...conversation, request: undefined }]);
+    });
+    const profile = this.profileCache.get(this.accountId);
+    if (profile) await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'profile', profile }, false);
   }
 
   isBlocked(accountId: string): boolean { return !!this.conversationCache.get(accountId)?.blocked; }
@@ -490,6 +500,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const text = content.body?.trim() || undefined;
     if (!text && !content.attachments?.length) throw new Error('empty message');
     if (this.isBlocked(conversationId)) throw new ContactBlockedError();
+    if (this.conversationCache.get(conversationId)?.request) await this.acceptRequest(conversationId); // replying accepts
     if (text && utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
     const groupId = groupIdOf(conversationId);
     const group = groupId ? await this.groups.record(groupId) : undefined;
@@ -1008,7 +1019,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** Sends a transient typing indicator when the user enabled them. */
   async sendTyping(conversationId: string, action: 'started' | 'stopped'): Promise<void> {
     const conversation = this.conversationCache.get(conversationId);
-    if (!this.currentSettings.typingIndicators || conversation?.kind !== 'direct' || this.socket.state !== 'online') return;
+    if (!this.currentSettings.typingIndicators || conversation?.kind !== 'direct' || conversation.request || this.socket.state !== 'online') return;
     const item = Outbox.create({
       destination: conversationId,
       content: { v: CONTENT_VERSION, kind: 'typing', typing: { action, timestamp: Date.now() } },
@@ -1227,7 +1238,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         followUps.push(...this.receiptFollowUps(result, sender, sender, content.data));
         if (result === 'new') {
           const ownProfile = this.profileCache.get(this.accountId);
-          if (ownProfile && !content.data.profile) followUps.push(() => this.enqueue(sender, { v: CONTENT_VERSION, kind: 'profile', profile: ownProfile }, false));
+          if (ownProfile && !content.data.profile && !this.conversationCache.get(sender)?.request) followUps.push(() => this.enqueue(sender, { v: CONTENT_VERSION, kind: 'profile', profile: ownProfile }, false));
         }
         return followUps;
       }
@@ -1369,6 +1380,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const targetId = data.reaction?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
     const targetAuthor = data.reaction?.targetAuthorId ?? authorId;
     if (await this.repos.isLocallyDeleted({ conversationId, authorId: targetAuthor, id: targetId })) return 'ignored';
+    const isNewChat = !this.conversationCache.has(conversationId);
     const conversation = await this.ensureConversation(conversationId, ops);
     changed.add(conversation.id);
 
@@ -1449,6 +1461,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       archived: conversation.archived && conversation.muted,
       unread: direction === 'in' && !visible ? conversation.unread + 1 : conversation.unread,
       mentioned: conversation.mentioned || mentionsMe || undefined,
+      // First contact from someone new is a message request (direct chats only).
+      request: conversation.request || (isNewChat && direction === 'in' && conversation.kind === 'direct') || undefined,
     });
     return 'new';
   }
@@ -1605,7 +1619,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const group = groupIdOf(conversationId) ? conversationId : undefined;
     const followUps = [() => this.enqueue(author, receipt('delivery', [id], group, revisions), false)];
     if (result === 'new') followUps.push(async () => this.emitAlert(conversationId, author, data));
-    if (this.currentSettings.readReceipts && this.activeConversation === conversationId && document.visibilityState === 'visible') {
+    if (this.currentSettings.readReceipts && !this.conversationCache.get(conversationId)?.request && this.activeConversation === conversationId && document.visibilityState === 'visible') {
       followUps.push(() => this.enqueue(author, receipt('read', [id], group, revisions), false));
     }
     return followUps;

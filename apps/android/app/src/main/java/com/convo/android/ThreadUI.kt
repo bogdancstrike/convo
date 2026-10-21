@@ -117,6 +117,13 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 }
             }
             if (!starredOnly) {
+                if (conversation.optBoolean("request") && !conversation.optBoolean("blocked")) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("This person is not in your chats yet. Accept to send read receipts and share your profile, or block them.", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton({ app.call("block", obj("id" to id, "blocked" to true), success = "Contact blocked") }) { Text("Block") }
+                        Button({ app.call("acceptRequest", obj("id" to id)) }) { Text("Accept request") }
+                    }
+                }
                 if (conversation.optBoolean("blocked")) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("You blocked this contact.", Modifier.weight(1f)); TextButton({ app.call("block", obj("id" to id, "blocked" to false), success = "Contact unblocked") }) { Text("Unblock") }
                 }
