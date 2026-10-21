@@ -1,6 +1,8 @@
 import { ApiError } from '../../api/errors';
 import type { EnclaveClient } from '../../core/client';
 import { isMuted, type Conversation } from '../../core/model';
+import { isSnoozed } from '../../core/snooze';
+import { openSnooze } from './SnoozeDialog';
 import type { MenuItem } from '../components/Popover';
 import type { I18n } from '../i18n/i18n';
 
@@ -30,6 +32,10 @@ export function conversationMenu(client: EnclaveClient, conversation: Conversati
             { label: t('header.muteAlways'), onSelect: () => void client.setMute(conversation.id, Infinity), testId: 'menu-mute-always' },
           ],
         },
+    isSnoozed(conversation.snooze)
+      ? { label: t('snooze.end', { when: new Date(conversation.snooze!.until).toLocaleString() }), icon: 'clock' as const, testId: 'menu-snooze-end',
+        onSelect: () => void client.setSnooze(conversation.id, null) }
+      : { label: t('snooze.menu'), icon: 'clock' as const, testId: 'menu-snooze', onSelect: () => openSnooze(conversation.id) },
     ...(group ? [{
       label: conversation.notify === 'mentions' ? t('notify.allMessages') : t('notify.mentionsOnly'),
       icon: 'mute' as const, testId: 'menu-notify-mode',

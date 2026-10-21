@@ -5,6 +5,7 @@ export { fold } from '../../core/search';
 import { useMemo, useState } from 'react';
 import type { EnclaveClient } from '../../core/client';
 import { isMuted, type Conversation } from '../../core/model';
+import { isSnoozed } from '../../core/snooze';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { useAccountLabel, useMessageSearch } from '../hooks';
@@ -179,6 +180,7 @@ function ChatRow({ client, conversation: c, active, onSelect, excerpt, onInfo, o
           </span>
           <span className="row-icons">
             {isMuted(c) && <Icon name="mute" size={16} label={t('chats.mute')} />}
+            {isSnoozed(c.snooze) && <span data-testid="snoozed" title={t('snooze.until', { when: new Date(c.snooze!.until).toLocaleString(), zone: c.snooze!.zone })}><Icon name="clock" size={16} label={t('snooze.active')} /></span>}
             {c.pinned && <Icon name="pin" size={16} label={t('chats.pinned')} />}
             {c.request && <span className="role-tag" data-testid="request-tag">{t('request.tag')}</span>}
             {c.unread > 0 && (

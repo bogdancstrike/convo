@@ -145,6 +145,8 @@ export interface SyncMessage {
   sent?: { destination: string; data: DataMessage };
   /** Read cursor of a conversation advanced on another device. */
   read?: { conversationId: string; upTo: number };
+  /** Conversation snooze (own devices only; higher mutation wins; `until: null` ends it). */
+  snooze?: { conversationId: string; until: number | null; zone: string; mutation: number };
   /** Private onboarding checklist progress (own devices only; higher counter wins). */
   onboarding?: { conversationId: string; itemId: string; done: boolean; counter: number };
 }
@@ -271,6 +273,11 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
       if (!isObject(parsed.sync)) throw new Error('malformed sync');
       if (parsed.sync.sent !== undefined && (!isObject(parsed.sync.sent) || !isDataMessage(parsed.sync.sent.data))) {
         throw new Error('malformed sync transcript');
+      }
+      if (parsed.sync.snooze !== undefined) {
+        const z = parsed.sync.snooze;
+        if (!isObject(z) || typeof z.conversationId !== 'string' || z.conversationId.length > 80 || !(z.until === null || Number.isSafeInteger(z.until))
+          || typeof z.zone !== 'string' || z.zone.length > 64 || !Number.isSafeInteger(z.mutation)) throw new Error('malformed snooze sync');
       }
       if (parsed.sync.onboarding !== undefined) {
         const o = parsed.sync.onboarding;

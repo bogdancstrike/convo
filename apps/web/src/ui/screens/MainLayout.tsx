@@ -1,3 +1,4 @@
+import { SnoozeDialog } from './SnoozeDialog';
 import { CommunitiesPanel } from './CommunitiesPanel';
 import { JoinLinkHandler } from '../joinLinks';
 import { useMessageNotifications } from '../notifications';
@@ -166,6 +167,7 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
           <Avatar id={client.accountId} name={labelOf(client.device)} size={30} />
         </button>
       </nav>
+      <SnoozeDialog client={client} />
       <section className="sidebar" aria-label={t('nav.chats')}>
         {sidebar}
       </section>

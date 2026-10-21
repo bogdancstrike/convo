@@ -186,6 +186,8 @@ class MainActivity : FragmentActivity() {
     var canPinActive by mutableStateOf(false); private set
     /** Where Back from a thread returns (e.g. the community it was opened from); null = chat list. */
     var threadReturn: Pair<String, String>? = null
+    /** Conversation whose snooze dialog is open. */
+    var snoozeFor by mutableStateOf<String?>(null)
     /** Opens a chat from another screen; Back returns to that screen and tab. */
     fun openChatFrom(id: String) { val from = route to selectedTab; openChat(id); threadReturn = from }
     fun openChat(id: String) {

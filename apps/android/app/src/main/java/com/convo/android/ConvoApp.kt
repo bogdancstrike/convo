@@ -154,6 +154,7 @@ import org.json.JSONObject
             } }
         }
         if (mediaOpen && app.phase == "ready") MediaBrowser(app) { mediaOpen = false }
+        app.snoozeFor?.let { SnoozeDialog(app, it) }
         app.error?.let { message -> AlertDialog(onDismissRequest = { app.error = null }, title = { Text("Convo") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { app.error = null }) { Text("OK") } }) }
         if (serverEdit) AlertDialog(onDismissRequest = { serverEdit = false }, title = { Text("Server address") }, text = { OutlinedTextField(server, { server = it }, label = { Text("HTTPS address") }) }, confirmButton = { TextButton(onClick = { serverEdit = false; app.setServer(server) }) { Text("Save") } }, dismissButton = { TextButton(onClick = { serverEdit = false }) { Text("Cancel") } })
     }
@@ -198,6 +199,7 @@ import org.json.JSONObject
                 }
                 if (c.optBoolean("request")) SuggestionChip({}, label = { Text("Request") }, modifier = Modifier.padding(end = 4.dp))
                 if (c.optBoolean("pinned")) Icon(Icons.Outlined.PushPin, "Pinned", Modifier.size(16.dp))
+                if ((c.optJSONObject("snooze")?.optLong("until") ?: 0L) > System.currentTimeMillis()) Icon(Icons.Outlined.Schedule, "Snoozed", Modifier.size(16.dp))
                 if (c.optBoolean("mentioned") && c.optInt("unread") > 0) RawText("@ ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 if (c.optInt("unread") > 0) Badge { Text(c.optInt("unread").toString()) }
                 ConversationQuickMenu(app, c)
@@ -228,6 +230,11 @@ import org.json.JSONObject
 @Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
+    // Timed snooze (specs §30.8): an overlay; the mute/notify mode above resumes afterwards.
+    val snoozeUntil = c.optJSONObject("snooze")?.optLong("until") ?: 0L
+    if (snoozeUntil > System.currentTimeMillis()) DropdownMenuItem(text = { RawText(tr("End snooze (until {when})").replace("{when}", java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(snoozeUntil)))) },
+        leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = { close(); app.call("setSnooze", obj("id" to c.optString("id"), "until" to JSONObject.NULL)) })
+    else DropdownMenuItem(text = { Text("Snooze notifications…") }, leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = { close(); app.snoozeFor = c.optString("id") })
     if (c.optString("kind") == "group" && !c.optBoolean("left")) DropdownMenuItem(text = { Text(if (c.optBoolean("adminOnly")) "Leave channel" else "Leave group", color = MaterialTheme.colorScheme.error) },
         leadingIcon = { Icon(Icons.Outlined.Logout, null, tint = MaterialTheme.colorScheme.error) }, onClick = { confirm = "leave" })
     if (c.optString("kind") == "group") DropdownMenuItem(text = { Text(if (c.optString("notify") == "mentions") "Notify for all messages" else "Notify only for mentions") }, leadingIcon = { Icon(Icons.Outlined.AlternateEmail, null) },
@@ -252,4 +259,29 @@ import org.json.JSONObject
         confirmButton = { TextButton({ confirm = ""; close(); app.call("block", obj("id" to c.optString("id"), "blocked" to true), success = "Contact blocked") }) { Text("Block", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
     else     if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })
+}
+
+/** Snooze dialog: presets resolve to an exact local time shown with the time zone before confirming. */
+@Composable fun SnoozeDialog(app: MainActivity, conversationId: String) {
+    val zone = java.util.TimeZone.getDefault().id
+    val now = remember { java.util.Calendar.getInstance() }
+    fun at(hour: Int, nextDay: Boolean): Long = (now.clone() as java.util.Calendar).apply {
+        if (nextDay) add(java.util.Calendar.DAY_OF_MONTH, 1); set(java.util.Calendar.HOUR_OF_DAY, hour); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val evening = at(18, false).let { if (it <= now.timeInMillis) at(18, true) else it }
+    val options = listOf("This evening" to evening, "Tomorrow morning" to at(9, true), "For 1 h" to now.timeInMillis + 3_600_000, "For 4 h" to now.timeInMillis + 4 * 3_600_000)
+    var picked by remember { mutableStateOf(0) }
+    val format = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+    AlertDialog(onDismissRequest = { app.snoozeFor = null }, title = { Text("Snooze notifications") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Alerts pause until the time you choose. Messages still arrive and count as unread; calls still ring. Afterwards your current notification setting resumes.", style = MaterialTheme.typography.bodySmall)
+            options.forEachIndexed { i, (label, time) ->
+                Row(Modifier.fillMaxWidth().clickable { picked = i }, verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(picked == i, { picked = i }); Column { Text(label); RawText(format.format(java.util.Date(time)), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+            RawText(tr("Snoozed until {when} ({zone})").replace("{when}", format.format(java.util.Date(options[picked].second))).replace("{zone}", zone), style = MaterialTheme.typography.bodyMedium)
+        }
+    }, confirmButton = { TextButton(onClick = { app.call("setSnooze", obj("id" to conversationId, "until" to options[picked].second, "zone" to zone)); app.snoozeFor = null }) { Text("Snooze") } },
+        dismissButton = { TextButton(onClick = { app.snoozeFor = null }) { Text("Cancel") } })
 }

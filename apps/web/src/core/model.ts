@@ -108,6 +108,10 @@ export interface Conversation {
   revisedUnread?: { authorId: string; id: string }[];
   pinned: boolean;
   muted: boolean;
+  /** Timed snooze overlay (specs §30.8); the underlying mute/notify mode is unchanged. */
+  snooze?: import('./snooze').Snooze;
+  /** Snooze mutation counter (own-device sync: higher wins; expiry is persisted, never revived). */
+  snoozeMutation?: number;
   /** Mute expiry (epoch ms); absent with `muted` means "always". */
   mutedUntil?: number;
   /** The preview is the user's own message (list shows "You:"). */

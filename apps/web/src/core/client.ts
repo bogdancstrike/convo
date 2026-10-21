@@ -37,6 +37,7 @@ import { approveRequest, describeRequest, type IncomingLinkRequest } from './lin
 import { groupConversationId, groupIdOf, isMuted, labelOf, STATUS_RANK, type ChatMessage, type Conversation, type DeviceState, type MessageStatus, type Settings } from './model';
 import { acceptsEdit, canEdit, editableUntil, normalizeEditBody } from './editPolicy';
 import { sanitizeAutoDownload } from './mediaPolicy';
+import { isSnoozed, localZone } from './snooze';
 import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './disappearing';
 import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, type CallInvite, type CallJoin, type CallKey, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
@@ -178,7 +179,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       });
     });
     this.socket.start();
-    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); }, OUTBOX_RETRY_MS);
+    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); void this.sweepSnoozes(); }, OUTBOX_RETRY_MS);
+    void this.sweepSnoozes();
     void this.maintainGroups();
   }
 
@@ -603,6 +605,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private emitAlert(conversationId: string, authorId: string, data: DataMessage): void {
     const conversation = this.conversationCache.get(conversationId);
     if (!conversation || isMuted(conversation) || conversation.blocked) return;
+    // Snoozed: ordinary alerts wait; messages still arrive and count as unread.
+    if (conversation.snooze && !isSnoozed(conversation.snooze)) void this.expireSnooze(conversationId);
+    else if (isSnoozed(conversation.snooze)) return;
     const mention = !!data.mentions?.includes(this.accountId) && !!groupIdOf(conversationId);
     if (conversation.kind === 'group' && conversation.notify === 'mentions' && !mention) return;
     this.emit('alert', { conversationId, authorId, messageId: data.messageId, mention, body: data.body, attachment: !!data.attachments?.length });
@@ -1420,6 +1425,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
           await this.applyData(destination, this.accountId, 'out', data, envelope, ops, changed);
         }
         if (content.sync.onboarding) await this.applyOnboardingSync(content.sync.onboarding, ops);
+        if (content.sync.snooze) this.applySnoozeSync(content.sync.snooze, ops);
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
           if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined, mentioned: undefined });
@@ -1531,6 +1537,44 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (!group?.adminOnly || !group.community) return false;
     const manager = (id: string) => ['owner', 'admin'].includes(group.members.find((m) => m.accountId === id)?.role ?? '');
     return manager(authorId) && request.reviewers.every(manager) && !request.audience.includes(authorId);
+  }
+
+  // --- snoozing (specs §30.8) ---------------------------------------------------------------
+
+  /**
+   * Snoozes alerts until `until` (UTC ms) or ends the snooze (`null`). The underlying mute/notify
+   * mode is untouched; own devices get the same state via E2EE sync.
+   */
+  async setSnooze(conversationId: string, until: number | null, zone = localZone()): Promise<void> {
+    if (until !== null && until <= Date.now()) throw new Error('snooze must end in the future');
+    const update = await this.mutex.run(async () => {
+      const c = this.conversationCache.get(conversationId);
+      if (!c) throw new Error('unknown conversation');
+      const mutation = (c.snoozeMutation ?? 0) + 1;
+      await this.saveConversations([{ ...c, snooze: until === null ? undefined : { until, zone }, snoozeMutation: mutation }]);
+      return { conversationId, until, zone, mutation };
+    });
+    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'sync', sync: { snooze: update } }, false);
+  }
+
+  /** Persists that a snooze expired, so a stale sync or clock rollback cannot bring it back. */
+  private async expireSnooze(conversationId: string): Promise<void> {
+    await this.mutex.run(async () => {
+      const c = this.conversationCache.get(conversationId);
+      if (c?.snooze && !isSnoozed(c.snooze)) await this.saveConversations([{ ...c, snooze: undefined }]);
+    });
+  }
+
+  /** Clears every expired snooze (start-up, resume, periodic sweep). */
+  async sweepSnoozes(): Promise<void> {
+    for (const c of this.conversations()) if (c.snooze && !isSnoozed(c.snooze)) await this.expireSnooze(c.id);
+  }
+
+  private applySnoozeSync(update: { conversationId: string; until: number | null; zone: string; mutation: number }, ops: StoreOp[]): void {
+    const c = this.conversationCache.get(update.conversationId);
+    if (!c || (c.snoozeMutation ?? 0) >= update.mutation) return; // stale or duplicate
+    const active = update.until !== null && update.until > Date.now();
+    this.stage(ops, { ...c, snooze: active ? { until: update.until!, zone: update.zone } : undefined, snoozeMutation: update.mutation });
   }
 
   // --- community onboarding (specs §30.7) -------------------------------------------------

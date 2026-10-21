@@ -127,6 +127,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   outbox acceptance callback, `refreshRecord` overwriting concurrent E2EE metadata, and history
   merges dropping acknowledgement state. Android has the editor too (Community → Welcome &
   rules; emulator-verified save → welcome card).
+- Timed conversation snoozing (specs §30.8, FR-NOTIF-01): presets This evening / Tomorrow
+  morning / 1 h / 4 h / custom, exact time + time zone shown before confirming; an overlay on the
+  mute/mentions mode (which resumes); alerts paused, messages still arrive and count; End snooze;
+  E2EE own-device sync (`sync.snooze`, higher mutation wins), expiry persisted so stale sync or
+  clock rollback cannot revive it. Web + Android (menu, dialog, list icon). `snooze.spec.ts`
+  (Chromium/Firefox), `snooze.test.ts`, emulator.
 - Rich group descriptions (specs §30.8): E2EE About text (≤ 8 KiB, safe formatting, links shown,
   no HTML) and rename for owners/admins on web and Android; receivers accept group metadata only
   from owners/admins (re-reading roles once for fresh promotions). `group-about.spec.ts`
