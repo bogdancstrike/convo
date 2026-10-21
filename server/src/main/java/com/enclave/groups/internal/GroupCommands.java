@@ -44,6 +44,9 @@ final class GroupCommands {
      * @param epoch epoch of the ciphertext (must equal the current epoch)
      * @param submissionId 16-byte idempotency key
      * @param message encoded MLSMessage (private message)
+     * @param urgent priority hint (call rings) for offline wake-ups
      */
-    record Message(long epoch, byte[] submissionId, byte[] message) {}
+    record Message(long epoch, byte[] submissionId, byte[] message, boolean urgent) {
+        Message(long epoch, byte[] submissionId, byte[] message) { this(epoch, submissionId, message, false); }
+    }
 }

@@ -42,6 +42,8 @@ export interface OutboxItem {
   /** Link to the local message whose status this item drives. */
   message?: { conversationId: string; id: string };
   transientTtlSeconds: number;
+  /** Priority hint (call rings): offline devices get an urgent push wake. */
+  urgent?: boolean;
   state: OutboxState;
   submissions: PreparedSubmission[];
   attempts: number;
@@ -82,6 +84,7 @@ export class Outbox {
     message?: { conversationId: string; id: string };
     transientTtlSeconds?: number;
     group?: boolean;
+    urgent?: boolean;
   }): OutboxItem {
     const targets = [];
     if (params.group) {
@@ -99,6 +102,7 @@ export class Outbox {
       syncTranscript: params.syncTranscript,
       message: params.message,
       transientTtlSeconds: params.transientTtlSeconds ?? 0,
+      ...(params.urgent ? { urgent: true } : {}),
       state: 'queued',
       submissions: [],
       attempts: 0,
@@ -178,7 +182,7 @@ export class Outbox {
         item.submissions.push({
           target,
           accepted: false,
-          group: { groupId: prepared.groupId, epoch: prepared.epoch, message: prepared.message, submissionId: toBase64Url(randomBytes(16)) },
+          group: { groupId: prepared.groupId, epoch: prepared.epoch, message: prepared.message, submissionId: toBase64Url(randomBytes(16)), ...(item.urgent ? { urgent: true } : {}) },
         });
         item.state = 'ready';
         await this.store.commit([...prepared.ops, Outbox.op(item)]);
@@ -203,7 +207,7 @@ export class Outbox {
             destination: target,
             submissionId: toBase64Url(randomBytes(16)),
             messages: fanout.messages,
-            urgent: false,
+            urgent: item.urgent === true,
             transientTtlSeconds: item.transientTtlSeconds,
           },
         });

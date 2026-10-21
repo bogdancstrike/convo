@@ -165,7 +165,7 @@ class GroupService {
         // Members who left get no further application messages, even before their MLS removal.
         Set<UUID> departed = groups.departures(groupId);
         List<DeviceAddress> recipients = groups.devices(groupId).stream().filter(d -> !d.equals(caller) && !departed.contains(d.accountId())).toList();
-        delivery.deliverGroup(recipients, new GroupEnvelope(GroupEnvelope.Kind.PRIVATE, caller, groupId, cmd.epoch(), 0, cmd.message()));
+        delivery.deliverGroup(recipients, new GroupEnvelope(GroupEnvelope.Kind.PRIVATE, caller, groupId, cmd.epoch(), 0, cmd.message(), cmd.urgent()));
         return false;
     }
 

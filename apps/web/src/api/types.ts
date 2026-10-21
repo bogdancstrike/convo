@@ -230,6 +230,8 @@ export interface GroupMessageRequest {
   epoch: number;
   submissionId: string;
   message: string;
+  /** Priority hint (call rings). */
+  urgent?: boolean;
 }
 
 /** `GET /v1/account/credentials`: registered IdP credential types. `unavailable` is never "none". */

@@ -760,7 +760,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   private async sendCall(conversationId: string, call: CallMessage): Promise<void> {
-    await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'call', call }, !groupIdOf(conversationId));
+    // Rings are urgent so an offline phone is woken to ring (content-free push; MSG-02).
+    await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'call', call }, !groupIdOf(conversationId), undefined, [], false, call.action === 'ring');
   }
 
   private async logCall(entry: CallLogEntry, ops?: StoreOp[]): Promise<void> {
@@ -1533,11 +1534,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     message?: { conversationId: string; id: string },
     extraOps: StoreOp[] = [],
     group = false,
+    urgent = false,
   ): Promise<void> {
     const groupId = group ? destination : groupIdOf(destination);
     const item = groupId
-      ? Outbox.create({ destination: groupId, content, selfAccountId: this.accountId, syncTranscript: false, message, group: true })
-      : Outbox.create({ destination, content, selfAccountId: this.accountId, syncTranscript, message });
+      ? Outbox.create({ destination: groupId, content, selfAccountId: this.accountId, syncTranscript: false, message, group: true, urgent })
+      : Outbox.create({ destination, content, selfAccountId: this.accountId, syncTranscript, message, urgent });
     await this.repos.store.commit([...extraOps, Outbox.op(item)]);
     void this.outbox.flush();
   }

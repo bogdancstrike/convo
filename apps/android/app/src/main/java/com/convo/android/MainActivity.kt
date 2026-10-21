@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Base64
@@ -118,6 +119,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Opened from a ringing call notification: show over the lock screen like a call app.
+        if (intent?.getBooleanExtra(CallWake.EXTRA_RING, false) == true && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) { setShowWhenLocked(true); setTurnScreenOn(true) }
         // Keep the old IndexedDB origin for existing installs; changing it would hide their keys.
         if (!getPreferences(MODE_PRIVATE).contains("server")) {
             val legacy = java.io.File(applicationInfo.dataDir, "app_webview").exists()
@@ -217,7 +220,7 @@ class MainActivity : FragmentActivity() {
     var stayConnected: Boolean
         get() = getPreferences(MODE_PRIVATE).getBoolean("stayConnected", false)
         set(value) { getPreferences(MODE_PRIVATE).edit().putBoolean("stayConnected", value).apply(); ConnectionService.sync(this, value && phase == "ready") }
-    override fun onStart() { super.onStart(); isInForeground = true; PushRegistration.appVisible = true }
+    override fun onStart() { super.onStart(); isInForeground = true; PushRegistration.appVisible = true; CallWake.cancel(this) }
     /** Registers with a UnifiedPush distributor and sends a new endpoint to the server once. */
     fun syncPush() {
         PushRegistration.onEndpoint = { runOnUiThread { if (phase == "ready") sendPushEndpoint() } }

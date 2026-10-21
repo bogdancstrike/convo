@@ -11,8 +11,14 @@ import com.enclave.contracts.DeviceAddress;
  * @param epoch epoch the message belongs to
  * @param groupSeq accepted commit sequence (0 for application messages and welcomes)
  * @param content encoded MLSMessage, opaque to the server
+ * @param urgent priority hint set by the sender (call rings)
  */
-public record GroupEnvelope(Kind kind, DeviceAddress source, byte[] groupId, long epoch, long groupSeq, byte[] content) {
+public record GroupEnvelope(Kind kind, DeviceAddress source, byte[] groupId, long epoch, long groupSeq, byte[] content, boolean urgent) {
+
+    /** Non-urgent envelope. */
+    public GroupEnvelope(Kind kind, DeviceAddress source, byte[] groupId, long epoch, long groupSeq, byte[] content) {
+        this(kind, source, groupId, epoch, groupSeq, content, false);
+    }
 
     /** MLS envelope kinds (map to the wire {@code Envelope.Type}). */
     public enum Kind {

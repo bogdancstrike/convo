@@ -120,6 +120,7 @@ class GatewayWebSocketHandler extends TextWebSocketHandler implements SubProtoco
         DeviceSession session = (DeviceSession) raw.getAttributes().get(SESSION_ATTRIBUTE);
         if (session != null) {
             registry.unregister(session);
+            if (!registry.isLocal(session.device())) hints.clearPresence(session.device(), replicaId);
         }
     }
 

@@ -44,7 +44,7 @@ class GatewayEventListener {
         event.recipients().forEach(hints::signalMail);
         // Offline devices get a content-free wake-up through their push channel, if registered.
         event.recipients().stream().filter(d -> !registry.isLocal(d) && !hints.isPresent(d)).distinct()
-                .forEach(d -> events.publishEvent(new com.enclave.messaging.MailWaiting(d)));
+                .forEach(d -> events.publishEvent(new com.enclave.messaging.MailWaiting(d, event.urgent())));
     }
 
     /** Revocation: purge the mailbox, close sockets, tell the account's other devices. */

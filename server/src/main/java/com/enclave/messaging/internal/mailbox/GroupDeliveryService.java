@@ -49,9 +49,9 @@ class GroupDeliveryService implements DeliveryApi {
         };
         for (DeviceAddress to : recipients) {
             mailbox.insert(new Envelope(to, Uuids.v7(), type, envelope.source(), now, now.plus(properties.envelopeTtl()),
-                    false, envelope.content(), envelope.groupId(), envelope.epoch(),
+                    envelope.urgent(), envelope.content(), envelope.groupId(), envelope.epoch(),
                     envelope.groupSeq() == 0 ? null : envelope.groupSeq()));
         }
-        events.publishEvent(new EnvelopesStored(List.copyOf(recipients)));
+        events.publishEvent(new EnvelopesStored(List.copyOf(recipients), envelope.urgent()));
     }
 }

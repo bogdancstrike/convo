@@ -7,5 +7,6 @@ import com.enclave.contracts.DeviceAddress;
  * a wake-up channel (MSG-02 push) can prompt it to connect. Carries no content or sender.
  *
  * @param device device with waiting mail
+ * @param urgent sender's priority hint (call ring): wake immediately and ring
  */
-public record MailWaiting(DeviceAddress device) {}
+public record MailWaiting(DeviceAddress device, boolean urgent) {}

@@ -55,6 +55,23 @@ class HintBus implements MessageListener {
         }
     }
 
+    /** Deletes the presence key only if this replica still owns it (atomic compare-and-delete). */
+    private static final org.springframework.data.redis.core.script.RedisScript<Long> CLEAR_IF_OWNER =
+            org.springframework.data.redis.core.script.RedisScript.of(
+                    "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end", Long.class);
+
+    /**
+     * Clears presence when the device's last session on this replica closed, so an app that was
+     * killed is treated as offline (and woken by push) right away instead of after the TTL.
+     */
+    void clearPresence(DeviceAddress device, String replicaId) {
+        try {
+            redis.execute(CLEAR_IF_OWNER, java.util.List.of(PRESENCE_PREFIX + device), replicaId);
+        } catch (RuntimeException e) {
+            log.debug("Presence clear failed: {}", e.toString());
+        }
+    }
+
     /** Refreshes the presence key of a device. */
     void markPresent(DeviceAddress device, String replicaId, Duration ttl) {
         try {

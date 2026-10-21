@@ -15,7 +15,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 class PushServiceTest {
     private final PushService push = new PushService(mock(JdbcClient.class),
-            new PushProperties(true, List.of("http://convo.example:8091"), "http://ntfy:80", Duration.ofSeconds(30), Duration.ofSeconds(5)), Clock.systemUTC());
+            new PushProperties(true, List.of("http://convo.example:8091"), "http://ntfy:80", Duration.ofSeconds(30), Duration.ofSeconds(3), Duration.ofSeconds(5)), Clock.systemUTC());
 
     @Test void onlyAllowListedDistributorsAreAcceptedAndReachedInternally() {
         assertThat(push.allowed("http://convo.example:8091/upAbC123?up=1")).isTrue();

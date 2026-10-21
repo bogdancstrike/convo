@@ -53,7 +53,7 @@ class GroupController {
             List<UUID> removeMembers, List<DeviceDto> addDevices, List<DeviceDto> removeDevices, Map<UUID, String> roleChanges) {}
 
     /** {@code PUT /v1/groups/{gid}/messages} request. */
-    record MessageRequest(long epoch, String submissionId, String message) {}
+    record MessageRequest(long epoch, String submissionId, String message, Boolean urgent) {}
 
     /** Member entry. */
     record MemberDto(UUID accountId, String role) {}
@@ -162,7 +162,7 @@ class GroupController {
     Map<String, Object> message(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId,
             @RequestBody MessageRequest body) {
         boolean duplicate = groups.message(me.address(), decode(groupId, "groupId"), new GroupCommands.Message(
-                body.epoch(), decode(body.submissionId(), "submissionId"), decode(body.message(), "message")));
+                body.epoch(), decode(body.submissionId(), "submissionId"), decode(body.message(), "message"), Boolean.TRUE.equals(body.urgent())));
         return Map.of("ok", true, "duplicate", duplicate);
     }
 

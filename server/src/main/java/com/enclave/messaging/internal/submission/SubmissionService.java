@@ -100,7 +100,7 @@ public class SubmissionService {
             // A concurrent request with the same ID won the race; roll back our envelopes.
             throw new EnclaveException(ErrorCode.IDEMPOTENCY_CONFLICT, "concurrent submission with the same ID");
         }
-        events.publishEvent(new EnvelopesStored(List.copyOf(recipients)));
+        events.publishEvent(new EnvelopesStored(List.copyOf(recipients), send.urgent()));
         return new SendResult(true, false);
     }
 

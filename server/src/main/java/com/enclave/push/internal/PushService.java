@@ -32,6 +32,8 @@ class PushService {
     private static final Logger log = LoggerFactory.getLogger(PushService.class);
     /** The whole wake payload: nothing about the sender, conversation or content. */
     static final String WAKE = "{\"t\":\"wake\"}";
+    /** Urgent wake (the sender marked it, e.g. a call ring): the device rings generically. */
+    static final String URGENT = "{\"t\":\"urgent\"}";
 
     private final JdbcClient jdbc;
     private final PushProperties properties;
@@ -39,6 +41,7 @@ class PushService {
     private final HttpClient http;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final Map<DeviceAddress, Instant> lastWake = new ConcurrentHashMap<>();
+    private final Map<DeviceAddress, Instant> lastUrgent = new ConcurrentHashMap<>();
 
     PushService(JdbcClient jdbc, PushProperties properties, Clock clock) {
         this.jdbc = jdbc;
@@ -64,25 +67,28 @@ class PushService {
     void on(MailWaiting event) {
         if (!properties.enabled()) return;
         Instant now = clock.instant();
-        Instant previous = lastWake.get(event.device());
-        if (previous != null && previous.plus(properties.minInterval()).isAfter(now)) return;
+        var last = event.urgent() ? lastUrgent : lastWake;
+        Instant previous = last.get(event.device());
+        if (previous != null && previous.plus(event.urgent() ? properties.urgentMinInterval() : properties.minInterval()).isAfter(now)) return;
         String endpoint = jdbc.sql("SELECT endpoint FROM push_endpoints WHERE account_id = :a AND device_id = :d")
                 .param("a", event.device().accountId()).param("d", event.device().deviceId()).query(String.class).optional().orElse(null);
         if (endpoint == null || !allowed(endpoint)) return;
-        lastWake.put(event.device(), now);
-        executor.submit(() -> send(endpoint));
+        last.put(event.device(), now);
+        String payload = event.urgent() ? URGENT : WAKE;
+        executor.submit(() -> send(endpoint, payload));
     }
 
     @ApplicationModuleListener
     void on(DeviceRevoked event) {
         unregister(event.address());
         lastWake.remove(event.address());
+        lastUrgent.remove(event.address());
     }
 
-    private void send(String endpoint) {
+    private void send(String endpoint, String payload) {
         try {
             var request = HttpRequest.newBuilder(URI.create(internal(endpoint))).timeout(properties.timeout())
-                    .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(WAKE)).build();
+                    .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(payload)).build();
             int status = http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
             if (status >= 300) log.info("Push wake rejected by distributor (HTTP {})", status);
         } catch (Exception e) {
