@@ -8,6 +8,8 @@ import com.convo.android.calls.*
 import com.convo.android.i18n.*
 import com.convo.android.push.*
 import com.convo.android.ui.communities.*
+import com.convo.android.ui.chats.*
+import com.convo.android.ui.components.*
 import com.convo.android.ui.contacts.*
 import com.convo.android.ui.info.*
 import com.convo.android.ui.linking.*
@@ -35,7 +37,8 @@ import net.openid.appauth.connectivity.ConnectionBuilder
 /** Exact development certificate trust; no trust-all verifier and no release override. */
 class DevelopmentTls(private val context: Context) : ConnectionBuilder {
     /** Debug builds pin the development certificate for the deployment hostname only. */
-    private val hosts = setOf(android.net.Uri.parse(DEFAULT_SERVER).host!!)
+    /** localhost is the local Compose stack, reached from the emulator through `adb reverse tcp:8443 tcp:8443`. */
+    private val hosts = setOf(android.net.Uri.parse(DEFAULT_SERVER).host!!, "localhost")
     private fun developmentEndpoint(uri: Uri) = uri.scheme == "https" && uri.host in hosts && uri.port in setOf(-1, 443, 8443)
     private val certificate: X509Certificate? by lazy {
         if (!BuildConfig.DEBUG) null else {

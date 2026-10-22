@@ -9,6 +9,8 @@ import com.convo.android.calls.*
 import com.convo.android.i18n.*
 import com.convo.android.push.*
 import com.convo.android.ui.communities.*
+import com.convo.android.ui.chats.*
+import com.convo.android.ui.components.*
 import com.convo.android.ui.contacts.*
 import com.convo.android.ui.info.*
 import com.convo.android.ui.linking.*
@@ -119,10 +121,10 @@ fun formatDuration(ms: Long): String { val s = ms / 1000; return "%d:%02d".forma
         else app.error = "Could not start recording. Check that no other app is using the microphone."
     }
     if (!recording) {
-        IconButton({
+        com.convo.android.ui.components.RoundActionButton(Icons.Outlined.Mic, "Record voice message") {
             if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
             else app.requestMicrophone { granted -> if (granted) begin() else app.error = "Microphone permission was not granted. You can still send text and files." }
-        }) { Icon(Icons.Outlined.Mic, "Record voice message", tint = MaterialTheme.colorScheme.primary) }
+        }
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -132,7 +134,7 @@ fun formatDuration(ms: Long): String { val s = ms / 1000; return "%d:%02d".forma
         IconButton({ if (paused) recorder.resume() else recorder.pause(); paused = recorder.paused }) {
             Icon(if (paused) Icons.Outlined.Mic else Icons.Outlined.Pause, if (paused) "Resume recording" else "Pause recording")
         }
-        IconButton({ send(app, recorder, conversationId); recording = false; onRecording(false) }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send voice message", tint = MaterialTheme.colorScheme.primary) }
+        com.convo.android.ui.components.RoundActionButton(Icons.AutoMirrored.Outlined.Send, "Send voice message") { send(app, recorder, conversationId); recording = false; onRecording(false) }
     }
 }
 

@@ -9,6 +9,8 @@ import com.convo.android.calls.*
 import com.convo.android.i18n.*
 import com.convo.android.push.*
 import com.convo.android.ui.communities.*
+import com.convo.android.ui.chats.*
+import com.convo.android.ui.components.*
 import com.convo.android.ui.contacts.*
 import com.convo.android.ui.info.*
 import com.convo.android.ui.linking.*
@@ -41,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -65,6 +68,14 @@ import org.json.JSONObject
         surfaceContainerHighest = colors.panelRaised, surfaceContainerLow = colors.panel,
         surfaceContainerLowest = colors.canvas,
     )
+    // System bars follow the app surface (WhatsApp: light header ⇒ light status bar with dark icons).
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) SideEffect {
+        val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+        @Suppress("DEPRECATION") window.statusBarColor = colors.panel.toArgb()
+        @Suppress("DEPRECATION") window.navigationBarColor = colors.panel.toArgb()
+        androidx.core.view.WindowCompat.getInsetsController(window, view).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
+    }
     CompositionLocalProvider(LocalConvoColors provides colors) {
         MaterialTheme(colorScheme = scheme, shapes = Shapes(
             extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(8.dp),
@@ -125,32 +136,60 @@ import org.json.JSONObject
                 app.route != "list" -> when (app.route) { "storage" -> "Storage and data"; "notifications" -> "Notifications"; "recovery" -> "History and recovery"; "profile" -> "Your profile"; "all-media" -> "All Media"; else -> app.route.replaceFirstChar { it.uppercase() } }
                 else -> if (app.selectedTab == "Chats") "Convo" else app.selectedTab
             }
-            Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = {
-                TopAppBar(title = { Column {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { if (app.route == "list" && app.selectedTab == "Chats") Image(androidx.compose.ui.res.painterResource(R.drawable.convo_logo), null, Modifier.size(30.dp)); Text(title, maxLines = 1, style = MaterialTheme.typography.titleLarge) }
-                    if (app.route == "thread") LastSeenLabel(app, app.active ?: "")
+            val colors = LocalConvoColors.current
+            val home = app.route == "list"
+            Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = colors.panel, topBar = {
+                TopAppBar(windowInsets = TopAppBarDefaults.windowInsets, colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.panel, scrolledContainerColor = colors.panel), title = { Column {
+                    if (home) Text(title, maxLines = 1, fontWeight = FontWeight.Bold, fontSize = if (app.selectedTab == "Chats") 24.sp else 22.sp, color = if (app.selectedTab == "Chats") colors.accentText else colors.textPrimary)
+                    else if (app.route == "thread") {
+                        // WhatsApp header: avatar, name and status line; tapping it opens the info page.
+                        val current = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }
+                        Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable { app.route = "info" }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            PersonAvatar(app, app.active ?: "", if (current?.optString("kind") == "note") tr("Note to self") else title, 40, group = current?.optString("kind") == "group")
+                            Column(Modifier.padding(start = 10.dp)) {
+                                RawText(if (current?.optString("kind") == "note") tr("Note to self") else title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                                LastSeenLabel(app, app.active ?: "")
+                            }
+                        }
+                    }
+                    else Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 } }, navigationIcon = {
                     if (app.route != "list") IconButton(onClick = app::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
                 }, actions = {
                     if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { mediaOpen = true }) { Icon(Icons.Outlined.PermMedia, "Media from all chats") }
-                    if (app.route == "list" && app.selectedTab in listOf("Chats", "Channels", "Unread")) IconButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" }) { Icon(Icons.Outlined.AddComment, "New chat") }
+                    if (home && app.selectedTab in listOf("Chats", "Channels")) HomeMenu(app)
                     if (app.route == "thread") {
                         val current = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }
                         if (current != null && current.optString("kind") != "note" && !current.optBoolean("left") && !current.optBoolean("adminOnly") && !current.optBoolean("blocked")) {
                             IconButton(onClick = { app.calls.start(current.optString("id"), true) }, enabled = app.calls.call == null) { Icon(Icons.Outlined.Videocam, "Video call") }
                             IconButton(onClick = { app.calls.start(current.optString("id"), false) }, enabled = app.calls.call == null) { Icon(Icons.Outlined.Call, "Voice call") }
                         }
-                        IconButton(onClick = { app.threadSearch = !app.threadSearch }) { Icon(Icons.Outlined.Search, "Search this chat") }; IconButton(onClick = { app.route = "info" }) { Icon(Icons.Outlined.Info, "Conversation info") }; ChatMenu(app) }
+                        ChatMenu(app) }
                 })
             }, bottomBar = {
-                if (app.route == "list") NavigationBar {
+                if (home) Column {
+                  HorizontalDivider(color = colors.border, thickness = 0.5.dp)
+                  NavigationBar(containerColor = colors.panel, tonalElevation = 0.dp) {
+                    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { !it.optBoolean("archived") && it.optString("id") !in app.locks.lockedChats }
+                    val unreadChats = conversations.count { !it.optBoolean("adminOnly") && it.optInt("unread") > 0 }
+                    val unreadChannels = conversations.count { it.optBoolean("adminOnly") && it.optInt("unread") > 0 }
                     listOf("Chats" to Icons.Outlined.ChatBubbleOutline, "Channels" to Icons.Outlined.Campaign, "Communities" to Icons.Outlined.Groups, "Calls" to Icons.Outlined.Call, "Settings" to Icons.Outlined.AccountCircle).forEach { (label, icon) ->
-                        NavigationBarItem(app.selectedTab == label && !mediaOpen, onClick = { if (label == "Media") mediaOpen = true else { app.selectedTab = label; app.route = "list" } }, icon = { if (label == "Settings") PersonAvatar(app, app.snapshot.optString("accountId"), app.snapshot.optJSONObject("device")?.label() ?: "You", 24) else Icon(icon, label) }, label = {
+                        val count = when (label) { "Chats" -> unreadChats; "Channels" -> unreadChannels; else -> 0 }
+                        NavigationBarItem(app.selectedTab == label && !mediaOpen, onClick = { app.selectedTab = label; app.route = "list" },
+                            colors = NavigationBarItemDefaults.colors(indicatorColor = colors.chipActive, selectedIconColor = colors.chipActiveText, selectedTextColor = colors.textPrimary, unselectedIconColor = colors.textSecondary, unselectedTextColor = colors.textSecondary),
+                            icon = { BadgedBox(badge = { if (count > 0) Badge(containerColor = colors.badge, contentColor = colors.badgeText) { RawText(count.toString()) } }) {
+                                if (label == "Settings") PersonAvatar(app, app.snapshot.optString("accountId"), app.snapshot.optJSONObject("device")?.label() ?: "You", 24) else Icon(icon, label) } }, label = {
                             // One line at any width: "Communities" must not wrap under its icon.
                             Text(if (label == "Settings") "Profile" else label, maxLines = 1, softWrap = false,
                                 style = MaterialTheme.typography.labelSmall.copy(letterSpacing = (-0.1).sp))
                         })
                     }
+                  }
+                }
+            }, floatingActionButton = {
+                if (home && app.selectedTab in listOf("Chats", "Channels")) FloatingActionButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" },
+                    containerColor = colors.actionFill, contentColor = colors.actionText, shape = RoundedCornerShape(16.dp)) {
+                    Icon(if (app.selectedTab == "Channels") Icons.Outlined.Campaign else Icons.Outlined.AddComment, if (app.selectedTab == "Channels") "New channel" else "New chat")
                 }
             }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) {
                 Crossfade(targetState = app.route to app.selectedTab, animationSpec = tween(if (app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false) 120 else 0), label = "page") { (route, tab) ->
@@ -183,128 +222,17 @@ import org.json.JSONObject
     }
 }
 
-@Composable fun PersonAvatar(app: MainActivity, id: String, name: String, size: Int = 44, group: Boolean = false) {
-    val photo = app.snapshot.optJSONObject("profiles")?.optJSONObject(id)?.optString("photo")?.takeIf { it.startsWith("data:image/jpeg;base64,") }
-    val bitmap = remember(photo) { try { photo?.substringAfter(',')?.let { android.util.Base64.decode(it, 0) }?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } } catch (_: Exception) { null } }
-    val avatarColor = AvatarColors[kotlin.math.abs(id.hashCode().toLong()).rem(AvatarColors.size).toInt()]
-    val words = name.removePrefix("@").trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-    val initials = if (words.size > 1) "${words.first().first()}${words.last().first()}" else words.firstOrNull()?.take(1) ?: "?"
-    Box(Modifier.size(size.dp).clip(CircleShape).background(avatarColor), contentAlignment = Alignment.Center) {
-        if (bitmap != null && !group) Image(bitmap, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-        else if (group) Icon(Icons.Outlined.Group, null, tint = Color.White) else Text(initials.uppercase(), color = Color.White, fontWeight = FontWeight.SemiBold)
-    }
-}
-@Composable fun ActionRow(label: String, hint: String? = null, icon: ImageVector = Icons.Outlined.ChevronRight, danger: Boolean = false, onClick: () -> Unit) {
-    ListItem(headlineContent = { Text(label, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }, supportingContent = hint?.let { { Text(it) } }, leadingContent = { Icon(icon, null, tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }, modifier = Modifier.clickable(onClick = onClick).heightIn(min = 64.dp))
-}
-@Composable fun ChatList(app: MainActivity, channels: Boolean, unreadOnly: Boolean = false) {
-    var query by remember { mutableStateOf("") }; var matches by remember { mutableStateOf(emptyList<String>()) }; var archived by remember { mutableStateOf(false) }
-    // Locked chats are listed only after authenticating, never in ordinary lists or search.
-    var showLocked by remember { mutableStateOf(false) }
-    var unreadChip by remember { mutableStateOf(unreadOnly) }
-    val locked = app.locks.lockedChats
-    LaunchedEffect(query) { if (query.isBlank()) matches = emptyList() else { kotlinx.coroutines.delay(200); app.call("search", obj("query" to query)) { result -> matches = (result as? JSONArray)?.objects()?.map { it.optString("conversationId") }?.filter { it !in app.locks.lockedChats } ?: emptyList() } } }
-    val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { (it.optString("id") in locked) == showLocked }.filter { showLocked || (if (unreadChip) it.optInt("unread") > 0 else it.optBoolean("adminOnly") == channels) && it.optBoolean("archived") == archived && (query.isBlank() || it.optString("title").contains(query, true) || it.optString("id") in matches) }
-    Column {
-        OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth().padding(12.dp), singleLine = true, placeholder = { Text("Search or start a new chat") }, leadingIcon = { Icon(Icons.Outlined.Search, null) })
-        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(!archived && !showLocked, { archived = false; showLocked = false }, label = { Text("All") }); FilterChip(archived && !showLocked, { archived = true; showLocked = false }, label = { Text("Archived") }); FilterChip(unreadChip && !showLocked, { unreadChip = !unreadChip; showLocked = false }, label = { Text("Unread") })
-            if (locked.isNotEmpty()) FilterChip(showLocked, { if (showLocked) showLocked = false else app.locks.authenticate("Show locked chats", "Confirm it’s you") { showLocked = true } },
-                label = { Text("Locked chats") }, leadingIcon = { Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp)) })
-        }
-        LaunchedEffect(app.locks.appUnlocked) { if (!app.locks.appUnlocked) showLocked = false }
-        LazyColumn { items(conversations, key = { it.optString("id") }) { c ->
-            Row(Modifier.fillMaxWidth().clickable { if (showLocked) app.locks.unlockedChat = c.optString("id"); app.openChat(c.optString("id")) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                PersonAvatar(app, c.optString("id"), c.optString("title"), group = c.optString("kind") == "group")
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), fontWeight = FontWeight.SemiBold)
-                    RawText(c.optString("preview").let { p -> if (p in setOf("📷 Photo", "🎤 Voice message", "📎 File")) tr(p) else p }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (c.optBoolean("request")) SuggestionChip({}, label = { Text("Request") }, modifier = Modifier.padding(end = 4.dp))
-                if (c.optBoolean("pinned")) Icon(Icons.Outlined.PushPin, "Pinned", Modifier.size(16.dp))
-                if ((c.optJSONObject("snooze")?.optLong("until") ?: 0L) > System.currentTimeMillis()) Icon(Icons.Outlined.Schedule, "Snoozed", Modifier.size(16.dp))
-                if (c.optBoolean("mentioned") && c.optInt("unread") > 0) RawText("@ ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                if (c.optInt("unread") > 0) Badge { Text(c.optInt("unread").toString()) }
-                ConversationQuickMenu(app, c)
-            }
-        }
-        if (conversations.isEmpty()) item { Text(if (unreadOnly) "You’re all caught up. New unread messages will appear here." else if (channels) "Create a channel to share announcements." else "Start a conversation with someone in your organization.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-    }
-}
-@Composable fun LastSeenLabel(app: MainActivity, id: String) {
-    var at by remember(id) { mutableStateOf("") }
-    LaunchedEffect(id) { if (id.startsWith("g:")) return@LaunchedEffect; while (true) { app.call("lastSeen", obj("id" to id), quiet = true) { value -> at = (value as? JSONObject)?.optString("at")?.takeUnless { it == "null" } ?: "" }; kotlinx.coroutines.delay(10000) } }
-    val seen = try { java.time.Instant.parse(at).atZone(java.time.ZoneId.systemDefault()) } catch (_: Exception) { null }
-    if (seen != null) Text(if (seen.toLocalDate() == java.time.LocalDate.now()) "Last seen today: ${seen.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}" else "Last seen on ${seen.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))}", style = MaterialTheme.typography.bodySmall)
-}
 
-@Composable fun ConversationQuickMenu(app: MainActivity, conversation: JSONObject) {
+/** Header overflow (WhatsApp ⋮): new group/channel/community, and settings. */
+@Composable fun HomeMenu(app: MainActivity) {
     var open by remember { mutableStateOf(false) }
-    Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "Chat options") }
-        DropdownMenu(open, { open = false }) { ConversationMenuItems(app, conversation) { open = false } }
-    }
-}
-@Composable fun ChatMenu(app: MainActivity) {
-    val c = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active } ?: return
-    var open by remember { mutableStateOf(false) }
-    Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "Chat options") }; DropdownMenu(open, { open = false }) { ConversationMenuItems(app, c) { open = false } } }
-}
-@Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
-    var confirm by remember { mutableStateOf("") }
-    listOf("Pin chat" to "pinned", "Archive chat" to "archived", "Mute notifications" to "muted").forEach { (label, key) -> DropdownMenuItem(text = { Text(if (c.optBoolean(key)) when(key) { "pinned" -> "Unpin chat"; "archived" -> "Unarchive chat"; else -> "Unmute notifications" } else label) }, onClick = { app.call("conversation", obj("id" to c.optString("id"), "patch" to obj(key to !c.optBoolean(key)))); close() }) }
-    // Timed snooze (specs §30.8): an overlay; the mute/notify mode above resumes afterwards.
-    val snoozeUntil = c.optJSONObject("snooze")?.optLong("until") ?: 0L
-    if (snoozeUntil > System.currentTimeMillis()) DropdownMenuItem(text = { RawText(tr("End snooze (until {when})").replace("{when}", java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(snoozeUntil)))) },
-        leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = { close(); app.call("setSnooze", obj("id" to c.optString("id"), "until" to JSONObject.NULL)) })
-    else DropdownMenuItem(text = { Text("Snooze notifications…") }, leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = { close(); app.snoozeFor = c.optString("id") })
-    if (c.optString("kind") == "group" && !c.optBoolean("left")) DropdownMenuItem(text = { Text(if (c.optBoolean("adminOnly")) "Leave channel" else "Leave group", color = MaterialTheme.colorScheme.error) },
-        leadingIcon = { Icon(Icons.Outlined.Logout, null, tint = MaterialTheme.colorScheme.error) }, onClick = { confirm = "leave" })
-    if (c.optString("kind") == "group") DropdownMenuItem(text = { Text(if (c.optString("notify") == "mentions") "Notify for all messages" else "Notify only for mentions") }, leadingIcon = { Icon(Icons.Outlined.AlternateEmail, null) },
-        onClick = { close(); app.call("conversation", obj("id" to c.optString("id"), "patch" to obj("notify" to if (c.optString("notify") == "mentions") JSONObject.NULL else "mentions"))) })
-    if (c.optString("kind") == "direct") {
-        val blocked = c.optBoolean("blocked")
-        DropdownMenuItem(text = { Text(if (blocked) "Unblock" else "Block contact", color = if (blocked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Outlined.Block, null) },
-            onClick = { if (blocked) { close(); app.call("block", obj("id" to c.optString("id"), "blocked" to false), success = "Contact unblocked") } else confirm = "block" })
-    }
-    val chatLocked = app.locks.locked(c.optString("id"))
-    if (chatLocked || app.locks.passkey == true) DropdownMenuItem(text = { Text(if (chatLocked) "Stop requiring authentication" else "Require authentication to open") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) }, onClick = {
-        close(); app.locks.setChatLocked(c.optString("id"), !chatLocked) { app.notice = if (chatLocked) "Chat unlocked" else "Chat locked"; if (!chatLocked && app.route != "list") app.back() }
-    })
-    DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })
-    DropdownMenuItem(text = { Text("Delete chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "deleteChat" })
-    if (confirm == "leave") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (c.optBoolean("adminOnly")) "Leave channel?" else "Leave group?") },
-        text = { Text("You keep the history on your devices but stop receiving new messages.") },
-        confirmButton = { TextButton({ confirm = ""; close(); app.call("leaveGroup", obj("id" to c.optString("id")), quiet = true) { if (it == null) app.error = tr("You are the only owner. Make another member owner first, then leave.") } }) { Text("Leave", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
-    else if (confirm == "block") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text("Block contact?") },
-        text = { Text("Their messages and calls will no longer reach you, and they won’t be told.") },
-        confirmButton = { TextButton({ confirm = ""; close(); app.call("block", obj("id" to c.optString("id"), "blocked" to true), success = "Contact blocked") }) { Text("Block", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
-    else     if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })
-}
-
-/** Snooze dialog: presets resolve to an exact local time shown with the time zone before confirming. */
-@Composable fun SnoozeDialog(app: MainActivity, conversationId: String) {
-    val zone = java.util.TimeZone.getDefault().id
-    val now = remember { java.util.Calendar.getInstance() }
-    fun at(hour: Int, nextDay: Boolean): Long = (now.clone() as java.util.Calendar).apply {
-        if (nextDay) add(java.util.Calendar.DAY_OF_MONTH, 1); set(java.util.Calendar.HOUR_OF_DAY, hour); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
-    }.timeInMillis
-    val evening = at(18, false).let { if (it <= now.timeInMillis) at(18, true) else it }
-    val options = listOf("This evening" to evening, "Tomorrow morning" to at(9, true), "For 1 h" to now.timeInMillis + 3_600_000, "For 4 h" to now.timeInMillis + 4 * 3_600_000)
-    var picked by remember { mutableStateOf(0) }
-    val format = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
-    AlertDialog(onDismissRequest = { app.snoozeFor = null }, title = { Text("Snooze notifications") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Alerts pause until the time you choose. Messages still arrive and count as unread; calls still ring. Afterwards your current notification setting resumes.", style = MaterialTheme.typography.bodySmall)
-            options.forEachIndexed { i, (label, time) ->
-                Row(Modifier.fillMaxWidth().clickable { picked = i }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(picked == i, { picked = i }); Column { Text(label); RawText(format.format(java.util.Date(time)), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-            RawText(tr("Snoozed until {when} ({zone})").replace("{when}", format.format(java.util.Date(options[picked].second))).replace("{zone}", zone), style = MaterialTheme.typography.bodyMedium)
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
+        DropdownMenu(open, { open = false }) {
+            DropdownMenuItem(text = { Text("New group") }, leadingIcon = { Icon(Icons.Outlined.GroupAdd, null) }, onClick = { open = false; app.route = "new-group" })
+            DropdownMenuItem(text = { Text("New channel") }, leadingIcon = { Icon(Icons.Outlined.Campaign, null) }, onClick = { open = false; app.route = "new-channel" })
+            DropdownMenuItem(text = { Text("New community") }, leadingIcon = { Icon(Icons.Outlined.Groups, null) }, onClick = { open = false; app.route = "new-community" })
+            DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Outlined.Settings, null) }, onClick = { open = false; app.selectedTab = "Settings"; app.route = "list" })
         }
-    }, confirmButton = { TextButton(onClick = { app.call("setSnooze", obj("id" to conversationId, "until" to options[picked].second, "zone" to zone)); app.snoozeFor = null }) { Text("Snooze") } },
-        dismissButton = { TextButton(onClick = { app.snoozeFor = null }) { Text("Cancel") } })
+    }
 }

@@ -8,6 +8,8 @@ import com.convo.android.bridge.*
 import com.convo.android.calls.*
 import com.convo.android.push.*
 import com.convo.android.ui.communities.*
+import com.convo.android.ui.chats.*
+import com.convo.android.ui.components.*
 import com.convo.android.ui.contacts.*
 import com.convo.android.ui.info.*
 import com.convo.android.ui.linking.*
@@ -28,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -514,7 +517,10 @@ object Strings {
         "Your photo and status are shared end-to-end encrypted with people you chat with." to "Fotografia și starea ta sunt partajate criptat integral cu persoanele cu care vorbești.",
         "Your profile" to "Profilul tău",
         "You’re going to" to "Urmează să mergi la",
-        "edited" to "editat"
+        "edited" to "editat",
+        "Groups" to "Grupuri", "Yesterday" to "Ieri", "Today" to "Astăzi", "Last seen today at {time}" to "Văzut ultima dată azi la {time}", "Last seen {date}" to "Văzut ultima dată {date}",
+        "Contact info" to "Informații contact", "Group info" to "Informații grup", "Channel info" to "Informații canal", "Search" to "Caută", "Draft" to "Ciornă", "No chats match your search." to "Nicio conversație nu corespunde căutării.",
+        "More options" to "Mai multe opțiuni", "Muted" to "Fără sunet", "Clear" to "Șterge",
     )
 }
 
@@ -522,13 +528,15 @@ object Strings {
 fun tr(english: String): String = if (Strings.locale == "ro") Strings.ro[english] ?: english else english
 
 @Composable fun Text(text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified, fontWeight: FontWeight? = null,
-    textAlign: TextAlign? = null, overflow: TextOverflow = TextOverflow.Clip, maxLines: Int = Int.MAX_VALUE, style: TextStyle = LocalTextStyle.current) =
-    androidx.compose.material3.Text(tr(text), modifier = modifier, color = color, fontWeight = fontWeight, textAlign = textAlign, overflow = overflow, maxLines = maxLines, style = style)
+    textAlign: TextAlign? = null, overflow: TextOverflow = TextOverflow.Clip, maxLines: Int = Int.MAX_VALUE, style: TextStyle = LocalTextStyle.current,
+    fontSize: TextUnit = TextUnit.Unspecified) =
+    androidx.compose.material3.Text(tr(text), modifier = modifier, color = color, fontWeight = fontWeight, textAlign = textAlign, overflow = overflow, maxLines = maxLines, style = style, fontSize = fontSize)
 
 /** Untranslated text for user content. */
 @Composable fun RawText(text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified, fontWeight: FontWeight? = null,
-    overflow: TextOverflow = TextOverflow.Clip, maxLines: Int = Int.MAX_VALUE, style: TextStyle = LocalTextStyle.current) =
-    androidx.compose.material3.Text(text, modifier = modifier, color = color, fontWeight = fontWeight, overflow = overflow, maxLines = maxLines, style = style)
+    overflow: TextOverflow = TextOverflow.Clip, maxLines: Int = Int.MAX_VALUE, style: TextStyle = LocalTextStyle.current,
+    fontSize: TextUnit = TextUnit.Unspecified, textAlign: TextAlign? = null) =
+    androidx.compose.material3.Text(text, modifier = modifier, color = color, fontWeight = fontWeight, overflow = overflow, maxLines = maxLines, style = style, fontSize = fontSize, textAlign = textAlign)
 
 @Composable fun Icon(imageVector: ImageVector, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) =
     androidx.compose.material3.Icon(imageVector, contentDescription?.let(::tr), modifier, tint)

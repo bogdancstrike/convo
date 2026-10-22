@@ -10,6 +10,8 @@ import com.convo.android.calls.*
 import com.convo.android.i18n.*
 import com.convo.android.push.*
 import com.convo.android.ui.communities.*
+import com.convo.android.ui.chats.*
+import com.convo.android.ui.components.*
 import com.convo.android.ui.contacts.*
 import com.convo.android.ui.info.*
 import com.convo.android.ui.linking.*
@@ -41,6 +43,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -64,8 +73,8 @@ import java.util.Date
 import java.util.Locale
 
 @Composable fun ChatWallpaper(style: String, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
-    val pattern = MaterialTheme.colorScheme.onBackground.copy(alpha = .045f)
-    Box(modifier.background(MaterialTheme.colorScheme.background)) {
+    val pattern = LocalConvoColors.current.textPrimary.copy(alpha = .06f)
+    Box(modifier.background(LocalConvoColors.current.wallpaper)) {
         Canvas(Modifier.matchParentSize()) {
             when (style) {
                 "dots" -> { var x = 0f; while (x < size.width) { var y = 0f; while (y < size.height) { drawCircle(pattern, 1.5f, Offset(x, y)); y += 24.dp.toPx() }; x += 24.dp.toPx() } }
@@ -127,13 +136,21 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             }
             val canScrollDown by remember { derivedStateOf { listState.canScrollForward } }
             LaunchedEffect(canScrollDown) { if (!canScrollDown) newBelow = 0 }
-            LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Text("Your personal messages are end-to-end encrypted", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(messages, key = { "${it.optString("authorId")}/${it.optString("id")}" }) { message ->
+            LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
+                item { EncryptionNotice() }
+                itemsIndexed(messages, key = { _, it -> "${it.optString("authorId")}/${it.optString("id")}" }) { index, message ->
+                    val previous = messages.getOrNull(index - 1)
+                    val newDay = previous == null || dayOf(previous.optLong("sentAt")) != dayOf(message.optLong("sentAt"))
+                    if (newDay) DateChip(message.optLong("sentAt"))
                     if (anchor == "${message.optString("authorId")}/${message.optString("id")}") Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
-                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface) { RawText((if (unreadAtOpen == 1) tr("1 unread message") else tr("{count} unread messages").replace("{count}", "$unreadAtOpen")), Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium) }
+                        Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panel) { RawText((if (unreadAtOpen == 1) tr("1 unread message") else tr("{count} unread messages").replace("{count}", "$unreadAtOpen")), Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = LocalConvoColors.current.accentText, style = MaterialTheme.typography.labelMedium) }
                     }
-                    MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }) }
+                    // WhatsApp grouping: a run of messages from one author shares a tail on its first bubble.
+                    val first = newDay || previous == null || previous.has("notice") || previous.optString("authorId") != message.optString("authorId")
+                    Box(Modifier.padding(top = if (first) 8.dp else 2.dp)) {
+                        MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }, first)
+                    }
+                }
             }
             if (canScrollDown) Row(Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 4.dp), horizontalArrangement = Arrangement.End) {
                 BadgedBox(badge = { if (newBelow > 0) Badge { Text("$newBelow") } }) {
@@ -153,8 +170,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 }
                 else if (app.selection != null) SelectionBar(app, id, all)
                 else if (readOnly) Text(if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
-                else Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-                    quote?.let { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("Reply: ${it.optString("excerpt")}", Modifier.weight(1f), maxLines = 2); IconButton({ quote = null }) { Icon(Icons.Outlined.Close, "Cancel reply") } } }
+                else Column {
+                    quote?.let { QuotePreview(it.optString("excerpt")) { quote = null } }
                     var voice by remember(id) { mutableStateOf(false) }
                     // Caret position (coerced to the text): moves to the end after inserting a mention.
                     var selection by remember(id) { mutableStateOf(androidx.compose.ui.text.TextRange(input.length)) }
@@ -179,25 +196,33 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         AckDeadlinePicker("Due", ackDue, listOf(0, 1, 3, 7), noneLabel = "No deadline") { ackDue = it; if (ackExpires in 1 until it) ackExpires = it }
                         AckDeadlinePicker("Closes", ackExpires, listOf(0) + listOf(1, 3, 7, 30).filter { it >= ackDue }, noneLabel = "Stays open") { ackExpires = it }
                     }
-                    Row(Modifier.fillMaxWidth().padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (!voice) {
-                            IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file") }
-                            OutlinedTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> input = v.text; selection = v.selection }, placeholder = { Text("Type a message") }, modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(24.dp))
+                            val colors = LocalConvoColors.current
+                            // WhatsApp composer: one pill holding the field and attach, the round action outside.
+                            Row(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(colors.panel).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
+                                    if (input.isEmpty()) Text("Type a message", color = colors.textSecondary, fontSize = 16.sp, maxLines = 1)
+                                    BasicTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> input = v.text; selection = v.selection }, maxLines = 6,
+                                        textStyle = LocalTextStyle.current.copy(color = colors.textPrimary, fontSize = 16.sp), cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
+                                }
+                                IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file", tint = colors.textSecondary) }
+                            }
                         } else Spacer(Modifier.weight(1f))
                         // One VoiceComposer instance for the whole recording (recomposition must not cancel it).
                         if (voice || input.isBlank()) VoiceComposer(app, id) { voice = it }
-                        else IconButton(onClick = {
+                        else RoundActionButton(Icons.AutoMirrored.Outlined.Send, "Send message") {
                             val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
                             val day = 24L * 60 * 60 * 1000; val now = System.currentTimeMillis()
                             val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null).toTypedArray())
-                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack)) { if (it != null) { input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } } }) { Icon(Icons.AutoMirrored.Outlined.Send, "Send message", tint = MaterialTheme.colorScheme.primary) }
+                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack)) { if (it != null) { input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } } }
                     }
                 }
             }
         }
     }
 }
-@Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit) {
+@Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit, first: Boolean = true) {
     message.optJSONObject("notice")?.let { TimerNotice(app, message, it.optLong("seconds"), it.optString("kind")); return }
     val outgoing = message.optString("direction") == "out"
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
@@ -230,14 +255,17 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     change.consume(); scope.launch { dragX.snapTo(next) }
                 }
             }
-            .combinedClickable(onClick = { if (selecting) app.toggleSelected(key) }, onLongClick = { if (selecting) app.toggleSelected(key) else menu = true }), colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) MaterialTheme.colorScheme.secondaryContainer else LocalConvoColors.current.bubbleIn), shape = RoundedCornerShape(8.dp)) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (conversation.startsWith("g:") && !outgoing) AccountName(app, message.optString("authorId"))
+            .combinedClickable(onClickLabel = null, onLongClickLabel = tr("Message options"), onClick = { if (selecting) app.toggleSelected(key) }, onLongClick = { if (selecting) app.toggleSelected(key) else menu = true }),
+            colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) LocalConvoColors.current.bubbleOut else LocalConvoColors.current.bubbleIn),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+            shape = RoundedCornerShape(topStart = if (first && !outgoing) 0.dp else 10.dp, topEnd = if (first && outgoing) 0.dp else 10.dp, bottomStart = 10.dp, bottomEnd = 10.dp)) {
+            Column(Modifier.padding(start = 9.dp, end = 9.dp, top = 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (conversation.startsWith("g:") && !outgoing && first) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { RawText(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
-                    if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty())
+                    if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))
                     if (message.has("ackRequest")) AckBox(app, message)
                     val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
                     val visual = attachments.withIndex().filter { (_, a) -> a.optString("contentType").let { it.startsWith("image/") || it.startsWith("video/") } }.map { it.index to it.value }
@@ -250,13 +278,19 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     }
                 }
                 message.optJSONObject("reactions")?.let { reactions -> if (reactions.length() > 0) Text(reactions.keys().asSequence().joinToString("  ") { "${it} ${reactions.optJSONArray(it)?.length() ?: 0}" }) }
-                Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                // Time and ticks sit at the end of the last text line (space reserved by metaReserve).
+                val meta = LocalConvoColors.current.bubbleMeta
+                val hasBody = message.optString("body").isNotBlank() && !message.optBoolean("deleted") && message.optJSONArray("attachments")?.length().let { it == null || it == 0 } && message.optJSONObject("reactions")?.length().let { it == null || it == 0 } && !message.has("ackRequest")
+                Row(Modifier.align(Alignment.End).then(if (hasBody) Modifier.layout { measurable, constraints ->
+                    // Zero-height slot: drawn over the reserved tail of the last text line.
+                    val placeable = measurable.measure(constraints); layout(placeable.width, 0) { placeable.place(0, -placeable.height + 2.dp.roundToPx()) }
+                } else Modifier), verticalAlignment = Alignment.CenterVertically) {
                     if (message.optLong("expireTimer") > 0 && !message.optBoolean("deleted")) Icon(Icons.Outlined.Timer, "Disappearing message", Modifier.size(14.dp).padding(end = 3.dp))
-                    if (message.has("editedAt") && !message.optBoolean("deleted")) Text("edited ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), style = MaterialTheme.typography.labelSmall)
+                    if (message.has("editedAt") && !message.optBoolean("deleted")) Text("edited ", fontSize = 11.sp, color = meta)
+                    RawText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), fontSize = 11.sp, color = meta)
                     if (message.optBoolean("starred")) Icon(Icons.Outlined.StarOutline, "Starred", Modifier.size(14.dp).padding(start = 3.dp))
-                    if (outgoing) { val status = message.optString("status"); Icon(if (status in listOf("read", "delivered")) Icons.Outlined.DoneAll else if (status == "sent") Icons.Outlined.Done else if (status == "failed") Icons.Outlined.ErrorOutline else Icons.Outlined.Schedule, when(status) { "read" -> "Seen"; "delivered" -> "Received"; "sent" -> "Sent"; else -> status }, Modifier.size(18.dp).padding(start = 4.dp), tint = if (status == "read") LocalConvoColors.current.tickRead else MaterialTheme.colorScheme.onSurfaceVariant) }
-                    Box { IconButton(onClick = { menu = true }, modifier = Modifier.size(28.dp)) { Icon(Icons.Outlined.KeyboardArrowDown, "Message options", Modifier.size(18.dp)) }
+                    if (outgoing) { val status = message.optString("status"); Icon(if (status in listOf("read", "delivered")) Icons.Outlined.DoneAll else if (status == "sent") Icons.Outlined.Done else if (status == "failed") Icons.Outlined.ErrorOutline else Icons.Outlined.Schedule, when(status) { "read" -> "Seen"; "delivered" -> "Received"; "sent" -> "Sent"; else -> status }, Modifier.size(18.dp).padding(start = 3.dp), tint = if (status == "read") LocalConvoColors.current.tickRead else meta) }
+                    Box {
                         DropdownMenu(menu, { menu = false }) {
                             Row { listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(38.dp)) { Text(emoji) } } }
                             DropdownMenuItem(text = { Text("Message info") }, onClick = { menu = false; info = true })
@@ -285,19 +319,21 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     if (delete) AlertDialog(onDismissRequest = { delete = false }, title = { Text("Delete message?") }, text = { Text("Choose whether to remove your local copy or delete your message for everyone.") }, confirmButton = { Column { if (outgoing) TextButton({ app.call("deleteMessage", message.targetArgs(conversation).put("everyone", true)); delete = false }) { Text("Delete for everyone") }; TextButton({ app.call("deleteMessage", message.targetArgs(conversation).put("everyone", false)); delete = false }) { Text("Delete for me") } } }, dismissButton = { TextButton({ delete = false }) { Text("Cancel") } })
     if (forwarding) AlertDialog(onDismissRequest = { forwarding = false }, title = { Text("Forward to") }, text = { LazyColumn { items(app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { !app.locks.locked(it.optString("id")) }) { c -> TextButton({ app.call("forward", message.targetArgs(conversation).put("destination", c.optString("id"))); forwarding = false }) { Text(c.optString("title")) } } } }, confirmButton = { TextButton({ forwarding = false }) { Text("Cancel") } })
 }
-@Composable fun LinkedBody(app: MainActivity, body: String, mentions: List<String> = emptyList()) {
+@Composable fun LinkedBody(app: MainActivity, body: String, mentions: List<String> = emptyList(), reserve: String = "") {
     var external by remember { mutableStateOf<String?>(null) }
     val pattern = remember { Regex("https?://[^\\s<>]+|www\\.[^\\s<>]+", RegexOption.IGNORE_CASE) }
     val links = pattern.findAll(body).map { it.value.trimEnd('.', ',', ';', '!', '?', ')', ']', '}') }.toList()
     // @mentions are highlighted; the labels come from the message's structured mention IDs.
-    val accent = MaterialTheme.colorScheme.primary
-    val annotated = remember(body, mentions) {
+    val accent = LocalConvoColors.current.accentText
+    val annotated = remember(body, mentions, reserve) {
         androidx.compose.ui.text.buildAnnotatedString {
             append(body)
             mentions.forEach { label -> var at = body.indexOf("@$label"); while (at >= 0) { addStyle(androidx.compose.ui.text.SpanStyle(color = accent, fontWeight = FontWeight.SemiBold), at, at + label.length + 1); at = body.indexOf("@$label", at + 1) } }
+            // Invisible tail the width of the time/ticks, so they fit on the last line (WhatsApp).
+            if (reserve.isNotEmpty()) { pushStyle(androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color.Transparent, fontSize = 11.sp)); append(reserve); pop() }
         }
     }
-    SelectionContainer { androidx.compose.material3.Text(annotated) }
+    SelectionContainer { androidx.compose.material3.Text(annotated, fontSize = 16.sp, lineHeight = 21.sp) }
     links.forEach { text -> val target = if (text.startsWith("www.")) "https://$text" else text
         val uri = Uri.parse(target)
         if (uri.scheme in listOf("https", "http") && uri.userInfo == null) TextButton(onClick = { if (app.snapshot.optJSONObject("settings")?.optBoolean("confirmExternalLinks", true) != false) external = target else app.startActivity(Intent(Intent.ACTION_VIEW, uri)) }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Outlined.OpenInNew, null, Modifier.size(16.dp)); Text("Open $text", maxLines = 2) }
@@ -425,4 +461,60 @@ fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds
     if (forward) AlertDialog(onDismissRequest = { forward = false }, title = { Text("Forward to") }, text = { LazyColumn { items(app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { !app.locks.locked(it.optString("id")) }) { c ->
         TextButton({ forward = false; each("forward") { it.put("destination", c.optString("id")) }; app.selection = null; app.notice = "Forwarded" }) { RawText(c.optString("title")) } } } },
         confirmButton = { TextButton({ forward = false }) { Text("Cancel") } })
+}
+
+/** Placeholder text as wide as the bubble's meta row ("edited 14:05 ✓✓"), drawn transparent. */
+fun metaReserve(message: JSONObject, outgoing: Boolean): String {
+    val attachments = message.optJSONArray("attachments")?.length() ?: 0
+    val reactions = message.optJSONObject("reactions")?.length() ?: 0
+    if (attachments > 0 || reactions > 0 || message.has("ackRequest")) return ""
+    var width = 7 // " 00:00" plus a gap
+    if (message.has("editedAt")) width += 7
+    if (message.optLong("expireTimer") > 0) width += 2
+    if (message.optBoolean("starred")) width += 2
+    if (outgoing) width += 3
+    return "\u00A0".repeat(2) + "\u2007".repeat(width)
+}
+
+fun dayOf(at: Long): java.time.LocalDate = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+
+/** "TODAY" / "YESTERDAY" / date chip between days (web `.day-chip`). */
+@Composable fun DateChip(at: Long) {
+    val colors = LocalConvoColors.current
+    val day = dayOf(at); val today = java.time.LocalDate.now()
+    val label = when (day) {
+        today -> tr("Today"); today.minusDays(1) -> tr("Yesterday")
+        else -> day.format(java.time.format.DateTimeFormatter.ofPattern(if (day.year == today.year) "d MMMM" else "d MMMM yyyy", java.util.Locale.forLanguageTag(if (Strings.locale == "ro") "ro" else "en")))
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp), horizontalArrangement = Arrangement.Center) {
+        Surface(shape = RoundedCornerShape(8.dp), color = colors.panel, shadowElevation = 0.5.dp) {
+            RawText(label.uppercase(), Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/** Yellow end-to-end encryption pill at the top of every chat (web `.e2e-notice`). */
+@Composable fun EncryptionNotice() {
+    val colors = LocalConvoColors.current
+    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
+        Surface(shape = RoundedCornerShape(8.dp), color = colors.warningBg) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp), tint = colors.warningText)
+                Text("Your personal messages are end-to-end encrypted", Modifier.padding(start = 6.dp), color = colors.warningText, fontSize = 12.5.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+    }
+}
+
+/** Reply preview above the composer: accent bar, excerpt, cancel. */
+@Composable fun QuotePreview(excerpt: String, onCancel: () -> Unit) {
+    val colors = LocalConvoColors.current
+    Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp).clip(RoundedCornerShape(12.dp)).background(colors.panel).height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(4.dp).fillMaxHeight().background(colors.accent))
+        Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text("Reply", color = colors.accentText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            RawText(excerpt, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = colors.textSecondary, fontSize = 14.sp)
+        }
+        IconButton(onCancel) { Icon(Icons.Outlined.Close, "Cancel reply", tint = colors.textSecondary) }
+    }
 }

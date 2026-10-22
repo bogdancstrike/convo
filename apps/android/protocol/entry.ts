@@ -37,7 +37,10 @@ const publicMessage = (message: ChatMessage) => ({ ...message, editableUntil: cl
 })) });
 async function snapshot() {
   if (!client) return;
-  emit('snapshot', { accountId: client.accountId, device: client.device, conversations: client.conversations(),
+  // Group previews name their author ("Ana: …"), resolved here because the list has no directory.
+  const conversations = await Promise.all(client.conversations().map(async (c) => c.kind === 'group' && c.previewAuthor && !c.previewFromMe
+    ? { ...c, previewAuthorName: await client!.displayName(c.previewAuthor) } : c));
+  emit('snapshot', { accountId: client.accountId, device: client.device, conversations,
     limits: { attachmentMaxBytes: MAX_ATTACHMENT_BYTES }, settings: client.settings, history: client.historyStatus, connection: client.socket.state,
     profiles: Object.fromEntries(client.profiles()), active, messages: active ? await Promise.all((await client.messages(active, 1000)).map(async (m) => ({
       ...publicMessage(m), mentionLabels: m.mentions?.length ? await Promise.all(m.mentions.map((id) => client!.displayName(id))) : undefined,
