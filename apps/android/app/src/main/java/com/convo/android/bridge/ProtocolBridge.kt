@@ -1,5 +1,23 @@
-package com.convo.android
+package com.convo.android.bridge
 
+import com.convo.android.R
+import com.convo.android.BuildConfig
+import com.convo.android.*
+import com.convo.android.app.*
+import com.convo.android.calls.*
+import com.convo.android.i18n.*
+import com.convo.android.push.*
+import com.convo.android.ui.communities.*
+import com.convo.android.ui.contacts.*
+import com.convo.android.ui.info.*
+import com.convo.android.ui.linking.*
+import com.convo.android.ui.locks.*
+import com.convo.android.ui.media.*
+import com.convo.android.ui.settings.*
+import com.convo.android.ui.theme.*
+import com.convo.android.ui.thread.*
+import com.convo.android.i18n.Text
+import com.convo.android.i18n.Icon
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
