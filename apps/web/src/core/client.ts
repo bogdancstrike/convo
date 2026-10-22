@@ -1242,6 +1242,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     void this.outbox.flush();
   }
 
+  /** Registers (or with null removes) this device's push endpoint: UnifiedPush or Web Push. */
+  setPushEndpoint(endpoint: string | null): Promise<void> {
+    return endpoint ? this.api.setPushEndpoint(endpoint) : this.api.clearPushEndpoint();
+  }
+
   async updateSettings(patch: Partial<Settings>): Promise<void> {
     if ('autoDownload' in patch) {
       const autoDownload = sanitizeAutoDownload(patch.autoDownload);

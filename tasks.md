@@ -35,8 +35,13 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   emulator-5554 against the local stack (`adb reverse`, debug cert pinned by `build-apk.sh`).
   APK rebuilt; README documents building it.
 - [x] Docs diagram: architecture and trust boundaries (`docs/diagrams/security/architecture.*`).
-- [ ] Open from this checkpoint: router forwards + `turn.doncik.ro` DNS (user), Web Push for closed
-  browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4).
+- [x] Web Push for closed browser tabs (MSG-02): opt-in "Notify me when Convo is closed"; empty
+  VAPID-signed wakes to allow-listed push services, `/sw.js` generic notification, start-up
+  re-registration, `deploy/vapid-keys.sh`. `PushServiceTest` (allow-list, verified ES256 JWT,
+  TTL/Urgency); `web-push.spec.ts` delivers a real wake through Mozilla autopush to a closed
+  Firefox tab and checks that turning it off stops them.
+- [ ] Open from this checkpoint: router forwards + `turn.doncik.ro` DNS (user), Keystore/PRF-bound
+  local keys (SECURITY.md §18.4).
 - [x] Docs diagrams (diagram-design, Convo profile): message flow (Signal, per-device fan-out),
   calls (LiveKit SFU + coturn, frame E2EE), network exposure (tunnel, router forwards,
   ClusterIP); linked from README and SECURITY.md.
@@ -396,7 +401,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Item | Task |
 |---|---|
 | Communities: ack withdraw/custom reviewers, membership-operation retries/ownership transfer flow, polls/events | COM-01/02 |
-| FCM and Web Push fallbacks; kill-point/Valkey-loss drills for push | MSG-02 |
+| FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
 | Calls: screen sharing, invited-member call links | CALL-01 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |

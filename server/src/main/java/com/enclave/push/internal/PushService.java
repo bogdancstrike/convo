@@ -20,7 +20,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Registers UnifiedPush endpoints and records content-free wake intents. An intent is written in
+ * Registers UnifiedPush and Web Push endpoints and records content-free wake intents. An intent is written in
  * the transaction that stores the envelopes ({@link MailWaiting} is published before commit), so
  * no wake is lost between commit and enqueue; {@link PushDispatcher} delivers it.
  */
@@ -35,11 +35,13 @@ class PushService {
     private final PushProperties properties;
     private final Clock clock;
     /** Posts one wake; returns the HTTP status (throws on transport failure). Replaceable in tests. */
-    interface Transport { int post(String url, String payload) throws Exception; }
+    interface Transport { int post(String url, String body, java.util.Map<String, String> headers) throws Exception; }
     /** Outcome of one attempt. */
     enum Outcome { DELIVERED, RETRY, GONE, REJECTED }
 
     private final Transport transport;
+    /** VAPID signer when Web Push is enabled. */
+    private final Vapid vapid;
     /** Runs after an intent commits, so a wake usually leaves within milliseconds, not a poll later. */
     private volatile Runnable nudge = () -> { };
 
@@ -49,9 +51,12 @@ class PushService {
         this.properties = properties;
         this.clock = clock;
         HttpClient http = HttpClient.newBuilder().connectTimeout(properties.timeout()).followRedirects(HttpClient.Redirect.NEVER).build();
-        this.transport = (url, payload) -> http.send(HttpRequest.newBuilder(URI.create(url)).timeout(properties.timeout())
-                .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(payload)).build(),
-                HttpResponse.BodyHandlers.discarding()).statusCode();
+        this.transport = (url, body, headers) -> {
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(properties.timeout()).POST(HttpRequest.BodyPublishers.ofString(body));
+            headers.forEach(request::header);
+            return http.send(request.build(), HttpResponse.BodyHandlers.discarding()).statusCode();
+        };
+        this.vapid = vapid(properties, clock);
     }
 
     PushService(JdbcClient jdbc, PushProperties properties, Clock clock, Transport transport) {
@@ -59,6 +64,12 @@ class PushService {
         this.properties = properties;
         this.clock = clock;
         this.transport = transport;
+        this.vapid = vapid(properties, clock);
+    }
+
+    private static Vapid vapid(PushProperties properties, Clock clock) {
+        var web = properties.webPush();
+        return web.enabled() ? new Vapid(web.publicKey(), web.privateKey(), web.subject(), clock) : null;
     }
 
     void onIntent(Runnable nudge) { this.nudge = nudge; }
@@ -106,10 +117,18 @@ class PushService {
         unregister(event.address());
     }
 
-    /** One delivery attempt to the distributor (no redirects, bounded timeout). */
+    /**
+     * One delivery attempt (no redirects, bounded timeout). UnifiedPush gets the constant JSON
+     * wake; Web Push an empty VAPID-signed request whose TTL/Urgency carry only "urgent or not".
+     */
     Outcome attempt(String endpoint, String payload) {
         try {
-            return classify(transport.post(internal(endpoint), payload));
+            if (webPush(endpoint)) {
+                boolean urgent = URGENT.equals(payload);
+                return classify(transport.post(endpoint, "", java.util.Map.of("Authorization", vapid.authorization(endpoint),
+                        "TTL", Long.toString((urgent ? properties.urgentTtl() : properties.intentTtl()).toSeconds()), "Urgency", urgent ? "high" : "normal")));
+            }
+            return classify(transport.post(internal(endpoint), payload, java.util.Map.of("Content-Type", "application/json")));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Outcome.RETRY;
@@ -128,9 +147,23 @@ class PushService {
     boolean allowed(String endpoint) {
         try {
             URI uri = URI.create(endpoint);
-            if (uri.getUserInfo() != null || uri.getHost() == null) return false;
+            if (uri.getUserInfo() != null || uri.getHost() == null || endpoint.length() > 512) return false;
             String origin = uri.getScheme() + "://" + uri.getAuthority();
-            return properties.allowedOrigins().contains(origin) && endpoint.length() <= 512;
+            return properties.allowedOrigins().contains(origin) || webPush(endpoint);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** A browser push-service endpoint (HTTPS, default port, allow-listed host) while Web Push is on. */
+    boolean webPush(String endpoint) {
+        if (vapid == null) return false;
+        try {
+            URI uri = URI.create(endpoint);
+            String host = uri.getHost();
+            if (!"https".equals(uri.getScheme()) || host == null || uri.getUserInfo() != null || (uri.getPort() != -1 && uri.getPort() != 443)) return false;
+            String h = host.toLowerCase(java.util.Locale.ROOT);
+            return properties.webPush().hosts().stream().anyMatch(p -> p.startsWith("*.") ? h.endsWith(p.substring(1)) : h.equals(p));
         } catch (IllegalArgumentException e) {
             return false;
         }

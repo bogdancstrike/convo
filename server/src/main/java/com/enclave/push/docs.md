@@ -43,6 +43,18 @@ Presence: closing a device's last socket on a replica deletes its Valkey presenc
 (compare-and-delete), so a killed app counts as offline immediately rather than after the
 90 s TTL.
 
+## Web Push (browsers)
+
+With `enclave.push.web-push.enabled` and a VAPID key pair (`deploy/vapid-keys.sh`), browsers
+subscribe from Settings → Notifications ("Notify me when Convo is closed") with the public key
+from `GET /v1/deployment-info` (`push.webPushKey`) and register the push-service endpoint through
+the same `PUT /v1/push/endpoint`. Such endpoints (HTTPS, default port, host in
+`enclave.push.web-push.hosts`) get an **empty** POST with `Authorization: vapid t=<ES256 JWT>, k=<key>`,
+`TTL` (intent / urgent TTL) and `Urgency: normal|high`; 201 counts as delivered, 404/410 forget the
+endpoint, and the browser re-registers its subscription on its next start. The service worker
+(`apps/web/public/sw.js`) shows "New message or call". `Vapid` signs and caches the JWT per
+push-service origin for 12 h.
+
 ## Safety
 
 - Endpoints must be on an allow-listed origin (`enclave.push.allowed-origins`); no user-info, max
@@ -60,3 +72,4 @@ Presence: closing a device's last socket on a replica deletes its Valkey presenc
 | `PushDispatcher` | Lease/poll loop, outcome handling, dead-letter purge |
 | `PushHealth` | `PushApi`: aggregate counts and redrive |
 | `PushController` | `/v1/push/endpoint` |
+| `Vapid` | VAPID (RFC 8292) ES256 JWTs for Web Push |

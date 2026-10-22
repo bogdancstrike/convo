@@ -32,6 +32,7 @@ Diagrams (sources in [diagrams/security](diagrams/security)):
 | Keycloak (identity provider) | usernames, names, email, phone, credentials (password hash, passkey public keys, OTP seeds), sign-in events | anything Convo encrypts; it never receives message or history keys |
 | LiveKit SFU / coturn | who is in a call room, when, packet sizes and timing | call audio/video (frames are end-to-end encrypted) |
 | Push service (ntfy) | that *some* device should wake up, and whether it is urgent (a call ring) | sender, conversation, content |
+| Browser push service (Web Push, opt-in: Google FCM, Mozilla, Apple, Microsoft) | that this browser should wake up, when, and whether it is urgent | sender, conversation, content, account name (the request is empty) |
 | Administrators | directory data, devices, aggregate statistics, per-person activity *counts*, audit log | any message content or keys — no such API exists |
 | Someone holding an **unlocked** phone or browser | everything the user can see | — (end-to-end encryption does not protect an unlocked endpoint) |
 
@@ -329,6 +330,16 @@ connects and fetches ciphertext. Endpoints must be on allow-listed origins (no S
 logged, and are deleted on revocation. Wake intents are committed with the envelopes, delivered by
 leased workers with retries, and failures kept 24 h as sanitized dead letters (MSG-02). Generic
 notification text is the default; locked chats and app lock force it.
+
+**Web Push (browsers, opt-in in Settings → Notifications):** a closed tab is woken through the
+browser vendor's push service. The server sends an **empty** request (no payload, so no RFC 8291
+message encryption is needed and none can leak) signed with the deployment's VAPID key (ES256,
+RFC 8292; JWT cached per push service for 12 h); only `TTL` and `Urgency` reveal "urgent or not".
+Accepted endpoints are HTTPS on the default port at allow-listed push-service hosts
+(`enclave.push.web-push.hosts`). The service worker (`/sw.js`, no caching or fetch handling)
+always shows the same "New message or call" text. Because the vendor learns *when* this browser
+receives mail, Web Push is off until the user enables it; the VAPID private key is a deployment
+secret (`deploy/vapid-keys.sh`).
 
 ## 13. Calls
 

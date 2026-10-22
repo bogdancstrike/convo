@@ -32,8 +32,11 @@ class DeploymentInfoController {
     DeploymentInfoController(DeploymentProperties deployment, SecurityProperties security, AttachmentPolicy attachments,
             MessagePolicy messages, @org.springframework.beans.factory.annotation.Value("${enclave.identity.device-auth.require-nonce:true}") boolean requireNonce,
             @org.springframework.beans.factory.annotation.Value("${enclave.push.enabled:false}") boolean pushEnabled,
-            @org.springframework.beans.factory.annotation.Value("${enclave.push.allowed-origins:}") List<String> pushOrigins) {
-        this.push = new PushInfo(pushEnabled ? pushOrigins.stream().filter(o -> !o.isBlank()).toList() : List.of());
+            @org.springframework.beans.factory.annotation.Value("${enclave.push.allowed-origins:}") List<String> pushOrigins,
+            @org.springframework.beans.factory.annotation.Value("${enclave.push.web-push.enabled:false}") boolean webPushEnabled,
+            @org.springframework.beans.factory.annotation.Value("${enclave.push.web-push.public-key:}") String webPushKey) {
+        this.push = new PushInfo(pushEnabled ? pushOrigins.stream().filter(o -> !o.isBlank()).toList() : List.of(),
+                pushEnabled && webPushEnabled && !webPushKey.isBlank() ? webPushKey : null);
         this.apiVersions = requireNonce ? List.of("v1.2") : List.of("v1", "v1.2");
         this.deployment = deployment;
         this.security = security;
@@ -61,8 +64,9 @@ class DeploymentInfoController {
     /**
      * @param servers UnifiedPush distributor servers (ntfy) this organization accepts; a phone's push
      *     app must use one of them. Empty when push wake-ups are disabled.
+     * @param webPushKey VAPID public key browsers subscribe with (null when Web Push is off)
      */
-    record PushInfo(List<String> servers) {}
+    record PushInfo(List<String> servers, String webPushKey) {}
     /**
      * @param attachmentMaxBytes plaintext attachment limit
      * @param editWindowMs edit window for chats, groups and Note to self

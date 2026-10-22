@@ -25,6 +25,7 @@ import org.springframework.validation.annotation.Validated;
  * @param lease how long a claimed intent is reserved for one worker before others may retry it
  * @param batchSize intents claimed per poll
  * @param deadLetterRetention how long sanitized dead letters are kept (specs: diagnostics ≤ 24 h)
+ * @param webPush browser Web Push (VAPID) for closed tabs
  */
 @Validated
 @ConfigurationProperties("enclave.push")
@@ -42,4 +43,23 @@ public record PushProperties(
         @DefaultValue("1s") @NotNull Duration pollInterval,
         @DefaultValue("30s") @NotNull Duration lease,
         @DefaultValue("50") @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(1000) int batchSize,
-        @DefaultValue("24h") @NotNull Duration deadLetterRetention) {}
+        @DefaultValue("24h") @NotNull Duration deadLetterRetention,
+        @DefaultValue @NotNull WebPush webPush) {
+
+    /**
+     * {@code enclave.push.web-push.*}: wakes for browsers whose Convo tab is closed. The browser's
+     * push service (Google, Mozilla, Apple, Microsoft) receives an empty, VAPID-signed request.
+     *
+     * @param enabled offer Web Push to browsers (requires the key pair)
+     * @param publicKey base64url uncompressed P-256 public key (browsers subscribe with it)
+     * @param privateKey base64url P-256 private scalar (secret)
+     * @param subject contact the push services may use ({@code mailto:} or {@code https:})
+     * @param hosts push-service hosts endpoints may point to; {@code *.} matches subdomains
+     */
+    public record WebPush(
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("") String publicKey,
+            @DefaultValue("") String privateKey,
+            @DefaultValue("mailto:admin@localhost") String subject,
+            @DefaultValue({"fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com", "*.notify.windows.com"}) List<String> hosts) {}
+}

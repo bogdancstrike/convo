@@ -13,6 +13,7 @@ import { useProfile } from '../components/ProfileContext';
 import { Segmented, Switch } from '../components/Controls';
 import { Icon, type IconName } from '../components/Icon';
 import { useI18n } from '../i18n/i18n';
+import { disableWebPush, enableWebPush, webPushEnabled, webPushSupported } from '../webPush';
 import { MIN_PASSPHRASE, WrongPassphraseError } from '../../storage/encryptedStore';
 import type { MessageKey } from '../i18n/en';
 
@@ -73,7 +74,7 @@ export function SettingsPanel({
           {current.page === 'profile' && <ProfileSettings client={client} />}
           {current.page === 'recovery' && <RecoverySettings client={client} />}
           {current.page === 'chats' && <ChatsPage settings={settings} update={update} />}
-          {current.page === 'notifications' && <NotificationsPage settings={settings} update={update} />}
+          {current.page === 'notifications' && <NotificationsPage client={client} settings={settings} update={update} />}
           {current.page === 'storage' && <StoragePage settings={settings} update={update} />}
           {current.page === 'privacy' && <PrivacyPage client={client} settings={settings} update={update} />}
           {current.page === 'devices' && <DevicesPage client={client} />}
@@ -133,8 +134,19 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
  * one switch per media kind applies to Wi-Fi and other networks; Android offers per-network rules.
  */
 /** Device notifications: opt-in, browser permission, preview level (generic by default). */
-function NotificationsPage({ settings, update }: { settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
+function NotificationsPage({ client, settings, update }: { client: EnclaveClient; settings: SettingsModel; update: (p: Partial<SettingsModel>) => void }) {
   const { t } = useI18n();
+  // Web Push (closed tabs): the browser subscription is the state; offered when the server has a VAPID key.
+  const [closedTab, setClosedTab] = useState<boolean | null>(null);
+  const [pushError, setPushError] = useState(false);
+  useEffect(() => { void webPushEnabled().then(setClosedTab); }, []);
+  const toggleClosedTab = async (on: boolean) => {
+    setPushError(false);
+    try {
+      if (on) { const ok = await enableWebPush(client); setClosedTab(ok); if (!ok) setPermission(Notification.permission); }
+      else { await disableWebPush(client); setClosedTab(false); }
+    } catch { setPushError(true); setClosedTab(await webPushEnabled()); }
+  };
   const supported = typeof Notification !== 'undefined';
   const [permission, setPermission] = useState(supported ? Notification.permission : 'denied');
   const toggle = async (on: boolean) => {
@@ -148,6 +160,11 @@ function NotificationsPage({ settings, update }: { settings: SettingsModel; upda
       <Segmented label={t('notify.preview')} value={settings.notificationPreview} testId="notification-preview" onChange={(v) => update({ notificationPreview: v as SettingsModel['notificationPreview'] })}
         options={[{ value: 'generic', label: t('notify.preview.generic') }, { value: 'sender', label: t('notify.preview.sender') }, { value: 'full', label: t('notify.preview.full') }]} />
       <p className="muted-text">{t('notify.previewHelp')}</p>
+      {webPushSupported() && (
+        <Switch checked={closedTab === true} disabled={closedTab === null} onChange={(on) => void toggleClosedTab(on)}
+          label={t('notify.closed')} description={t('notify.closedHelp')} testId="toggle-web-push" />
+      )}
+      {pushError && <p role="alert" className="failed">{t('notify.closedError')}</p>}
     </Card>
   );
 }

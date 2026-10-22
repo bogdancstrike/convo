@@ -2,6 +2,7 @@ import { SnoozeDialog } from './SnoozeDialog';
 import { CommunitiesPanel } from './CommunitiesPanel';
 import { JoinLinkHandler } from '../joinLinks';
 import { useMessageNotifications } from '../notifications';
+import { syncWebPush } from '../webPush';
 import { LockedChatGate, useChatLocks } from '../chatLocks';
 import { CallsPanel } from '../calls/CallsPanel';
 import { AllMedia } from './AllMedia';
@@ -83,6 +84,8 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
 
   const openChat = (id: string) => { setChatSearch(null); navigate({ panel: 'chats', chat: id, info: false }); };
   useMessageNotifications(client, nav.chat, openChat);
+  // Keep an existing Web Push subscription registered for this device (never prompts).
+  useEffect(() => { void syncWebPush(client).catch(() => undefined); }, [client]);
   const openNoteToSelf = async () => {
     const c = await client.openConversation({ accountId: client.accountId, username: client.device.username, displayName: client.device.displayName });
     openChat(c.id);

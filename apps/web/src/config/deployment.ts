@@ -14,8 +14,11 @@ export interface DeploymentInfo {
   /** OIDC settings for the public PKCE client. */
   oidc: { issuer: string; clientId: string };
   limits?: { attachmentMaxBytes: number; editWindowMs?: number; channelEditWindowMs?: number; editGraceMs?: number };
-  /** Push (UnifiedPush) servers phones may use for background wake-ups; empty when disabled. */
-  push?: { servers: string[] };
+  /**
+   * Push: UnifiedPush servers phones may use (empty when disabled) and the VAPID public key
+   * browsers subscribe with for Web Push (absent when Web Push is off).
+   */
+  push?: { servers: string[]; webPushKey?: string | null };
 }
 
 /** API version implemented by this client. */
