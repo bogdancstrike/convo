@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -316,19 +317,25 @@ class CallManager(private val app: MainActivity) {
         Box(Modifier.fillMaxSize()) {
             val videoTiles = if (call.video && call.phase == "connected") remotes.mapNotNull { p -> videoOf(p)?.let { p to it } } else emptyList()
             if (videoTiles.isNotEmpty()) Column(Modifier.fillMaxSize()) { videoTiles.forEach { (_, track) -> VideoRenderer(manager, track, Modifier.weight(1f).fillMaxWidth()) } }
-            else Column(Modifier.fillMaxWidth().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            else Column(Modifier.fillMaxWidth().padding(top = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // WhatsApp: the encryption line sits above the caller.
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 36.dp)) {
+                    Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp), tint = Color(0xFFC7D0D6))
+                    Text(if (call.phase == "connected" && !manager.encrypted) " Securing call…" else " End-to-end encrypted", color = Color(0xFFC7D0D6), style = MaterialTheme.typography.bodySmall)
+                }
                 PersonAvatar(app, call.conversationId, title, 112, group = call.conversationId.startsWith("g:"))
                 Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 16.dp))
                 Text(status, color = Color(0xFFC7D0D6), modifier = Modifier.padding(top = 6.dp))
                 if (call.phase == "connected" && call.conversationId.startsWith("g:")) Text("${remotes.size + 1} in call", color = Color(0xFFC7D0D6))
             }
             if (videoTiles.isNotEmpty()) Text(status, Modifier.align(Alignment.TopCenter).padding(top = 48.dp).background(Color(0x80000000), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp))
-            manager.room?.localParticipant?.let { local -> if (call.video && manager.cameraOn) videoOf(local)?.let { VideoRenderer(manager, it, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 140.dp).size(110.dp, 150.dp)) } }
-            Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (call.phase == "connected") Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
-                    Icon(Icons.Outlined.Lock, null, Modifier.size(14.dp)); Text(if (manager.encrypted) " End-to-end encrypted" else " Securing call…", style = MaterialTheme.typography.bodySmall)
+            manager.room?.localParticipant?.let { local -> if (call.video && manager.cameraOn) videoOf(local)?.let { VideoRenderer(manager, it, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 160.dp).size(110.dp, 150.dp).clip(RoundedCornerShape(12.dp))) } }
+            // Control tray (WhatsApp): rounded sheet along the bottom edge.
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF1F2C34), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).padding(top = 20.dp, bottom = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (videoTiles.isNotEmpty() && call.phase == "connected") Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
+                    Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp)); Text(if (manager.encrypted) " End-to-end encrypted" else " Securing call…", style = MaterialTheme.typography.bodySmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(if (call.phase == "incoming") 72.dp else 28.dp)) {
                     if (call.phase == "incoming") {
                         CallButton(Icons.Outlined.CallEnd, "Decline", Color(0xFFC62828)) { manager.decline() }
                         CallButton(if (call.video) Icons.Outlined.Videocam else Icons.Outlined.Call, "Accept", Color(0xFF11713F)) { manager.accept() }
