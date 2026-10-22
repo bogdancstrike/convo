@@ -31,6 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -75,9 +76,11 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     }
     if (image || video) {
         val manual = image && !load && bitmap == null
-        Box((if (compact) Modifier.size(128.dp) else Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp)).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (manual) "Download $name" else if (video) "Play $name" else "View $name", onClick = { if (manual) requested = true else open() }), contentAlignment = Alignment.Center) {
+        // Photos keep their own shape (clamped), cropped to the bubble width, no letterboxing (WhatsApp).
+        val ratio = bitmap?.let { (it.width.toFloat() / it.height.coerceAtLeast(1)).coerceIn(0.6f, 1.8f) }
+        Box((if (compact) Modifier.size(128.dp) else if (ratio != null) Modifier.width(264.dp).aspectRatio(ratio).clip(RoundedCornerShape(8.dp)) else Modifier.width(264.dp).heightIn(min = 140.dp, max = 300.dp)).background(LocalConvoColors.current.canvas, RoundedCornerShape(8.dp)).clickable(onClickLabel = if (manual) "Download $name" else if (video) "Play $name" else "View $name", onClick = { if (manual) requested = true else open() }), contentAlignment = Alignment.Center) {
             if (bitmap == null) preview?.let { Image(it, null, Modifier.matchParentSize().blur(16.dp), contentScale = ContentScale.Crop) }
-            bitmap?.let { Image(it, name, if (compact) Modifier.fillMaxSize() else Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 300.dp), contentScale = if (compact) ContentScale.Crop else ContentScale.Fit) }
+            bitmap?.let { Image(it, name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             if (video) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) { Icon(Icons.Outlined.PlayArrow, "Play $name", Modifier.padding(12.dp).size(32.dp)) }
             else if (manual) Surface(shape = RoundedCornerShape(50), color = LocalConvoColors.current.panelRaised.copy(alpha = .9f)) {
                 Row(Modifier.padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Download, null); if (!compact) Text(formatSize(pointer.optLong("size")), Modifier.padding(start = 6.dp)) }

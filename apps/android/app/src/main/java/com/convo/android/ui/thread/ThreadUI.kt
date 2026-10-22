@@ -55,6 +55,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -261,15 +262,17 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) LocalConvoColors.current.bubbleOut else LocalConvoColors.current.bubbleIn),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
             shape = RoundedCornerShape(topStart = if (first && !outgoing) 0.dp else 10.dp, topEnd = if (first && outgoing) 0.dp else 10.dp, bottomStart = 10.dp, bottomEnd = 10.dp)) {
-            Column(Modifier.padding(start = 9.dp, end = 9.dp, top = 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val media = message.optJSONArray("attachments")?.length()?.let { it > 0 } == true
+            Column(Modifier.padding(start = if (media) 4.dp else 9.dp, end = if (media) 4.dp else 9.dp, top = if (media) 4.dp else 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (conversation.startsWith("g:") && !outgoing && first) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { RawText(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
-                    if (message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))
-                    if (message.has("ackRequest")) AckBox(app, message)
                     val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
+                    // Text first only without attachments; with media the caption goes underneath (WhatsApp).
+                    if (attachments.isEmpty() && message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))
+                    if (message.has("ackRequest")) AckBox(app, message)
                     val visual = attachments.withIndex().filter { (_, a) -> a.optString("contentType").let { it.startsWith("image/") || it.startsWith("video/") } }.map { it.index to it.value }
                     if (visual.size >= 2) AlbumGrid(app, message, conversation, visual) { selectedAttachment = it }
                     message.optJSONArray("pendingFiles")?.objects()?.forEach { f ->
@@ -278,6 +281,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     attachments.forEachIndexed { index, a ->
                         if (visual.size < 2 || visual.none { it.first == index }) AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
                     }
+                    if (attachments.isNotEmpty() && message.optString("body").isNotBlank()) Box(Modifier.padding(horizontal = 5.dp)) { LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()) }
                 }
                 // Time and ticks sit at the end of the last text line (space reserved by metaReserve).
                 val meta = LocalConvoColors.current.bubbleMeta
@@ -390,8 +394,16 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
     val temp = remember(bytes) { if ((video || audio) && bytes != null) File(app.cacheDir, "convo-preview-${java.util.UUID.randomUUID()}").apply { writeBytes(bytes) } else null }
     DisposableEffect(temp) { onDispose { temp?.delete() } }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Column {
-            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) { Text(pointer.optString("fileName", "Media"), Modifier.weight(1f), maxLines = 1); IconButton(onClick = { if (bytes != null) app.export(pointer.optString("fileName", "file"), mime, bytes) }, enabled = bytes != null) { Icon(Icons.Outlined.Download, "Download") }; IconButton(close) { Icon(Icons.Outlined.Close, "Close viewer") } }
+        // WhatsApp viewer: black canvas, translucent top bar (back, sender/time, save), swipe to page.
+        Surface(Modifier.fillMaxSize(), color = Color.Black, contentColor = Color.White) { Column {
+            Row(Modifier.fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(close) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Close viewer", tint = Color.White) }
+                Column(Modifier.weight(1f)) {
+                    RawText(pointer.optString("fileName", tr("Media")), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    RawText(SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), fontSize = 13.sp, color = Color(0xFFC7D0D6))
+                }
+                IconButton(onClick = { if (bytes != null) app.export(pointer.optString("fileName", "file"), mime, bytes) }, enabled = bytes != null) { Icon(Icons.Outlined.Download, "Download", tint = Color.White) }
+            }
             var drag by remember { mutableFloatStateOf(0f) }
             Box(Modifier.weight(1f).fillMaxWidth().pointerInput(position, items.size) {
                 // Swipe left/right pages through the chat's photos and videos.
@@ -399,12 +411,16 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
                     if (drag < -120 && position < items.lastIndex) position++ else if (drag > 120 && position > 0) position--
                 }) { _, amount -> drag += amount }
             }, contentAlignment = Alignment.Center) {
-                if (loaded == null) CircularProgressIndicator()
+                if (loaded == null) CircularProgressIndicator(color = Color.White)
                 else if (bitmap != null) Image(bitmap, pointer.optString("fileName"), Modifier.fillMaxSize().clickable { zoom = !zoom }, contentScale = if (zoom) androidx.compose.ui.layout.ContentScale.Crop else androidx.compose.ui.layout.ContentScale.Fit)
                 else if (temp != null) AndroidView(factory = { context -> VideoView(context).apply { setVideoURI(Uri.fromFile(temp)); setMediaController(MediaController(context).also { it.setAnchorView(this) }); setOnPreparedListener { start() } } }, modifier = Modifier.fillMaxSize())
-                else Text("This file is ready to save.")
+                else Text("This file is ready to save.", color = Color.White)
             }
-            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { TextButton({ position-- }, enabled = position > 0) { Text("Previous") }; Text("${position + 1} / ${items.size}"); TextButton({ position++ }, enabled = position < items.lastIndex) { Text("Next") } }
+            if (items.size > 1) Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ position-- }, enabled = position > 0) { Icon(Icons.Outlined.ChevronLeft, "Previous", tint = if (position > 0) Color.White else Color(0x55FFFFFF)) }
+                RawText("${position + 1} / ${items.size}", color = Color(0xFFC7D0D6), fontSize = 14.sp)
+                IconButton({ position++ }, enabled = position < items.lastIndex) { Icon(Icons.Outlined.ChevronRight, "Next", tint = if (position < items.lastIndex) Color.White else Color(0x55FFFFFF)) }
+            }
         } }
     }
 }
