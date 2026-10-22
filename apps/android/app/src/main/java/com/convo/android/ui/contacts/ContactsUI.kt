@@ -31,6 +31,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -48,13 +52,14 @@ import org.json.JSONObject
     val choices = (if (query.isBlank()) (app.phoneMatches + recent).distinctBy { it.optString("accountId") } else (results + app.phoneMatches.filter { it.optString("localName").contains(query, true) }).distinctBy { it.optString("accountId") })
         .filter { it.optString("accountId") !in excluded && it.optString("accountId") != app.snapshot.optString("accountId") }
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(12.dp), label = { Text("Search name or phone number") }, leadingIcon = { Icon(Icons.Outlined.Search, null) })
+        SearchField(query, { query = it }, "Search name or phone number", Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         LazyColumn {
             if (!multi && query.isBlank()) {
-                item { ActionRow("New group", icon = Icons.Outlined.Group) { app.route = "new-group" } }
-                item { ActionRow("Note to self", icon = Icons.Outlined.NoteAlt) { app.call("newChat", obj("id" to app.snapshot.optString("accountId"))) { value -> (value as? JSONObject)?.optString("id")?.let(app::openChat) } } }
+                item { CircleAction(Icons.Outlined.GroupAdd, "New group") { app.route = "new-group" } }
+                item { CircleAction(Icons.Outlined.Groups, "New community") { app.route = "new-community" } }
+                item { CircleAction(Icons.Outlined.NoteAlt, "Note to self") { app.call("newChat", obj("id" to app.snapshot.optString("accountId"))) { value -> (value as? JSONObject)?.optString("id")?.let(app::openChat) } } }
                 item { var joining by remember { mutableStateOf(false) }; var pasted by remember { mutableStateOf("") }
-                    ActionRow("Join with invite link", icon = Icons.Outlined.Link) { joining = true }
+                    CircleAction(Icons.Outlined.Link, "Join with invite link") { joining = true }
                     if (joining) AlertDialog(onDismissRequest = { joining = false }, title = { Text("Join a group") },
                         text = { Column { Text("Ask the group’s admins to add you? They will see your name."); OutlinedTextField(pasted, { pasted = it }, label = { Text("Invite link") }, singleLine = true) } },
                         confirmButton = { TextButton({ val token = Regex("#/join/([A-Za-z0-9_-]{32})").find(pasted)?.groupValues?.get(1)
@@ -63,15 +68,19 @@ import org.json.JSONObject
                         dismissButton = { TextButton({ joining = false }) { Text("Cancel") } }) }
             }
             item {
-                ActionRow(if (app.discovering) "Finding your contacts…" else "Find phone contacts", "With your permission, match phone numbers to Convo accounts. Contact names and photos stay on your phone.", Icons.Outlined.Contacts) { app.requestContacts() }
+                CircleAction(Icons.Outlined.Contacts, if (app.discovering) "Finding your contacts…" else "Find phone contacts", "With your permission, match phone numbers to Convo accounts. Contact names and photos stay on your phone.") { app.requestContacts() }
                 if (app.discovering) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (app.discoveryDone && app.phoneMatches.isEmpty()) Text("No matching phone contacts found. You can still search the directory.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
-                Text(if (query.isBlank()) "Phone contacts and recent chats" else "Directory results", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary)
+                ListCaption(if (query.isBlank()) "Contacts on Convo" else "Directory results")
             }
             items(choices, key = { it.optString("accountId") }) { account ->
-                Row(Modifier.fillMaxWidth().clickable { onPick(account) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PersonAvatar(app, account.optString("accountId"), account.label())
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(account.optString("localName").takeIf { it.isNotBlank() } ?: account.label()); Text("@${account.optString("username")} · ${account.optString("phone")}", style = MaterialTheme.typography.bodySmall) }
+                Row(Modifier.fillMaxWidth().clickable { onPick(account) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PersonAvatar(app, account.optString("accountId"), account.label(), 48)
+                    val status = app.snapshot.optJSONObject("profiles")?.optJSONObject(account.optString("accountId"))?.optString("status")?.takeIf { it.isNotBlank() && it != "null" }
+                    Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                        RawText(account.optString("localName").takeIf { it.isNotBlank() } ?: account.label(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        RawText(status ?: listOf("@${account.optString("username")}", account.optString("phone")).filter { it.isNotBlank() && it != "@" }.joinToString(" · "), fontSize = 14.sp, color = LocalConvoColors.current.textSecondary, maxLines = 1)
+                    }
                     if (multi) Checkbox(account.optString("accountId") in selected, onCheckedChange = { onPick(account) })
                 }
             }
@@ -88,6 +97,16 @@ fun JSONObject.label() = optString("displayName").takeIf { it.isNotBlank() && it
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             listOf("People", "Details", "Review").forEachIndexed { index, label -> Text("${index + 1}  $label", color = if (step == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        if (step == 0 && selected.isNotEmpty()) androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // WhatsApp: chosen people as avatars with a remove badge.
+            items(selected, key = { it.optString("accountId") }) { a ->
+                Column(Modifier.width(64.dp).clickable { selected = selected.filter { it.optString("accountId") != a.optString("accountId") } }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box { PersonAvatar(app, a.optString("accountId"), a.label(), 52)
+                        Box(Modifier.align(Alignment.BottomEnd).size(20.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LocalConvoColors.current.textSecondary), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Close, tr("Remove"), Modifier.size(14.dp), tint = LocalConvoColors.current.panel) } }
+                    RawText(a.label().substringBefore(' '), maxLines = 1, fontSize = 12.sp)
+                }
+            }
         }
         if (step == 0) Box(Modifier.weight(1f)) {
             ContactsPicker(app, multi = true, selected = selected.map { it.optString("accountId") }.toSet()) { a -> selected = if (selected.any { it.optString("accountId") == a.optString("accountId") }) selected.filter { it.optString("accountId") != a.optString("accountId") } else selected + a }

@@ -61,5 +61,32 @@ import org.json.JSONObject
     }
 }
 @Composable fun ActionRow(label: String, hint: String? = null, icon: ImageVector = Icons.Outlined.ChevronRight, danger: Boolean = false, onClick: () -> Unit) {
-    ListItem(headlineContent = { Text(label, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }, supportingContent = hint?.let { { Text(it) } }, leadingContent = { Icon(icon, null, tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }, modifier = Modifier.clickable(onClick = onClick).heightIn(min = 64.dp))
+    val colors = LocalConvoColors.current
+    // WhatsApp settings row: grey icon column, 16 sp label, optional secondary line.
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 56.dp).padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, Modifier.size(24.dp), tint = if (danger) colors.dangerText else colors.textSecondary)
+        Column(Modifier.weight(1f).padding(start = 24.dp)) {
+            Text(label, color = if (danger) colors.dangerText else colors.textPrimary, fontSize = 16.sp)
+            if (hint != null) Text(hint, color = colors.textSecondary, fontSize = 13.5.sp)
+        }
+    }
+}
+
+/** A white card on the canvas (WhatsApp/web info and settings sections), optional small title. */
+@Composable fun InfoSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    val colors = LocalConvoColors.current
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp).background(colors.panel).padding(vertical = 6.dp)) {
+        if (title != null) Text(title, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp), color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        content()
+    }
+}
+
+/** Square-ish quick action under the info hero (Audio · Video · Search). */
+@Composable fun QuickAction(icon: ImageVector, label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = LocalConvoColors.current
+    Column(modifier.clip(RoundedCornerShape(12.dp)).border(1.dp, colors.border, RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick).padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, label, Modifier.size(24.dp), tint = if (enabled) colors.accentText else colors.textSecondary)
+        Text(label, Modifier.padding(top = 6.dp), color = colors.textPrimary, fontSize = 13.sp)
+    }
 }

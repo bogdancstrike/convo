@@ -42,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -368,27 +370,32 @@ private fun videoOf(participant: Participant): VideoTrack? =
     LaunchedEffect(refresh) { app.call("callLog", quiet = true) { value -> entries = (value as? JSONArray)?.objects().orEmpty() } }
     val conversations = app.snapshot.optJSONArray("conversations")?.objects().orEmpty().associateBy { it.optString("id") }
     if (entries.isEmpty()) {
-        Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Outlined.Call, null, Modifier.size(56.dp)); Text("No calls yet", style = MaterialTheme.typography.headlineSmall)
-            Text("Start an end-to-end encrypted voice or video call from any chat.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        EmptyState(Icons.Outlined.Call, "No calls yet", "Start an end-to-end encrypted voice or video call from any chat.", action = "New call") { app.route = "new-call" }
         return
     }
-    LazyColumn {
-        item { TextButton({ app.call("clearCallLog") }, Modifier.padding(start = 8.dp)) { Text("Clear call history") } }
+    val colors = LocalConvoColors.current
+    LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+        item { Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Recent", Modifier.weight(1f), color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            TextButton({ app.call("clearCallLog") }) { Text("Clear call history", color = colors.accentText) }
+        } }
         items(entries.filter { !app.locks.locked(it.optString("conversationId")) }, key = { it.optString("callId") }) { e ->
             val c = conversations[e.optString("conversationId")]
             val status = e.optString("status")
             val missed = e.optString("direction") == "in" && status in setOf("missed", "cancelled")
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                PersonAvatar(app, e.optString("conversationId"), c?.optString("title") ?: "?", group = c?.optString("kind") == "group")
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(c?.optString("title") ?: "Unknown", color = if (missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-                    Text("${if (e.optString("direction") == "in") "↙" else "↗"} ${status.replaceFirstChar { it.uppercase() }} · ${SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(e.optLong("startedAt")))}",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PersonAvatar(app, e.optString("conversationId"), c?.optString("title") ?: "?", 52, group = c?.optString("kind") == "group")
+                Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+                    RawText(c?.optString("title") ?: tr("Unknown"), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (missed) colors.dangerText else colors.textPrimary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // WhatsApp: ↙ incoming / ↗ outgoing, red when missed.
+                        Icon(if (e.optString("direction") == "in") Icons.Outlined.CallReceived else Icons.Outlined.CallMade, null, Modifier.size(16.dp), tint = if (missed) colors.dangerText else colors.success)
+                        RawText("${tr(status.replaceFirstChar { it.uppercase() })} · ${listTime(e.optLong("startedAt"))}${if (listTime(e.optLong("startedAt")).contains(':')) "" else ", " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(e.optLong("startedAt")))}",
+                            Modifier.padding(start = 4.dp), fontSize = 14.sp, color = colors.textSecondary, maxLines = 1)
+                    }
                 }
                 if (c != null && !c.optBoolean("left") && !c.optBoolean("adminOnly")) IconButton({ app.calls.start(c.optString("id"), e.optBoolean("video")) }, enabled = app.calls.call == null) {
-                    Icon(if (e.optBoolean("video")) Icons.Outlined.Videocam else Icons.Outlined.Call, if (e.optBoolean("video")) "Video call" else "Voice call")
+                    Icon(if (e.optBoolean("video")) Icons.Outlined.Videocam else Icons.Outlined.Call, if (e.optBoolean("video")) "Video call" else "Voice call", tint = colors.accentText)
                 }
             }
         }

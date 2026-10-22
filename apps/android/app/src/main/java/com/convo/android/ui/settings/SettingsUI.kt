@@ -31,6 +31,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.background
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -38,14 +41,42 @@ import org.json.JSONObject
     val settings = app.snapshot.optJSONObject("settings") ?: JSONObject()
     var logout by remember { mutableStateOf(false) }
     val page = app.route
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val colors = LocalConvoColors.current
+    if (page == "list") {
+        // WhatsApp settings: profile header, then grouped rows with one-line hints.
+        val device = app.snapshot.optJSONObject("device") ?: JSONObject()
+        val status = app.snapshot.optJSONObject("profiles")?.optJSONObject(app.snapshot.optString("accountId"))?.optString("status")?.takeIf { it.isNotBlank() && it != "null" }
+        LazyColumn(Modifier.fillMaxSize().background(colors.canvas), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item { Row(Modifier.fillMaxWidth().background(colors.panel).clickable { app.route = "profile" }.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                PersonAvatar(app, app.snapshot.optString("accountId"), device.label(), 64)
+                Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                    RawText(device.label(), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    RawText(status ?: "@${device.optString("username")}", maxLines = 1, color = colors.textSecondary, fontSize = 14.sp)
+                }
+            } }
+            item { InfoSection {
+                ActionRow("Your profile", "Photo and status", Icons.Outlined.AccountCircle) { app.route = "profile" }
+                ActionRow("Privacy", "Read receipts, app lock, blocked contacts", Icons.Outlined.Lock) { app.route = "privacy" }
+                ActionRow("Devices", "Linked devices and safety", Icons.Outlined.Devices) { app.route = "devices" }
+                ActionRow("History and recovery", "Recovery code and encrypted history", Icons.Outlined.Shield) { app.route = "recovery" }
+            } }
+            item { InfoSection {
+                ActionRow("Chats", "Theme, wallpaper, language", Icons.Outlined.Palette) { app.route = "chats" }
+                ActionRow("Notifications", "Messages, groups and calls", Icons.Outlined.Notifications) { app.route = "notifications" }
+                ActionRow("Storage and data", "Network usage, auto-download", Icons.Outlined.DataUsage) { app.route = "storage" }
+                ActionRow("All Media", "Photos, videos, documents and links from all chats", Icons.Outlined.PermMedia) { app.route = "all-media" }
+            } }
+            item { InfoSection { ActionRow("Log out", icon = Icons.Outlined.Logout, danger = true) { logout = true } } }
+            item { Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Lock, null, Modifier.size(14.dp), tint = colors.textSecondary)
+                Text("Your personal messages are end-to-end encrypted", Modifier.padding(start = 6.dp), color = colors.textSecondary, fontSize = 13.sp)
+            } }
+        }
+        if (logout) Confirm("Log out of this phone?", "Encrypted history must finish syncing. Keep a recovery code or another trusted device before removing this device.", "Log out", { logout = false }) { logout = false; app.call("logout") }
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize().background(colors.panel), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when (page) {
-            "list" -> {
-                item { val device = app.snapshot.optJSONObject("device") ?: JSONObject(); Row(Modifier.fillMaxWidth().clickable { app.route = "profile" }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { PersonAvatar(app, app.snapshot.optString("accountId"), device.label(), 64); Column(Modifier.padding(start = 16.dp)) { Text(device.label(), style = MaterialTheme.typography.titleLarge); Text("@${device.optString("username")}") } } }
-                items(listOf("Your profile" to "profile", "History and recovery" to "recovery", "Chats" to "chats", "Notifications" to "notifications", "Storage and data" to "storage", "Privacy" to "privacy", "Devices" to "devices")) { (label, route) -> Card { ActionRow(label, icon = when(route) { "profile" -> Icons.Outlined.AccountCircle; "chats" -> Icons.Outlined.Palette; "devices" -> Icons.Outlined.Devices; "privacy" -> Icons.Outlined.Lock; "storage" -> Icons.Outlined.DataUsage; "notifications" -> Icons.Outlined.Notifications; else -> Icons.Outlined.Shield }) { app.route = route } } }
-                item { ActionRow("All Media", "Photos, videos, documents and links from all chats", Icons.Outlined.PermMedia) { app.route = "all-media" } }
-                item { ActionRow("Log out", icon = Icons.Outlined.Logout, danger = true) { logout = true } }
-            }
             "profile" -> item { ProfileEditor(app) }
             "recovery" -> item { RecoveryEditor(app) }
             "chats" -> {
@@ -64,7 +95,6 @@ import org.json.JSONObject
                 item { ActionRow("Log out", icon = Icons.Outlined.Logout, danger = true) { logout = true } }
             }
         }
-        item { Text("Your personal messages are end-to-end encrypted", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(12.dp)) }
     }
     if (logout) Confirm("Log out of this phone?", "Encrypted history must finish syncing. Keep a recovery code or another trusted device before removing this device.", "Log out", { logout = false }) { logout = false; app.call("logout") }
 }

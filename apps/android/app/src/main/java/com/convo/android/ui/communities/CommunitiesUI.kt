@@ -29,12 +29,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -48,20 +55,28 @@ import org.json.JSONObject
     LaunchedEffect(app.snapshot) { app.call("communities", quiet = true) { v -> communities = (v as? JSONArray)?.objects().orEmpty() } }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            ListItem(headlineContent = { Text("New community") }, leadingContent = { Icon(Icons.Outlined.Add, null) },
-                modifier = Modifier.clickable { app.route = "new-community" }.testTag("new-community"))
+            val colors = LocalConvoColors.current
+            // WhatsApp: "New community" with a rounded-square community tile.
+            Row(Modifier.fillMaxWidth().clickable { app.route = "new-community" }.testTag("new-community").padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(colors.chip), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Groups, null, Modifier.size(30.dp), tint = colors.textSecondary)
+                    Box(Modifier.align(Alignment.BottomEnd).size(20.dp).clip(CircleShape).background(colors.actionFill), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Add, null, Modifier.size(14.dp), tint = colors.actionText) }
+                }
+                Text("New community", Modifier.padding(start = 14.dp), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+            HorizontalDivider(thickness = 8.dp, color = colors.canvas)
         }
         items(communities.orEmpty(), key = { it.optString("communityId") }) { c ->
-            ListItem(headlineContent = { RawText(c.optString("name").ifBlank { tr("Community") }) },
-                supportingContent = { RawText(c.optString("description").ifBlank { tr(roleLabel(c.optString("role"))) }, maxLines = 1) },
-                leadingContent = { PersonAvatar(app, c.optString("conversationId"), c.optString("name").ifBlank { "?" }, 44, group = true) },
-                modifier = Modifier.clickable { app.route = "community:${c.optString("communityId")}" })
+            Row(Modifier.fillMaxWidth().clickable { app.route = "community:${c.optString("communityId")}" }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp))) { PersonAvatar(app, c.optString("conversationId"), c.optString("name").ifBlank { "?" }, 52, group = true) }
+                Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                    RawText(c.optString("name").ifBlank { tr("Community") }, maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    RawText(c.optString("description").ifBlank { tr(roleLabel(c.optString("role"))) }, maxLines = 1, fontSize = 14.sp, color = LocalConvoColors.current.textSecondary)
+                }
+            }
         }
         if (communities?.isEmpty() == true) item {
-            Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("No communities yet", style = MaterialTheme.typography.titleMedium)
-                Text("A community brings announcements and related groups together. Create one, or ask an admin for an invite link.", style = MaterialTheme.typography.bodyMedium)
-            }
+            EmptyState(Icons.Outlined.Groups, "No communities yet", "A community brings announcements and related groups together. Create one, or ask an admin for an invite link.")
         }
     }
 }

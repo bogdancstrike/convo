@@ -21,6 +21,9 @@ import com.convo.android.ui.thread.*
 import com.convo.android.i18n.Text
 import com.convo.android.i18n.Icon
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -51,44 +54,61 @@ import org.json.JSONObject
         fold(memberNames[m.optString("accountId")] ?: if (m.optString("accountId") == app.snapshot.optString("accountId")) "You" else "").let { name -> fold(memberQuery).split(Regex("\\s+")).filter { it.isNotBlank() }.all { name.contains(it) } } }
     val me = app.snapshot.optString("accountId"); val myRole = members.find { it.optString("accountId") == me }?.optString("role")
     val canManage = myRole in listOf("owner", "admin") && !c.optBoolean("left") && group?.optBoolean("needsJoin") != true
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            PersonAvatar(app, id, c.optString("title"), 104, isGroup)
-            Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 16.dp))
-            if (isGroup) SuggestionChip({}, label = { Text(if (c.optBoolean("adminOnly")) "Channel" else "Group") }, icon = { Icon(if (c.optBoolean("adminOnly")) Icons.Outlined.Campaign else Icons.Outlined.Group, null, Modifier.size(16.dp)) })
+    val colors = LocalConvoColors.current
+    val canCall = c.optString("kind") != "note" && !c.optBoolean("left") && !c.optBoolean("adminOnly") && !c.optBoolean("blocked")
+    LazyColumn(Modifier.fillMaxSize().background(colors.canvas), contentPadding = PaddingValues(bottom = 24.dp)) {
+        // Hero (WhatsApp/web info drawer): photo, name, how to reach them, quick actions.
+        item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            PersonAvatar(app, id, c.optString("title"), 120, isGroup)
+            Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), Modifier.padding(top = 14.dp), fontSize = 24.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            if (isGroup) RawText((if (c.optBoolean("adminOnly")) tr("Channel") else tr("Group")) + " · " + tr("{count} members").replace("{count}", "${members.size}"), Modifier.padding(top = 4.dp), color = colors.textSecondary, fontSize = 15.sp)
+            else if (c.optString("kind") == "direct") HeroContact(app, id)
+            Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (canCall) {
+                    QuickAction(Icons.Outlined.Call, "Voice call", Modifier.weight(1f), enabled = app.calls.call == null) { app.calls.start(id, false) }
+                    QuickAction(Icons.Outlined.Videocam, "Video call", Modifier.weight(1f), enabled = app.calls.call == null) { app.calls.start(id, true) }
+                }
+                QuickAction(Icons.Outlined.Search, "Search", Modifier.weight(1f)) { app.threadSearch = true; app.route = "thread" }
+            }
         } }
-        if (!isGroup) item { ContactDetails(app, id) }
-        item { ActionRow("Media, links and docs", icon = Icons.Outlined.PermMedia) { app.route = "media" } }
-        item { ActionRow("Starred messages", icon = Icons.Outlined.StarOutline) { app.route = "starred" } }
-        item { ActionRow("Chat background", icon = Icons.Outlined.Palette) { app.route = "appearance" } }
-        // Disappearing messages: any chat; groups and channels need owner/admin.
-        item {
+        if (!isGroup) item { InfoSection { ContactDetails(app, id) } }
+        item { InfoSection {
+            ActionRow("Media, links and docs", icon = Icons.Outlined.PermMedia) { app.route = "media" }
+            ActionRow("Starred messages", icon = Icons.Outlined.StarOutline) { app.route = "starred" }
+        } }
+        item { InfoSection {
+            ActionRow(if (c.optBoolean("muted")) "Unmute notifications" else "Mute notifications", icon = if (c.optBoolean("muted")) Icons.Outlined.VolumeOff else Icons.Outlined.NotificationsNone) {
+                app.call("conversation", obj("id" to id, "patch" to obj("muted" to !c.optBoolean("muted")))) }
+            ActionRow("Chat background", icon = Icons.Outlined.Palette) { app.route = "appearance" }
+            // Disappearing messages: any chat; groups and channels need owner/admin.
             val canChange = !c.optBoolean("left") && (!isGroup || myRole in listOf("owner", "admin"))
-            Column {
-                Text("Disappearing messages", style = MaterialTheme.typography.titleMedium)
-                Text("New messages disappear from everyone’s devices after the selected time. Sent messages count from sending; received ones from being read.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DisappearingTimers.forEach { (seconds, label) ->
-                        FilterChip(c.optLong("expireSeconds") == seconds, { if (canChange) app.call("setDisappearing", obj("id" to id, "seconds" to seconds)) }, label = { Text(label) }, enabled = canChange)
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Timer, null, Modifier.size(24.dp), tint = colors.textSecondary)
+                    Column(Modifier.padding(start = 24.dp)) {
+                        Text("Disappearing messages", fontSize = 16.sp)
+                        Text("New messages disappear from everyone’s devices after the selected time. Sent messages count from sending; received ones from being read.", color = colors.textSecondary, fontSize = 13.sp)
                     }
                 }
-                if (!canChange) Text("Only group admins can change this.", style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.padding(start = 48.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DisappearingTimers.forEach { (seconds, label) -> PillChip(label, c.optLong("expireSeconds") == seconds) { if (canChange) app.call("setDisappearing", obj("id" to id, "seconds" to seconds)) } }
+                }
+                if (!canChange) Text("Only group admins can change this.", Modifier.padding(start = 48.dp, top = 4.dp), color = colors.textSecondary, fontSize = 13.sp)
             }
-        }
-        // Per-chat "require authentication", same control as the chat ⋮ menu (all chat types).
-        if (app.locks.locked(id) || app.locks.passkey == true) item {
-            PrivacySwitch("Require authentication to open", "Fingerprint, face or screen lock. The chat is hidden from the chat list, search, media and gallery saving until you confirm.",
-                app.locks.locked(id)) { lock -> app.locks.setChatLocked(id, lock) { app.notice = if (lock) "Chat locked" else "Chat unlocked" } }
-        }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { ConversationQuickMenu(app, c) } }
-        item { var export by remember { mutableStateOf(false) }; ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }; if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) } }
+            // Per-chat "require authentication", same control as the chat ⋮ menu (all chat types).
+            if (app.locks.locked(id) || app.locks.passkey == true) Box(Modifier.padding(horizontal = 8.dp)) {
+                PrivacySwitch("Require authentication to open", "Fingerprint, face or screen lock. The chat is hidden from the chat list, search, media and gallery saving until you confirm.",
+                    app.locks.locked(id)) { lock -> app.locks.setChatLocked(id, lock) { app.notice = if (lock) "Chat locked" else "Chat unlocked" } }
+            }
+            if (!isGroup && id != app.snapshot.optString("accountId")) EncryptionRow(app, id)
+        } }
         if (isGroup) {
             // About (specs §30.8): E2EE description; owners/admins edit name and description.
             item {
                 var editing by remember { mutableStateOf(false) }
                 val description = group?.optString("description").orEmpty()
-                if (description.isNotBlank() || canManage) Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("About", style = MaterialTheme.typography.titleSmall)
+                if (description.isNotBlank() || canManage) Column(Modifier.fillMaxWidth().padding(top = 8.dp).background(colors.panel).padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("About", color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     if (description.isNotBlank()) LinkedBody(app, description, emptyList()) else Text("No description yet.", style = MaterialTheme.typography.bodySmall)
                     if (canManage) TextButton(onClick = { editing = true }) { Text("Edit name and description") }
                 }
@@ -105,25 +125,25 @@ import org.json.JSONObject
                         dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
                 }
             }
-            item { Text("${members.size} participants", style = MaterialTheme.typography.titleMedium) }
+            item { Spacer(Modifier.height(8.dp).fillMaxWidth()); Text("${members.size} participants", Modifier.fillMaxWidth().background(colors.panel).padding(start = 20.dp, top = 14.dp, bottom = 6.dp), color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
             // Member search (specs §30.8): local roster, case/diacritic-insensitive; Admins includes owners.
             item {
-                if (members.size > 1) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(memberQuery, { memberQuery = it }, placeholder = { Text("Search members") }, singleLine = true, leadingIcon = { Icon(Icons.Outlined.Search, null) }, modifier = Modifier.fillMaxWidth())
+                if (members.size > 1) Column(Modifier.background(colors.panel).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SearchField(memberQuery, { memberQuery = it }, "Search members")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(!adminsOnly, { adminsOnly = false }, label = { Text("All") }); FilterChip(adminsOnly, { adminsOnly = true }, label = { Text("Admins") })
+                        PillChip("All", !adminsOnly) { adminsOnly = false }; PillChip("Admins", adminsOnly) { adminsOnly = true }
                     }
                     RawText(tr("{shown} of {total} members").replace("{shown}", "${shownMembers.size}").replace("{total}", "${members.size}"), style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
                 }
             }
-            if (canManage) item { InviteSection(app, id) }
-            if (canManage) item { ActionRow("Add participant", icon = Icons.Outlined.PersonAdd) { adding = true } }
+            if (canManage) item { Column(Modifier.background(colors.panel)) { ActionRow("Add participant", icon = Icons.Outlined.PersonAdd) { adding = true } } }
+            if (canManage) item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(horizontal = 20.dp, vertical = 8.dp)) { InviteSection(app, id) } }
             items(shownMembers, key = { it.optString("accountId") }) { member ->
                 val accountId = member.optString("accountId"); var account by remember(accountId) { mutableStateOf<JSONObject?>(null) }; var menu by remember { mutableStateOf(false) }
                 LaunchedEffect(accountId) { app.call("account", obj("id" to accountId)) { account = it as? JSONObject } }
                 val name = account?.label() ?: "…"; val role = member.optString("role")
-                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().background(colors.panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     PersonAvatar(app, accountId, name, 44)
                     Column(Modifier.weight(1f).clickable { app.route = "contact:$accountId" }.padding(horizontal = 14.dp)) { Text(if (accountId == me) "You" else name); Text("@${account?.optString("username") ?: "…"}", style = MaterialTheme.typography.bodySmall); if (role != "member") Text(role.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
                     if (canManage && accountId != me && (role != "owner" || myRole == "owner")) Box {
@@ -138,9 +158,14 @@ import org.json.JSONObject
                         }
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
+        item { InfoSection {
+            var export by remember { mutableStateOf(false) }
+            ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }
+            if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) }
+            ConversationDangerRows(app, c)
+        } }
     }
     if (adding) androidx.compose.ui.window.Dialog(onDismissRequest = { adding = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) { Surface(Modifier.fillMaxSize()) { Column { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Add participant", Modifier.weight(1f).padding(16.dp), style = MaterialTheme.typography.titleLarge); IconButton({ adding = false }) { Icon(Icons.Outlined.Close, "Close") } }; ContactsPicker(app, multi = true, excluded = members.map { it.optString("accountId") }.toSet()) { a -> app.call("addMembers", obj("id" to id, "members" to JSONArray(listOf(a.optString("accountId"))))) { adding = false } } } } }
     roleConfirm?.takeIf { it.second == "ban" }?.let { (member, _) -> Confirm("Remove and ban?", "They cannot ask to join or be added again until unbanned.", "Remove and ban", { roleConfirm = null }) { roleConfirm = null; app.call("banMember", obj("id" to id, "accountId" to member)) } }
@@ -152,22 +177,49 @@ import org.json.JSONObject
         app.call("account", obj("id" to id)) { account = it as? JSONObject }
         app.snapshot.optJSONArray("conversations")?.objects().orEmpty().filter { it.optString("kind") == "group" && !it.optBoolean("left") }.forEach { conversation -> app.call("group", obj("id" to conversation.optString("id"))) { value -> val members = (value as? JSONObject)?.optJSONArray("members")?.objects().orEmpty(); if (members.any { it.optString("accountId") == id }) groups = (groups + conversation).distinctBy { it.optString("id") } } }
     }
-    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { PersonAvatar(app, id, account?.label() ?: "…", 100); Text(account?.label() ?: "…", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 12.dp)); LastSeenLabel(app, id) } }
-        item { ContactDetails(app, id) }
-        item { Button({ app.call("newChat", obj("id" to id)) { data -> (data as? JSONObject)?.optString("id")?.let(app::openChat) } }, modifier = Modifier.fillMaxWidth()) { Text("Message") } }
-        item { Text("${groups.size} groups in common", style = MaterialTheme.typography.titleMedium) }
-        items(groups) { g -> ActionRow(g.optString("title"), icon = if (g.optBoolean("adminOnly")) Icons.Outlined.Campaign else Icons.Outlined.Group) { app.openChat(g.optString("id")); app.route = "info" } }
+    val colors = LocalConvoColors.current
+    LazyColumn(Modifier.fillMaxSize().background(colors.canvas), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            PersonAvatar(app, id, account?.label() ?: "…", 120)
+            RawText(account?.label() ?: "…", Modifier.padding(top = 14.dp), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            LastSeenLabel(app, id)
+            Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickAction(Icons.Outlined.ChatBubbleOutline, "Message", Modifier.weight(1f)) { app.call("newChat", obj("id" to id)) { data -> (data as? JSONObject)?.optString("id")?.let(app::openChat) } }
+            }
+        } }
+        item { InfoSection { ContactDetails(app, id); if (id != app.snapshot.optString("accountId")) EncryptionRow(app, id) } }
+        if (groups.isNotEmpty()) item { InfoSection(tr("{count} groups in common").replace("{count}", "${groups.size}")) {
+            groups.forEach { g -> Row(Modifier.fillMaxWidth().clickable { app.openChat(g.optString("id")); app.route = "info" }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                PersonAvatar(app, g.optString("id"), g.optString("title"), 44, group = true); RawText(g.optString("title"), Modifier.padding(start = 14.dp), fontSize = 16.sp) } }
+        } }
     }
 }
-@Composable fun ContactDetails(app: MainActivity, id: String) {
-    var account by remember(id) { mutableStateOf<JSONObject?>(null) }; var fingerprint by remember(id) { mutableStateOf<JSONObject?>(null) }; var showIdentity by remember { mutableStateOf(false) }
+/** Phone or @handle under the hero name. */
+@Composable fun HeroContact(app: MainActivity, id: String) {
+    var account by remember(id) { mutableStateOf<JSONObject?>(null) }
     LaunchedEffect(id) { app.call("account", obj("id" to id)) { account = it as? JSONObject } }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        account?.let { Text("@${it.optString("username")}"); if (it.optString("phone").isNotBlank()) Text(it.optString("phone")) }
-        app.snapshot.optJSONObject("profiles")?.optJSONObject(id)?.optString("status")?.takeIf { it.isNotBlank() }?.let { Text("Status", style = MaterialTheme.typography.labelMedium); Text(it) }
-        if (id != app.snapshot.optString("accountId")) ActionRow("Encryption", "Compare the safety number with your contact", Icons.Outlined.Lock) { app.call("identity", obj("id" to id)) { fingerprint = it as? JSONObject; showIdentity = true } }
+    account?.let { RawText(it.optString("phone").takeIf { p -> p.isNotBlank() } ?: "@${it.optString("username")}", Modifier.padding(top = 4.dp), color = LocalConvoColors.current.textSecondary, fontSize = 16.sp) }
+}
+
+/** About (status), handle and phone rows (web contact drawer). */
+@Composable fun ContactDetails(app: MainActivity, id: String) {
+    val colors = LocalConvoColors.current
+    var account by remember(id) { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(id) { app.call("account", obj("id" to id)) { account = it as? JSONObject } }
+    val status = app.snapshot.optJSONObject("profiles")?.optJSONObject(id)?.optString("status")?.takeIf { it.isNotBlank() && it != "null" }
+    Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (status != null) Column { Text("About", color = colors.textSecondary, fontSize = 13.sp); RawText(status, fontSize = 16.sp) }
+        account?.let {
+            Column { Text("Username", color = colors.textSecondary, fontSize = 13.sp); RawText("@${it.optString("username")}", fontSize = 16.sp) }
+            if (it.optString("phone").isNotBlank()) Column { Text("Phone", color = colors.textSecondary, fontSize = 13.sp); RawText(it.optString("phone"), fontSize = 16.sp) }
+        }
     }
+}
+
+/** "Encryption — compare the safety number" row with its verification dialog. */
+@Composable fun EncryptionRow(app: MainActivity, id: String) {
+    var fingerprint by remember(id) { mutableStateOf<JSONObject?>(null) }; var showIdentity by remember { mutableStateOf(false) }
+    ActionRow("Encryption", "Messages and calls are end-to-end encrypted. Tap to verify.", Icons.Outlined.Lock) { app.call("identity", obj("id" to id)) { fingerprint = it as? JSONObject; showIdentity = true } }
     if (showIdentity) AlertDialog(onDismissRequest = { showIdentity = false }, title = { Text("Verify safety number") }, text = { Text(fingerprint?.optString("digits")?.takeIf { it.isNotBlank() } ?: "Exchange a message with this person first.") }, confirmButton = { TextButton({ app.call("verify", obj("id" to id, "verified" to true)); showIdentity = false }) { Text("Numbers match — verify") } }, dismissButton = { TextButton({ showIdentity = false }) { Text("Close") } })
 }
 @Composable fun SharedMedia(app: MainActivity) {

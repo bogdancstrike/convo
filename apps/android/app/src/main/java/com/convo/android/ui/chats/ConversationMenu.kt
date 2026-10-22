@@ -101,15 +101,32 @@ import org.json.JSONObject
     })
     DropdownMenuItem(text = { Text("Clear chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "clear" })
     DropdownMenuItem(text = { Text("Delete chat", color = MaterialTheme.colorScheme.error) }, onClick = { confirm = "deleteChat" })
-    if (confirm == "leave") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (c.optBoolean("adminOnly")) "Leave channel?" else "Leave group?") },
+    ConversationConfirm(app, c, confirm, { confirm = it }, close)
+}
+
+/** Info page's red rows (WhatsApp): block or leave, clear and delete, with the menu's confirmations. */
+@Composable fun ConversationDangerRows(app: MainActivity, c: JSONObject) {
+    var confirm by remember { mutableStateOf("") }
+    if (c.optString("kind") == "direct") {
+        if (c.optBoolean("blocked")) ActionRow("Unblock", icon = Icons.Outlined.Block) { app.call("block", obj("id" to c.optString("id"), "blocked" to false), success = "Contact unblocked") }
+        else ActionRow(tr("Block {name}").replace("{name}", c.optString("title")), icon = Icons.Outlined.Block, danger = true) { confirm = "block" }
+    }
+    if (c.optString("kind") == "group" && !c.optBoolean("left")) ActionRow(if (c.optBoolean("adminOnly")) "Leave channel" else "Leave group", icon = Icons.Outlined.Logout, danger = true) { confirm = "leave" }
+    ActionRow("Clear chat", icon = Icons.Outlined.CleaningServices, danger = true) { confirm = "clear" }
+    ActionRow("Delete chat", icon = Icons.Outlined.Delete, danger = true) { confirm = "deleteChat" }
+    ConversationConfirm(app, c, confirm, { confirm = it }) {}
+}
+
+@Composable private fun ConversationConfirm(app: MainActivity, c: JSONObject, confirm: String, setConfirm: (String) -> Unit, close: () -> Unit) {
+    if (confirm == "leave") AlertDialog(onDismissRequest = { setConfirm("") }, title = { Text(if (c.optBoolean("adminOnly")) "Leave channel?" else "Leave group?") },
         text = { Text("You keep the history on your devices but stop receiving new messages.") },
-        confirmButton = { TextButton({ confirm = ""; close(); app.call("leaveGroup", obj("id" to c.optString("id")), quiet = true) { if (it == null) app.error = tr("You are the only owner. Make another member owner first, then leave.") } }) { Text("Leave", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
-    else if (confirm == "block") AlertDialog(onDismissRequest = { confirm = "" }, title = { Text("Block contact?") },
+        confirmButton = { TextButton({ setConfirm(""); close(); app.call("leaveGroup", obj("id" to c.optString("id")), quiet = true) { if (it == null) app.error = tr("You are the only owner. Make another member owner first, then leave.") } }) { Text("Leave", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton({ setConfirm("") }) { Text("Cancel") } })
+    else if (confirm == "block") AlertDialog(onDismissRequest = { setConfirm("") }, title = { Text("Block contact?") },
         text = { Text("Their messages and calls will no longer reach you, and they won’t be told.") },
-        confirmButton = { TextButton({ confirm = ""; close(); app.call("block", obj("id" to c.optString("id"), "blocked" to true), success = "Contact blocked") }) { Text("Block", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton({ confirm = "" }) { Text("Cancel") } })
-    else     if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); confirm = ""; close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Cancel") } })
+        confirmButton = { TextButton({ setConfirm(""); close(); app.call("block", obj("id" to c.optString("id"), "blocked" to true), success = "Contact blocked") }) { Text("Block", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton({ setConfirm("") }) { Text("Cancel") } })
+    else     if (confirm.isNotBlank()) AlertDialog(onDismissRequest = { setConfirm("") }, title = { Text(if (confirm == "clear") "Clear chat?" else "Delete chat?") }, text = { Text("This removes the local copy on this device. Other participants keep their messages.") }, confirmButton = { TextButton(onClick = { app.call(confirm, obj("id" to c.optString("id"))); setConfirm(""); close(); if (c.optString("id") == app.active) app.back() }) { Text("Remove", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { setConfirm("") }) { Text("Cancel") } })
 }
 
 /** Snooze dialog: presets resolve to an exact local time shown with the time zone before confirming. */

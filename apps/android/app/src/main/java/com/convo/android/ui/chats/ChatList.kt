@@ -62,7 +62,7 @@ import org.json.JSONObject
             IconButton(onClick = { archived = false }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
             Text("Archived", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
-        SearchField(query, { query = it }, "Search or start a new chat", Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        SearchField(query, { query = it }, if (channels) "Search channels" else "Search or start a new chat", Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         if (!archived) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val options = if (channels) listOf("all" to "All", "unread" to "Unread") else listOf("all" to "All", "unread" to "Unread", "groups" to "Groups")
             options.forEach { (key, label) -> PillChip(label, filter == key && !showLocked) { filter = key; showLocked = false } }
@@ -82,12 +82,13 @@ import org.json.JSONObject
                 ChatRow(app, c) { if (showLocked) app.locks.unlockedChat = c.optString("id"); app.openChat(c.optString("id")) }
             }
             if (conversations.isEmpty()) item {
-                Text(when {
-                    query.isNotBlank() -> "No chats match your search."
-                    filter == "unread" -> "You’re all caught up. New unread messages will appear here."
-                    channels -> "Create a channel to share announcements."
-                    else -> "Start a conversation with someone in your organization."
-                }, Modifier.fillMaxWidth().padding(32.dp), color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                when {
+                    query.isNotBlank() -> Text("No chats match your search.", Modifier.fillMaxWidth().padding(32.dp), color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    filter == "unread" -> EmptyState(Icons.Outlined.MarkChatRead, "No unread chats", "You’re all caught up. New unread messages will appear here.")
+                    filter == "groups" -> EmptyState(Icons.Outlined.Group, "No groups yet", "Create a group to chat with several people at once.", action = "New group") { app.route = "new-group" }
+                    channels -> EmptyState(Icons.Outlined.Campaign, "No channels yet", "Create a channel to share announcements.", action = "New channel") { app.route = "new-channel" }
+                    else -> EmptyState(Icons.Outlined.ChatBubbleOutline, "No chats yet", "Start a conversation with someone in your organization.", action = "New chat") { app.route = "new" }
+                }
             }
         }
     }

@@ -125,9 +125,11 @@ import org.json.JSONObject
         } else {
             val title = when {
                 app.route == "thread" -> app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }?.optString("title") ?: "Chat"
-                app.route == "info" -> "Conversation info"
+                app.route == "info" -> app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active }.let { c -> when {
+                    c?.optString("kind") == "direct" -> "Contact info"; c?.optBoolean("adminOnly") == true -> "Channel info"; c?.optString("kind") == "group" -> "Group info"; else -> "Conversation info" } }
                 app.route.startsWith("contact:") -> "Contact info"
                 app.route == "new" -> "New chat"
+                app.route == "new-call" -> "New call"
                 app.route == "new-group" -> "New group"
                 app.route == "new-channel" -> "New channel"
                 app.route == "new-community" -> "New community"
@@ -187,14 +189,21 @@ import org.json.JSONObject
                   }
                 }
             }, floatingActionButton = {
-                if (home && app.selectedTab in listOf("Chats", "Channels")) FloatingActionButton(onClick = { app.route = if (app.selectedTab == "Channels") "new-channel" else "new" },
+                if (home && app.selectedTab in listOf("Chats", "Channels", "Calls")) FloatingActionButton(onClick = { app.route = when (app.selectedTab) { "Channels" -> "new-channel"; "Calls" -> "new-call"; else -> "new" } },
                     containerColor = colors.actionFill, contentColor = colors.actionText, shape = RoundedCornerShape(16.dp)) {
-                    Icon(if (app.selectedTab == "Channels") Icons.Outlined.Campaign else Icons.Outlined.AddComment, if (app.selectedTab == "Channels") "New channel" else "New chat")
+                    when (app.selectedTab) {
+                        "Channels" -> Icon(Icons.Outlined.Campaign, "New channel")
+                        "Calls" -> Icon(Icons.Outlined.AddIcCall, "New call")
+                        else -> Icon(Icons.Outlined.AddComment, "New chat")
+                    }
                 }
             }) { padding -> Box(Modifier.padding(padding).fillMaxSize()) {
                 Crossfade(targetState = app.route to app.selectedTab, animationSpec = tween(if (app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false) 120 else 0), label = "page") { (route, tab) ->
                 when {
                     route == "new" -> ContactsPicker(app, onPick = { account -> app.call("newChat", obj("id" to account.optString("accountId"))) { data -> (data as? JSONObject)?.optString("id")?.let(app::openChat) } })
+                    // New call (WhatsApp): pick a person, open the chat and ring them.
+                    route == "new-call" -> ContactsPicker(app, onPick = { account -> app.call("newChat", obj("id" to account.optString("accountId"))) { data ->
+                        (data as? JSONObject)?.optString("id")?.let { id -> app.openChat(id); if (app.calls.call == null) app.calls.start(id, false) } } })
                     route == "new-group" || route == "new-channel" -> GroupWizard(app, route == "new-channel")
                     (route == "thread" || route == "info" || route == "media" || route == "starred") && app.locks.locked(app.active) && app.locks.unlockedChat != app.active -> LockedChatGate(app, app.active!!)
                     route == "thread" -> NativeThread(app)
