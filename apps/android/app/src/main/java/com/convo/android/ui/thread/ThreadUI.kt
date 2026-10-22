@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.BasicTextField
@@ -239,6 +240,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         val scope = rememberCoroutineScope()
         val animate = app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) != false
         if (dragX.value > 8f) Icon(Icons.AutoMirrored.Outlined.Reply, "Reply", Modifier.align(Alignment.CenterVertically).padding(end = 4.dp).alpha((dragX.value / threshold).coerceIn(0f, 1f)))
+        Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
         Card(Modifier.widthIn(max = 320.dp)
             .offset { androidx.compose.ui.unit.IntOffset(dragX.value.toInt(), 0) }
             .pointerInput(key, selecting) {
@@ -277,10 +279,9 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         if (visual.size < 2 || visual.none { it.first == index }) AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
                     }
                 }
-                message.optJSONObject("reactions")?.let { reactions -> if (reactions.length() > 0) Text(reactions.keys().asSequence().joinToString("  ") { "${it} ${reactions.optJSONArray(it)?.length() ?: 0}" }) }
                 // Time and ticks sit at the end of the last text line (space reserved by metaReserve).
                 val meta = LocalConvoColors.current.bubbleMeta
-                val hasBody = message.optString("body").isNotBlank() && !message.optBoolean("deleted") && message.optJSONArray("attachments")?.length().let { it == null || it == 0 } && message.optJSONObject("reactions")?.length().let { it == null || it == 0 } && !message.has("ackRequest")
+                val hasBody = message.optString("body").isNotBlank() && !message.optBoolean("deleted") && message.optJSONArray("attachments")?.length().let { it == null || it == 0 } && !message.has("ackRequest")
                 Row(Modifier.align(Alignment.End).then(if (hasBody) Modifier.layout { measurable, constraints ->
                     // Zero-height slot: drawn over the reserved tail of the last text line.
                     val placeable = measurable.measure(constraints); layout(placeable.width, 0) { placeable.place(0, -placeable.height + 2.dp.roundToPx()) }
@@ -292,25 +293,29 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     if (outgoing) { val status = message.optString("status"); Icon(if (status in listOf("read", "delivered")) Icons.Outlined.DoneAll else if (status == "sent") Icons.Outlined.Done else if (status == "failed") Icons.Outlined.ErrorOutline else Icons.Outlined.Schedule, when(status) { "read" -> "Seen"; "delivered" -> "Received"; "sent" -> "Sent"; else -> status }, Modifier.size(18.dp).padding(start = 3.dp), tint = if (status == "read") LocalConvoColors.current.tickRead else meta) }
                     Box {
                         DropdownMenu(menu, { menu = false }) {
-                            Row { listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(38.dp)) { Text(emoji) } } }
-                            DropdownMenuItem(text = { Text("Message info") }, onClick = { menu = false; info = true })
-                            DropdownMenuItem(text = { Text("Select") }, onClick = { menu = false; app.selection = setOf("${message.optString("authorId")}/${message.optString("id")}") })
+                            // Reaction bar first (WhatsApp long-press).
+                            Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) { listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(42.dp)) { RawText(emoji, fontSize = 22.sp) } } }
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Message info") }, leadingIcon = { Icon(Icons.Outlined.Info, null) }, onClick = { menu = false; info = true })
+                            DropdownMenuItem(text = { Text("Select") }, leadingIcon = { Icon(Icons.Outlined.CheckCircleOutline, null) }, onClick = { menu = false; app.selection = setOf("${message.optString("authorId")}/${message.optString("id")}") })
                             if (app.canPinActive) {
                                 val pinned = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == conversation }?.optJSONArray("pinnedMessages")?.objects().orEmpty()
                                     .any { it.optString("authorId") == message.optString("authorId") && it.optString("id") == message.optString("id") }
-                                DropdownMenuItem(text = { Text(if (pinned) "Unpin" else "Pin for everyone") }, onClick = { menu = false; app.call("pin", message.targetArgs(conversation).put("pinned", !pinned)) })
+                                DropdownMenuItem(text = { Text(if (pinned) "Unpin" else "Pin for everyone") }, leadingIcon = { Icon(Icons.Outlined.PushPin, null) }, onClick = { menu = false; app.call("pin", message.targetArgs(conversation).put("pinned", !pinned)) })
                             }
-                            DropdownMenuItem(text = { Text("Reply") }, onClick = { menu = false; onReply(message) })
-                            DropdownMenuItem(text = { Text("Forward") }, onClick = { menu = false; forwarding = true })
-                            DropdownMenuItem(text = { Text(if (message.optBoolean("starred")) "Unstar" else "Star") }, onClick = { menu = false; app.call("star", message.targetArgs(conversation).put("value", !message.optBoolean("starred"))) })
-                            DropdownMenuItem(text = { Text("Copy text") }, onClick = { menu = false; (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo message", message.optString("body"))) })
-                            if (outgoing && message.optLong("editableUntil", 0L) > System.currentTimeMillis()) DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; edit = true })
-                            DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; delete = true })
-                            if (message.optString("status") == "failed") DropdownMenuItem(text = { Text("Retry") }, onClick = { menu = false; app.call("retry", message.targetArgs(conversation)) })
+                            DropdownMenuItem(text = { Text("Reply") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Reply, null) }, onClick = { menu = false; onReply(message) })
+                            DropdownMenuItem(text = { Text("Forward") }, leadingIcon = { Icon(Icons.Outlined.Shortcut, null) }, onClick = { menu = false; forwarding = true })
+                            DropdownMenuItem(text = { Text(if (message.optBoolean("starred")) "Unstar" else "Star") }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }, onClick = { menu = false; app.call("star", message.targetArgs(conversation).put("value", !message.optBoolean("starred"))) })
+                            DropdownMenuItem(text = { Text("Copy text") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo message", message.optString("body"))) })
+                            if (outgoing && message.optLong("editableUntil", 0L) > System.currentTimeMillis()) DropdownMenuItem(text = { Text("Edit") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; edit = true })
+                            DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.error) }, onClick = { menu = false; delete = true })
+                            if (message.optString("status") == "failed") DropdownMenuItem(text = { Text("Retry") }, leadingIcon = { Icon(Icons.Outlined.Refresh, null) }, onClick = { menu = false; app.call("retry", message.targetArgs(conversation)) })
                         }
                     }
                 }
             }
+        }
+        ReactionPill(message)
         }
     }
     if (selectedAttachment >= 0) AttachmentDialog(app, message, conversation, selectedAttachment) { selectedAttachment = -1 }
@@ -333,7 +338,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             if (reserve.isNotEmpty()) { pushStyle(androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color.Transparent, fontSize = 11.sp)); append(reserve); pop() }
         }
     }
-    SelectionContainer { androidx.compose.material3.Text(annotated, fontSize = 16.sp, lineHeight = 21.sp) }
+    // No SelectionContainer: it would take the bubble's long-press (message options has "Copy text").
+    androidx.compose.material3.Text(annotated, fontSize = 16.sp, lineHeight = 21.sp)
     links.forEach { text -> val target = if (text.startsWith("www.")) "https://$text" else text
         val uri = Uri.parse(target)
         if (uri.scheme in listOf("https", "http") && uri.userInfo == null) TextButton(onClick = { if (app.snapshot.optJSONObject("settings")?.optBoolean("confirmExternalLinks", true) != false) external = target else app.startActivity(Intent(Intent.ACTION_VIEW, uri)) }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Outlined.OpenInNew, null, Modifier.size(16.dp)); Text("Open $text", maxLines = 2) }
@@ -466,8 +472,7 @@ fun timerLabel(seconds: Long) = tr(DisappearingTimers.find { it.first == seconds
 /** Placeholder text as wide as the bubble's meta row ("edited 14:05 ✓✓"), drawn transparent. */
 fun metaReserve(message: JSONObject, outgoing: Boolean): String {
     val attachments = message.optJSONArray("attachments")?.length() ?: 0
-    val reactions = message.optJSONObject("reactions")?.length() ?: 0
-    if (attachments > 0 || reactions > 0 || message.has("ackRequest")) return ""
+    if (attachments > 0 || message.has("ackRequest")) return ""
     var width = 7 // " 00:00" plus a gap
     if (message.has("editedAt")) width += 7
     if (message.optLong("expireTimer") > 0) width += 2
@@ -516,5 +521,18 @@ fun dayOf(at: Long): java.time.LocalDate = java.time.Instant.ofEpochMilli(at).at
             RawText(excerpt, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = colors.textSecondary, fontSize = 14.sp)
         }
         IconButton(onCancel) { Icon(Icons.Outlined.Close, "Cancel reply", tint = colors.textSecondary) }
+    }
+}
+
+/** Reactions as a pill overlapping the bubble's bottom edge (WhatsApp / web `.reactions`). */
+@Composable fun ReactionPill(message: JSONObject) {
+    val reactions = message.optJSONObject("reactions") ?: return
+    if (reactions.length() == 0 || message.optBoolean("deleted")) return
+    val colors = LocalConvoColors.current
+    val counts = reactions.keys().asSequence().map { it to (reactions.optJSONArray(it)?.length() ?: 0) }.filter { it.second > 0 }.toList()
+    if (counts.isEmpty()) return
+    Surface(Modifier.padding(horizontal = 8.dp).offset(y = (-6).dp).testTag("reaction"), shape = RoundedCornerShape(12.dp), color = colors.panelRaised, shadowElevation = 1.dp, border = androidx.compose.foundation.BorderStroke(1.dp, colors.wallpaper)) {
+        RawText(counts.joinToString(" ") { it.first } + (counts.sumOf { it.second }.takeIf { it > 1 }?.let { " $it" } ?: ""),
+            Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 14.sp, color = colors.textSecondary)
     }
 }
