@@ -85,6 +85,34 @@ The Compose UI uses the same generated light/dark colors and logo as the browser
 client bundles the existing encryption core; reviewed native Keystore/SQLCipher storage,
 background delivery, full localization and complete feature/UX parity remain release gates.
 
+### Build the APK
+
+Prerequisites: JDK 17, the Android SDK with platform 34 and build-tools (Android Studio installs
+both), and Node.js 20+ (the script installs `apps/web` dependencies on first use).
+
+```sh
+# 1. Point Gradle at the SDK once (ignored by Git), or export ANDROID_HOME instead
+echo "sdk.dir=$HOME/Android/Sdk" > apps/android/local.properties
+
+# 2. Build: type-checks and bundles the shared encryption core, regenerates the colour tokens
+#    from the web palette, runs Gradle (clean :app:assembleDebug) and writes the checksum
+JAVA_HOME=/path/to/jdk-17 apps/android/scripts/build-apk.sh
+
+# 3. Verify and install on a device or emulator
+(cd apps/assets && sha256sum -c convo-android-debug.apk.sha256)
+adb install -r apps/assets/convo-android-debug.apk
+```
+
+The result is `apps/assets/convo-android-debug.apk` (+ `.sha256`), a debug-signed build for
+arm64-v8a and x86_64 that defaults to `https://convo.doncik.ro`.
+
+**Against the local Compose stack (emulator):** start the stack (`docker compose up -d`) before
+building, so the script pins its development certificate into the debug build. Then
+`adb reverse tcp:8443 tcp:8443`, tap the server address on the welcome screen and enter
+`https://localhost:8443` (the address the local Keycloak issues tokens for). The sign-in page
+opens in the browser, which warns about the self-signed certificate; continue there. Release
+builds never trust the development certificate.
+
 Set `CONVO_ATTACHMENT_MAX_MB=100` in `.env` to configure the plaintext attachment limit for
 both clients. The backend separately allows encryption tags and size-bucket padding; attachment
 contents, names and keys remain end-to-end encrypted.

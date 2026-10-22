@@ -24,6 +24,9 @@ ANDROID_HOME=/path/to/Android/Sdk JAVA_HOME=/path/to/jdk-17 apps/android/scripts
 adb install -r apps/assets/convo-android-debug.apk
 ```
 
+Full steps (SDK setup, checksum, installing, using the local Compose stack from the emulator)
+are in the root README under *Build the APK*.
+
 The script type-checks and bundles the shared protocol adapter, generates native color tokens
 from the web palette, builds the APK and writes its checksum into apps/assets.
 Both light and dark modes use those shared semantic colors. Compose Material 3 supplies native
@@ -52,3 +55,31 @@ the organization's ntfy (homelab deployment: `https://ntfy.doncik.ro`, signed in
 that can read `up*` topics; Compose: `http://<server>:8091`). Convo registers automatically when it
 signs in; when it is not running, a message produces a generic "New message" notification
 (content stays end-to-end encrypted until you open the app).
+
+## Source layout
+
+Packages mirror the web client (`apps/web/src/ui`):
+
+| Package | Web counterpart | Contents |
+|---|---|---|
+| `app` | `ui/App.tsx`, `MainLayout` | `ConvoTheme`, navigation shell (top bar, bottom bar, FAB, routes) |
+| `bridge` | `core/` | `ProtocolBridge` (headless WebView running the bundled core), dev TLS |
+| `ui.chats` | `ChatListPanel`, `conversationMenu` | chat list and rows, chat ⋮ / long-press menu, snooze |
+| `ui.thread` | `Thread`, `MessageBubble`, `Composer` | conversation, bubbles, composer, voice notes, acknowledgements |
+| `ui.info` | `ConversationDetails`, `ContactDrawer` | contact/group/channel info, members, invites |
+| `ui.contacts` | `NewChatPanel`, `NewGroupPanel` | people picker, phone contacts, group/channel wizard |
+| `ui.communities` | `CommunitiesPanel` | communities |
+| `ui.settings` | `SettingsPanel`, `ProfileSettings` | settings pages |
+| `ui.media` | `AllMedia`, `SharedContent` | media browser and tiles |
+| `ui.locks`, `ui.linking` | `chatLocks`, `LinkDeviceScreen` | app/chat locks, device-link QR |
+| `ui.components` | `components/` | avatar, rows, sections, empty states, buttons |
+| `ui.theme` | `theme/tokens.ts` | generated `DesignTokens.kt` (do not edit) |
+| `calls`, `push`, `i18n` | `calls/`, `notifications`, `i18n/` | LiveKit calls, UnifiedPush and notifications, EN/RO strings |
+
+## Look and feel
+
+The layout follows WhatsApp for Android (bottom tabs, FAB, long-press menus, info pages with
+sections) in Convo's web style (same tokens, wallpaper, bubbles, encryption pill, chips). Colours
+come only from `LocalConvoColors`; never hard-code a colour in a screen. Shared pieces live in
+`ui.components` (`EmptyState`, `InfoSection`, `ActionRow`, `QuickAction`, `CircleAction`,
+`RoundActionButton`, `PersonAvatar`) and `ui.chats` (`SearchField`, `PillChip`, `Tag`).

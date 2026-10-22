@@ -25,8 +25,20 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   servers; Android Settings → Notifications shows background delivery status and fixes.
 - [x] docs/SECURITY.md: full security description, ports/firewall, forensic analysis (Son et al.
   2022) with recommendations (Keystore-bound and PRF-bound store keys, per-chat keys).
+- [x] Android UI pass (WhatsApp layout, Convo web style): sources split into packages that mirror
+  `apps/web/src/ui` (app, bridge, ui.chats/thread/info/contacts/communities/settings/media/locks/
+  linking/components/theme, calls, push, i18n); chat list (time, You:/author, badges, Archived
+  row, FAB, overflow), conversation (avatar header, wallpaper, encryption pill, day chips, grouped
+  bubbles with tails, inline time/ticks, long-press options, pill composer + round send/mic),
+  info pages (hero + Voice/Video/Search, sections, red actions), settings home, calls (recent,
+  New call), communities, new chat; light/dark system bars. Checked light and dark on
+  emulator-5554 against the local stack (`adb reverse`, debug cert pinned by `build-apk.sh`).
+  APK rebuilt; README documents building it.
+- [x] Docs diagram: architecture and trust boundaries (`docs/diagrams/security/architecture.*`).
 - [ ] Open from this checkpoint: router forwards + `turn.doncik.ro` DNS (user), Web Push for closed
-  browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4), diagrams for docs.
+  browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4), diagrams for message flow, calls
+  and network (SECURITY.md references them), Android: call screen and media viewer restyle,
+  message reaction bar on long-press.
 
 ## Active checkpoint — 2026-10-21 (earlier)
 
