@@ -37,8 +37,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - [x] Docs diagram: architecture and trust boundaries (`docs/diagrams/security/architecture.*`).
 - [ ] Open from this checkpoint: router forwards + `turn.doncik.ro` DNS (user), Web Push for closed
   browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4), diagrams for message flow, calls
-  and network (SECURITY.md references them), Android: call screen and media viewer restyle,
-  message reaction bar on long-press.
+  and network (SECURITY.md references them).
+- [x] Android follow-ups: long-press menu with reaction bar (SelectionContainer removed so the
+  gesture reaches the bubble), reactions as a pill on the bubble edge, call screen (encryption
+  line, control tray), photos with their own aspect ratio and caption below, black media viewer.
 
 ## Active checkpoint — 2026-10-21 (earlier)
 
