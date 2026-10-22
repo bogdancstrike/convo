@@ -260,6 +260,13 @@ Signal library licensing, browser portability, cryptographic composition, and sa
 
 ## Architecture at a glance
 
+![Convo architecture and trust boundaries](docs/diagrams/security/architecture.svg)
+
+More diagrams: [how a 1:1 message travels](docs/diagrams/security/message-flow.svg),
+[voice and video calls](docs/diagrams/security/calls.svg),
+[network exposure and firewall](docs/diagrams/security/network.svg)
+(sources and generator in `docs/diagrams/security/src`, explained in [docs/SECURITY.md](docs/SECURITY.md)).
+
 ```mermaid
 flowchart TB
     A["Android · Kotlin + Jetpack Compose"]

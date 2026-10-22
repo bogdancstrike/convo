@@ -36,8 +36,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   APK rebuilt; README documents building it.
 - [x] Docs diagram: architecture and trust boundaries (`docs/diagrams/security/architecture.*`).
 - [ ] Open from this checkpoint: router forwards + `turn.doncik.ro` DNS (user), Web Push for closed
-  browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4), diagrams for message flow, calls
-  and network (SECURITY.md references them).
+  browsers, Keystore/PRF-bound local keys (SECURITY.md §18.4).
+- [x] Docs diagrams (diagram-design, Convo profile): message flow (Signal, per-device fan-out),
+  calls (LiveKit SFU + coturn, frame E2EE), network exposure (tunnel, router forwards,
+  ClusterIP); linked from README and SECURITY.md.
 - [x] Android follow-ups: long-press menu with reaction bar (SelectionContainer removed so the
   gesture reaches the bubble), reactions as a pill on the bubble edge, call screen (encryption
   line, control tray), photos with their own aspect ratio and caption below, black media viewer.

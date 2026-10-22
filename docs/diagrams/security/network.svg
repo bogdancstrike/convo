@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="network-title network-desc">
+      <title id="network-title">Network exposure and firewall</title>
+      <desc id="network-desc">HTTPS reaches the cluster only through an outbound Cloudflare tunnel; the router forwards only LiveKit and coturn media ports; databases and the API stay cluster-internal.</desc>
+      <defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#40576E"></polygon></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1F7FA3"></polygon></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#9A5B12"></polygon></marker><marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#40576E" stroke-width="1.2"></polyline></marker></defs>
+      <rect width="100%" height="100%" fill="#F4F8FA"></rect>
+<rect x="32" y="72" width="200" height="400" rx="8" fill="rgba(23,50,77,0.02)" stroke="rgba(23,50,77,0.18)" stroke-width="0.8" stroke-dasharray="4,4"></rect><rect x="44" y="66" width="56" height="12" rx="2" fill="#F4F8FA"></rect><text x="72.0" y="75" fill="rgba(23,50,77,0.55)" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.12em">INTERNET</text>
+<rect x="272" y="72" width="200" height="400" rx="8" fill="rgba(23,50,77,0.02)" stroke="rgba(23,50,77,0.18)" stroke-width="0.8" stroke-dasharray="4,4"></rect><rect x="284" y="66" width="104" height="12" rx="2" fill="#F4F8FA"></rect><text x="336.0" y="75" fill="rgba(23,50,77,0.55)" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.12em">HOME ROUTER · NAT</text>
+<rect x="512" y="72" width="456" height="400" rx="8" fill="rgba(31,127,163,0.04)" stroke="rgba(31,127,163,0.50)" stroke-width="0.8" stroke-dasharray="4,4"></rect><rect x="524" y="66" width="132" height="12" rx="2" fill="#F4F8FA"></rect><text x="590.0" y="75" fill="#1F7FA3" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.12em">K3S NODE 192.168.1.151</text>
+<path d="M 208,132 H 536" fill="none" stroke="#9A5B12" stroke-width="1.2" marker-end="url(#arrow-link)"></path>
+<rect x="294.0" y="111" width="152" height="12" rx="2" fill="#F4F8FA"></rect><text x="370" y="120" fill="#9A5B12" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">HTTPS 443 · NO INBOUND PORT</text>
+<path d="M 704,132 H 744" fill="none" stroke="#40576E" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"></path>
+<path d="M 208,268 H 536" fill="none" stroke="#1F7FA3" stroke-width="1.2" marker-end="url(#arrow-accent)"></path>
+<rect x="262.0" y="247" width="88" height="12" rx="2" fill="#F4F8FA"></rect><text x="306" y="256" fill="#1F7FA3" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">UDP 50000-50100</text>
+<rect x="422.0" y="247" width="52" height="12" rx="2" fill="#F4F8FA"></rect><text x="448" y="256" fill="#1F7FA3" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">TCP 7881</text>
+<path d="M 208,380 H 536" fill="none" stroke="#1F7FA3" stroke-width="1.2" marker-end="url(#arrow-accent)"></path>
+<rect x="268.0" y="359" width="76" height="12" rx="2" fill="#F4F8FA"></rect><text x="306" y="368" fill="#1F7FA3" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">UDP/TCP 3478</text>
+<rect x="404.0" y="359" width="88" height="12" rx="2" fill="#F4F8FA"></rect><text x="448" y="368" fill="#1F7FA3" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">UDP 49160-49200</text>
+<rect x="56" y="96" width="152" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="56" y="96" width="152" height="72" rx="6" fill="rgba(23,50,77,0.03)" stroke="rgba(23,50,77,0.30)" stroke-width="1"></rect>
+<rect x="64" y="104" width="28" height="12" rx="2" fill="none" stroke="rgba(23,50,77,0.30)" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="78.0" y="113" fill="rgba(23,50,77,0.30)" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">CDN</text>
+<text x="132.0" y="138.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">Cloudflare edge</text>
+<text x="132.0" y="154.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">convo · convo-admin</text>
+<rect x="56" y="232" width="152" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="56" y="232" width="152" height="72" rx="6" fill="rgba(64,87,110,0.10)" stroke="#5F7387" stroke-width="1"></rect>
+<rect x="64" y="240" width="40" height="12" rx="2" fill="none" stroke="#5F7387" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="84.0" y="249" fill="#5F7387" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">CLIENT</text>
+<text x="132.0" y="274.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">Phones, browsers</text>
+<text x="132.0" y="290.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">call media</text>
+<rect x="56" y="344" width="152" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="56" y="344" width="152" height="72" rx="6" fill="rgba(64,87,110,0.10)" stroke="#5F7387" stroke-width="1"></rect>
+<rect x="64" y="352" width="40" height="12" rx="2" fill="none" stroke="#5F7387" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="84.0" y="361" fill="#5F7387" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">CLIENT</text>
+<text x="132.0" y="386.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">NAT-ed clients</text>
+<text x="132.0" y="402.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">TURN relay</text>
+<rect x="536" y="96" width="168" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="536" y="96" width="168" height="72" rx="6" fill="#ffffff" stroke="#17324D" stroke-width="1"></rect>
+<rect x="544" y="104" width="28" height="12" rx="2" fill="none" stroke="#17324D" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="558.0" y="113" fill="#17324D" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">POD</text>
+<text x="620.0" y="138.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">cloudflared</text>
+<text x="620.0" y="154.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">outbound tunnel</text>
+<rect x="744" y="96" width="200" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="744" y="96" width="200" height="72" rx="6" fill="#ffffff" stroke="#17324D" stroke-width="1"></rect>
+<rect x="752" y="104" width="28" height="12" rx="2" fill="none" stroke="#17324D" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="766.0" y="113" fill="#17324D" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">POD</text>
+<text x="844.0" y="138.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">ingress-nginx</text>
+<text x="844.0" y="154.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">web · admin · keycloak</text>
+<rect x="536" y="232" width="168" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="536" y="232" width="168" height="72" rx="6" fill="rgba(37,150,190,0.10)" stroke="#1F7FA3" stroke-width="1.2"></rect>
+<rect x="544" y="240" width="28" height="12" rx="2" fill="none" stroke="#1F7FA3" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="558.0" y="249" fill="#1F7FA3" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">POD</text>
+<text x="620.0" y="274.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">LiveKit SFU</text>
+<text x="620.0" y="290.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">host network</text>
+<rect x="536" y="344" width="168" height="72" rx="6" fill="#F4F8FA"></rect>
+<rect x="536" y="344" width="168" height="72" rx="6" fill="rgba(37,150,190,0.10)" stroke="#1F7FA3" stroke-width="1.2"></rect>
+<rect x="544" y="352" width="28" height="12" rx="2" fill="none" stroke="#1F7FA3" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="558.0" y="361" fill="#1F7FA3" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">POD</text>
+<text x="620.0" y="386.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">coturn</text>
+<text x="620.0" y="402.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">host network</text>
+<rect x="744" y="232" width="200" height="184" rx="6" fill="#F4F8FA"></rect>
+<rect x="744" y="232" width="200" height="184" rx="6" fill="rgba(23,50,77,0.05)" stroke="#40576E" stroke-width="1"></rect>
+<rect x="752" y="240" width="52" height="12" rx="2" fill="none" stroke="#40576E" stroke-opacity="0.45" stroke-width="0.8"></rect>
+<text x="778.0" y="249" fill="#40576E" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">INTERNAL</text>
+<text x="844.0" y="334.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle"></text>
+<text x="844" y="284" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">ClusterIP only</text>
+<text x="844" y="312" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">convo-server 8080</text>
+<text x="844" y="328" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">postgres 5432 · redis 6379</text>
+<text x="844" y="344" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">minio 9000 · ntfy 80</text>
+<text x="844" y="360" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">LiveKit API 7880</text>
+<text x="844" y="400" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">6443 · 22 never forwarded</text>
+<line x1="32" y1="520" x2="968" y2="520" stroke="rgba(23,50,77,0.12)" stroke-width="0.8"></line>
+<text x="32" y="540" fill="#40576E" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+<path d="M 112,536 H 140" fill="none" stroke="#9A5B12" stroke-width="1.2" marker-end="url(#arrow-link)"></path>
+<text x="152" y="540" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Tunnel (outbound from cluster)</text>
+<path d="M 352,536 H 380" fill="none" stroke="#1F7FA3" stroke-width="1.2" marker-end="url(#arrow-accent)"></path>
+<text x="392" y="540" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Router forward (inbound)</text>
+<rect x="558" y="528" width="28" height="16" rx="3" fill="rgba(23,50,77,0.05)" stroke="#40576E" stroke-width="1"></rect>
+<text x="598" y="540" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Not reachable from outside</text>
+    </svg>

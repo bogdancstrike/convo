@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="message-flow-title message-flow-desc">
+      <title id="message-flow-title">How a 1:1 message travels</title>
+      <desc id="message-flow-desc">Ana fetches Bogdan's device prekeys, encrypts one Signal ciphertext per device, the server stores and delivers envelopes, each device decrypts locally and acknowledges.</desc>
+      <defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#40576E"></polygon></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1F7FA3"></polygon></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#9A5B12"></polygon></marker><marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#40576E" stroke-width="1.2"></polyline></marker></defs>
+      <rect width="100%" height="100%" fill="#F4F8FA"></rect>
+<line x1="120" y1="112" x2="120" y2="540" stroke="rgba(23,50,77,0.20)" stroke-width="1" stroke-dasharray="3,3"></line>
+<line x1="380" y1="112" x2="380" y2="540" stroke="rgba(23,50,77,0.20)" stroke-width="1" stroke-dasharray="3,3"></line>
+<line x1="640" y1="112" x2="640" y2="540" stroke="rgba(23,50,77,0.20)" stroke-width="1" stroke-dasharray="3,3"></line>
+<line x1="880" y1="112" x2="880" y2="540" stroke="rgba(23,50,77,0.20)" stroke-width="1" stroke-dasharray="3,3"></line>
+<rect x="28" y="48" width="184" height="56" rx="6" fill="#F4F8FA"></rect>
+<rect x="28" y="48" width="184" height="56" rx="6" fill="rgba(64,87,110,0.10)" stroke="#5F7387" stroke-width="1"></rect>
+<text x="120.0" y="76.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">Ana · web</text>
+<text x="120.0" y="92.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">holds identity + sessions</text>
+<rect x="288" y="48" width="184" height="56" rx="6" fill="#F4F8FA"></rect>
+<rect x="288" y="48" width="184" height="56" rx="6" fill="rgba(37,150,190,0.10)" stroke="#1F7FA3" stroke-width="1.2"></rect>
+<text x="380.0" y="76.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">Convo server</text>
+<text x="380.0" y="92.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">mailboxes, no keys</text>
+<rect x="548" y="48" width="184" height="56" rx="6" fill="#F4F8FA"></rect>
+<rect x="548" y="48" width="184" height="56" rx="6" fill="rgba(64,87,110,0.10)" stroke="#5F7387" stroke-width="1"></rect>
+<text x="640.0" y="76.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">Bogdan · phone</text>
+<text x="640.0" y="92.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">Android</text>
+<rect x="788" y="48" width="184" height="56" rx="6" fill="#F4F8FA"></rect>
+<rect x="788" y="48" width="184" height="56" rx="6" fill="rgba(64,87,110,0.10)" stroke="#5F7387" stroke-width="1"></rect>
+<text x="880.0" y="76.0" fill="#17324D" font-size="12" font-weight="600" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">Bogdan · laptop</text>
+<text x="880.0" y="92.0" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">linked web device</text>
+<path d="M 120,152 H 372" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow)"></path><rect x="154.0" y="135" width="192" height="12" rx="2" fill="#F4F8FA"></rect><text x="250.0" y="144" fill="#5F7387" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">fetch prekey bundles · every device</text>
+<path d="M 380,188 H 128" fill="none" stroke="#40576E" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"></path><rect x="134.0" y="171" width="232" height="12" rx="2" fill="#F4F8FA"></rect><text x="250.0" y="180" fill="#5F7387" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">identity + signed prekey + one-time prekey</text>
+<path d="M 124,216 H 160 V 232 H 132" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow)"></path><text x="168" y="228" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">X3DH + Double Ratchet</text>
+<path d="M 120,268 H 372" fill="none" stroke="#1F7FA3" stroke-width="1.2" marker-end="url(#arrow-accent)"></path><rect x="178.0" y="251" width="144" height="12" rx="2" fill="#F4F8FA"></rect><text x="250.0" y="260" fill="#1F7FA3" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">one ciphertext per device</text>
+<path d="M 384,296 H 420 V 312 H 392" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow)"></path><text x="428" y="308" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">queue one envelope per device</text>
+<path d="M 380,348 H 632" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow-open)"></path><rect x="392.0" y="331" width="236" height="12" rx="2" fill="#F4F8FA"></rect><text x="510.0" y="340" fill="#5F7387" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">WSS push (online) or content-free ntfy wake</text>
+<path d="M 380,384 H 872" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow-open)"></path><rect x="596.0" y="367" width="68" height="12" rx="2" fill="#F4F8FA"></rect><text x="630.0" y="376" fill="#5F7387" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">WSS deliver</text>
+<path d="M 644,412 H 680 V 428 H 652" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow)"></path><text x="688" y="424" fill="#40576E" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">decrypt locally</text>
+<path d="M 640,456 H 388" fill="none" stroke="#40576E" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"></path><rect x="446.0" y="439" width="128" height="12" rx="2" fill="#F4F8FA"></rect><text x="510.0" y="448" fill="#5F7387" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">ACK → envelope deleted</text>
+<path d="M 640,492 H 128" fill="none" stroke="#40576E" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"></path><rect x="254.0" y="475" width="252" height="12" rx="2" fill="#F4F8FA"></rect><text x="380.0" y="484" fill="#5F7387" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">receipt · an encrypted message, via the server</text>
+<line x1="32" y1="576" x2="968" y2="576" stroke="rgba(23,50,77,0.12)" stroke-width="0.8"></line>
+<text x="32" y="596" fill="#40576E" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+<path d="M 112,592 H 140" fill="none" stroke="#1F7FA3" stroke-width="1.2" marker-end="url(#arrow-accent)"></path>
+<text x="152" y="596" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Ciphertext fan-out</text>
+<path d="M 284,592 H 312" fill="none" stroke="#40576E" stroke-width="1.2" marker-end="url(#arrow)"></path>
+<text x="324" y="596" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Request</text>
+<path d="M 395,592 H 423" fill="none" stroke="#40576E" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"></path>
+<text x="435" y="596" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Reply / receipt</text>
+<rect x="551" y="584" width="28" height="16" rx="3" fill="rgba(37,150,190,0.10)" stroke="#1F7FA3" stroke-width="1.2"></rect>
+<text x="591" y="596" fill="#40576E" font-size="9" font-family="'Inter', system-ui, sans-serif">Never sees plaintext or keys</text>
+    </svg>
