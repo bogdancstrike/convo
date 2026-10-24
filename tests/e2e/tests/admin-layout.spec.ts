@@ -113,9 +113,12 @@ test('audit labels use the resized column width instead of a fixed text cap', as
     const target = row.locator('.audit-identity').nth(1);
     const separator = page.getByRole('separator', { name: 'Resize Target column' });
     const resize = async (delta: number) => {
+      await separator.hover();
+      const width = Number(await separator.getAttribute('aria-valuenow'));
       const box = (await separator.boundingBox())!;
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + delta, box.y + box.height / 2, { steps: 5 }); await page.mouse.up();
+      await expect.poll(async () => Math.abs(Number(await separator.getAttribute('aria-valuenow')) - width - delta)).toBeLessThanOrEqual(1);
     };
     await resize(170);
     await expect.poll(() => target.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
