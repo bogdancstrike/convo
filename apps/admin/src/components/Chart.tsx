@@ -1,5 +1,4 @@
-import { Button, Space, Tooltip } from 'antd';
-import { LineChartOutlined, TableOutlined } from '@ant-design/icons';
+import { ChartCard, ChartViewSwitch, useChartHeader } from './ChartCard';
 import { LocalDataTable } from './LocalDataTable';
 import { chartData } from './chartData';
 import { useViewState } from './useViewState';
@@ -9,7 +8,13 @@ import { chartTheme, SERIES } from '../theme';
 import { useDark } from './useDark';
 
 /** ECharts with the console's colours, axis styling and an accessible label. */
-export function Chart({ option, height = 280, label }: { option: EChartsOption; height?: number; label: string }) {
+interface Props { option: EChartsOption; height?: number; label: string }
+export function Chart(props: Props) {
+  const header = useChartHeader();
+  return header === undefined ? <ChartCard title={props.label}><ChartBody {...props} /></ChartCard> : <ChartBody {...props} />;
+}
+
+function ChartBody({ option, height = 280, label }: Props) {
   const dark = useDark();
   const stateKey = `chart_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
   const { view, update } = useViewState({ [stateKey]: 'chart' });
@@ -29,7 +34,7 @@ export function Chart({ option, height = 280, label }: { option: EChartsOption; 
   } as EChartsOption;
   return (
     <div className="data-chart" aria-label={label}>
-      <div className="chart-view-controls"><Space.Compact><Tooltip title="Chart"><Button size="small" type={mode === 'chart' ? 'primary' : 'default'} icon={<LineChartOutlined />} aria-label={`Show chart: ${label}`} onClick={() => update({ [stateKey]: 'chart' })} /></Tooltip><Tooltip title="Table"><Button size="small" type={mode === 'table' ? 'primary' : 'default'} icon={<TableOutlined />} aria-label={`Show table: ${label}`} onClick={() => update({ [stateKey]: 'table' })} /></Tooltip></Space.Compact></div>
+      <ChartViewSwitch mode={mode} label={label} onChange={(next) => update({ [stateKey]: next })} />
       {mode === 'table' ? <LocalDataTable id={stateKey} rows={data.rows} columns={data.columns} height={height} /> : <div role="img" aria-label={label}><ReactECharts option={themed} style={{ height }} notMerge lazyUpdate opts={{ renderer: 'svg' }} /></div>}
     </div>
   );

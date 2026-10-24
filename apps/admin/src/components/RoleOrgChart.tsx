@@ -1,6 +1,7 @@
+import { ChartCard } from './ChartCard';
 import { DiagramView } from './DiagramView';
 import { useMemo } from 'react';
-import { Button, Card, Descriptions, Empty, Input, Pagination, Select, Space, Tag, Typography } from 'antd';
+import { Button, Descriptions, Empty, Input, Pagination, Select, Space, Tag, Typography } from 'antd';
 import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { RoleHolder, RoleView } from '../api';
 import { PERMISSIONS, ROLE_LABELS } from '../format';
@@ -43,7 +44,7 @@ export function RoleOrgChart({ roles, view, update, onPerson, onRole, canManage 
     return { nodes, edges, count: matched.length, page, roleCount: visibleRoles.length };
   }, [roles, view.chartRole, view.chartSearch, view.chartNode, view.chartPage, allPeople, dark]);
   const reset = () => update({ chartRole: 'all', chartSearch: '', chartNode: '', chartPage: '1' });
-  return <Card className="organization-card" data-testid="role-organigram">
+  return <ChartCard title="Organization chart" className="organization-card" data-testid="role-organigram">
     <div className="chart-toolbar"><Select aria-label="Filter organization chart by role" value={view.chartRole} onChange={(chartRole) => update({ chartRole, chartNode: chartRole === 'all' ? '' : `role:${chartRole}`, chartPage: '1' })}
       options={[{ value: 'all', label: 'All roles' }, ...roles.map((r) => ({ value: r.role, label: ROLE_LABELS[r.role] ?? r.role }))]} />
       <Input.Search allowClear aria-label="Search organization chart" placeholder="Search people or roles" value={view.chartSearch} onChange={(e) => update({ chartSearch: e.target.value, chartPage: '1' }, true)} />
@@ -67,5 +68,5 @@ export function RoleOrgChart({ roles, view, update, onPerson, onRole, canManage 
       </> : <><div className="eyebrow">Organization access</div><h2>Who can do what</h2><Typography.Paragraph type="secondary">Start with a role, then select a person. Details and quick actions appear here.</Typography.Paragraph><Descriptions column={1}><Descriptions.Item label="Roles">{roles.length}</Descriptions.Item><Descriptions.Item label="People">{allPeople.size}</Descriptions.Item></Descriptions><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Select a card in the chart" /></>}
       {!!permissions.length && <><Typography.Title level={5}>Effective permissions</Typography.Title><div className="inspector-permissions">{permissions.map((p) => <div key={p}><span>{PERMISSIONS[p]?.label ?? p}</span><small>{PERMISSIONS[p]?.group}</small></div>)}</div></>}
     </aside></div>
-  </Card>;
+  </ChartCard>;
 }

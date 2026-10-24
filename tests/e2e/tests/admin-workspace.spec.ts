@@ -279,24 +279,67 @@ test('table column settings and backend pagination, sorting and filtering', asyn
   } finally { await closeAll(page); }
 });
 
-test('user organization graph shows name, phone and connected device information', async ({ browser, request }) => {
+test('user organization graph aligns identity, account and device cards and refits the available space', async ({ browser, request }) => {
+  test.setTimeout(150_000);
   const user = await createUser(request, 'graphadmin', { realmRoles: ['convo-admin'] });
-  const member = await createUser(request, 'graphmember');
-  const [page, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  const member = await createUser(request, 'graphmember', { realmRoles: ['convo-helpdesk'] });
+  const [page, person, linked] = await Promise.all([newPage(browser), newPage(browser), newPage(browser)]);
+  let releaseDevices = () => {};
   try {
-    await enroll(person, member); await adminSignIn(page, user);
+    await enroll(person, member);
+    await signIn(linked, member);
+    await expect(linked.getByTestId('link-code')).toBeVisible({ timeout: 45_000 });
+    await person.getByTestId('nav-settings').click(); await person.getByTestId('settings-devices').click();
+    await person.getByTestId('link-request').getByRole('button', { name: 'Codes match — approve' }).click();
+    await expect(linked.getByTestId('nav-settings')).toBeVisible({ timeout: 30_000 });
+    await adminSignIn(page, user);
     const account = (await adminApi(page, `/accounts?q=${member.username}`))[0];
+    const deviceGate = new Promise<void>((resolve) => { releaseDevices = resolve; });
+    await page.route('**/v1/admin/accounts/*/devices', async (route) => { await deviceGate; await route.continue(); });
     await adminGo(page, `users/${account.accountId}/organization?display=page`);
     const graph = page.getByTestId('user-organization');
+    const panel = page.locator('.user-organization-panel');
     await expect(graph.locator('[data-id="person"]')).toContainText(member.name);
     await expect(graph.locator('[data-id="person"]')).toContainText(member.phone);
+    await expect(graph.locator('.react-flow__node')).toHaveCount(5);
+    releaseDevices();
     await expect(graph.locator('[data-id="device:1"]')).toContainText('Web browser');
-    await expect(graph.locator('[data-id="device:1"]')).toContainText('Last active');
-    await expect(graph.locator('.react-flow__edge[data-id="account:device:1"]')).toBeVisible();
+    await expect(graph.locator('[data-id="device:2"]')).toContainText('Last active');
+    // Chromium reports a horizontal SVG group's zero-height box as hidden.
+    // Check the actual connector geometry instead.
+    const connector = graph.locator('.react-flow__edge[data-id="account:device:1"] .react-flow__edge-path');
+    await expect.poll(() => connector.evaluate((e) => (e as SVGGeometryElement).getTotalLength())).toBeGreaterThan(0);
+    expect(await connector.getAttribute('d')).not.toContain('C');
+    const aligned = async (ids: string[]) => graph.evaluate((element, keys) => {
+      const centers = keys.map((id) => { const r = element.querySelector(`.react-flow__node[data-id="${id}"]`)!.getBoundingClientRect(); return r.y + r.height / 2; });
+      return Math.max(...centers) - Math.min(...centers);
+    }, ids);
+    await expect.poll(() => aligned(['organization', 'person', 'account', 'device:1'])).toBeLessThan(1);
+    await expect.poll(() => aligned(['identity', 'role:convo-helpdesk'])).toBeLessThan(1);
+    const allCardsFit = () => graph.evaluate((element) => {
+      const bounds = element.querySelector('.user-system-canvas')!.getBoundingClientRect();
+      return Array.from(element.querySelectorAll('.react-flow__node')).every((node) => {
+        const r = node.getBoundingClientRect();
+        return r.left >= bounds.left && r.right <= bounds.right && r.top >= bounds.top && r.bottom <= bounds.bottom;
+      });
+    });
+    await expect.poll(allCardsFit).toBe(true);
     await page.screenshot({ path: 'test-results/admin-user-organization.png', fullPage: true });
+    await page.getByTestId('sidebar-toggle').click();
+    await expect.poll(async () => (await page.locator('.ant-layout-sider').boundingBox())!.width).toBe(64);
+    await expect.poll(allCardsFit).toBe(true);
+    await panel.getByRole('button', { name: 'Fit organization to view' }).click();
     await graph.locator('[data-id="device:1"]').click();
     await expect(page.getByRole('dialog')).toContainText('Device #1');
-  } finally { await closeAll(page, person); }
+    await page.goBack();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    const table = panel.getByRole('button', { name: 'Show diagram as table' });
+    expect(await table.evaluate((e) => !!e.closest('.diagram-panel-header'))).toBe(true);
+    await table.click();
+    await expect(graph.getByRole('columnheader', { name: /Connections/ })).toBeVisible();
+    await page.goBack();
+    await expect(graph.locator('.react-flow__node')).toHaveCount(7);
+  } finally { releaseDevices(); await closeAll(page, person, linked); }
 });
 
 test('data charts and diagrams can switch to inspectable tables and back', async ({ browser, request }) => {
@@ -304,14 +347,20 @@ test('data charts and diagrams can switch to inspectable tables and back', async
   const page = await newPage(browser);
   try {
     await adminSignIn(page, user);
-    await page.getByRole('button', { name: 'Show table: Encrypted items and active people per day', exact: true }).click();
+    const tableSwitch = page.getByRole('button', { name: 'Show table: Encrypted items and active people per day', exact: true });
+    await expect(tableSwitch).toBeVisible();
+    expect(await tableSwitch.evaluate((e) => !!e.closest('.ant-card-head'))).toBe(true);
+    await page.screenshot({ path: 'test-results/admin-chart-headers.png', fullPage: true });
+    await tableSwitch.click();
     const values = page.getByLabel('Encrypted items and active people per day', { exact: true });
     await expect(values.getByRole('columnheader', { name: /Encrypted items/ })).toBeVisible();
     await expect(values.getByRole('columnheader', { name: /Active people/ })).toBeVisible();
     await page.goBack(); await expect(page.getByRole('img', { name: 'Encrypted items and active people per day', exact: true })).toBeVisible();
     await adminGo(page, 'roles?tab=organization');
     const graph = page.getByTestId('role-organigram');
-    await graph.getByRole('button', { name: 'Show diagram as table' }).click();
+    const diagramSwitch = graph.getByRole('button', { name: 'Show diagram as table' });
+    expect(await diagramSwitch.evaluate((e) => !!e.closest('.ant-card-head'))).toBe(true);
+    await diagramSwitch.click();
     await expect(graph.getByRole('columnheader', { name: /Connections/ })).toBeVisible();
     await graph.getByRole('button', { name: 'Show diagram', exact: true }).click();
     await expect(graph.locator('.react-flow__node')).toHaveCount(6);
@@ -322,9 +371,33 @@ test('sidebar footer keeps theme and role controls visible within the viewport',
   const user = await createUser(request, 'sidebaradmin', { realmRoles: ['convo-admin'] });
   const page = await newPage(browser);
   try {
+    await page.setViewportSize({ width: 1280, height: 720 });
     await adminSignIn(page, user);
     await expect(page.getByRole('switch', { name: 'Dark theme' })).toBeInViewport();
     await expect(page.getByTestId('admin-roles')).toBeInViewport();
     await expect(page.getByTestId('admin-tab-health')).toBeInViewport();
+    const toggle = page.getByTestId('sidebar-toggle');
+    expect(await toggle.evaluate((e) => !!e.closest('.sidebar-footer'))).toBe(true);
+    expect((await toggle.boundingBox())!.y).toBeGreaterThan((await page.getByTestId('admin-name').boundingBox())!.y);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toBeInViewport();
+    await expect(page.getByRole('switch', { name: 'Dark theme' })).toBeInViewport();
+    await page.getByRole('switch', { name: 'Dark theme' }).click();
+    await toggle.click();
+    await expect(page.getByTestId('admin-name')).toBeVisible();
+    await expect.poll(async () => (await page.locator('.ant-layout-sider').boundingBox())!.width).toBe(232);
+    await page.mouse.move(1200, 16);
+    await page.keyboard.press('Escape');
+    await page.screenshot({ path: 'test-results/admin-sidebar-dark.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(toggle).toBeInViewport();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect.poll(async () => (await page.locator('.ant-layout-sider').boundingBox())!.width).toBe(232);
+    await page.mouse.move(380, 16);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('admin-roles')).toBeInViewport();
+    await page.screenshot({ path: 'test-results/admin-sidebar-mobile.png', fullPage: true });
   } finally { await closeAll(page); }
 });

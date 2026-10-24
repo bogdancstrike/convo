@@ -59,3 +59,12 @@
 - Firefox: all 14 applicable scenarios passed across the full run and targeted repairs; the Chromium-only virtual-authenticator case was skipped. Confirmation is tested through the keyboard to avoid the missed automated mouse click, and initial navigation waits for the DOM before interacting with the sign-in control.
 - Docker Compose admin/server/web are deployed; migrations V27–V29 applied.
 - Source-backed message-type reporting remains pending the user's telemetry choice.
+
+## Chart headers, user graph and sidebar refinement (2026-10-24)
+
+- Move chart/table and diagram/table switches into shared panel headers, using compact icon controls with selected states, tooltips and keyboard focus. Keep descriptions with the titles and preserve URL-backed view history.
+- Standardize user graph card dimensions and typography; align organization, person, account and first device horizontally. Place sign-in under the person and permissions beside it, so a role plus two devices fit in two rows.
+- Fit the complete layout bounds after asynchronous data loading and viewport changes. Use explicit card handles so the sign-in branch connects vertically and the primary path stays horizontal. Keep card details and quick actions available.
+- Move collapse/expand to the sidebar footer. Group the avatar, username and roles into an account menu, with separate theme and collapse rows; preserve access in the collapsed rail and dark mode.
+- Docker Compose is running with the rebuilt admin image. Local PostgreSQL uses port 5434 in the ignored `.env`, because the GIF responder stack occupies 5433.
+- Validation: admin typecheck/build, 23 unit tests and 12 browser scenarios (6 each in Chromium and Firefox) pass. Browser regression coverage includes delayed device loading, card alignment and fit, diagram/table switches, header placement, browser Back, internal scrolling, session renewal, and footer controls at desktop/mobile widths.

@@ -1,3 +1,4 @@
+import { ChartCard } from '../components/ChartCard';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, App, AutoComplete, Avatar, Button, Card, Col, Collapse, Row, Select, Popover, Space, Tabs, Tag, Typography } from 'antd';
 import { DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
@@ -52,8 +53,8 @@ export function RolesPage({ can, navigate }: PageProps) {
             ...(roles ?? []).map((r) => ({ title: ROLE_LABELS[r.role] ?? r.role, key: r.role, align: 'center' as const, render: (_: unknown, row: Record<string, string | boolean>) => row[r.role] ? <Tag color="green">Allowed</Tag> : <span aria-label="Not granted">—</span> })),
           ]} />
         </Card> },
-        { key: 'map', label: 'Permission map', children: <Card className="diagram-surface"><PermissionMap roles={roles ?? []} focus={view.permission} onFocus={(permission) => update({ permission })} /></Card> },
-        { key: 'flow', label: 'How access works', children: <Card className="diagram-surface"><AccessFlow selected={view.accessNode} onSelect={(accessNode) => update({ accessNode }, !accessNode)} /></Card> },
+        { key: 'map', label: 'Permission map', children: <ChartCard className="diagram-surface" title="Permission map"><PermissionMap roles={roles ?? []} focus={view.permission} onFocus={(permission) => update({ permission })} /></ChartCard> },
+        { key: 'flow', label: 'How access works', children: <ChartCard className="diagram-surface" title="How access works"><AccessFlow selected={view.accessNode} onSelect={(accessNode) => update({ accessNode }, !accessNode)} /></ChartCard> },
       ]} />
     </div>
   );

@@ -1,3 +1,4 @@
+import { ChartCard } from '../components/ChartCard';
 import { useEffect, useState } from 'react';
 import { Alert, AutoComplete, Button, Card, Col, Row, Segmented, Skeleton, Statistic, Tabs, Tag, Typography } from 'antd';
 import { api, errorText, type AccountActivity, type AccountSummary, type Levels, type Overview, type UserActivity } from '../api';
@@ -85,11 +86,11 @@ function PersonActivity({ person }: { person: AccountActivity }) {
   ];
   return <div data-testid="person-activity"><div className="section-heading"><h2>{nameOf(account)} <Typography.Text type="secondary">@{account.username}</Typography.Text></h2><Tag color={LEVEL[level].color}>{LEVEL[level].label}</Tag></div>
     <Row gutter={[16, 16]}>{metrics.map((m) => <Col key={m.label} xs={24} sm={12} xl={4}><Card className="kpi"><Statistic title={m.label} value={m.value} suffix={m.suffix} valueStyle={typeof m.value === 'string' ? { fontSize: 20 } : undefined} /></Card></Col>)}
-      <Col span={24}><Card title="Daily activity" extra={<Typography.Text type="secondary">{person.window} days · UTC</Typography.Text>}><Chart label={`Daily activity of ${account.username}`} option={{
+      <Col span={24}><ChartCard title="Daily activity" description={<>{person.window} days · UTC</>}><Chart label={`Daily activity of ${account.username}`} option={{
         xAxis: { type: 'category', data: dates.map(shortDay) }, yAxis: [{ type: 'value', name: 'items', minInterval: 1 }, { type: 'value', min: 0, max: 1, show: false }],
         series: [{ name: 'Encrypted items', type: 'bar', barMaxWidth: 18, data: dates.map((d) => byDay.get(d)?.items ?? 0) },
           { name: 'Used Convo', type: 'scatter', yAxisIndex: 1, data: dates.map((d) => { const v = byDay.get(d); return v && (v.opened || v.items > 0) ? 1 : null; }), itemStyle: { color: '#2E9D6A' } }],
-      }} /></Card></Col>
+      }} /></ChartCard></Col>
     </Row><p className="privacy-note">Encrypted items include messages, receipts, reactions and typing signals. Activity is recorded by day; no message content or recipients are shown.</p>
   </div>;
 }
@@ -115,7 +116,7 @@ function OrganizationOverview({ days, data }: { days: number; data: Overview }) 
           </Col>
         ))}
         <Col xs={24} xl={16}>
-          <Card title="Activity" extra={<Typography.Text type="secondary">encrypted items sent and people active per day</Typography.Text>}>
+          <ChartCard title="Activity" description={<>encrypted items sent and people active per day</>}>
             {data ? <Chart label="Encrypted items and active people per day" option={{
               xAxis: { type: 'category', data: x, boundaryGap: false },
               yAxis: [{ type: 'value', name: 'items', minInterval: 1 }, { type: 'value', name: 'people', minInterval: 1, splitLine: { show: false } }],
@@ -124,10 +125,10 @@ function OrganizationOverview({ days, data }: { days: number; data: Overview }) 
                 { name: 'Active people', type: 'line', smooth: true, showSymbol: false, yAxisIndex: 1, data: data.days.map((v) => v.activeAccounts) },
               ],
             }} /> : <Skeleton active />}
-          </Card>
+          </ChartCard>
         </Col>
         <Col xs={24} xl={8}>
-          <Card title="Who was active" extra={<Typography.Text type="secondary">by last device activity</Typography.Text>}>
+          <ChartCard title="Who was active" description={<>by last device activity</>}>
             {d ? <Chart label="People by last activity" height={280} option={{
               tooltip: { trigger: 'item' },
               legend: { bottom: 0, top: 'auto' },
@@ -140,18 +141,18 @@ function OrganizationOverview({ days, data }: { days: number; data: Overview }) 
                   { name: 'Disabled', value: d.disabled },
                 ] }],
             }} /> : <Skeleton active />}
-          </Card>
+          </ChartCard>
         </Col>
         <Col xs={24} xl={12}>
-          <Card title="New people" extra={<Typography.Text type="secondary">first sign-in per day</Typography.Text>}>
+          <ChartCard title="New people" description={<>first sign-in per day</>}>
             {data ? <Chart label="New accounts per day" height={240} option={{
               xAxis: { type: 'category', data: x }, yAxis: { type: 'value', minInterval: 1 },
               series: [{ name: 'New people', type: 'bar', barMaxWidth: 18, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: data.days.map((v) => v.newAccounts) }],
             }} /> : <Skeleton active />}
-          </Card>
+          </ChartCard>
         </Col>
         <Col xs={24} xl={12}>
-          <Card title="Calls" extra={<Typography.Text type="secondary">started per day</Typography.Text>}>
+          <ChartCard title="Calls" description={<>started per day</>}>
             {data ? <Chart label="Calls per day by type" height={240} option={{
               xAxis: { type: 'category', data: x }, yAxis: { type: 'value', minInterval: 1 },
               series: [
@@ -160,7 +161,7 @@ function OrganizationOverview({ days, data }: { days: number; data: Overview }) 
                 { name: 'of which group', type: 'line', smooth: true, showSymbol: false, data: data.days.map((v) => v.groupCalls) },
               ],
             }} /> : <Skeleton active />}
-          </Card>
+          </ChartCard>
         </Col>
       </Row>
       <p className="privacy-note" style={{ marginTop: 16 }}>Activity is kept for {data?.retentionDays ?? 90} days at day granularity. Encrypted items include messages, receipts, reactions and typing signals; the server cannot tell them apart.</p>

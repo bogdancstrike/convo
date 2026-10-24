@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntApp, Avatar, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tag, Typography } from 'antd';
-import { ApartmentOutlined, AuditOutlined, DashboardOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
+import { App as AntApp, Avatar, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tooltip, Typography } from 'antd';
+import { ApartmentOutlined, AuditOutlined, DashboardOutlined, EllipsisOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
 import { AdminError, api, type Me, type Permission } from './api';
 import { session, signIn, signOut } from './auth';
 import { themeConfig } from './theme';
@@ -79,17 +79,22 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
     <Layout className="console-frame">
       <Layout.Sider collapsible trigger={null} collapsed={collapsed} onCollapse={setCollapsed} breakpoint="lg" collapsedWidth={64} width={232} theme={dark ? 'dark' : 'light'} style={{ borderRight: '1px solid var(--ant-color-border-secondary, transparent)' }}>
         <div className={`brand${collapsed ? ' brand-collapsed' : ''}`}><img src="/logo.svg" alt="" />{!collapsed && <span>Convo<small>Admin console</small></span>}</div>
-        <Button type="text" className="sidebar-toggle" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((v) => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-testid="sidebar-toggle">{!collapsed && 'Collapse sidebar'}</Button>
         <Menu mode="inline" inlineCollapsed={collapsed} selectedKeys={page ? [page] : []} onClick={(e) => navigate(e.key)} data-testid="admin-menu"
           items={visible.map((p) => ({ key: p.key, icon: p.icon, label: p.label, 'data-testid': `admin-tab-${p.key}` }))} />
-          <div className="sidebar-footer">
-          <Space size={6}><MoonOutlined />{!collapsed && <span>Dark theme</span>}<Switch size="small" checked={dark} onChange={setDark} aria-label="Dark theme" /></Space>
-          <Space size={4} wrap data-testid="admin-roles" className={collapsed ? 'sidebar-roles-collapsed' : ''}>{me.roles.map((r) => <Tag key={r} color="blue">{ROLE_LABELS[r] ?? r}</Tag>)}</Space>
-          <Dropdown menu={{ items: [{ key: 'out', icon: <LogoutOutlined />, label: 'Sign out', onClick: () => void signOut() }] }}>
-            <Space style={{ cursor: 'pointer' }}><Avatar size="small" style={{ background: '#2596BE' }}>{admin.slice(0, 1).toUpperCase()}</Avatar>
-              <Typography.Text className={collapsed ? 'sidebar-name-collapsed' : ''} data-testid="admin-name">{admin}</Typography.Text></Space>
+        <div className="sidebar-footer">
+          <Dropdown trigger={['click', 'hover']} placement="topRight" menu={{ items: [{ key: 'out', icon: <LogoutOutlined />, label: 'Sign out', onClick: () => void signOut() }] }}>
+            <button type="button" className="sidebar-account" aria-label={`Account menu for ${admin}`}>
+              <Avatar size={32} className="sidebar-avatar">{admin.slice(0, 1).toUpperCase()}</Avatar>
+              <span className={`sidebar-account-info${collapsed ? ' sidebar-name-collapsed' : ''}`}>
+                <strong data-testid="admin-name" title={admin}>{admin}</strong>
+                <span className="sidebar-account-roles" data-testid="admin-roles" title={me.roles.map((r) => ROLE_LABELS[r] ?? r).join(' · ')}>{me.roles.map((r) => ROLE_LABELS[r] ?? r).join(' · ')}</span>
+              </span>
+              {!collapsed && <EllipsisOutlined className="sidebar-account-more" />}
+            </button>
           </Dropdown>
-          </div>
+          <div className="sidebar-appearance"><span className="sidebar-appearance-label"><MoonOutlined />{!collapsed && <span>Dark theme</span>}</span><Switch size="small" checked={dark} onChange={setDark} aria-label="Dark theme" /></div>
+          <Tooltip title={collapsed ? 'Expand sidebar' : undefined} placement="right"><Button type="text" className="sidebar-toggle" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((v) => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-testid="sidebar-toggle">{!collapsed && 'Collapse sidebar'}</Button></Tooltip>
+        </div>
       </Layout.Sider>
       <Layout>
         <Layout.Content className="console-content">

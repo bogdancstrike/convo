@@ -1,4 +1,5 @@
-import { Card, Col, Row, Skeleton, Statistic, Typography } from 'antd';
+import { ChartCard } from './ChartCard';
+import { Card, Col, Row, Skeleton, Statistic } from 'antd';
 import { Chart } from './Chart';
 import { SERIES } from '../theme';
 import type { Levels, Overview } from '../api';
@@ -29,7 +30,7 @@ export function ActivityStats({ days, levels, overview }: { days: number; levels
         </Col>
       ))}
       <Col xs={24} xl={8}>
-        <Card title="Activity levels" extra={<Typography.Text type="secondary">share of active days</Typography.Text>}>
+        <ChartCard title="Activity levels" description={<>share of active days</>}>
           {levels ? <Chart label="People by activity level" height={260} option={{
             tooltip: { trigger: 'item' }, legend: { bottom: 0, top: 'auto' },
             series: [{ type: 'pie', radius: ['45%', '72%'], label: { show: false }, itemStyle: { borderRadius: 6, borderWidth: 2 },
@@ -40,10 +41,10 @@ export function ActivityStats({ days, levels, overview }: { days: number; levels
                 { name: LEVEL.none.label, value: levels.none, itemStyle: { color: '#94a3b8' } },
               ] }],
           }} /> : <Skeleton active />}
-        </Card>
+        </ChartCard>
       </Col>
       <Col xs={24} xl={10}>
-        <Card title="People using Convo per day" extra={<Typography.Text type="secondary">sent something vs only opened</Typography.Text>}>
+        <ChartCard title="People using Convo per day" description={<>sent something vs only opened</>}>
           {overview ? <Chart label="People using Convo per day, split into senders and readers" height={260} option={{
             xAxis: { type: 'category', data: overview.days.map((d) => shortDay(d.day)), boundaryGap: false }, yAxis: { type: 'value', minInterval: 1 },
             series: [
@@ -51,18 +52,18 @@ export function ActivityStats({ days, levels, overview }: { days: number; levels
               { name: 'Only opened', type: 'line', stack: 'people', smooth: true, showSymbol: false, areaStyle: { opacity: 0.2 }, data: overview.days.map((d) => Math.max(0, d.activeAccounts - d.senders)) },
             ],
           }} /> : <Skeleton active />}
-        </Card>
+        </ChartCard>
       </Col>
       <Col xs={24} xl={6}>
-        <Card title="By weekday" extra={<Typography.Text type="secondary">encrypted items</Typography.Text>}>
+        <ChartCard title="By weekday" description={<>encrypted items</>}>
           {overview ? <Chart label="Encrypted items by weekday" height={260} option={{
             xAxis: { type: 'category', data: WEEKDAYS }, yAxis: { type: 'value', minInterval: 1 },
             series: [{ name: 'Items', type: 'bar', barMaxWidth: 22, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: byWeekday }],
           }} /> : <Skeleton active />}
-        </Card>
+        </ChartCard>
       </Col>
       <Col xs={24} xl={16}>
-        <Card title="Web and Android" extra={<Typography.Text type="secondary">people per day on each platform</Typography.Text>}>
+        <ChartCard title="Web and Android" description={<>people per day on each platform</>}>
           {overview ? <Chart label="People per day on web and Android" height={240} option={{
             xAxis: { type: 'category', data: overview.days.map((d) => shortDay(d.day)) }, yAxis: { type: 'value', minInterval: 1 },
             series: [
@@ -70,10 +71,10 @@ export function ActivityStats({ days, levels, overview }: { days: number; levels
               { name: 'Android', type: 'bar', barMaxWidth: 10, itemStyle: { borderRadius: [3, 3, 0, 0], color: SERIES[4] }, data: overview.days.map((d) => d.androidUsers) },
             ],
           }} /> : <Skeleton active />}
-        </Card>
+        </ChartCard>
       </Col>
       <Col xs={24} xl={8}>
-        <Card title="Platform share" extra={<Typography.Text type="secondary">person-days in the period</Typography.Text>}>
+        <ChartCard title="Platform share" description={<>person-days in the period</>}>
           {overview ? <Chart label="Share of usage by platform" height={240} option={{
             tooltip: { trigger: 'item' }, legend: { bottom: 0, top: 'auto' },
             series: [{ type: 'pie', radius: ['45%', '72%'], label: { show: false }, itemStyle: { borderRadius: 6, borderWidth: 2 }, data: [
@@ -81,7 +82,7 @@ export function ActivityStats({ days, levels, overview }: { days: number; levels
               { name: 'Android', value: overview.days.reduce((n, d) => n + d.androidUsers, 0), itemStyle: { color: SERIES[4] } },
             ] }],
           }} /> : <Skeleton active />}
-        </Card>
+        </ChartCard>
       </Col>
     </Row>
   );
