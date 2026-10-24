@@ -84,6 +84,8 @@ class CallManager(private val app: MainActivity) {
     var room: Room? = null; private set
     var micOn by mutableStateOf(true); private set
     var cameraOn by mutableStateOf(false); private set
+    /** Loudspeaker instead of the earpiece (WhatsApp: on by default for video calls only). */
+    var speakerOn by mutableStateOf(false); private set
     private val e2ee = mutableMapOf<String, E2EEState>()
     private var keyProvider: BaseKeyProvider? = null
     /** Current group-call media key (generation 0 = the ring's key). */
@@ -177,6 +179,22 @@ class CallManager(private val app: MainActivity) {
     }
 
     fun toggleMic() { val r = room ?: return; app.lifecycleScope.launch { micOn = !micOn; r.localParticipant.setMicrophoneEnabled(micOn) } }
+    fun toggleSpeaker() { route(!speakerOn) }
+
+    /**
+     * Routes call audio to the loudspeaker or back to the earpiece. A connected headset or
+     * Bluetooth device keeps priority when the loudspeaker is off.
+     */
+    private fun route(speaker: Boolean) {
+        val handler = room?.audioSwitchHandler ?: return
+        val devices = handler.availableAudioDevices
+        val target = if (speaker) devices.firstOrNull { it is com.twilio.audioswitch.AudioDevice.Speakerphone }
+            else devices.firstOrNull { it is com.twilio.audioswitch.AudioDevice.BluetoothHeadset || it is com.twilio.audioswitch.AudioDevice.WiredHeadset }
+                ?: devices.firstOrNull { it is com.twilio.audioswitch.AudioDevice.Earpiece }
+        if (target != null) handler.selectDevice(target)
+        speakerOn = speaker && target != null
+    }
+
     fun toggleCamera() { val r = room ?: return; app.lifecycleScope.launch { cameraOn = !cameraOn; r.localParticipant.setCameraEnabled(cameraOn) } }
 
     private fun end(answered: Boolean) {
@@ -245,10 +263,62 @@ class CallManager(private val app: MainActivity) {
                 created.connect(url, join.optString("token"))
                 micOn = true; created.localParticipant.setMicrophoneEnabled(true)
                 cameraOn = video; if (video) created.localParticipant.setCameraEnabled(true)
+                route(speaker = video)
                 version++; onRoomChanged()
+                if (BuildConfig.DEBUG) { logMediaStats(created); if (debugProperty("debug.convo.calltone") == "1") injectTestTone(created) }
             } catch (_: Exception) { end(answered = false); finish("failed") }
         }
     }
+
+    /**
+     * Debug builds only: logs inbound/outbound media counters every 5 seconds (tag ConvoCallStats),
+     * so a call test can prove that audio and video actually flow and decrypt in both directions.
+     * Counters only; no media or keys.
+     */
+    private fun logMediaStats(room: Room) {
+        app.lifecycleScope.launch {
+            while (this@CallManager.room === room) {
+                room.getSubscriberRTCStats { report ->
+                    val inbound = report.statsMap.values.filter { it.type == "inbound-rtp" }
+                    val audio = inbound.firstOrNull { it.members["kind"] == "audio" }?.members
+                    val video = inbound.firstOrNull { it.members["kind"] == "video" }?.members
+                    android.util.Log.d("ConvoCallStats", "in audio bytes=${audio?.get("bytesReceived")} energy=${audio?.get("totalAudioEnergy")} samples=${audio?.get("totalSamplesReceived")} " +
+                        "video frames=${video?.get("framesDecoded")} size=${video?.get("frameWidth")}x${video?.get("frameHeight")}")
+                }
+                room.getPublisherRTCStats { report ->
+                    val outbound = report.statsMap.values.filter { it.type == "outbound-rtp" }
+                    android.util.Log.d("ConvoCallStats", "out " + outbound.joinToString(" ") { "${it.members["kind"]}=${it.members["bytesSent"]}" })
+                }
+                delay(5000)
+            }
+        }
+    }
+
+    /**
+     * Debug builds only, opt-in with `adb shell setprop debug.convo.calltone 1`: replaces the
+     * microphone signal with a 440 Hz tone so automated call tests can prove that audio from this
+     * device is audible on the other side (emulators often capture only silence).
+     */
+    private fun injectTestTone(room: Room) {
+        val track = room.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track as? io.livekit.android.room.track.LocalAudioTrack ?: return
+        var phase = 0.0
+        track.setAudioBufferCallback(object : io.livekit.android.audio.AudioBufferCallback {
+            override fun onBuffer(buffer: java.nio.ByteBuffer, audioFormat: Int, channelCount: Int, sampleRate: Int, bytesRead: Int, captureTimeNs: Long): Long {
+                val pcm = buffer.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                for (frame in 0 until bytesRead / 2 / channelCount) {
+                    val sample = (Math.sin(phase) * 6000).toInt().toShort()
+                    phase += 2 * Math.PI * 440 / sampleRate
+                    for (c in 0 until channelCount) pcm.putShort((frame * channelCount + c) * 2, sample)
+                }
+                return captureTimeNs
+            }
+        })
+        android.util.Log.i("ConvoCallStats", "test tone enabled")
+    }
+
+    private fun debugProperty(name: String): String? = try {
+        Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String
+    } catch (_: Exception) { null }
 
     private fun onRoomChanged() {
         val active = call ?: return
@@ -269,7 +339,7 @@ class CallManager(private val app: MainActivity) {
     private fun finish(reason: String) {
         stopRing()
         events?.cancel(); events = null
-        room?.let { it.disconnect(); it.release() }; room = null; e2ee.clear()
+        room?.let { it.disconnect(); it.release() }; room = null; e2ee.clear(); speakerOn = false
         call = call?.copy(phase = "ended", reason = reason)
         app.lifecycleScope.launch { delay(1800); if (call?.phase == "ended") call = null }
     }
@@ -335,11 +405,12 @@ class CallManager(private val app: MainActivity) {
                 if (videoTiles.isNotEmpty() && call.phase == "connected") Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
                     Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp)); Text(if (manager.encrypted) " End-to-end encrypted" else " Securing call…", style = MaterialTheme.typography.bodySmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(if (call.phase == "incoming") 72.dp else 28.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(if (call.phase == "incoming") 72.dp else 20.dp)) {
                     if (call.phase == "incoming") {
                         CallButton(Icons.Outlined.CallEnd, "Decline", Color(0xFFC62828)) { manager.decline() }
                         CallButton(if (call.video) Icons.Outlined.Videocam else Icons.Outlined.Call, "Accept", Color(0xFF11713F)) { manager.accept() }
                     } else if (call.phase != "ended") {
+                        CallButton(if (manager.speakerOn) Icons.Outlined.VolumeUp else Icons.Outlined.VolumeDown, if (manager.speakerOn) "Turn speaker off" else "Turn speaker on", if (manager.speakerOn) Color(0xFFE9EDEF) else Color(0x29FFFFFF), enabled = manager.room != null, contentColor = if (manager.speakerOn) Color(0xFF0B141A) else Color.White) { manager.toggleSpeaker() }
                         CallButton(if (manager.micOn) Icons.Outlined.Mic else Icons.Outlined.MicOff, if (manager.micOn) "Mute" else "Unmute", Color(0x29FFFFFF), enabled = manager.room != null) { manager.toggleMic() }
                         if (call.video) CallButton(if (manager.cameraOn) Icons.Outlined.Videocam else Icons.Outlined.VideocamOff, if (manager.cameraOn) "Turn camera off" else "Turn camera on", Color(0x29FFFFFF), enabled = manager.room != null) { manager.toggleCamera() }
                         CallButton(Icons.Outlined.CallEnd, "End call", Color(0xFFC62828)) { manager.hangUp() }
@@ -364,8 +435,8 @@ private fun videoOf(participant: Participant): VideoTrack? =
     }
 }
 
-@Composable private fun CallButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
-    FilledIconButton(onClick, Modifier.size(64.dp), enabled = enabled, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = color, contentColor = Color.White)) {
+@Composable private fun CallButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, contentColor: Color = Color.White, onClick: () -> Unit) {
+    FilledIconButton(onClick, Modifier.size(64.dp), enabled = enabled, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = color, contentColor = contentColor)) {
         Icon(icon, label, Modifier.size(28.dp))
     }
 }
