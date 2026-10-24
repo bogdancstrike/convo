@@ -68,9 +68,20 @@ identity import. The sync-outage rule runs independently of source-event ingesti
 configured grace period after backend startup. Source recovery clears the episode marker; it
 does not silently resolve the existing investigation. A later outage creates a new alert.
 
-**Detection rules** allows administrators/security operators to enable/disable each rule, set
-severity, configure thresholds/windows, and control notifications. Role grants always trigger
-individually; the audit-sync window is its grace period. Changes require a reason and recent
+**Enabled rules** draws each enabled rule as a React Flow diagram using its live settings: event
+source → condition (threshold within window, every grant, or no successful sync within the grace
+period) → alert with its severity → episode deduplication → notification (or "no notification"
+when the rule's notifications are off) → audited operator review (acknowledge, resolve, reopen).
+Selecting a card explains that step; the selection is kept in the URL (`ruleNode`). Disabled rules
+are listed in a note and drawn greyed out without a flow. The diagram also has a table view.
+
+**Detection rules** shows one card per rule with a plain-language summary that follows the current
+draft (for example "Raise a HIGH alert when one person fails to sign in 5 times within 5
+minutes"). Administrators/security operators can switch a rule on or off in the card header,
+choose severity, edit the threshold/window inline and control notifications. Role grants have no
+editable threshold or window (both fixed at 1); audit sync only has a grace period. The reason
+field, **Reset** and **Save rule** appear only when a card has unsaved changes. Users without
+rule-management permission see the same cards read-only. Changes require a reason and recent
 sign-in. They apply to subsequently processed events, including pending ingestion, without
 rewriting existing alert severity or replaying older processed audit entries.
 

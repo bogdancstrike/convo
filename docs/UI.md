@@ -321,7 +321,9 @@ Specs §31 supplies test scripts, methods and pass/fail criteria for all journey
 Live sessions has a remote person picker and a full-width, backend-controlled session table.
 User details includes the same Sessions tab. A session opens a lateral detail surface with a
 maximize action and explicit termination scope. Security alerts has an operational count strip,
-Inbox and Detection rules tabs, severity/status/rule filters, and a detail surface containing
+Inbox, Enabled rules (a step-by-step flow of each enabled rule with live settings; disabled rules
+greyed out) and Detection rules (one card per rule with a plain-language summary; reason and Save
+appear only for unsaved changes) tabs, severity/status/rule filters, and a detail surface containing
 evidence links, lifecycle actions and history. Both surfaces preserve browser Back/Forward state
 and use component scrolling. Desktop alerts require explicit per-administrator browser opt-in.
 See [admin security operations](admin-security.md) for behavior and role restrictions.

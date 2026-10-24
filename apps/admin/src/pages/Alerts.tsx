@@ -3,7 +3,9 @@ import { Alert, App, Button, Card, Descriptions, Drawer, Select, Space, Spin, Sw
 import { ArrowLeftOutlined, CheckOutlined, CompressOutlined, ExpandOutlined, ReloadOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { api, errorText, type AlertDetail, type AlertSeverity, type AlertStatus, type SecurityAlert } from '../api';
 import { AdminTable } from '../components/AdminTable';
-import { AlertRules, ALERT_RULE_NAMES } from '../components/AlertRules';
+import { AlertRules, ALERT_RULE_NAMES, useAlertRules } from '../components/AlertRules';
+import { AlertRuleFlow } from '../components/AlertRuleFlow';
+import { ChartCard } from '../components/ChartCard';
 import { useAlertInbox } from '../components/SecurityAlertContext';
 import { useReason } from '../components/confirm';
 import { useViewState } from '../components/useViewState';
@@ -14,7 +16,7 @@ const COLORS: Record<AlertSeverity, string> = { critical: 'red', high: 'volcano'
 const STATUS: Record<AlertStatus, string> = { open: 'Open', acknowledged: 'Acknowledged', resolved: 'Resolved' };
 
 export function AlertsPage({ can, navigate, param }: PageProps) {
-  const { view, update, link } = useViewState({ tab: 'inbox', status: 'open', severity: 'all', ruleId: 'all', display: '' });
+  const { view, update, link } = useViewState({ tab: 'inbox', status: 'open', severity: 'all', ruleId: 'all', display: '', ruleNode: '' });
   const inbox = useAlertInbox(); const { message } = App.useApp(); const ask = useReason();
   const [detail, setDetail] = useState<AlertDetail | null>(null); const [error, setError] = useState<string | null>(null); const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -22,6 +24,7 @@ export function AlertsPage({ can, navigate, param }: PageProps) {
     if (param) void api.alertDetail(param).then((data) => { if (active) setDetail(data); }).catch((e) => { if (active) setError(errorText(e)); });
     return () => { active = false; };
   }, [param, version]);
+  const rules = useAlertRules(version);
   const refresh = () => { inbox.refresh(); setVersion((v) => v + 1); };
   const close = () => navigate(link('alerts'));
   const expanded = view.display === 'page';
@@ -67,7 +70,8 @@ export function AlertsPage({ can, navigate, param }: PageProps) {
         { title: 'Status', key: 'status', render: (_, row) => STATUS[row.status] }, { title: 'Who / target', key: 'subjectName', dataIndex: 'subjectName' },
         { title: 'Events', key: 'occurrences', dataIndex: 'occurrences' }, { title: 'Created', key: 'createdAt', render: (_, row) => fmtTime(row.createdAt) }, { title: 'Latest event', key: 'lastSeen', render: (_, row) => fmtTime(row.lastSeen) },
       ]} /></Card> },
-      { key: 'rules', label: 'Detection rules', children: <AlertRules editable={can('ALERT_RULES_MANAGE')} onChanged={refresh} /> },
+      { key: 'enabled', label: 'Enabled rules', children: <ChartCard className="diagram-surface" title="How enabled rules raise alerts" description="Each row follows one enabled rule from its event source to operator review, using its current settings. Select a card for details."><AlertRuleFlow rules={rules.rules} error={rules.error} selected={view.ruleNode} onSelect={(ruleNode) => update({ ruleNode }, !ruleNode)} /></ChartCard> },
+      { key: 'rules', label: 'Detection rules', children: <AlertRules rules={rules.rules} error={rules.error} editable={can('ALERT_RULES_MANAGE')} onSaved={(updated) => { rules.setRules(updated); inbox.refresh(); }} /> },
     ]} />
     {param && <Drawer open width={720} title="Security alert" onClose={close} extra={toggle} destroyOnHidden>{detailContent}</Drawer>}
   </div>;

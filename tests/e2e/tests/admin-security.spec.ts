@@ -56,8 +56,10 @@ test('real failed logins produce one durable alert with evidence, audited lifecy
   const operator = await createUser(request, 'alertoperator', { realmRoles: ['convo-security'] });
   const person = await createUser(request, 'loginfailures');
   const page = await newPage(browser);
+  let savedRules: Array<Record<string, unknown> & { id: string }> = [];
   try {
     await adminSignIn(page, operator); await adminGo(page, 'alerts');
+    savedRules = (await adminApi(page, '/alerts/rules')).body;
     for (let i = 0; i < 6; i++) {
       const result = await request.post('/auth/realms/enclave/protocol/openid-connect/token', { form: { grant_type: 'password', client_id: 'admin-cli', username: person.username, password: 'incorrect-password' } });
       expect(result.status()).toBe(401);
@@ -83,18 +85,59 @@ test('real failed logins produce one durable alert with evidence, audited lifecy
     await page.reload(); await expect(page.getByTestId('alert-details')).toContainText('review once more');
     expect((await adminApi(page, `/tables/alerts?q=${person.username}&ruleId=failed-logins`)).body.total).toBe(1);
     await page.getByRole('button', { name: 'Close', exact: true }).click();
+    // Enabled rules: every enabled rule is drawn as a flow with its live settings; disabled rules are greyed out.
+    const login = savedRules.find((r) => r.id === 'failed-logins')!; const sync = savedRules.find((r) => r.id === 'audit-sync')!;
+    expect((await adminApi(page, '/alerts/rules/audit-sync', 'POST', { ...sync, enabled: false, reason: 'show disabled rule in flow' })).status).toBe(200);
+    await page.getByTestId('alerts-refresh').click();
+    await page.getByRole('tab', { name: 'Enabled rules' }).click();
+    await expect(page).toHaveURL(/tab=enabled/);
+    const flow = page.getByTestId('alert-rule-flow');
+    await expect(flow.getByTestId('alert-flow-failed-logins-source')).toBeVisible();
+    await expect(flow.getByTestId('alert-flow-failed-logins-condition')).toContainText(`${login.threshold} failed sign-ins in ${login.windowMinutes} minute`);
+    await expect(flow.getByTestId('alert-flow-failed-logins-alert')).toContainText(`Raise a ${String(login.severity).toUpperCase()} alert`);
+    await expect(flow.getByTestId('alert-flow-lifecycle')).toBeVisible();
+    await expect(flow.getByTestId('alert-flow-audit-sync-disabled')).toContainText('Disabled');
+    await expect(flow.getByTestId('alert-flow-audit-sync-source')).toHaveCount(0);
+    await expect(page.getByTestId('alert-flow-disabled-note')).toContainText('Identity audit sync unavailable');
+    await page.screenshot({ path: 'test-results/admin-alert-rule-flow.png', fullPage: true });
+    await flow.getByTestId('alert-flow-failed-logins-episode').click();
+    await expect(page).toHaveURL(/ruleNode=failed-logins%3Aepisode/);
+    await expect(page.getByTestId('alert-flow-details')).toContainText('extend its event count');
+    await page.getByRole('button', { name: 'Got it' }).click();
+    await page.getByRole('switch', { name: 'Dark theme' }).click();
+    await expect(flow.locator('.react-flow.dark')).toBeVisible();
+    await page.waitForTimeout(500); // let the theme transition settle before capturing
+    await page.screenshot({ path: 'test-results/admin-alert-rule-flow-dark.png', fullPage: true });
+    await page.getByRole('switch', { name: 'Dark theme' }).click();
+    // Detection rules: the summary follows the draft; reason, Reset and Save appear only for unsaved changes.
     await page.getByRole('tab', { name: 'Detection rules' }).click();
     const rule = page.getByTestId('alert-rule-failed-logins');
+    await expect(rule.getByRole('button', { name: 'Save rule' })).toHaveCount(0);
+    await expect(page.getByTestId('alert-rule-summary-audit-sync')).toContainText('Off.');
+    await page.waitForTimeout(500); // let the theme transition settle before capturing
+    await page.screenshot({ path: 'test-results/admin-alert-rules-overview.png', fullPage: true });
+    const nextWindow = Number(login.windowMinutes) + 1;
+    await rule.getByLabel('Window in minutes').fill(String(nextWindow));
+    await expect(page.getByTestId('alert-rule-summary-failed-logins')).toContainText(`within ${nextWindow} minutes`);
+    await rule.getByRole('button', { name: 'Reset' }).click();
+    await expect(rule.getByRole('button', { name: 'Save rule' })).toHaveCount(0);
+    await rule.getByLabel('Window in minutes').fill(String(nextWindow));
+    await page.screenshot({ path: 'test-results/admin-alert-rules-editing.png', fullPage: true });
     await rule.getByLabel('Reason for this change').fill('verify rule editing');
     await rule.getByRole('button', { name: 'Save rule' }).click();
     await expect(page.getByText('Alert rule updated', { exact: true })).toBeVisible();
+    expect((await adminApi(page, '/alerts/rules')).body.find((r: { id: string }) => r.id === 'failed-logins').windowMinutes).toBe(nextWindow);
+    await expect(rule.getByRole('button', { name: 'Save rule' })).toHaveCount(0);
     const invalid = await adminApi(page, '/alerts/rules/failed-logins', 'POST', { enabled: true, severity: 'high', threshold: 0, windowMinutes: 5, notificationsEnabled: true, reason: 'invalid rule' });
     expect(invalid.status).toBe(400);
     const audit = await adminApi(page, '/tables/audit?q=investigation%20started');
     expect(audit.body.rows.some((r: { action: string }) => r.action === 'alert.acknowledge')).toBe(true);
     const detail = await adminApi(page, `/alerts/${id}`); expect(detail.body.history.length).toBeGreaterThanOrEqual(4);
     await page.screenshot({ path: 'test-results/admin-alert-rules.png', fullPage: true });
-  } finally { await closeAll(page); }
+  } finally {
+    for (const r of savedRules) await adminApi(page, `/alerts/rules/${r.id}`, 'POST', { ...r, reason: 'restore rule after verification' });
+    await closeAll(page);
+  }
 });
 
 test('device enrollment and role grants trigger alerts while helpdesk and auditors retain separate duties', async ({ browser, request }) => {
