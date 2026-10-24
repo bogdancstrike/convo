@@ -130,15 +130,20 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     val at = messages.indexOfFirst { "${it.optString("authorId")}/${it.optString("id")}" == anchor }
                     listState.scrollToItem(if (at >= 0) at + 1 else messages.size)
                 } else {
+                    // Measured against the layout before the new rows (item 0 is the encryption notice).
                     val wasAtBottom = (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= lastSize - 1
-                    if (wasAtBottom) { if (animate) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }
-                    else if (messages.size > lastSize) newBelow += messages.size - lastSize
+                    // WhatsApp: sending always returns to the newest message, wherever you had scrolled.
+                    val sentByMe = messages.size > lastSize && messages.last().optString("direction") == "out"
+                    if (wasAtBottom || sentByMe) { if (animate) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size); newBelow = 0 }
+                    else if (messages.size > lastSize) newBelow += messages.subList(lastSize.coerceAtMost(messages.size), messages.size).count { it.optString("direction") == "in" && !it.has("notice") }
                 }
                 lastSize = messages.size
             }
-            val canScrollDown by remember { derivedStateOf { listState.canScrollForward } }
+            // The newest message (item index messages.size, after the encryption notice) is out of view.
+            val canScrollDown by remember(messages.size) { derivedStateOf { (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) < messages.size } }
             LaunchedEffect(canScrollDown) { if (!canScrollDown) newBelow = 0 }
-            LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
+            Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
                 item { EncryptionNotice() }
                 itemsIndexed(messages, key = { _, it -> "${it.optString("authorId")}/${it.optString("id")}" }) { index, message ->
                     val previous = messages.getOrNull(index - 1)
@@ -154,10 +159,12 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     }
                 }
             }
-            if (canScrollDown) Row(Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 4.dp), horizontalArrangement = Arrangement.End) {
-                BadgedBox(badge = { if (newBelow > 0) Badge { Text("$newBelow") } }) {
-                    SmallFloatingActionButton({ scope.launch { if (animate) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }; newBelow = 0 }) { Icon(Icons.Outlined.KeyboardArrowDown, "Jump to latest messages") }
-                }
+            // Shown once the newest message is out of view; floats over the list like WhatsApp's.
+            androidx.compose.animation.AnimatedVisibility(canScrollDown && messages.isNotEmpty(),
+                Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp),
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(), exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()) {
+                ScrollToLatestButton(newBelow) { scope.launch { if (animate) listState.animateScrollToItem(messages.size) else listState.scrollToItem(messages.size) }; newBelow = 0 }
+            }
             }
             if (!starredOnly) {
                 if (conversation.optBoolean("request") && !conversation.optBoolean("blocked")) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -550,5 +557,21 @@ fun dayOf(at: Long): java.time.LocalDate = java.time.Instant.ofEpochMilli(at).at
     Surface(Modifier.padding(horizontal = 8.dp).offset(y = (-6).dp).testTag("reaction"), shape = RoundedCornerShape(12.dp), color = colors.panelRaised, shadowElevation = 1.dp, border = androidx.compose.foundation.BorderStroke(1.dp, colors.wallpaper)) {
         RawText(counts.joinToString(" ") { it.first } + (counts.sumOf { it.second }.takeIf { it > 1 }?.let { " $it" } ?: ""),
             Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 14.sp, color = colors.textSecondary)
+    }
+}
+
+/**
+ * WhatsApp's "scroll to latest" control: a small round chevron over the bottom of the chat, with a
+ * green count of messages that arrived while you were reading older ones.
+ */
+@Composable private fun ScrollToLatestButton(newMessages: Int, onClick: () -> Unit) {
+    val colors = LocalConvoColors.current
+    Box(contentAlignment = Alignment.TopCenter) {
+        Surface(onClick = onClick, Modifier.padding(top = if (newMessages > 0) 10.dp else 0.dp).size(42.dp), shape = CircleShape, color = colors.panel, shadowElevation = 3.dp) {
+            Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.KeyboardDoubleArrowDown, tr("Jump to latest messages"), tint = colors.textSecondary) }
+        }
+        if (newMessages > 0) Surface(shape = RoundedCornerShape(50), color = colors.success) {
+            RawText(if (newMessages > 99) "99+" else "$newMessages", Modifier.padding(horizontal = 6.dp, vertical = 1.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        }
     }
 }
