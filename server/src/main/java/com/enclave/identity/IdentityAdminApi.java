@@ -50,6 +50,9 @@ public interface IdentityAdminApi {
     /** Accounts (including disabled ones) whose handle or display name contains the query. */
     List<AccountSummary> searchAccounts(String query, int limit);
 
+    /** Paged source for admin directory queries; filtering/sorting happens before final paging. */
+    List<AccountSummary> accountDirectory(int offset, int limit);
+
     Optional<AccountSummary> account(UUID accountId);
 
     /** Active devices of an account. */

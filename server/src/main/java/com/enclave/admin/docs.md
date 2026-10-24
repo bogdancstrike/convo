@@ -70,3 +70,27 @@ Admin tokens stay in sessionStorage. A single-flight refresh renews within 60 se
 and on resumed/expired sessions, with one refresh/retry for an API 401. Temporary connectivity
 failures retain refresh credentials. Explicit logout clears the session and redirects to Keycloak.
 Refreshing a token does not reset `auth_time`: sensitive actions retain the ten-minute step-up.
+
+## Table and throughput views
+
+Management tables share `/v1/admin/tables/{people,role-holders,permissions,audit,activity,health}`.
+`q`, whitelisted `sort`, `order=asc|desc`, `page`, `size` (1–100) and `f_<column>` search filters
+are applied before paging. Audit queries run in PostgreSQL; directory/role sources consume the
+identity provider's complete paged source before filtering and sorting, rather than sorting a
+truncated browser page. Provider enumeration is bounded at 100,000 identities and fails explicitly
+if exceeded. The people table retains Convo users with an unavailable/deleted IdP record and
+reports an IdP outage instead of silently hiding the directory. Column display and density are
+local preferences; query state lives in the URL for Back/Forward and sharing.
+
+V29 adds `actor_name` and `target_name` projections for audit table sorting/search. They are not
+part of the signed canonical fields. Existing rows are backfilled in batches of 500; the original
+actor/target/hash remain unchanged. Username, device number and historical snapshots are visible
+in the table; recorded identifiers remain in a detail popover.
+
+V28 counts accepted encrypted submissions, new calls and attachment upload sessions per UTC
+minute. Counters update transactionally with the accepted operation, and carry no sender,
+recipient, attachment ID or content. Counters are retained for two days and displayed over 1/6/24
+hours. Upload sessions count starts, not successful object-storage completion; a sent attachment
+may contribute both one upload session and encrypted submissions. Minutes before recording began
+are shown as missing observations, not invented history. The current minute is partial. This
+telemetry respects `enclave.admin.activity.enabled` and does not reveal text/media/voice types.

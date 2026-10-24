@@ -1,3 +1,4 @@
+import { DiagramView } from './DiagramView';
 import { Alert, Button, Descriptions, Modal, Space, Typography } from 'antd';
 import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react';
 import { useDark } from './useDark';
@@ -35,9 +36,9 @@ export function AccessFlow({ selected, onSelect }: { selected: string; onSelect:
   const edge = (source: string, target: string, label?: string): Edge => ({ id: `${source}-${target}`, source, target, label, type: 'straight', markerEnd: { type: MarkerType.ArrowClosed, color: '#7192a8' }, style: { stroke: '#7192a8', strokeWidth: 1.5 }, labelStyle: { fontSize: 11 } });
   const edges = [edge('admin', 'signin'), edge('signin', 'permission'), edge('permission', 'stepup'), edge('stepup', 'action'), edge('permission', 'denied', 'refused'), edge('denied', 'audit', 'record attempt'), edge('action', 'audit', 'record change')];
   return <div className="diagram-frame" data-testid="access-flow"><Typography.Paragraph type="secondary">Follow an administrator request from sign-in to the audit trail. Select a card to understand its checks and what to do next.</Typography.Paragraph>
-    <div className="access-canvas"><ReactFlow nodes={nodes} edges={edges} fitView minZoom={0.25} colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }} onNodeClick={(_, n) => onSelect(n.id)}>
+    <div className="access-canvas"><DiagramView id="access" nodes={nodes} edges={edges} onSelect={onSelect}><ReactFlow nodes={nodes} edges={edges} fitView minZoom={0.25} colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }} onNodeClick={(_, n) => onSelect(n.id)}>
       <Background gap={24} /><Controls showInteractive={false} />
-    </ReactFlow></div>
+    </ReactFlow></DiagramView></div>
     <Modal open={!!current} title={current?.title} width={650} onCancel={() => onSelect('')} footer={<Button type="primary" onClick={() => onSelect('')}>Got it</Button>} data-testid="access-details">
       {current && <Space direction="vertical" size="middle" style={{ width: '100%' }}><Typography.Paragraph>{current.description}</Typography.Paragraph>
         <Descriptions column={1} bordered size="small">{current.facts.map(([label, value]) => <Descriptions.Item key={label} label={label}>{value}</Descriptions.Item>)}</Descriptions>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, App, Button, Card, Descriptions, Drawer, Empty, List, Segmented, Space, Spin, Tabs, Tag, Typography } from 'antd';
 import { DeleteOutlined, KeyOutlined, StopOutlined, CheckCircleOutlined, ExpandOutlined, CompressOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { api, errorText, type AccountActivity, type AccountSummary, type DeviceSummary, type Permission } from '../api';
+import { UserSystemChart } from './UserSystemChart';
 import { Chart } from './Chart';
 import { fmtDay, fmtTime, LEVEL, nameOf, shortDay } from '../format';
 import { useReason } from './confirm';
@@ -9,8 +10,8 @@ import { AuditTrail } from './AuditTrail';
 import { SignInSections, useSignIn } from './SignInPanel';
 
 /** Everything about one Convo account an administrator may see and do (never message content). */
-export function UserDrawer({ accountId: requestedAccountId, subjectId, tab = 'overview', days = 30, expanded = false, onMaximize, onDaysChange, onTabChange, onClose, can, onChanged }: {
-  expanded?: boolean; onMaximize?: () => void; days?: number; onDaysChange?: (days: number) => void; accountId: string | null; subjectId?: string | null; tab?: string; onTabChange?: (tab: string) => void;
+export function UserDrawer({ accountId: requestedAccountId, subjectId, tab = 'overview', days = 30, expanded = false, graphNode = '', onGraphNodeChange, onMaximize, onDaysChange, onTabChange, onClose, can, onChanged }: {
+  graphNode?: string; onGraphNodeChange?: (node: string) => void; expanded?: boolean; onMaximize?: () => void; days?: number; onDaysChange?: (days: number) => void; accountId: string | null; subjectId?: string | null; tab?: string; onTabChange?: (tab: string) => void;
   onClose: () => void; can: (p: Permission) => boolean; onChanged?: () => void;
 }) {
   const { message } = App.useApp();
@@ -45,6 +46,7 @@ export function UserDrawer({ accountId: requestedAccountId, subjectId, tab = 'ov
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />}
       {((accountId && !account && !error) || (!accountId && !u && !signIn.error)) ? <Spin /> : (
         <Tabs activeKey={tab} onChange={onTabChange} items={[
+          { key: 'organization', label: 'Organization', children: <UserSystemChart identity={signIn.account} account={account} devices={devices} selected={graphNode} onSelect={(id) => onGraphNodeChange?.(id)} onTab={(key) => onTabChange?.(key)} /> },
           { key: 'overview', label: 'Overview', children: <SignInSections {...signIn} can={can} onChanged={changed} sections={['details']} /> },
           ...(account && can('STATS_READ') ? [{ key: 'activity', label: 'Activity', children: (
             <Space direction="vertical" style={{ width: '100%' }} size="middle">

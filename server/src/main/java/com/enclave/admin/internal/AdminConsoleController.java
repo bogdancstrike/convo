@@ -151,7 +151,7 @@ class AdminConsoleController {
         return noStore(new AccountActivityView(level(account, totals, window), series, window));
     }
 
-    private static UserActivity level(AccountSummary account, ActivityStore.AccountActivity a, int window) {
+    static UserActivity level(AccountSummary account, ActivityStore.AccountActivity a, int window) {
         if (a == null) return new UserActivity(account, 0, 0, null, "none");
         double share = (double) a.activeDays() / window;
         String level = share >= 0.5 ? "high" : share >= 0.15 ? "medium" : "low";

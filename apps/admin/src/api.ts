@@ -39,6 +39,8 @@ export interface RoleHolder { id: string; username: string; firstName: string | 
 export interface RoleView { role: string; permissions: Permission[]; holders: RoleHolder[] }
 export interface Levels { high: number; medium: number; low: number; none: number; window: number }
 export interface Throughput { minutes: { minute: string; items: number; calls: number; uploads: number }[]; recordingSince: string; capturedAt: string; enabled: boolean }
+export interface TableQuery { q: string; sort: string; order: 'asc' | 'desc'; page: number; size: number; filters: Record<string, string> }
+export interface TablePage<T> { rows: T[]; total: number; page: number; size: number; warnings: string[] }
 export interface Health { push: { pending: number; oldestPending: string; deadLetters: Record<string, number> } }
 
 export class AdminError extends Error {
@@ -67,6 +69,10 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 const q = encodeURIComponent;
 export const api = {
+  table: <T,>(resource: string, scope: Record<string, string>, query: TableQuery) => {
+    const params = new URLSearchParams({ ...scope, q: query.q, sort: query.sort, order: query.order, page: String(query.page), size: String(query.size), ...Object.fromEntries(Object.entries(query.filters).map(([k, v]) => [`f_${k}`, v])) });
+    return call<TablePage<T>>('GET', `/tables/${q(resource)}?${params}`);
+  },
   me: () => call<Me>('GET', '/me'),
   throughput: (minutes: number) => call<Throughput>('GET', `/stats/throughput?minutes=${minutes}`),
   overview: (days: number) => call<Overview>('GET', `/stats/overview?days=${days}`),

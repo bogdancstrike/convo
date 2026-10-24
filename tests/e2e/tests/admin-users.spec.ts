@@ -9,7 +9,7 @@ import { ADMIN_URL, adminSignIn, closeAll, confirmReason, createUser, enroll, ne
 async function openSignIn(admin: Page, username: string) {
   await admin.getByTestId('admin-tab-users').click();
   await admin.getByTestId('admin-search').fill(username);
-  await admin.getByTestId(`idp-user-${username}`).getByRole('button').first().click();
+  await admin.getByTestId(`idp-user-${username}`).or(admin.getByTestId(`admin-account-${username}`)).getByRole('button').first().click();
   return admin.getByTestId('user-drawer');
 }
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, App, Button, Card, Col, Empty, Row, Statistic, Table, Typography } from 'antd';
+import { Alert, App, Button, Card, Col, Row, Statistic, Typography } from 'antd';
 import { ReloadOutlined, SendOutlined } from '@ant-design/icons';
 import { api, errorText, type Health } from '../api';
+import { AdminTable } from '../components/AdminTable';
 import { useReason } from '../components/confirm';
 import { seconds } from '../format';
 import type { PageProps } from '../Shell';
@@ -35,12 +36,11 @@ export function HealthPage({ can }: PageProps) {
             if (!reason) return;
             try { const r = await api.redrive(reason); message.success(`${r.queued} wake-ups queued again.`); load(); } catch (e) { message.error(errorText(e)); }
           }}>Retry failed message wake-ups</Button>}>
-            {dead.length === 0 ? <Empty description="No failures in the last 24 hours" /> : (
-              <Table rowKey="key" pagination={false} dataSource={dead} onRow={() => ({ 'data-testid': 'admin-push-dead-row' } as never)} columns={[
-                { title: 'Reason', dataIndex: 'reason', render: (r: string) => REASONS[r] ?? r },
-                { title: 'Kind', dataIndex: 'kind', render: (k: string) => k === 'call' ? 'Call rings' : 'Messages' },
-                { title: 'Count', dataIndex: 'n', align: 'right' },
-              ]} />)}
+            <div className="health-table"><AdminTable<{ key: string; reason: string; kind: string; n: number }> id="health" resource="health" rowKey="key" defaultSort="n" defaultOrder="desc" refreshKey={health} columns={[
+              { title: 'Reason', key: 'reason', dataIndex: 'reason', render: (r: string) => REASONS[r] ?? r },
+              { title: 'Kind', key: 'kind', dataIndex: 'kind', render: (k: string) => k === 'call' ? 'Call rings' : 'Messages' },
+              { title: 'Count', key: 'n', dataIndex: 'n', align: 'right' },
+            ]} /></div>
             <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>Only counts are shown; failures are kept for 24 hours without device addresses or content.</Typography.Paragraph>
           </Card>
         </Col>

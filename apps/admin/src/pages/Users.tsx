@@ -1,77 +1,40 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Avatar, Button, Card, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { useCallback, useState } from 'react';
+import { Avatar, Button, Card, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined, UserAddOutlined } from '@ant-design/icons';
-import { api, errorText, type AccountSummary, type SignInAccount } from '../api';
+import { type AccountSummary, type SignInAccount } from '../api';
 import { UserDrawer } from '../components/UserDrawer';
 import { useViewState } from '../components/useViewState';
+import { AdminTable } from '../components/AdminTable';
 import { CreateUser } from '../components/CreateUser';
-import { fmtDay, nameOf } from '../format';
+import { fmtDay } from '../format';
 import type { PageProps } from '../Shell';
 
 interface Person { key: string; username: string; name: string; account?: AccountSummary; identity?: SignInAccount }
 
 /** One directory for enrolled people and sign-in accounts still waiting to join. */
 export function UsersPage({ can, navigate, param }: PageProps) {
-  const { view, update, link } = useViewState({ search: '', status: 'all', page: '1', size: '25', sort: 'name-asc', drawerDays: '30', display: '' });
-  const query = view.search, filter = view.status;
-  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
-  const [identities, setIdentities] = useState<SignInAccount[]>([]);
-  const [busy, setBusy] = useState(true);
-  const [errors, setErrors] = useState<string[]>([]);
+  const { view, update, link } = useViewState({ search: '', status: 'all', page: '1', size: '25', sort: 'name-asc', drawerDays: '30', display: '', graphNode: '' });
   const [version, setVersion] = useState(0);
   const [creating, setCreating] = useState(false);
   const load = useCallback(() => setVersion((v) => v + 1), []);
-  useEffect(() => {
-    let active = true;
-    const timer = setTimeout(() => {
-      setBusy(true); setErrors([]);
-      void Promise.allSettled([api.accounts(query), api.idpUsers(query)]).then(([a, i]) => {
-        if (!active) return;
-        setAccounts(a.status === 'fulfilled' ? a.value : []);
-        setIdentities(i.status === 'fulfilled' ? i.value : []);
-        setErrors([a, i].flatMap((r, idx) => r.status === 'rejected' ? [`${idx ? 'Sign-in accounts' : 'Convo accounts'}: ${errorText(r.reason)}`] : []));
-        setBusy(false);
-      });
-    }, 250);
-  return () => { active = false; clearTimeout(timer); };
-  }, [query, version]);
-  const people = useMemo<Person[]>(() => {
-    const matched = new Set<string>();
-    const rows: Person[] = identities.map((identity) => {
-      const account = accounts.find((a) => a.accountId === identity.convoAccountId);
-      if (account) matched.add(account.accountId);
-      const u = identity.user;
-      return { key: `idp:${u.id}`, username: u.username, name: account ? nameOf(account) : [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username, account, identity };
-    });
-    return [...rows, ...accounts.filter((a) => !matched.has(a.accountId)).map((account) => ({ key: account.accountId, username: account.username, name: nameOf(account), account }))]
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [accounts, identities]);
-  const shown = people.filter((p) => filter === 'all' || (filter === 'joined' && (p.account || p.identity?.convoAccountId)) || (filter === 'pending' && p.identity && !p.identity.convoAccountId)
-    || (filter === 'blocked' && (p.account?.status === 'disabled' || p.identity?.user.enabled === false)));
   const open = (p: Person) => navigate(link(p.account ? `users/${p.account.accountId}` : p.identity?.convoAccountId ? `users/${p.identity.convoAccountId}` : `users/sign-in/${p.identity!.user.id}`));
   const parts = param.split('/');
   const identityId = parts[0] === 'sign-in' ? parts[1] ?? null : null;
   const accountId = !identityId && parts[0] ? parts[0] : null;
   const detailBase = identityId ? `users/sign-in/${identityId}` : `users/${accountId}`;
   const tab = (identityId ? parts[2] : parts[1]) || 'overview';
-  const details = (accountId || identityId) ? <UserDrawer key={detailBase} accountId={accountId} subjectId={identityId} tab={tab} onTabChange={(key) => navigate(link(`${detailBase}/${key}`))} onClose={() => { update({ display: '' }, true); navigate(link('users')); }} expanded={view.display === 'page'} onMaximize={() => update({ display: view.display === 'page' ? '' : 'page' })} days={Number(view.drawerDays) || 30} onDaysChange={(days) => update({ drawerDays: String(days) })} can={can} onChanged={load} /> : null;
+  const details = (accountId || identityId) ? <UserDrawer key={detailBase} accountId={accountId} subjectId={identityId} tab={tab} onTabChange={(key) => navigate(link(`${detailBase}/${key}`))} onClose={() => { update({ display: '' }, true); navigate(link('users')); }} graphNode={view.graphNode} onGraphNodeChange={(graphNode) => update({ graphNode }, !graphNode)} expanded={view.display === 'page'} onMaximize={() => update({ display: view.display === 'page' ? '' : 'page' })} days={Number(view.drawerDays) || 30} onDaysChange={(days) => update({ drawerDays: String(days) })} can={can} onChanged={load} /> : null;
   if (details && view.display === 'page') return details;
   return (
     <div className="page-frame page-users" data-testid="admin-users">
       <div className="page-head">
         <div><div className="eyebrow">People & access</div><h1>Users</h1><p>One place for everyone: sign-in access, Convo activity, linked devices and people who have yet to join.</p></div>
-        <Space><Button icon={<ReloadOutlined />} onClick={load} loading={busy}>Refresh</Button>{can('USERS_CREATE') && <Button type="primary" icon={<UserAddOutlined />} onClick={() => setCreating(true)} data-testid="admin-create-user">Create user</Button>}</Space>
+        <Space><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>{can('USERS_CREATE') && <Button type="primary" icon={<UserAddOutlined />} onClick={() => setCreating(true)} data-testid="admin-create-user">Create user</Button>}</Space>
       </div>
-      {errors.map((error) => <Alert key={error} type="warning" showIcon message={error} style={{ marginBottom: 16 }} />)}
       <Card className="table-surface">
-        <div className="directory-toolbar">
-          <Input.Search allowClear aria-label="Search users" placeholder="Search name, username or email" value={query} onChange={(e) => update({ search: e.target.value, page: '1' }, true)} data-testid="admin-search" />
-          <Select aria-label="Filter users" value={filter} onChange={(status) => update({ status, page: '1' })} options={[{ value: 'all', label: 'Everyone' }, { value: 'joined', label: 'Joined Convo' }, { value: 'pending', label: 'Not joined yet' }, { value: 'blocked', label: 'Access restricted' }]} />
-          <Select aria-label="Sort users" value={view.sort} onChange={(sort) => update({ sort, page: '1' })} options={[{ value: 'name-asc', label: 'Name · A to Z' }, { value: 'name-desc', label: 'Name · Z to A' }, { value: 'devices', label: 'Most devices' }, { value: 'last', label: 'Recently active' }]} />
-          <Typography.Text type="secondary">{shown.length} results · up to 200 Convo / 100 sign-in accounts per search</Typography.Text>
-        </div>
-        <Table<Person> rowKey="key" size="middle" loading={busy} dataSource={[...shown].sort((a, b) => view.sort === 'devices' ? (b.account?.activeDevices ?? 0) - (a.account?.activeDevices ?? 0) : view.sort === 'last' ? (b.account?.lastSeenDay ?? '').localeCompare(a.account?.lastSeenDay ?? '') : a.name.localeCompare(b.name) * (view.sort === 'name-desc' ? -1 : 1))} scroll={{ x: 900, y: 1 }} pagination={{ current: Math.max(1, Number(view.page) || 1), pageSize: Math.max(1, Number(view.size) || 25), showSizeChanger: true, hideOnSinglePage: true, onChange: (page, size) => update({ page: String(page), size: String(size) }) }}
-          rowClassName={() => 'clickable-row'} onRow={(p) => ({ onClick: () => open(p), 'data-testid': p.account ? `admin-account-${p.username}` : `idp-user-${p.username}` } as never)}
+        <AdminTable<Person> id="people" resource="people" rowKey="key" scope={{ status: view.status }} defaultSort="name" defaultSize={25} refreshKey={version} searchId="admin-search" searchPlaceholder="Search name, username or email"
+          controls={<Select aria-label="Filter users" value={view.status} onChange={(status) => update({ status })} options={[{ value: 'all', label: 'Everyone' }, { value: 'joined', label: 'Joined Convo' }, { value: 'pending', label: 'Not joined yet' }, { value: 'blocked', label: 'Access restricted' }]} style={{ width: 170 }} />}
+          onRow={(p) => ({ onClick: () => open(p), 'data-testid': p.account ? `admin-account-${p.username}` : `idp-user-${p.username}` } as never)}
           columns={[
             { title: 'Person', key: 'person', render: (_, p) => <Space><Avatar>{p.name.slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}>
               <Button type="link" className="person-link" onClick={(e) => { e.stopPropagation(); open(p); }}>{p.name}</Button><Typography.Text type="secondary">@{p.username}</Typography.Text></Space></Space> },

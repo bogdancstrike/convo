@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ADMIN_URL, adminGo, adminSignIn, closeAll, createUser, enroll, newPage, signIn } from './support';
+import { ADMIN_URL, adminGo, adminSignIn, closeAll, createUser, enroll, newPage, signIn, startChat, send } from './support';
 
 async function adminApi(page: Page, path: string) {
   return page.evaluate(async (url) => {
@@ -235,17 +235,96 @@ test('organization details scroll internally without enlarging the page', async 
 test('system throughput reports accepted operations per minute', async ({ browser, request }) => {
   const user = await createUser(request, 'throughputadmin', { realmRoles: ['convo-admin'] });
   const member = await createUser(request, 'throughputsender');
-  const [page, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  const peerU = await createUser(request, 'throughputpeer');
+  const [page, person, peer] = await Promise.all([newPage(browser), newPage(browser), newPage(browser)]);
   try {
-    await enroll(person, member); await adminSignIn(page, user);
+    await enroll(person, member); await enroll(peer, peerU); await adminSignIn(page, user);
     const initial = await adminApi(page, '/stats/throughput?minutes=60');
     expect(initial.minutes).toHaveLength(60);
-    await person.getByTestId('new-chat').click(); await person.getByTestId('note-to-self').click();
-    await person.getByTestId('composer').fill('throughput counter'); await person.getByTestId('composer').press('Enter');
-    // Note-to-self is local-only; actual transport traffic is tested by the messaging suite.
+    const before = initial.minutes.reduce((sum: number, m: { items: number }) => sum + m.items, 0);
+    await startChat(person, peerU); await send(person, 'throughput counter');
+    await expect.poll(async () => (await adminApi(page, '/stats/throughput?minutes=60')).minutes.reduce((sum: number, m: { items: number }) => sum + m.items, 0)).toBeGreaterThan(before);
     await page.getByRole('tab', { name: 'System throughput' }).click();
     await expect(page.getByTestId('system-throughput')).toContainText('operations');
     const times = initial.minutes.map((m: { minute: string }) => Date.parse(m.minute));
     expect(times.slice(1).every((t: number, i: number) => t - times[i] === 60_000)).toBe(true);
+  } finally { await closeAll(page, person, peer); }
+});
+
+test('table column settings and backend pagination, sorting and filtering', async ({ browser, request }) => {
+  test.setTimeout(120_000);
+  const user = await createUser(request, 'tableadmin', { realmRoles: ['convo-admin'] });
+  const page = await newPage(browser);
+  try {
+    await adminSignIn(page, user); await adminGo(page, 'audit');
+    const ten = await adminApi(page, '/tables/audit?size=10&sort=seq&order=asc');
+    expect(ten.rows).toHaveLength(10); expect(ten.total).toBeGreaterThan(10);
+    const sequence = ten.rows.map((r: { seq: number }) => r.seq);
+    expect(sequence).toEqual([...sequence].sort((a, b) => a - b));
+    const filtered = await adminApi(page, `/tables/audit?size=10&f_actor=${user.username}`);
+    expect(filtered.total).toBeGreaterThan(0); expect(filtered.rows.every((r: { actorName: string }) => r.actorName === user.username)).toBe(true);
+    await expect(page.getByTestId('admin-audit-entry').first()).toBeVisible();
+    const table = page.getByTestId('admin-audit');
+    await table.locator('.ant-pagination-options-size-changer').click();
+    await page.locator('.ant-select-item-option').filter({ hasText: /^10 \/ page$/ }).click();
+    await expect(table.getByTestId('admin-audit-entry')).toHaveCount(10);
+    await page.getByTestId('table-settings-audit').click();
+    await page.getByRole('checkbox', { name: 'Reason', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Reason', exact: true })).not.toBeChecked();
+    await page.mouse.click(300, 30);
+    await expect(table.getByRole('columnheader', { name: /Reason/ })).toHaveCount(0);
+    await page.getByTestId('table-settings-audit').click(); await page.getByRole('button', { name: 'Reset display settings' }).click();
+    await page.mouse.click(300, 30);
+    await expect(table.getByRole('columnheader', { name: /Reason/ })).toHaveCount(1);
+  } finally { await closeAll(page); }
+});
+
+test('user organization graph shows name, phone and connected device information', async ({ browser, request }) => {
+  const user = await createUser(request, 'graphadmin', { realmRoles: ['convo-admin'] });
+  const member = await createUser(request, 'graphmember');
+  const [page, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    await enroll(person, member); await adminSignIn(page, user);
+    const account = (await adminApi(page, `/accounts?q=${member.username}`))[0];
+    await adminGo(page, `users/${account.accountId}/organization?display=page`);
+    const graph = page.getByTestId('user-organization');
+    await expect(graph.locator('[data-id="person"]')).toContainText(member.name);
+    await expect(graph.locator('[data-id="person"]')).toContainText(member.phone);
+    await expect(graph.locator('[data-id="device:1"]')).toContainText('Web browser');
+    await expect(graph.locator('[data-id="device:1"]')).toContainText('Last active');
+    await expect(graph.locator('.react-flow__edge[data-id="account:device:1"]')).toBeVisible();
+    await page.screenshot({ path: 'test-results/admin-user-organization.png', fullPage: true });
+    await graph.locator('[data-id="device:1"]').click();
+    await expect(page.getByRole('dialog')).toContainText('Device #1');
   } finally { await closeAll(page, person); }
+});
+
+test('data charts and diagrams can switch to inspectable tables and back', async ({ browser, request }) => {
+  const user = await createUser(request, 'chartviewadmin', { realmRoles: ['convo-admin'] });
+  const page = await newPage(browser);
+  try {
+    await adminSignIn(page, user);
+    await page.getByRole('button', { name: 'Show table: Encrypted items and active people per day', exact: true }).click();
+    const values = page.getByLabel('Encrypted items and active people per day', { exact: true });
+    await expect(values.getByRole('columnheader', { name: /Encrypted items/ })).toBeVisible();
+    await expect(values.getByRole('columnheader', { name: /Active people/ })).toBeVisible();
+    await page.goBack(); await expect(page.getByRole('img', { name: 'Encrypted items and active people per day', exact: true })).toBeVisible();
+    await adminGo(page, 'roles?tab=organization');
+    const graph = page.getByTestId('role-organigram');
+    await graph.getByRole('button', { name: 'Show diagram as table' }).click();
+    await expect(graph.getByRole('columnheader', { name: /Connections/ })).toBeVisible();
+    await graph.getByRole('button', { name: 'Show diagram', exact: true }).click();
+    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+  } finally { await closeAll(page); }
+});
+
+test('sidebar footer keeps theme and role controls visible within the viewport', async ({ browser, request }) => {
+  const user = await createUser(request, 'sidebaradmin', { realmRoles: ['convo-admin'] });
+  const page = await newPage(browser);
+  try {
+    await adminSignIn(page, user);
+    await expect(page.getByRole('switch', { name: 'Dark theme' })).toBeInViewport();
+    await expect(page.getByTestId('admin-roles')).toBeInViewport();
+    await expect(page.getByTestId('admin-tab-health')).toBeInViewport();
+  } finally { await closeAll(page); }
 });

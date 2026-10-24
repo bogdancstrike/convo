@@ -44,6 +44,13 @@ class IdentityAdminService implements IdentityAdminApi {
 
     @Override
     @Transactional(readOnly = true)
+    public List<AccountSummary> accountDirectory(int offset, int limit) {
+        return jdbc.sql(SUMMARY + " ORDER BY a.username OFFSET :offset LIMIT :limit")
+                .param("offset", Math.max(0, offset)).param("limit", Math.max(1, Math.min(1000, limit))).query(IdentityAdminService::summary).list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<AccountSummary> account(UUID accountId) {
         return jdbc.sql(SUMMARY + " WHERE a.account_id = :id").param("id", accountId).query(IdentityAdminService::summary).optional();
     }

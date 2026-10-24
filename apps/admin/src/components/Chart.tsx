@@ -1,5 +1,6 @@
-import { Button, Space, Table, Tooltip } from 'antd';
+import { Button, Space, Tooltip } from 'antd';
 import { LineChartOutlined, TableOutlined } from '@ant-design/icons';
+import { LocalDataTable } from './LocalDataTable';
 import { chartData } from './chartData';
 import { useViewState } from './useViewState';
 import ReactECharts from 'echarts-for-react';
@@ -29,8 +30,7 @@ export function Chart({ option, height = 280, label }: { option: EChartsOption; 
   return (
     <div className="data-chart" aria-label={label}>
       <div className="chart-view-controls"><Space.Compact><Tooltip title="Chart"><Button size="small" type={mode === 'chart' ? 'primary' : 'default'} icon={<LineChartOutlined />} aria-label={`Show chart: ${label}`} onClick={() => update({ [stateKey]: 'chart' })} /></Tooltip><Tooltip title="Table"><Button size="small" type={mode === 'table' ? 'primary' : 'default'} icon={<TableOutlined />} aria-label={`Show table: ${label}`} onClick={() => update({ [stateKey]: 'table' })} /></Tooltip></Space.Compact></div>
-      {mode === 'table' ? <Table size="small" rowKey="key" dataSource={data.rows} pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }} scroll={{ x: 'max-content', y: height - 70 }}
-        columns={data.columns.map((c) => ({ title: c.title, dataIndex: c.key, key: c.key, sorter: (a, b) => typeof a[c.key] === 'number' && typeof b[c.key] === 'number' ? Number(a[c.key]) - Number(b[c.key]) : String(a[c.key] ?? '').localeCompare(String(b[c.key] ?? '')), render: (v: unknown) => v == null ? 'No observation' : String(v) }))} /> : <div role="img" aria-label={label}><ReactECharts option={themed} style={{ height }} notMerge lazyUpdate opts={{ renderer: 'svg' }} /></div>}
+      {mode === 'table' ? <LocalDataTable id={stateKey} rows={data.rows} columns={data.columns} height={height} /> : <div role="img" aria-label={label}><ReactECharts option={themed} style={{ height }} notMerge lazyUpdate opts={{ renderer: 'svg' }} /></div>}
     </div>
   );
 }

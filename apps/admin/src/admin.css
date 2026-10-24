@@ -144,3 +144,48 @@ html, body, #root { height: 100%; overflow: hidden; }
 @media (max-width: 600px) { .console-content { padding: 12px !important; } .page-head h1 { font-size: 21px; } .page-head p { -webkit-line-clamp: 1; } .role-summary > .ant-typography { display: none; } .role-summary { gap: 8px 20px; } .role-summary strong { font-size: 17px; } }
 .chart-view-controls { display: flex; justify-content: flex-end; margin-bottom: 4px; }
 .data-chart { min-width: 0; }
+.user-system-canvas { height: clamp(300px, calc(100dvh - 310px), 660px); background: #2596be05; border: 1px solid #91a9b333; border-radius: 16px; overflow: hidden; }
+.system-node { text-align: start; border: 1px solid #9bb9ce70; border-radius: 16px; padding: 18px; color: #17324d; background: linear-gradient(135deg, #fff, #f0f8fc); box-shadow: 0 8px 24px #17324d12; }
+.system-node-top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.system-node-icon { width: 32px; height: 32px; border-radius: 10px; background: #2596be14; color: #2596be; display: grid; place-items: center; font-size: 18px; }
+.system-node-kicker { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; opacity: .6; }
+.system-node-indicator { margin-inline-start: auto; width: 6px; height: 6px; border-radius: 50%; background: #2596be; }
+.system-node > strong { display: block; font-size: 17px; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.system-node-subtitle { display: block; font-size: 12px; opacity: .65; margin-block: 5px 14px; }
+.system-node-facts { display: grid; gap: 7px; padding-top: 12px; border-top: 1px solid #91a9b333; }
+.system-node-facts > span { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
+.system-node-facts small { opacity: .65; }.system-node-facts b { font-weight: 500; text-align: end; }
+.system-node-person { color: #f1f8fc; background: linear-gradient(135deg, #17324d, #176a87); border-color: #8bd3e2; box-shadow: 0 8px 28px #176a8730; }
+.system-node-person .system-node-icon { color: #8bd3e2; background: #ffffff18; }
+.system-node-device { border-top: 3px solid #2596be; }
+.react-flow.dark .system-node:not(.system-node-person) { color: #edf6fc; background: linear-gradient(135deg, #192a3a, #12212d); border-color: #52718a70; }
+.system-node:hover { border-color: #2596be; box-shadow: 0 10px 30px #2596be25; }
+.remote-table { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.remote-table > .ant-alert { flex-shrink: 0; margin-bottom: 10px; }
+.table-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0; padding-block: 0 12px; }
+.table-controls > .ant-input-search { width: 300px; max-width: 100%; flex: 1 1 220px; }
+.table-tools { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.column-options { display: flex; flex-direction: column; gap: 8px; }
+.remote-table .ant-table-wrapper { flex: 1; min-height: 0; }
+.remote-table .ant-spin-nested-loading, .remote-table .ant-spin-container { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.remote-table .ant-table { flex: 1; min-height: 0; }
+.remote-table .ant-table-container { height: 100%; display: flex; flex-direction: column; }
+.remote-table .ant-table-header { flex-shrink: 0; }
+.remote-table .ant-table-body { flex: 1; min-height: 0; max-height: none !important; overflow: auto !important; overscroll-behavior: contain; }
+.remote-table .ant-table-pagination { flex-shrink: 0; margin-block: 10px 0; }
+.drawer-audit { height: clamp(300px, calc(100dvh - 260px), 650px); display: flex; flex-direction: column; }
+.health-table { height: 300px; display: flex; }
+.activity-table-card { height: calc(100dvh - 240px); min-height: 350px; display: flex; flex-direction: column; }
+.activity-table-card > .ant-card-body { flex: 1; min-height: 0; display: flex; }
+.scroll-surface > .ant-card-body { display: flex; flex-direction: column; overflow: hidden; }
+.diagram-view { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
+.diagram-view-content { flex: 1; min-height: 0; overflow: hidden; }
+.diagram-view .chart-view-controls { padding: 6px 8px 0; flex-shrink: 0; }
+.local-data-table { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.diagram-view-content > .local-data-table { height: 100% !important; padding: 10px; box-sizing: border-box; }
+.page-audit .page-head p { max-width: 460px; font-size: 13px; }
+.page-audit > .ant-alert { padding-block: 9px; margin-bottom: 12px !important; }
+.audit-identity { display: inline-block; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.role-inline-summary { padding-top: 4px; }
+.page-roles > .page-head { align-items: center; }
+.page-roles .page-head p { font-size: 13px; }

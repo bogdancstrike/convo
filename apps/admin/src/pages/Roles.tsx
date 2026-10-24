@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, App, AutoComplete, Avatar, Button, Card, Col, Collapse, Empty, Input, Row, Select, Popover, Space, Tabs, Table, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Avatar, Button, Card, Col, Collapse, Row, Select, Popover, Space, Tabs, Tag, Typography } from 'antd';
 import { DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
 import '@xyflow/react/dist/style.css';
 import { api, errorText, type RoleView, type SignInAccount } from '../api';
 import { useReason } from '../components/confirm';
 import { PERMISSIONS, ROLE_LABELS } from '../format';
 import { BRAND, SERIES } from '../theme';
+import { AdminTable } from '../components/AdminTable';
 import { PermissionMap } from '../components/PermissionMap';
 import { AccessFlow } from '../components/AccessFlow';
 import { useViewState } from '../components/useViewState';
@@ -32,15 +33,10 @@ export function RolesPage({ can, navigate }: PageProps) {
   return (
     <div className="page-frame page-roles" data-testid="admin-roles-page">
       <div className="page-head">
-        <div><h1>Roles &amp; permissions</h1><p>Administrator roles at the organization's sign-in service. Explore who has access, compare permissions, and manage assignments from one place.</p></div>
+        <div><h1>Roles &amp; permissions</h1><p>Manage role assignments and access. Permissions from multiple roles combine.</p></div>
+        <Space className="role-inline-summary" wrap><Tag>{roles?.length ?? '—'} roles</Tag><Tag>{roles ? new Set(roles.flatMap((r) => r.holders.map((h) => h.id))).size : '—'} people with access</Tag><Tag>{Object.keys(PERMISSIONS).length} permissions</Tag></Space>
       </div>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
-      <div className="role-summary">
-        <div><strong>{roles?.length ?? '—'}</strong><span>Administrator roles</span></div>
-        <div><strong>{roles ? new Set(roles.flatMap((r) => r.holders.map((h) => h.id))).size : '—'}</strong><span>People with access</span></div>
-        <div><strong>{Object.keys(PERMISSIONS).length}</strong><span>Scoped permissions</span></div>
-        <Typography.Text type="secondary">Roles are additive. A person with several roles receives their combined permissions.</Typography.Text>
-      </div>
       <Tabs activeKey={view.tab} onChange={(tab) => update({ tab })} items={[
         { key: 'roles', label: 'Role explorer', children: <div className="role-explorer">
           <nav aria-label="Administrator roles" className="role-nav">{(roles ?? []).map((r) => <button key={r.role} type="button" aria-pressed={selected === r.role} onClick={() => update({ role: r.role, holderPage: '1' })}>
@@ -50,9 +46,11 @@ export function RolesPage({ can, navigate }: PageProps) {
         </div> },
         { key: 'organization', label: 'Organization chart', children: <RoleOrgChart roles={roles ?? []} view={view} update={update} canManage={can('ROLES_MANAGE')} onPerson={(id, tab) => navigate(`users/sign-in/${id}${tab ? `/${tab}` : ''}`)} onRole={(role) => update({ role, tab: 'roles', holderPage: '1' })} /> },
         { key: 'compare', label: 'Compare permissions', children: <Card className="scroll-surface"><Typography.Paragraph type="secondary">Compare exactly which permissions each role grants. Assignments are independent.</Typography.Paragraph>
-          <Table rowKey="key" pagination={false} scroll={{ x: 1000 }} size="middle" dataSource={Object.entries(PERMISSIONS).map(([key, meta]) => ({ key, ...meta }))}
-            columns={[{ title: 'Permission', dataIndex: 'label', fixed: 'left', width: 300, render: (label: string, row) => <><Typography.Text strong>{label}</Typography.Text><br /><Typography.Text type="secondary">{row.group}</Typography.Text></> },
-              ...(roles ?? []).map((r) => ({ title: ROLE_LABELS[r.role] ?? r.role, key: r.role, align: 'center' as const, render: (_: unknown, row: { key: string }) => r.permissions.includes(row.key as never) ? <Tag color="green">Allowed</Tag> : <span aria-label="Not granted">—</span> }))]} />
+          <AdminTable<Record<string, string | boolean>> id="permissions" resource="permissions" rowKey="key" defaultSort="label" defaultSize={20} columns={[
+            { title: 'Permission', dataIndex: 'label', key: 'label', width: 300, render: (label: string) => <Typography.Text strong>{label}</Typography.Text> },
+            { title: 'Area', dataIndex: 'group', key: 'group', width: 130 },
+            ...(roles ?? []).map((r) => ({ title: ROLE_LABELS[r.role] ?? r.role, key: r.role, align: 'center' as const, render: (_: unknown, row: Record<string, string | boolean>) => row[r.role] ? <Tag color="green">Allowed</Tag> : <span aria-label="Not granted">—</span> })),
+          ]} />
         </Card> },
         { key: 'map', label: 'Permission map', children: <Card className="diagram-surface"><PermissionMap roles={roles ?? []} focus={view.permission} onFocus={(permission) => update({ permission })} /></Card> },
         { key: 'flow', label: 'How access works', children: <Card className="diagram-surface"><AccessFlow selected={view.accessNode} onSelect={(accessNode) => update({ accessNode }, !accessNode)} /></Card> },
@@ -86,7 +84,7 @@ function RoleCards({ roles, can, onChanged, view, update, onPerson }: {
   };
   if (!roles) return <Card loading />;
   return (
-    <Row gutter={[16, 16]}>
+    <Row gutter={0}>
       {roles.map((r) => (
         <Col key={r.role} span={24}>
           <Card title={<Space>{ROLE_LABELS[r.role] ?? r.role}<Tag>{r.holders.length}</Tag></Space>} data-testid={`role-card-${r.role}`}
@@ -98,26 +96,20 @@ function RoleCards({ roles, can, onChanged, view, update, onPerson }: {
                 {permissions.map((p) => <Tag key={p} style={{ borderInlineStart: `3px solid ${color}` }}>{PERMISSIONS[p]?.label ?? p}</Tag>)}
               </Space></div> : null;
             })}</div> }]} />
-            <div className="directory-toolbar">
+            <AdminTable<RoleView['holders'][number]> id="role-holders" resource="role-holders" rowKey="id" defaultSort="person" defaultSize={20} refreshKey={roles}
+              scope={{ role: r.role, status: view.holderStatus }} searchPlaceholder="Search name or username" testId="role-holders-table" controls={<>
               {manage && <Popover trigger="click" title={`Grant ${ROLE_LABELS[r.role] ?? r.role}`} content={<AutoComplete style={{ width: 300, maxWidth: '100%' }} value={query[r.role] ?? ''} aria-label="Assign this role to a person" placeholder="Grant this role: search by username"
                 data-testid={`role-add-${r.role}`} onChange={(v) => search(r.role, v)}
                 options={(options[r.role] ?? []).filter((o) => !r.holders.some((h) => h.id === o.user.id)).map((o) => ({ value: o.user.id, label: o.user.username }))}
                 onSelect={(id: string) => { const u = options[r.role]?.find((o) => o.user.id === id); if (u) void change(r.role, id, u.user.username, true); }} />}><Button icon={<UserAddOutlined />}>Assign person</Button></Popover>}
-              <Input.Search allowClear aria-label="Search people in selected role" placeholder="Search name or username" value={view.holderSearch} onChange={(e) => update({ holderSearch: e.target.value, holderPage: '1' }, true)} />
-              <Select aria-label="Filter role holders by sign-in status" style={{ minWidth: 150 }} value={view.holderStatus} onChange={(holderStatus) => update({ holderStatus, holderPage: '1' })} options={[{ value: 'all', label: 'All sign-in statuses' }, { value: 'allowed', label: 'Sign-in allowed' }, { value: 'blocked', label: 'Sign-in blocked' }]} />
-              <Select aria-label="Sort role holders" style={{ minWidth: 140 }} value={view.holderSort} onChange={(holderSort) => update({ holderSort, holderPage: '1' })} options={[{ value: 'name-asc', label: 'Name · A to Z' }, { value: 'name-desc', label: 'Name · Z to A' }, { value: 'username', label: 'Username · A to Z' }]} />
-            </div>
-            <Table rowKey="id" size="middle" scroll={{ x: 440, y: 'max(300px, calc(100vh - 410px))' }} data-testid="role-holders-table" locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={r.holders.length ? 'No people match these filters' : 'No people assigned yet'} /> }}
-              dataSource={r.holders.filter((h) => `${h.username} ${h.firstName ?? ''} ${h.lastName ?? ''}`.toLowerCase().includes(view.holderSearch.toLowerCase()) && (view.holderStatus === 'all' || h.enabled === (view.holderStatus === 'allowed')))
-                .sort((a, b) => view.holderSort === 'username' ? a.username.localeCompare(b.username) : `${a.firstName ?? ''} ${a.lastName ?? ''} ${a.username}`.localeCompare(`${b.firstName ?? ''} ${b.lastName ?? ''} ${b.username}`) * (view.holderSort === 'name-desc' ? -1 : 1))}
-              pagination={{ current: Math.max(1, Number(view.holderPage) || 1), pageSize: Math.max(1, Number(view.holderSize) || 20), pageSizeOptions: [20, 50, 100], showSizeChanger: true, showTotal: (total) => `${total} matching people`, onChange: (page, size) => update({ holderPage: String(page), holderSize: String(size) }) }}
+              <Select aria-label="Filter role holders by sign-in status" value={view.holderStatus} onChange={(holderStatus) => update({ holderStatus, holderPage: '1' })} options={[{ value: 'all', label: 'All sign-in statuses' }, { value: 'allowed', label: 'Sign-in allowed' }, { value: 'blocked', label: 'Sign-in blocked' }]} style={{ width: 170 }} />
+              </>}
               columns={[
                 { title: 'Person', key: 'person', render: (_, h) => <Space><Avatar style={{ background: BRAND.ocean }}>{h.username.slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}>
                   <Button type="link" className="person-link" onClick={() => onPerson(h.id)}>{[h.firstName, h.lastName].filter(Boolean).join(' ') || h.username}</Button><Typography.Text type="secondary">@{h.username}</Typography.Text></Space></Space> },
                 { title: 'Sign-in', key: 'status', width: 130, render: (_, h) => <Tag color={h.enabled ? 'green' : 'red'}>{h.enabled ? 'Allowed' : 'Blocked'}</Tag> },
                 ...(manage ? [{ title: 'Actions', key: 'actions', width: 110, render: (_: unknown, h: RoleView['holders'][number]) => <Button size="small" danger type="text" icon={<DeleteOutlined />} aria-label={`Remove ${h.username}`} data-testid={`role-remove-${h.username}`} onClick={() => void change(r.role, h.id, h.username, false)}>Remove</Button> }] : []),
               ]} />
-            {r.holders.length >= 500 && <Typography.Paragraph type="secondary">Showing the first 500 role holders returned by the sign-in service.</Typography.Paragraph>}
 
           </Card>
         </Col>

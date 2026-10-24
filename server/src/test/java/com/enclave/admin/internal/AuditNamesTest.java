@@ -20,7 +20,7 @@ class AuditNamesTest {
         when(identity.accountsBySubject(any())).thenReturn(Map.of(subject, account));
         when(identity.accounts(any())).thenReturn(List.of(new IdentityAdminApi.AccountSummary(account, "ana", "Ana", "active", 1, Instant.EPOCH, null)));
         var entry = new AuditLog.Entry(1, Instant.EPOCH, "idp:" + subject, "device.remove", account + ".2", "unlinked", "signed-hash");
-        var view = new AuditNames(identity, idp, Clock.systemUTC()).resolve(List.of(entry)).getFirst();
+        var view = new AuditNames(identity, idp, Clock.systemUTC(), mock(org.springframework.jdbc.core.simple.JdbcClient.class)).resolve(List.of(entry)).getFirst();
         assertThat(view.actorName()).isEqualTo("ana"); assertThat(view.targetName()).isEqualTo("ana · device 2");
         assertThat(view.actor()).isEqualTo(entry.actor()); assertThat(view.target()).isEqualTo(entry.target()); assertThat(view.hash()).isEqualTo("signed-hash");
         verify(idp, never()).username(anyString());

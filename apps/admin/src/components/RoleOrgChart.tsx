@@ -1,3 +1,4 @@
+import { DiagramView } from './DiagramView';
 import { useMemo } from 'react';
 import { Button, Card, Descriptions, Empty, Input, Pagination, Select, Space, Tag, Typography } from 'antd';
 import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react';
@@ -49,10 +50,10 @@ export function RoleOrgChart({ roles, view, update, onPerson, onRole, canManage 
       {(view.chartRole !== 'all' || view.chartSearch) && <Button onClick={reset}>Full organization</Button>}
     </div>
     <div className="chart-workspace"><div>
-      <div className="organization-canvas"><ReactFlow key={`${view.chartRole}:${view.chartSearch}:${graph.page}:${graph.count}`} nodes={graph.nodes} edges={graph.edges} fitView fitViewOptions={{ maxZoom: 1, padding: 0.12 }} minZoom={0.2} colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}
+      <div className="organization-canvas"><DiagramView id="organization" nodes={graph.nodes} edges={graph.edges} onSelect={(id) => id === 'organization' ? reset() : id.startsWith('role:') ? update({ chartRole: id.slice(5), chartNode: id, chartPage: '1' }) : update({ chartNode: id })}><ReactFlow key={`${view.chartRole}:${view.chartSearch}:${graph.page}:${graph.count}`} nodes={graph.nodes} edges={graph.edges} fitView fitViewOptions={{ maxZoom: 1, padding: 0.12 }} minZoom={0.2} colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}
         onNodeClick={(_, n) => n.id === 'organization' ? reset() : n.id.startsWith('role:') ? update({ chartRole: n.id.slice(5), chartNode: n.id, chartPage: '1' }) : update({ chartNode: n.id })}>
         <Background gap={24} /><Controls showInteractive={false} />
-      </ReactFlow></div>
+      </ReactFlow></DiagramView></div>
       <div className="chart-caption"><Typography.Text type="secondary">{!graph.roleCount ? 'No matching roles or people.' : view.chartRole === 'all' && !view.chartSearch ? 'Select a role to expand its people. Each line represents a role assignment.' : `${graph.count} matching people · select a card for details`}</Typography.Text>
         {graph.count > 8 && <Pagination size="small" current={graph.page} total={graph.count} pageSize={8} showSizeChanger={false} onChange={(page) => update({ chartPage: String(page) })} />}</div>
     </div>

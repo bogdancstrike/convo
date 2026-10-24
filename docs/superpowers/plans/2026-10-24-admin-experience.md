@@ -36,3 +36,17 @@
 ### Task 6: Validation and docs
 - [ ] Run admin test/build, server tests including module boundaries, and available browser checks.
 - [ ] Update admin/deployment documentation with audit coverage, polling and setup requirements; record validation limits.
+
+## Accepted additions during implementation
+
+- Put theme, identity and role controls in a collapsible sidebar; remove the header.
+- Make significant tabs, chart scope, filters, pagination and detail presentation URL-backed so Back/Forward restores the view.
+- Use a single user detail surface for pending and enrolled users; support maximizing it into a page.
+- Add a user/device organization graph with identity, phone, administrator roles and real device metadata.
+- Add diagram detail inspectors/modals, straight edges, stable hover focus, and component-contained scrolling.
+- Add chart/table views for numerical plots and diagrams, plus inspectable plotted values.
+- Add consistent table column settings, real backend sorting/filtering/search and bounded pagination to management tables.
+- Display readable audit names as projections outside the signed fields; backfill historical projections without changing the hash chain.
+- Add system throughput per minute for accepted encrypted items, calls started and upload sessions created, without account dimensions.
+- Message-type reporting remains awaiting the user's explicit choice about aggregate client telemetry; no content-type inference or fabricated values.
+- Commit and push milestones on `feat/admin-workspace-audit`; redeploy Docker Compose for review.

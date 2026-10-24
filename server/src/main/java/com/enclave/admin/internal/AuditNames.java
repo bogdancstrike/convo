@@ -21,8 +21,9 @@ class AuditNames {
     private final IdentityAdminApi identity;
     private final KeycloakUsers idp;
     private final Clock clock;
+    private final org.springframework.jdbc.core.simple.JdbcClient jdbc;
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
-    AuditNames(IdentityAdminApi identity, KeycloakUsers idp, Clock clock) { this.identity = identity; this.idp = idp; this.clock = clock; }
+    AuditNames(IdentityAdminApi identity, KeycloakUsers idp, Clock clock, org.springframework.jdbc.core.simple.JdbcClient jdbc) { this.identity = identity; this.idp = idp; this.clock = clock; this.jdbc = jdbc; }
 
     List<View> resolve(List<AuditLog.Entry> entries) {
         var ids = new LinkedHashSet<String>();
@@ -54,6 +55,16 @@ class AuditNames {
         }
         if (cache.size() > 10_000) cache.clear();
         return entries.stream().map(e -> new View(e.seq(), e.at(), e.actor(), e.action(), e.target(), e.reason(), e.hash(), label(e.actor(), names), label(e.target(), names))).toList();
+    }
+
+    /** Incremental projection backfill keeps historical table sorting/searching readable too. */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelayString = "PT10S", initialDelayString = "PT2S")
+    @org.springframework.transaction.annotation.Transactional
+    void backfill() {
+        var entries = jdbc.sql("SELECT seq, at, actor, action, target, reason, hash FROM admin_audit WHERE actor_name IS NULL OR target_name IS NULL ORDER BY seq LIMIT 500")
+                .query((rs, i) -> new AuditLog.Entry(rs.getLong(1), rs.getObject(2, java.time.OffsetDateTime.class).toInstant(), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), java.util.HexFormat.of().formatHex(rs.getBytes(7)))).list();
+        for (var entry : resolve(entries)) jdbc.sql("UPDATE admin_audit SET actor_name = :actor, target_name = :target WHERE seq = :seq")
+                .param("actor", entry.actorName()).param("target", entry.targetName()).param("seq", entry.seq()).update();
     }
 
     /** Name searches resolve to identifiers before SQL filtering/pagination. */

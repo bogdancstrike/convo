@@ -1,3 +1,4 @@
+import { DiagramView } from './DiagramView';
 import { useMemo, useState } from 'react';
 import { Space, Tag, Typography } from 'antd';
 import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react';
@@ -42,8 +43,8 @@ export function PermissionMap({ roles, focus, onFocus }: { roles: RoleView[]; fo
   </Space><div className="permission-canvas" onPointerMove={(event) => {
       const id = (event.target as Element).closest('.react-flow__node')?.getAttribute('data-id') ?? null;
       setHovered((old) => old === id ? old : id);
-    }} onPointerLeave={() => setHovered(null)}><ReactFlow nodes={nodes} edges={edges} fitView colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}
+    }} onPointerLeave={() => setHovered(null)}><DiagramView id="permissions" nodes={nodes} edges={edges} onSelect={onFocus}><ReactFlow nodes={nodes} edges={edges} fitView colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}
     onNodeClick={(_, n) => onFocus(focus === n.id ? '' : n.id)} onPaneClick={() => onFocus('')}>
     <Background gap={24} /><Controls showInteractive={false} />
-  </ReactFlow></div></div>;
+  </ReactFlow></DiagramView></div></div>;
 }

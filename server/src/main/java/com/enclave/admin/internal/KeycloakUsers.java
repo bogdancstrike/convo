@@ -87,9 +87,20 @@ class KeycloakUsers {
 
     boolean available() { return !properties.idp().clientSecret().isBlank(); }
 
-    List<IdpUser> search(String query, int limit) {
+    List<IdpUser> search(String query, int limit) { return searchPage(query, 0, Math.min(100, limit)); }
+
+    List<IdpUser> directory() {
+        List<IdpUser> out = new ArrayList<>();
+        for (int offset = 0; offset < 100_000; offset += 200) {
+            var page = searchPage("", offset, 200); out.addAll(page);
+            if (page.size() < 200) return List.copyOf(out);
+        }
+        throw new EnclaveException(ErrorCode.UNAVAILABLE, "directory exceeds the supported table source size");
+    }
+
+    private List<IdpUser> searchPage(String query, int first, int limit) {
         URI uri = admin(b -> b.pathSegment("users").queryParam("briefRepresentation", "false")
-                .queryParam("search", query == null ? "" : query.strip()).queryParam("max", Math.max(1, Math.min(limit, 100))));
+                .queryParam("search", query == null ? "" : query.strip()).queryParam("first", first).queryParam("max", Math.max(1, Math.min(limit, 200))));
         List<UserRep> users = call(() -> http.get().uri(uri).headers(h -> h.setBearerAuth(accessToken())).retrieve()
                 .body(new ParameterizedTypeReference<List<UserRep>>() {}));
         List<IdpUser> out = new ArrayList<>();
@@ -166,10 +177,15 @@ class KeycloakUsers {
     /** Holders of one managed admin role. */
     List<Holder> holders(String role) {
         if (!MANAGED_ROLES.contains(role)) throw new EnclaveException(ErrorCode.INVALID_REQUEST, "not a Convo admin role");
-        List<UserRep> users = call(() -> http.get().uri(admin(b -> b.pathSegment("roles", role, "users").queryParam("max", 500))).headers(h -> h.setBearerAuth(accessToken()))
-                .retrieve().body(new ParameterizedTypeReference<List<UserRep>>() {}));
-        return users == null ? List.of() : users.stream().map(u -> new Holder(u.id(), u.username(), u.firstName(), u.lastName(), Boolean.TRUE.equals(u.enabled())))
-                .sorted(java.util.Comparator.comparing(Holder::username)).toList();
+        List<Holder> out = new ArrayList<>();
+        for (int offset = 0; offset < 100_000; offset += 200) {
+            final int first = offset;
+            List<UserRep> page = call(() -> http.get().uri(admin(b -> b.pathSegment("roles", role, "users").queryParam("first", first).queryParam("max", 200))).headers(h -> h.setBearerAuth(accessToken()))
+                    .retrieve().body(new ParameterizedTypeReference<List<UserRep>>() {}));
+            if (page != null) for (var u : page) out.add(new Holder(u.id(), u.username(), u.firstName(), u.lastName(), Boolean.TRUE.equals(u.enabled())));
+            if (page == null || page.size() < 200) return out.stream().sorted(java.util.Comparator.comparing(Holder::username)).toList();
+        }
+        throw new EnclaveException(ErrorCode.UNAVAILABLE, "role exceeds the supported table source size");
     }
 
     /** Authoritative identity events. Never copy arbitrary details (tokens/credential data) into audit. */

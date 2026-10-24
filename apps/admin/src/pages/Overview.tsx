@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Alert, AutoComplete, Button, Card, Col, Row, Segmented, Skeleton, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, AutoComplete, Button, Card, Col, Row, Segmented, Skeleton, Statistic, Tabs, Tag, Typography } from 'antd';
 import { api, errorText, type AccountActivity, type AccountSummary, type Levels, type Overview, type UserActivity } from '../api';
 import { Chart } from '../components/Chart';
 import { useViewState } from '../components/useViewState';
 import { ThroughputChart } from '../components/ThroughputChart';
+import { AdminTable } from '../components/AdminTable';
 import { ActivityStats } from '../components/ActivityStats';
 import { compact, fmtDay, LEVEL, nameOf, shortDay } from '../format';
 import { SERIES } from '../theme';
@@ -16,22 +17,18 @@ export function OverviewPage({ can, navigate, param }: PageProps) {
   const [data, setData] = useState<Overview | null>(null);
   const [person, setPerson] = useState<AccountActivity | null>(null);
   const [levels, setLevels] = useState<Levels | null>(null);
-  const [top, setTop] = useState<UserActivity[]>([]);
-  const [quiet, setQuiet] = useState<UserActivity[]>([]);
   const query = view.personQuery;
   const [options, setOptions] = useState<AccountSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [rankError, setRankError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const selected = can('ACCOUNTS_READ') ? param : '';
   useEffect(() => {
     let active = true;
-    setBusy(true); setError(null); setRankError(null); setPerson(null); setData(null); setLevels(null); setTop([]); setQuiet([]);
+    setBusy(true); setError(null); setPerson(null); setData(null); setLevels(null);
     if (selected) {
       void api.accountActivity(selected, days).then((v) => { if (active) setPerson(v); }).catch((e) => { if (active) setError(errorText(e)); }).finally(() => { if (active) setBusy(false); });
     } else {
       void Promise.all([api.overview(days), api.levels(days)]).then(([o, l]) => { if (active) { setData(o); setLevels(l); } }).catch((e) => { if (active) setError(errorText(e)); }).finally(() => { if (active) setBusy(false); });
-      if (can('ACCOUNTS_READ')) void Promise.all([api.usersByActivity('active', days), api.usersByActivity('inactive', days)]).then(([t, q]) => { if (active) { setTop(t); setQuiet(q); } }).catch((e) => { if (active) setRankError(errorText(e)); });
     }
     return () => { active = false; };
   }, [days, selected, can]);
@@ -41,14 +38,13 @@ export function OverviewPage({ can, navigate, param }: PageProps) {
     const timer = setTimeout(() => void api.accounts(query).then((v) => { if (active) setOptions(v); }).catch(() => { if (active) setOptions([]); }), 200);
     return () => { active = false; clearTimeout(timer); };
   }, [query, can]);
-  const rankings = (rows: UserActivity[]) => <Table rowKey={(r) => r.account.accountId} dataSource={rows} pagination={false} scroll={{ x: 450 }} size="middle"
-    columns={[
-      { title: 'Person', key: 'name', render: (_, r) => <Button type="link" className="person-link" onClick={() => navigate(link(`overview/${r.account.accountId}`))}>{nameOf(r.account)}</Button> },
-      { title: 'Level', key: 'level', render: (_, r) => <Tag color={LEVEL[r.level].color}>{LEVEL[r.level].label}</Tag> },
-      { title: 'Items', dataIndex: 'items', align: 'right' },
-      { title: 'Days used', dataIndex: 'activeDays', align: 'right' },
-      { title: 'Last active', key: 'last', render: (_, r) => fmtDay(r.lastActiveDay) },
-    ]} />;
+  const rankings = (mode: string) => <AdminTable<UserActivity> id={`activity-${mode}`} resource="activity" rowKey={(r) => r.account.accountId} scope={{ days: String(days) }} defaultSort="items" defaultOrder={mode === 'active' ? 'desc' : 'asc'} defaultSize={10} columns={[
+    { title: 'Person', key: 'person', render: (_, r) => <Button type="link" className="person-link" onClick={() => navigate(link(`overview/${r.account.accountId}`))}>{nameOf(r.account)}</Button> },
+    { title: 'Level', key: 'level', render: (_, r) => <Tag color={LEVEL[r.level].color}>{LEVEL[r.level].label}</Tag> },
+    { title: 'Items', key: 'items', dataIndex: 'items', align: 'right' }, { title: 'Days used', key: 'activeDays', dataIndex: 'activeDays', align: 'right' },
+    { title: 'Last active', key: 'last', render: (_, r) => fmtDay(r.lastActiveDay) },
+  ]} />;
+
   return <div className="page-frame page-overview" data-testid="admin-overview">
     <div className="page-head"><div><div className="eyebrow">Usage & adoption</div><h1>Overview &amp; activity</h1><p>Follow adoption across your organization or focus on one person's activity. Counts only; message content stays private.</p></div>
       <Segmented aria-label="Activity date window" value={days} onChange={(v) => update({ days: String(v) })} options={[7, 30, 90].map((v) => ({ label: `${v} days`, value: v }))} data-testid="overview-window" /></div>
@@ -68,8 +64,7 @@ export function OverviewPage({ can, navigate, param }: PageProps) {
         { key: 'throughput', label: 'System throughput', children: <ThroughputChart minutes={[60, 360, 1440].includes(Number(view.throughput)) ? Number(view.throughput) : 60} onWindowChange={(minutes) => update({ throughput: String(minutes) })} /> },
         { key: 'adoption', label: 'Adoption & engagement', children: <ActivityStats days={days} levels={levels} overview={data} /> },
         ...(can('ACCOUNTS_READ') ? [{ key: 'people', label: 'People', children: <>
-          {rankError && <Alert type="warning" showIcon message={rankError} style={{ marginBottom: 16 }} />}
-          <Row gutter={[16, 16]}><Col xs={24} xl={12}><Card title="Most active" data-testid="activity-top">{rankings(top)}</Card></Col><Col xs={24} xl={12}><Card title="Least active" data-testid="activity-quiet">{rankings(quiet)}</Card></Col></Row>
+          <Row gutter={[16, 16]}><Col xs={24} xl={12}><Card className="activity-table-card" title="Most active" data-testid="activity-top">{rankings('active')}</Card></Col><Col xs={24} xl={12}><Card className="activity-table-card" title="Least active" data-testid="activity-quiet">{rankings('inactive')}</Card></Col></Row>
         </> }] : []),
       ]} />
     </>}
