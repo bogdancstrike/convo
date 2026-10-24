@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/v1/admin")
 class SecurityAlertsController {
-    record Transition(@NotBlank String status,@NotBlank @Size(max=500) String reason) {}
+    record Transition(@NotBlank String status,@Size(max=500) String reason) {}
+    record BulkResolve(@Size(max=500) String reason) {}
+    record BulkResult(long resolved) {}
     record RuleUpdate(boolean enabled,@NotBlank String severity,@Min(1) @Max(1000) int threshold,@Min(1) @Max(1440) int windowMinutes,boolean notificationsEnabled,@NotBlank @Size(max=500) String reason) {}
     private final AdminGuard guard;
     private final SecurityAlerts alerts;
@@ -37,6 +39,11 @@ class SecurityAlertsController {
     @PostMapping("/alerts/{id}/status") ResponseEntity<SecurityAlerts.Detail> transition(@AuthenticationPrincipal Jwt admin,@PathVariable UUID id,@Valid @RequestBody Transition body) {
         guard.requireAudited(admin,ALERTS_MANAGE,"alert.status","alert:"+id);
         alerts.transition(id,body.status(),guard.actor(admin),body.reason()); return noStore(alerts.detail(id));
+    }
+    /** Resolves all open and acknowledged alerts matching the inbox search/filters/scope (same query parameters as the table). */
+    @PostMapping("/alerts/resolve-all") ResponseEntity<BulkResult> resolveAll(@AuthenticationPrincipal Jwt admin,@RequestParam Map<String,String> params,@Valid @RequestBody(required=false) BulkResolve body) {
+        guard.requireAudited(admin,ALERTS_MANAGE,"alert.resolve-all","alerts");
+        return noStore(new BulkResult(alerts.resolveAll(AdminTableQuery.from(params),params,guard.actor(admin),body==null?null:body.reason())));
     }
     @PostMapping("/alerts/rules/{id}") ResponseEntity<List<SecurityAlerts.Rule>> rule(@AuthenticationPrincipal Jwt admin,@PathVariable String id,@Valid @RequestBody RuleUpdate body) {
         guard.requireAudited(admin,ALERT_RULES_MANAGE,"alert.rule-update","alert-rule:"+id); guard.requireRecentSignIn(admin);

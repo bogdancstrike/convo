@@ -91,6 +91,10 @@ export const api = {
   alertSummary: () => call<AlertSummary>('GET', '/alerts/summary'),
   alertDetail: (id: string) => call<AlertDetail>('GET', `/alerts/${q(id)}`),
   alertRules: () => call<AlertRule[]>('GET', '/alerts/rules'),
+  resolveAlerts: (scope: Record<string, string>, query: Pick<TableQuery, 'q' | 'filters'>, reason: string) => {
+    const params = new URLSearchParams({ ...scope, q: query.q, ...Object.fromEntries(Object.entries(query.filters).map(([k, v]) => [`f_${k}`, v])) });
+    return call<{ resolved: number }>('POST', `/alerts/resolve-all?${params}`, { reason });
+  },
   alertStatus: (id: string, status: AlertStatus, reason: string) => call<AlertDetail>('POST', `/alerts/${q(id)}/status`, { status, reason }),
   updateAlertRule: (rule: AlertRule, reason: string) => call<AlertRule[]>('POST', `/alerts/rules/${q(rule.id)}`, { ...rule, reason }),
   me: () => call<Me>('GET', '/me'),

@@ -39,6 +39,13 @@ open, acknowledged and critical unresolved alerts. The sidebar badge counts all 
 Details can be maximized, reloaded or restored through browser Back/Forward.
 
 Security operators can **Acknowledge**, **Resolve**, or **Reopen** an alert with a recorded reason.
+The reason is optional when resolving; a blank reason is stored as "No reason given".
+**Resolve all** (security operators only, disabled when nothing is unresolved) resolves every open
+and acknowledged alert matching the inbox's current status/severity/rule scope, search and column
+filters, after a confirmation that shows the count and accepts an optional reason. It runs in one
+transaction (`POST /v1/admin/alerts/resolve-all` with the table query parameters and an optional
+`reason`), writes a history row per alert and a single `alert.resolve-all` audit entry with the
+count and filters, and returns `{ "resolved": n }`. Later matching events open new alerts.
 Those changes and rule edits are added to the hash-chained audit. Resolved alerts, lifecycle
 history, source evidence and disabled rules' existing alerts are retained. The details panel shows
 the latest 100 lifecycle changes; older changes remain in the database and audit. Alerts are
@@ -68,12 +75,14 @@ identity import. The sync-outage rule runs independently of source-event ingesti
 configured grace period after backend startup. Source recovery clears the episode marker; it
 does not silently resolve the existing investigation. A later outage creates a new alert.
 
-**Enabled rules** draws each enabled rule as a React Flow diagram using its live settings: event
+**Enabled rules** explains one rule at a time (pick it from a severity-coded switcher; the choice
+is kept in the URL as `flowRule`) as a React Flow diagram using its live settings: event
 source → condition (threshold within window, every grant, or no successful sync within the grace
 period) → alert with its severity → episode deduplication → notification (or "no notification"
 when the rule's notifications are off) → audited operator review (acknowledge, resolve, reopen).
 Selecting a card explains that step; the selection is kept in the URL (`ruleNode`). Disabled rules
-are listed in a note and drawn greyed out without a flow. The diagram also has a table view.
+are marked "(off)" in the switcher; selecting one shows a note and its flow greyed out. The diagram
+also has a table view.
 
 **Detection rules** shows one card per rule with a plain-language summary that follows the current
 draft (for example "Raise a HIGH alert when one person fails to sign in 5 times within 5
@@ -129,7 +138,8 @@ The operations client already has `manage-users`, `view-users`, `view-realm` and
 | `GET /tables/alerts` | Backend inbox search/sort/filter/paging plus `status`, `severity`, `ruleId` scopes |
 | `GET /alerts/summary` | Counts, recent notification candidates, processor time/error |
 | `GET /alerts/{id}` | Alert and latest lifecycle history |
-| `POST /alerts/{id}/status` | `{status: open\|acknowledged\|resolved, reason}` |
+| `POST /alerts/{id}/status` | `{status: open\|acknowledged\|resolved, reason?}`; blank reason stored as "No reason given" |
+| `POST /alerts/resolve-all` | Resolve open and acknowledged alerts matching the `/tables/alerts` query parameters; `{reason?}` → `{resolved}` |
 | `GET /alerts/rules` | Current persisted rule configuration |
 | `POST /alerts/rules/{id}` | `{enabled, severity, threshold, windowMinutes, notificationsEnabled, reason}` |
 

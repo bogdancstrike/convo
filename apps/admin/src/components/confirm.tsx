@@ -2,25 +2,26 @@ import { App, Input, Typography } from 'antd';
 
 /**
  * Every change asks for a reason, which is written to the audit chain with it. Resolves with the
- * reason, or null when cancelled.
+ * reason, or null when cancelled. With `optional`, an empty reason is accepted and resolves to ''
+ * (the server then records a default such as "No reason given").
  */
 export function useReason() {
   const { modal } = App.useApp();
-  return (title: string, body: string, danger = false) => new Promise<string | null>((resolve) => {
+  return (title: string, body: string, danger = false, { optional = false, okText = 'Confirm' }: { optional?: boolean; okText?: string } = {}) => new Promise<string | null>((resolve) => {
     let reason = '';
     modal.confirm({
       title,
       content: (
         <div style={{ display: 'grid', gap: 8 }}>
           <Typography.Text type="secondary">{body}</Typography.Text>
-          <Input.TextArea autoFocus rows={3} maxLength={500} placeholder="Reason (recorded in the audit log)" data-testid="reason-input"
+          <Input.TextArea autoFocus rows={3} maxLength={500} placeholder={optional ? 'Reason (optional, recorded in the audit log)' : 'Reason (recorded in the audit log)'} data-testid="reason-input"
             onChange={(e) => { reason = e.target.value; }} />
         </div>
       ),
-      okText: 'Confirm',
+      okText,
       okButtonProps: { danger, 'data-testid': 'reason-confirm' } as never,
       onOk: () => {
-        if (!reason.trim()) return Promise.reject(new Error('A reason is required'));
+        if (!reason.trim() && !optional) return Promise.reject(new Error('A reason is required'));
         resolve(reason.trim());
         return undefined;
       },

@@ -84,7 +84,34 @@ test('real failed logins produce one durable alert with evidence, audited lifecy
     await expect(page.getByTestId('alert-details')).toContainText('review once more');
     await page.reload(); await expect(page.getByTestId('alert-details')).toContainText('review once more');
     expect((await adminApi(page, `/tables/alerts?q=${person.username}&ruleId=failed-logins`)).body.total).toBe(1);
+    // Resolving does not require a reason; the history records a default.
+    await page.getByTestId('alert-resolve').click(); await page.getByTestId('reason-confirm').click();
+    await expect(page.getByTestId('alert-details')).toContainText('No reason given');
+    await expect(page.getByTestId('alert-reopen')).toBeVisible();
+    await page.getByTestId('alert-reopen').click(); await confirmReason(page, 'reopen for bulk resolve');
+    await expect(page.getByTestId('alert-acknowledge')).toBeVisible();
+    await page.getByTestId('alert-acknowledge').click(); await confirmReason(page, 'acknowledged before bulk resolve');
+    await expect(page.getByTestId('alert-reopen')).toBeVisible();
     await page.getByRole('button', { name: 'Close', exact: true }).click();
+    // Resolve all: confirms the count of open and acknowledged alerts matching the current status and search.
+    await page.locator('.ant-select').filter({ has: page.getByRole('combobox', { name: 'Alert status' }) }).click();
+    await page.locator('.ant-select-item-option').filter({ hasText: 'All statuses' }).click();
+    await expect(page).toHaveURL(/status=all/);
+    await expect(alertRows).toHaveCount(1);
+    expect((await adminApi(page, `/tables/alerts?q=${person.username}&status=acknowledged`)).body.total).toBe(1);
+    await page.getByTestId('alerts-resolve-all').click();
+    await expect(page.locator('.ant-modal-confirm-title')).toHaveText('Resolve 1 alert?');
+    await page.waitForTimeout(400); // let the dialog finish animating before capturing
+    await page.screenshot({ path: 'test-results/admin-alert-resolve-all.png', fullPage: true });
+    await page.getByTestId('reason-confirm').click();
+    await expect(page.getByText('1 alert resolved', { exact: true })).toBeVisible();
+    expect((await adminApi(page, `/tables/alerts?q=${person.username}&status=open`)).body.total).toBe(0);
+    expect((await adminApi(page, `/tables/alerts?q=${person.username}&status=acknowledged`)).body.total).toBe(0);
+    expect((await adminApi(page, `/tables/alerts?q=${person.username}&status=resolved`)).body.total).toBe(1);
+    const bulk = await adminApi(page, '/tables/audit?q=alert.resolve-all');
+    expect(bulk.body.rows.some((r: { action: string; reason: string }) => r.action === 'alert.resolve-all' && r.reason.includes('count=1') && r.reason.includes(`search=${person.username}`))).toBe(true);
+    await expect(alertRows.first()).toContainText('Resolved');
+    await expect(page.getByText('1 alert resolved', { exact: true })).toHaveCount(0, { timeout: 10_000 });
     // Enabled rules: every enabled rule is drawn as a flow with its live settings; disabled rules are greyed out.
     const login = savedRules.find((r) => r.id === 'failed-logins')!; const sync = savedRules.find((r) => r.id === 'audit-sync')!;
     expect((await adminApi(page, '/alerts/rules/audit-sync', 'POST', { ...sync, enabled: false, reason: 'show disabled rule in flow' })).status).toBe(200);
@@ -95,11 +122,17 @@ test('real failed logins produce one durable alert with evidence, audited lifecy
     await expect(flow.getByTestId('alert-flow-failed-logins-source')).toBeVisible();
     await expect(flow.getByTestId('alert-flow-failed-logins-condition')).toContainText(`${login.threshold} failed sign-ins in ${login.windowMinutes} minute`);
     await expect(flow.getByTestId('alert-flow-failed-logins-alert')).toContainText(`Raise a ${String(login.severity).toUpperCase()} alert`);
-    await expect(flow.getByTestId('alert-flow-lifecycle')).toBeVisible();
-    await expect(flow.getByTestId('alert-flow-audit-sync-disabled')).toContainText('Disabled');
-    await expect(flow.getByTestId('alert-flow-audit-sync-source')).toHaveCount(0);
-    await expect(page.getByTestId('alert-flow-disabled-note')).toContainText('Identity audit sync unavailable');
+    await expect(flow.getByTestId('alert-flow-failed-logins-lifecycle')).toBeVisible();
+    await expect(flow.getByTestId('alert-flow-sentence')).toContainText(`fails to sign in ${login.threshold} times`);
+    // Readable without zooming: cards render at (close to) their natural width.
+    expect((await flow.locator('.react-flow__node').first().boundingBox())!.width).toBeGreaterThanOrEqual(200);
     await page.screenshot({ path: 'test-results/admin-alert-rule-flow.png', fullPage: true });
+    await flow.getByTestId('alert-flow-pick-audit-sync').click();
+    await expect(page).toHaveURL(/flowRule=audit-sync/);
+    await expect(page.getByTestId('alert-flow-disabled-note')).toContainText('Identity audit sync unavailable is disabled');
+    await expect(flow.locator('.react-flow__node.alert-flow-muted')).toHaveCount(6);
+    await page.screenshot({ path: 'test-results/admin-alert-rule-flow-disabled.png', fullPage: true });
+    await flow.getByTestId('alert-flow-pick-failed-logins').click();
     await flow.getByTestId('alert-flow-failed-logins-episode').click();
     await expect(page).toHaveURL(/ruleNode=failed-logins%3Aepisode/);
     await expect(page.getByTestId('alert-flow-details')).toContainText('extend its event count');

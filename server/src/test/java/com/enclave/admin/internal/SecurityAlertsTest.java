@@ -89,4 +89,42 @@ class SecurityAlertsTest {
         assertThatThrownBy(()->store.updateRule("role-grant",true,"high",1,5,true,"op","test")).isInstanceOf(EnclaveException.class);
         verifyNoInteractions(jdbc);
     }
+
+    @SuppressWarnings({"unchecked","rawtypes"})
+    @Test void resolveAllChangesOnlyMatchingUnresolvedAlertsWithHistoryAndOneAuditEntry() {
+        var audit=mock(AuditLog.class); var store=new SecurityAlerts(jdbc,clock,audit);
+        var sql=mock(JdbcClient.StatementSpec.class,RETURNS_SELF);
+        when(jdbc.sql(anyString())).thenReturn(sql); when(sql.update()).thenReturn(3);
+        var query=AdminTableQuery.from(Map.of("q","bob","f_title","failed"));
+        long count=store.resolveAll(query,Map.of("status","all","severity","high","ruleId","all","q","bob"),"op","  ");
+        assertThat(count).isEqualTo(3);
+        var statement=org.mockito.ArgumentCaptor.forClass(String.class); verify(jdbc).sql(statement.capture());
+        assertThat(statement.getValue()).contains("UPDATE admin_security_alert SET status='resolved'").contains("AND status IN ('open','acknowledged')").contains("SELECT id,:at,:actor,'resolved',:reason").contains("INSERT INTO admin_alert_history").contains("severity = :severity").doesNotContain("rule_id = :ruleId").doesNotContain("status = :status");
+        var bindings=org.mockito.ArgumentCaptor.forClass(Map.class); verify(sql).params(bindings.capture());
+        assertThat((Map<String,Object>)bindings.getValue()).containsEntry("q","bob").containsEntry("severity","high").containsEntry("f0","failed");
+        verify(sql).param("reason",SecurityAlerts.NO_REASON);
+        verify(audit,times(1)).append(eq("op"),eq("alert.resolve-all"),eq("alerts"),argThat((String r)->r.startsWith(SecurityAlerts.NO_REASON) && r.contains("count=3") && r.contains("severity=high") && !r.contains("ruleId")));
+    }
+    @SuppressWarnings({"unchecked","rawtypes"})
+    @Test void resolvingWithoutAReasonRecordsTheDefaultReason() {
+        var audit=mock(AuditLog.class); var store=new SecurityAlerts(jdbc,clock,audit);
+        var sql=mock(JdbcClient.StatementSpec.class,RETURNS_SELF); JdbcClient.MappedQuerySpec<String> current=mock(JdbcClient.MappedQuerySpec.class);
+        when(jdbc.sql(anyString())).thenReturn(sql); when(sql.query(String.class)).thenReturn((JdbcClient.MappedQuerySpec)current); when(current.optional()).thenReturn(Optional.of("open"));
+        var id=UUID.randomUUID();
+        store.transition(id,"resolved","op",null);
+        verify(sql).param("reason",SecurityAlerts.NO_REASON);
+        verify(audit).append("op","alert.resolve","alert:"+id,SecurityAlerts.NO_REASON);
+        store.transition(id,"resolved","op"," confirmed ");
+        verify(audit).append("op","alert.resolve","alert:"+id,"confirmed");
+    }
+    @Test void transitionReasonIsOptionalButBounded() {
+        try (var factory=jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var validator=factory.getValidator();
+            assertThat(validator.validate(new SecurityAlertsController.Transition("resolved",null))).isEmpty();
+            assertThat(validator.validate(new SecurityAlertsController.Transition("resolved",""))).isEmpty();
+            assertThat(validator.validate(new SecurityAlertsController.Transition("resolved","x".repeat(501)))).isNotEmpty();
+            assertThat(validator.validate(new SecurityAlertsController.BulkResolve(null))).isEmpty();
+            assertThat(validator.validate(new SecurityAlertsController.RuleUpdate(true,"high",5,5,true," "))).isNotEmpty();
+        }
+    }
 }

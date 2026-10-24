@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,16 +49,25 @@ class SecurityAlerts {
                 .query((r,n) -> new History(r.getLong("id"), time(r,"at"), r.getString("actor"), r.getString("status"), r.getString("reason"))).list();
         return new Detail(a, history);
     }
-    @Transactional AdminTableQuery.Page<Alert> table(AdminTableQuery q, Map<String, String> scope) {
-        Map<String, String> fields = Map.ofEntries(Map.entry("title","title"),Map.entry("ruleId","rule_id"),Map.entry("severity","severity"),Map.entry("status","status"),Map.entry("subjectName","subject_name"),Map.entry("occurrences","occurrences"),Map.entry("createdAt","created_at"),Map.entry("lastSeen","last_seen"));
+    private static final Map<String, String> FIELDS = Map.ofEntries(Map.entry("title","title"),Map.entry("ruleId","rule_id"),Map.entry("severity","severity"),Map.entry("status","status"),Map.entry("subjectName","subject_name"),Map.entry("occurrences","occurrences"),Map.entry("createdAt","created_at"),Map.entry("lastSeen","last_seen"));
+    /** Reason stored in history and audit when an operator leaves the optional reason empty. */
+    static final String NO_REASON = "No reason given";
+    record Filter(String sql, Map<String, Object> bindings) {}
+    /** The inbox's search, column filters and status/severity/rule scope as a bound WHERE clause; shared by the table and bulk resolve. */
+    static Filter filter(AdminTableQuery q, Map<String, String> scope) {
         StringBuilder where = new StringBuilder(" WHERE true"); Map<String, Object> bindings = new HashMap<>();
         if (!q.search().isBlank()) { where.append(" AND position(lower(:q) in lower(concat_ws(' ', title, subject_name, detail, rule_id, severity, status))) > 0"); bindings.put("q",q.search()); }
         int i=0;
-        for (var f : q.filters().entrySet()) if (fields.containsKey(f.getKey())) { String key="f"+i++; where.append(" AND position(lower(:").append(key).append(") in lower(CAST(").append(fields.get(f.getKey())).append(" AS text))) > 0"); bindings.put(key,f.getValue()); }
-        for (String field : List.of("status","severity","ruleId")) { String value=scope.getOrDefault(field,""); if (!value.isBlank() && !value.equals("all")) { where.append(" AND ").append(fields.get(field)).append(" = :").append(field); bindings.put(field,value); } }
+        for (var f : q.filters().entrySet()) if (FIELDS.containsKey(f.getKey())) { String key="f"+i++; where.append(" AND position(lower(:").append(key).append(") in lower(CAST(").append(FIELDS.get(f.getKey())).append(" AS text))) > 0"); bindings.put(key,f.getValue()); }
+        for (String field : List.of("status","severity","ruleId")) { String value=scope.getOrDefault(field,""); if (!value.isBlank() && !value.equals("all")) { where.append(" AND ").append(FIELDS.get(field)).append(" = :").append(field); bindings.put(field,value); } }
+        return new Filter(where.toString(), bindings);
+    }
+    static String reason(String reason) { return reason==null || reason.isBlank() ? NO_REASON : reason.strip(); }
+    @Transactional AdminTableQuery.Page<Alert> table(AdminTableQuery q, Map<String, String> scope) {
+        var filter=filter(q,scope); String where=filter.sql(); Map<String,Object> bindings=filter.bindings();
         long total=jdbc.sql("SELECT count(*) FROM admin_security_alert"+where).params(bindings).query(Long.class).single();
         int page=Math.min(q.page(),Math.max(1,(int)((total+q.size()-1)/q.size())));
-        String sort=fields.getOrDefault(q.sort(),"created_at");
+        String sort=FIELDS.getOrDefault(q.sort(),"created_at");
         if (q.sort().equals("severity")) sort="CASE severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END";
         var rows=jdbc.sql("SELECT * FROM admin_security_alert"+where+" ORDER BY "+sort+(q.sort().isBlank() || q.descending()?" DESC":" ASC")+", id LIMIT :limit OFFSET :offset")
                 .params(bindings).param("limit",q.size()).param("offset",(page-1)*q.size()).query((r,n)->alert(r)).list();
@@ -76,9 +86,24 @@ class SecurityAlerts {
         var current=jdbc.sql("SELECT status FROM admin_security_alert WHERE id=:id FOR UPDATE").param("id",id).query(String.class).optional()
                 .orElseThrow(()->new EnclaveException(ErrorCode.NOT_FOUND,"unknown security alert"));
         if (current.equals(status)) return;
+        reason=reason(reason);
         jdbc.sql("UPDATE admin_security_alert SET status=:status, updated_at=:at WHERE id=:id").param("id",id).param("status",status).param("at",date(clock.instant())).update();
         history(id,actor,status,reason);
         audit.append(actor,"alert."+(status.equals("open")?"reopen":status.equals("acknowledged")?"acknowledge":"resolve"),"alert:"+id,reason);
+    }
+    /**
+     * Resolves every unresolved (open or acknowledged) alert matching the inbox filter in one statement:
+     * each changed alert gets a history row, and the bulk action is audited once with its count.
+     * Returns the number resolved.
+     */
+    @Transactional long resolveAll(AdminTableQuery q, Map<String, String> scope, String actor, String reason) {
+        var filter=filter(q,scope); String why=reason(reason);
+        long count=jdbc.sql("WITH changed AS (UPDATE admin_security_alert SET status='resolved', updated_at=:at"+filter.sql()+" AND status IN ('open','acknowledged') RETURNING id) "
+                +"INSERT INTO admin_alert_history(alert_id,at,actor,status,reason) SELECT id,:at,:actor,'resolved',:reason FROM changed")
+                .params(filter.bindings()).param("at",date(clock.instant())).param("actor",actor).param("reason",why).update();
+        String scoped=List.of("status","severity","ruleId").stream().filter(k->!scope.getOrDefault(k,"").isBlank() && !scope.get(k).equals("all")).map(k->k+"="+scope.get(k)).collect(Collectors.joining(", "));
+        audit.append(actor,"alert.resolve-all","alerts",why+" [count="+count+(q.search().isBlank()?"":", search="+q.search())+(scoped.isEmpty()?"":", "+scoped)+(q.filters().isEmpty()?"":", filters="+q.filters())+"]");
+        return count;
     }
     @Transactional void updateRule(String id, boolean enabled, String severity, int threshold, int minutes, boolean notificationsEnabled, String actor, String reason) {
         if (!LABELS.containsKey(id) || !SEVERITIES.contains(severity) || threshold<1 || threshold>1000 || minutes<1 || minutes>1440 || (id.equals("role-grant") || id.equals("audit-sync")) && threshold!=1 || id.equals("role-grant") && minutes!=1)

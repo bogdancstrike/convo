@@ -317,6 +317,16 @@ html, body, #root { height: 100%; overflow: hidden; }
 .rule-save .ant-form-item { margin-bottom: 10px; }
 .rule-updated { font-size: 11px; margin: 12px 0 0 !important; overflow-wrap: anywhere; }
 .diagram-frame > .alert-flow-note { flex-shrink: 0; margin-bottom: 12px; }
+.alert-flow-picker { flex-shrink: 0; margin-bottom: 12px; max-width: 100%; overflow-x: auto; }
+.alert-flow-picker .rule-severity-option { font-weight: 500; }
+.alert-flow-picker .ant-segmented-item-selected .rule-severity-option { color: inherit; }
+.alert-flow-off { opacity: .6; }
+.diagram-frame > .alert-flow-sentence { margin-bottom: 12px; }
+.alert-flow-canvas { min-height: 260px; }
+.alert-flow-surface > .ant-card-body { overflow: auto; }
+.alert-flow .react-flow__node .access-node { height: 100%; box-sizing: border-box; align-content: start; }
+.alert-flow .react-flow__handle { opacity: 0; pointer-events: none; }
+.alert-flow .react-flow__node.alert-flow-muted { opacity: .6; }
 .page-alerts > .ant-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .page-alerts .ant-tabs-content-holder, .page-alerts .ant-tabs-content, .page-alerts .ant-tabs-tabpane-active { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 @media (max-width: 1000px) { .alert-rule-grid { grid-template-columns: 1fr; } }
