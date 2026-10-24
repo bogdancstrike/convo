@@ -393,12 +393,12 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
     var position by remember { mutableIntStateOf(initial) }
     val (message, index) = items.getOrNull(position) ?: return
     val attachments = message.optJSONArray("attachments")?.objects().orEmpty(); val pointer = attachments.getOrNull(index) ?: return
-    var loaded by remember(position) { mutableStateOf<JSONObject?>(null) }; var zoom by remember { mutableStateOf(false) }
-    LaunchedEffect(position) { app.call("download", message.targetArgs(conversation).put("index", index)) { loaded = it as? JSONObject; loaded?.optString("data")?.takeIf { d -> d.isNotEmpty() }?.let { d -> app.saveReceivedMedia(message, pointer, d) } } }
-    val bytes = remember(loaded) { loaded?.optString("data")?.let { app.decode(it) } }
+    var zoom by remember { mutableStateOf(false) }
+    var bytes by remember(position) { mutableStateOf<ByteArray?>(null) }
+    LaunchedEffect(position) { app.fetchMedia(message, conversation, index, pointer) { bytes = it } }
     val mime = pointer.optString("contentType"); val video = mime.startsWith("video/"); val audio = mime.startsWith("audio/")
-    val bitmap = remember(bytes) { if (mime in listOf("image/jpeg", "image/png", "image/webp") && bytes != null) mediaBitmap(bytes) else null }
-    val temp = remember(bytes) { if ((video || audio) && bytes != null) File(app.cacheDir, "convo-preview-${java.util.UUID.randomUUID()}").apply { writeBytes(bytes) } else null }
+    val bitmap = remember(bytes) { if (mime in MediaPolicy.imageTypes && bytes != null) mediaBitmap(bytes!!) else null }
+    val temp = remember(bytes) { if ((video || audio) && bytes != null) File(app.cacheDir, "convo-preview-${java.util.UUID.randomUUID()}").apply { writeBytes(bytes!!) } else null }
     DisposableEffect(temp) { onDispose { temp?.delete() } }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         // WhatsApp viewer: black canvas, translucent top bar (back, sender/time, save), swipe to page.
@@ -409,7 +409,7 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
                     RawText(pointer.optString("fileName", tr("Media")), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                     RawText(SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), fontSize = 13.sp, color = Color(0xFFC7D0D6))
                 }
-                IconButton(onClick = { if (bytes != null) app.export(pointer.optString("fileName", "file"), mime, bytes) }, enabled = bytes != null) { Icon(Icons.Outlined.Download, "Download", tint = Color.White) }
+                IconButton(onClick = { bytes?.let { app.export(pointer.optString("fileName", "file"), mime, it) } }, enabled = bytes != null) { Icon(Icons.Outlined.Download, "Download", tint = Color.White) }
             }
             var drag by remember { mutableFloatStateOf(0f) }
             Box(Modifier.weight(1f).fillMaxWidth().pointerInput(position, items.size) {
@@ -418,7 +418,7 @@ private fun isVisual(pointer: JSONObject) = pointer.optString("contentType").let
                     if (drag < -120 && position < items.lastIndex) position++ else if (drag > 120 && position > 0) position--
                 }) { _, amount -> drag += amount }
             }, contentAlignment = Alignment.Center) {
-                if (loaded == null) CircularProgressIndicator(color = Color.White)
+                if (bytes == null) CircularProgressIndicator(color = Color.White)
                 else if (bitmap != null) Image(bitmap, pointer.optString("fileName"), Modifier.fillMaxSize().clickable { zoom = !zoom }, contentScale = if (zoom) androidx.compose.ui.layout.ContentScale.Crop else androidx.compose.ui.layout.ContentScale.Fit)
                 else if (temp != null) AndroidView(factory = { context -> VideoView(context).apply { setVideoURI(Uri.fromFile(temp)); setMediaController(MediaController(context).also { it.setAnchorView(this) }); setOnPreparedListener { start() } } }, modifier = Modifier.fillMaxSize())
                 else Text("This file is ready to save.", color = Color.White)

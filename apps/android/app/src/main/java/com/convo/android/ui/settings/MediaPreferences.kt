@@ -46,10 +46,15 @@ object MediaPolicy {
     val networks = listOf("cellular" to "When using mobile data", "wifi" to "When connected on Wi-Fi", "roaming" to "When roaming")
     private val defaults = mapOf("wifi" to listOf("photos", "audio"), "cellular" to listOf("photos", "audio"), "roaming" to emptyList())
 
+    /** Image types shown inline as photos (GIFs show their first frame). */
+    val imageTypes = setOf("image/jpeg", "image/png", "image/gif", "image/webp")
+    /** Same bound as the web client (mediaPolicy.ts AUTO_PREFETCH_MAX_BYTES): larger videos/documents wait for a tap. */
+    const val PREFETCH_MAX_BYTES = 16L * 1024 * 1024
+
     fun kindOf(pointer: JSONObject): String {
         val mime = pointer.optString("contentType").lowercase()
         return when {
-            mime in setOf("image/jpeg", "image/png", "image/gif", "image/webp") -> "photos"
+            mime in imageTypes -> "photos"
             pointer.optBoolean("voiceNote") || mime.startsWith("audio/") -> "audio"
             mime.startsWith("video/") -> "videos"
             else -> "documents"
@@ -73,8 +78,12 @@ object MediaPolicy {
     }
 
     /** Own media always loads; others follow the current network's rule. */
-    fun automatic(app: MainActivity, pointer: JSONObject, own: Boolean): Boolean =
-        own || kindOf(pointer) in rules(app.snapshot.optJSONObject("settings")).getValue(network(app))
+    fun automatic(app: MainActivity, pointer: JSONObject, own: Boolean): Boolean {
+        if (own) return true
+        val kind = kindOf(pointer)
+        if ((kind == "videos" || kind == "documents") && pointer.optLong("size") > PREFETCH_MAX_BYTES) return false
+        return kind in rules(app.snapshot.optJSONObject("settings")).getValue(network(app))
+    }
 
     fun patch(rules: Map<String, List<String>>): JSONObject =
         obj("patch" to obj("autoDownload" to JSONObject().apply { rules.forEach { (network, list) -> put(network, JSONArray(list)) } }))

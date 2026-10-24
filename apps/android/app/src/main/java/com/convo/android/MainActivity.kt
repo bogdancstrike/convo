@@ -150,7 +150,7 @@ class MainActivity : FragmentActivity() {
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
-                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
+                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications() }; if (phase == "welcome") io.execute { mediaCache.clear() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
                 "alert" -> MessageNotifications.show(this, value)
                 "callLog" -> callLogVersion++
@@ -351,15 +351,46 @@ class MainActivity : FragmentActivity() {
     }
     fun attachmentLimit(): Long = snapshot.optJSONObject("limits")?.optLong("attachmentMaxBytes")?.takeIf { it > 0 } ?: 104857600L
     fun decode(value: String): ByteArray = Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    fun decodeImage(bytes: ByteArray, result: (androidx.compose.ui.graphics.ImageBitmap?) -> Unit) {
+        io.execute { val bitmap = try { mediaBitmap(bytes) } catch (_: Exception) { null }; runOnUiThread { result(bitmap) } }
+    }
     fun decodeImage(data: String, result: (androidx.compose.ui.graphics.ImageBitmap?) -> Unit) {
         io.execute { val bitmap = try { mediaBitmap(decode(data)) } catch (_: Exception) { null }; runOnUiThread { result(bitmap) } }
     }
     private val gallery by lazy { GallerySaver(this) }
-    /** Exports a received photo/video once, only when Save to gallery is on (never own media). */
-    fun saveReceivedMedia(message: JSONObject, pointer: JSONObject, data: String) {
+    val mediaCache by lazy { MediaCache(this) }
+    fun encode(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+
+    /**
+     * One attachment's plaintext: from the app-private [MediaCache] when it was fetched before,
+     * otherwise downloaded and decrypted by the core, cached, and exported to the gallery when that
+     * setting applies. [then] receives null on failure.
+     */
+    fun fetchMedia(message: JSONObject, conversation: String, index: Int, pointer: JSONObject, then: (ByteArray?) -> Unit = {}) {
+        val id = pointer.optString("attachmentId")
+        io.execute {
+            val cached = mediaCache.get(id)
+            if (cached != null) { runOnUiThread { then(cached) }; return@execute }
+            runOnUiThread {
+                call("download", message.targetArgs(conversation).put("index", index), quiet = true) { result ->
+                    val data = (result as? JSONObject)?.optString("data")?.takeIf { it.isNotEmpty() }
+                    if (data == null) { then(null); return@call }
+                    io.execute {
+                        val bytes = decode(data)
+                        mediaCache.put(id, bytes)
+                        saveReceivedMedia(message, pointer, bytes)
+                        runOnUiThread { then(bytes) }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Exports a received photo/video once, only when Save to gallery is on (never own media or locked chats). */
+    fun saveReceivedMedia(message: JSONObject, pointer: JSONObject, bytes: ByteArray) {
         if (message.optString("authorId") == snapshot.optString("accountId") || locks.locked(message.optString("conversationId"))) return
         if (snapshot.optJSONObject("settings")?.optBoolean("saveToGallery") != true) return
-        io.execute { try { gallery.saveOnce(pointer.optString("attachmentId"), pointer.optString("fileName").ifBlank { "convo-media" }, pointer.optString("contentType"), decode(data)) } catch (_: Exception) { } }
+        try { gallery.saveOnce(pointer.optString("attachmentId"), pointer.optString("fileName").ifBlank { "convo-media" }, pointer.optString("contentType"), bytes) } catch (_: Exception) { }
     }
     fun requestContacts() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) discoverContacts()

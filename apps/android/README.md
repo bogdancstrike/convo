@@ -72,6 +72,16 @@ turns notifications on if granted (previews stay hidden by default).
 Testing locally with the emulator: `adb reverse tcp:8091 tcp:8091`, set ntfy's default server to
 `http://localhost:8091` (allowed by the dev Compose), then go home and send a message from the web.
 
+## Storage and data
+
+Auto-download rules (per network: mobile data, Wi-Fi, roaming × photos, audio, videos, documents)
+are shared with the web client (`apps/web/src/core/mediaPolicy.ts`). When a chat shows an
+attachment the rules allow, the app downloads and decrypts it into a private cache
+(`files/media-cache`, hashed names, 256 MB LRU, cleared on logout); videos and documents over
+16 MB always wait for a tap. Viewers read from that cache, so media opens instantly and offline.
+**Save to gallery** exports received photos to Pictures/Convo and videos to Movies/Convo once per
+attachment (never your own media or locked chats); these copies are unencrypted.
+
 ## Source layout
 
 Packages mirror the web client (`apps/web/src/ui`):

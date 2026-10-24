@@ -56,7 +56,7 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
 @Composable fun AttachmentTile(app: MainActivity, message: JSONObject, conversation: String, index: Int, pointer: JSONObject, compact: Boolean = false, open: () -> Unit) {
     val mime = pointer.optString("contentType")
     val name = if (pointer.optBoolean("voiceNote")) "Voice message" else pointer.optString("fileName").ifBlank { "Attachment" }
-    val image = mime in listOf("image/jpeg", "image/png", "image/webp")
+    val image = mime in MediaPolicy.imageTypes
     val video = mime.startsWith("video/")
     var bitmap by remember(pointer.optString("attachmentId")) { mutableStateOf<ImageBitmap?>(null) }
     var failed by remember { mutableStateOf(false) }
@@ -68,11 +68,12 @@ fun mediaBitmap(bytes: ByteArray, maxEdge: Int = 1600): ImageBitmap? = try {
     LaunchedEffect(pointer.optString("attachmentId"), load) {
         if (video && pointer.optString("thumbnail").isNotBlank()) {
             bitmap = withContext(Dispatchers.IO) { mediaBitmap(app.decode(pointer.optString("thumbnail")), 800) }
-        } else if (image && load && bitmap == null) app.call("download", message.targetArgs(conversation).put("index", index)) { result ->
-            val data = (result as? JSONObject)?.optString("data")
-            if (data == null) failed = true
-            else { app.decodeImage(data) { bitmap = it; failed = it == null }; app.saveReceivedMedia(message, pointer, data) }
+        } else if (image && load && bitmap == null) app.fetchMedia(message, conversation, index, pointer) { bytes ->
+            if (bytes == null) failed = true else app.decodeImage(bytes) { bitmap = it; failed = it == null }
         }
+        // Audio, videos and documents allowed by the auto-download rules are fetched in the
+        // background into the private cache, so opening them is instant (and offline-capable).
+        if (!image && load && !own && !app.mediaCache.contains(pointer.optString("attachmentId"))) app.fetchMedia(message, conversation, index, pointer)
     }
     if (image || video) {
         val manual = image && !load && bitmap == null
