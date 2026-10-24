@@ -137,7 +137,8 @@ services:
       ENCLAVE_ADMIN_HEALTH_OPERATIONS_URL: http://pgadmin:80/misc/ping
       ENCLAVE_ADMIN_HEALTH_TURN_HOST: coturn
       ENCLAVE_PUSH_ENABLED: "true"
-      ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncik.ro}:${CONVO_NTFY_PORT:-8091}
+      # Second origin: an emulator's ntfy app reaching this ntfy through `adb reverse tcp:8091 tcp:8091`.
+      ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncik.ro}:${CONVO_NTFY_PORT:-8091},http://localhost:${CONVO_NTFY_PORT:-8091}
       ENCLAVE_PUSH_INTERNAL_ORIGIN: http://ntfy:80
       # Web Push for closed browser tabs; keys from deploy/vapid-keys.sh in .env (needs internet egress).
       ENCLAVE_PUSH_WEB_PUSH_ENABLED: ${CONVO_WEB_PUSH_ENABLED:-false}

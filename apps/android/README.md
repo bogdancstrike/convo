@@ -56,6 +56,22 @@ that can read `up*` topics; Compose: `http://<server>:8091`). Convo registers au
 signs in; when it is not running, a message produces a generic "New message" notification
 (content stays end-to-end encrypted until you open the app).
 
+**How messages reach a closed or backgrounded app.** Convo does not use Google's push service, so:
+
+| Phone setup | While Convo is open | Backgrounded / closed |
+|---|---|---|
+| ntfy installed, default server = the organization's | live connection | ~15 s after leaving the screen the app hands over to push; each new message wakes it and shows "New message" |
+| "Stay connected in the background" on | live connection | live connection kept by a foreground service (ongoing notification, more battery) |
+| neither | live connection | **nothing arrives until you open Convo** — messages wait encrypted in the server mailbox and are never lost |
+
+The third row is expected, not a bug: without a push channel Android freezes a backgrounded app
+within about a minute. Settings → Notifications → *Background delivery* shows which case applies
+and how to fix it. On first start after sign-in Convo asks once for notification permission and
+turns notifications on if granted (previews stay hidden by default).
+
+Testing locally with the emulator: `adb reverse tcp:8091 tcp:8091`, set ntfy's default server to
+`http://localhost:8091` (allowed by the dev Compose), then go home and send a message from the web.
+
 ## Source layout
 
 Packages mirror the web client (`apps/web/src/ui`):

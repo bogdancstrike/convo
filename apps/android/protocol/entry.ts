@@ -134,6 +134,11 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
       } else throw new Error('unsupported action');
       return;
     }
+    // Background handoff: the activity closes the socket shortly after leaving the screen when a
+    // push distributor can wake it, so the server sends wakes instead of writing to a socket the
+    // OS is about to freeze. Mail stays in the server mailbox until the next start.
+    case 'background': client.socket.stop(); return;
+    case 'foreground': client.socket.start(); return;
     case 'snapshot': return snapshot();
     case 'open': active = args.id; await client.setActiveConversation(active); await snapshot(); return;
     case 'close': active = null; await client.setActiveConversation(null); await snapshot(); return;

@@ -2,6 +2,7 @@ package com.enclave.messaging.internal.gateway;
 
 import com.enclave.contracts.DeviceAddress;
 import com.enclave.contracts.EnclaveException;
+import com.enclave.messaging.MailWaiting;
 import com.enclave.messaging.internal.MessagingProperties;
 import com.enclave.messaging.internal.gateway.WireFormat.ClientFrame;
 import com.enclave.messaging.internal.gateway.WireFormat.SendResultDto;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.SubProtocolCapable;
@@ -42,16 +44,18 @@ class GatewayWebSocketHandler extends TextWebSocketHandler implements SubProtoco
     private final HintBus hints;
     private final MessagingProperties properties;
     private final ObjectMapper mapper;
+    private final ApplicationEventPublisher events;
     private final String replicaId = UUID.randomUUID().toString();
 
     GatewayWebSocketHandler(DeviceSessionRegistry registry, MailboxService mailbox, SubmissionService submissions,
-            HintBus hints, MessagingProperties properties, ObjectMapper mapper) {
+            HintBus hints, MessagingProperties properties, ObjectMapper mapper, ApplicationEventPublisher events) {
         this.registry = registry;
         this.mailbox = mailbox;
         this.submissions = submissions;
         this.hints = hints;
         this.properties = properties;
         this.mapper = mapper;
+        this.events = events;
     }
 
     @Override
@@ -120,7 +124,24 @@ class GatewayWebSocketHandler extends TextWebSocketHandler implements SubProtoco
         DeviceSession session = (DeviceSession) raw.getAttributes().get(SESSION_ATTRIBUTE);
         if (session != null) {
             registry.unregister(session);
-            if (!registry.isLocal(session.device())) hints.clearPresence(session.device(), replicaId);
+            if (!registry.isLocal(session.device())) {
+                hints.clearPresence(session.device(), replicaId);
+                wakeIfMailWaiting(session.device());
+            }
+        }
+    }
+
+    /**
+     * Mail that arrived while the device still looked connected — a killed app or a phone that lost
+     * its network keeps a half-open socket until the idle timeout — got no push wake, because the
+     * live session was expected to deliver it. Once the device's last session is gone, wake it for
+     * whatever is still undelivered so the notification is not delayed until the app is reopened.
+     */
+    private void wakeIfMailWaiting(DeviceAddress device) {
+        try {
+            if (!hints.isPresent(device) && mailbox.hasPending(device)) events.publishEvent(new MailWaiting(device, false));
+        } catch (RuntimeException e) {
+            log.debug("Wake after disconnect skipped: {}", e.toString());
         }
     }
 

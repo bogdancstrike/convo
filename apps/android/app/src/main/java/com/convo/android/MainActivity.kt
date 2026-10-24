@@ -150,7 +150,7 @@ class MainActivity : FragmentActivity() {
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
-                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
+                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
                 "alert" -> MessageNotifications.show(this, value)
                 "callLog" -> callLogVersion++
@@ -235,7 +235,38 @@ class MainActivity : FragmentActivity() {
         try { androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(this, uri) }
         catch (_: Exception) { error = "No browser is available to manage passkeys." }
     }
-    override fun onStop() { super.onStop(); isInForeground = false; PushRegistration.appVisible = false; locks.onBackground() }
+    override fun onStop() {
+        super.onStop(); isInForeground = false; PushRegistration.appVisible = false; locks.onBackground()
+        if (!stayConnected && PushRegistration.endpoint(this) != null && !PushRegistration.rejected(this)) handoffHandler.postDelayed(backgroundHandoff, BACKGROUND_HANDOFF_MS)
+    }
+    /**
+     * WhatsApp-like default: on the first start after sign-in, ask once for Android's notification
+     * permission and, if granted, turn message notifications on (previews stay hidden by default).
+     * Declining leaves them off; Settings → Notifications can change it later.
+     */
+    private fun offerNotifications() {
+        val prefs = getPreferences(MODE_PRIVATE)
+        if (prefs.getBoolean("notificationsOffered", false)) return
+        prefs.edit().putBoolean("notificationsOffered", true).apply()
+        if (snapshot.optJSONObject("settings")?.optBoolean("notifications") == true) return
+        requestNotificationPermission { granted -> if (granted) call("settings", obj("patch" to obj("notifications" to true)), quiet = true) }
+    }
+
+    private companion object {
+        /** Grace before handing delivery to push: quick app switches keep the live connection. */
+        const val BACKGROUND_HANDOFF_MS = 15_000L
+    }
+    private val handoffHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var handedOff = false
+    /**
+     * Android freezes a backgrounded app within about a minute; its socket then looks alive to the
+     * server, which keeps "delivering" there instead of sending push wakes. With a working push
+     * registration the app therefore hands delivery over to push shortly after leaving the screen
+     * (never during a call); returning to the app reconnects and drains the mailbox.
+     */
+    private val backgroundHandoff = Runnable {
+        if (!isInForeground && phase == "ready" && calls.call == null) { call("background", quiet = true); handedOff = true }
+    }
     override fun onResume() { super.onResume(); if (phase == "ready") { refreshCredentialStatus(refresh = true); syncPush() } }
     var isInForeground = false; private set
     /** Device-local opt-in for [ConnectionService]. */
@@ -244,7 +275,11 @@ class MainActivity : FragmentActivity() {
     var stayConnected: Boolean
         get() = getPreferences(MODE_PRIVATE).getBoolean("stayConnected", false)
         set(value) { getPreferences(MODE_PRIVATE).edit().putBoolean("stayConnected", value).apply(); ConnectionService.sync(this, value && phase == "ready") }
-    override fun onStart() { super.onStart(); isInForeground = true; PushRegistration.appVisible = true; CallWake.cancel(this) }
+    override fun onStart() {
+        super.onStart(); isInForeground = true; PushRegistration.appVisible = true; CallWake.cancel(this)
+        handoffHandler.removeCallbacks(backgroundHandoff)
+        if (handedOff) { handedOff = false; call("foreground", quiet = true) }
+    }
     /** Registers with a UnifiedPush distributor and sends a new endpoint to the server once. */
     fun syncPush() {
         PushRegistration.onEndpoint = { runOnUiThread { if (phase == "ready") sendPushEndpoint() } }
@@ -256,10 +291,12 @@ class MainActivity : FragmentActivity() {
     private fun sendPushEndpoint() {
         val endpoint = PushRegistration.endpoint(this)
         // Once per process (and on every new endpoint): the server may have dropped a stale one.
-        if (endpoint != null && (!PushRegistration.synced(this) || sentPushEndpoint != endpoint)) call("setPushEndpoint", obj("endpoint" to endpoint), quiet = true) { result ->
-            // null = refused (e.g. the push app uses a server this organization does not accept).
-            PushRegistration.setRejected(this, result == null)
-            if (result != null) { sentPushEndpoint = endpoint; PushRegistration.markSynced(this) }
+        if (endpoint != null && (!PushRegistration.synced(this) || sentPushEndpoint != endpoint)) bridge.command("setPushEndpoint", obj("endpoint" to endpoint)) { result ->
+            // Only a policy refusal means "wrong push server" (the distributor uses a server this
+            // organization does not accept); network errors leave it unsynced to retry on resume.
+            val ok = result.optBoolean("ok")
+            PushRegistration.setRejected(this, !ok && result.optString("error") == "POLICY_VIOLATION")
+            if (ok) { sentPushEndpoint = endpoint; PushRegistration.markSynced(this) }
             pushVersion++
         }
     }

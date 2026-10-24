@@ -92,6 +92,14 @@ At app lock, clear visible content and memory keys where practicable, redact app
 | Native foreground WebSocket service | Restricted fallback where policy permits | Visible persistent notification, correct service type/start rules, measured battery cost; not a bypass for background restrictions. |
 | App foreground only | Explicit degraded mode | Queue remains durable; explain delayed notifications/calls until app opens. |
 
+Implemented behavior (UnifiedPush): with a registered, accepted endpoint the app closes its socket
+15 s after leaving the screen (not during a call; not with the foreground-service option), so the
+server sends content-free wakes instead of writing to a socket the OS freezes about a minute later.
+If a socket dies without a clean close (killed process, lost network), the server wakes the device
+for any undelivered mail once its last session closes (idle timeout, default 90 s). Without a
+distributor or the foreground service, delivery waits until the app is opened (degraded mode
+above); the in-app Background delivery card says so.
+
 Android manufacturer restrictions, Doze, app standby, force-stop, restricted battery mode, and notification permission affect delivery. WorkManager performs deferred retry/cleanup/key replenishment; it is not a precise scheduler for ringing or guaranteed real-time message delivery. A foreground service may be stopped/restricted; test it under supported OS and distribution rules. [Android background restrictions](https://developer.android.com/develop/background-work/background-tasks/bg-work-restrictions).
 
 Register/rotate push endpoint generation transactionally. The app acknowledges locally rendered notification event IDs and deduplicates repeated provider wakes. Fetch a bounded mailbox batch, process safely, and hand off remaining work without exhausting the background budget. Background failure leaves content recoverable in the mailbox; it must not falsely acknowledge or replace message content with an error.

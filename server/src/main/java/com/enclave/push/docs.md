@@ -19,6 +19,11 @@ Content-free wake-ups for devices without a live connection, through a self-host
    shows a ringing, full-screen-capable "Incoming call" notification without the caller; opening
    it connects, decrypts the ring and shows the real call screen.
 
+Half-open sockets: a device whose app was killed or lost its network still looks connected until
+the gateway's idle timeout (90 s), so mail in that window gets no wake. When the device's last
+session closes, `GatewayWebSocketHandler` publishes `MailWaiting` if the mailbox still holds
+envelopes (and no other replica has the device), so the wake is late rather than lost.
+
 Delivery (durable intents, V24): `MailWaiting` is published just before the envelope transaction
 commits, and `PushService` inserts a `push_intents` row in that same transaction (one pending
 intent per device and kind; later mail coalesces into it). After commit it nudges
