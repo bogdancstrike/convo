@@ -10,10 +10,11 @@ interface Props<T extends object> {
   id: string; resource: string; columns: ColumnType<T>[]; rowKey: TableProps<T>['rowKey']; scope?: Record<string, string>;
   defaultSort?: string; defaultOrder?: 'asc' | 'desc'; defaultSize?: number; searchId?: string; searchPlaceholder?: string;
   refreshKey?: unknown; controls?: ReactNode; onRow?: TableProps<T>['onRow']; testId?: string;
+  fitColumns?: boolean;
 }
 
 /** All source-backed admin tables share backend paging, column queries and persistent display settings. */
-export function AdminTable<T extends object>({ id, resource, columns, rowKey, scope = {}, defaultSort = '', defaultOrder = 'asc', defaultSize = 20, searchId, searchPlaceholder = 'Search this table', refreshKey, controls, onRow, testId }: Props<T>) {
+export function AdminTable<T extends object>({ id, resource, columns, rowKey, scope = {}, defaultSort = '', defaultOrder = 'asc', defaultSize = 20, searchId, searchPlaceholder = 'Search this table', refreshKey, controls, onRow, testId, fitColumns = false }: Props<T>) {
   const stateKey = `table_${id}`;
   const { view, update } = useViewState({ [stateKey]: '' });
   const query = useMemo<TableQuery>(() => {
@@ -63,7 +64,7 @@ export function AdminTable<T extends object>({ id, resource, columns, rowKey, sc
       </div>
     </div>
     {error && <Alert type="error" showIcon message={error} />}{data?.warnings.map((warning) => <Alert key={warning} type="warning" showIcon message={warning} />)}
-    <Table<T> rowKey={rowKey} columns={configured} dataSource={data?.rows ?? []} loading={busy} size={density} scroll={{ x: 'max-content', y: 1 }} onRow={onRow}
+    <Table<T> rowKey={rowKey} columns={configured} dataSource={data?.rows ?? []} loading={busy} size={density} scroll={{ x: 'max-content', y: 1 }} onRow={onRow} style={fitColumns ? { width: configured.reduce((sum, c) => sum + (typeof c.width === 'number' ? c.width : 160), 0), maxWidth: '100%' } : undefined}
       pagination={{ current: data?.page ?? query.page, pageSize: query.size, total: data?.total ?? 0, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], showTotal: (total, range) => `${range[0]}–${range[1]} of ${total}`, hideOnSinglePage: false }}
       onChange={(pagination, filters, sorter, extra) => {
         const sort = Array.isArray(sorter) ? sorter[0] : sorter;

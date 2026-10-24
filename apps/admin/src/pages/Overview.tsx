@@ -60,12 +60,11 @@ export function OverviewPage({ can, navigate, param }: PageProps) {
     {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
     {busy ? <Card><Skeleton active /></Card> : selected ? person && <PersonActivity person={person} /> : data && <>
       {!data.activityTracking && <Alert type="info" showIcon message="Activity tracking is turned off for this deployment." style={{ marginBottom: 16 }} />}
-<Tabs activeKey={view.tab} onChange={(tab) => update({ tab })} items={[
-        { key: 'trends', label: 'Usage trends', children: <OrganizationOverview days={days} data={data} /> },
-        { key: 'throughput', label: 'System throughput', children: <ThroughputChart minutes={[60, 360, 1440].includes(Number(view.throughput)) ? Number(view.throughput) : 60} onWindowChange={(minutes) => update({ throughput: String(minutes) })} /> },
+<Tabs activeKey={view.tab === 'throughput' ? 'trends' : view.tab} onChange={(tab) => update({ tab })} items={[
+        { key: 'trends', label: 'Usage trends', children: <OrganizationOverview days={days} data={data} throughput={<ThroughputChart minutes={[60, 360, 1440].includes(Number(view.throughput)) ? Number(view.throughput) : 60} onWindowChange={(minutes) => update({ throughput: String(minutes) })} />} /> },
         { key: 'adoption', label: 'Adoption & engagement', children: <ActivityStats days={days} levels={levels} overview={data} /> },
         ...(can('ACCOUNTS_READ') ? [{ key: 'people', label: 'People', children: <>
-          <Row gutter={[16, 16]}><Col xs={24} xl={12}><Card className="activity-table-card" title="Most active" data-testid="activity-top">{rankings('active')}</Card></Col><Col xs={24} xl={12}><Card className="activity-table-card" title="Least active" data-testid="activity-quiet">{rankings('inactive')}</Card></Col></Row>
+          <div className="people-activity-panels"><Row gutter={[16, 16]}><Col xs={24} xl={12}><Card className="activity-table-card" title="Most active" data-testid="activity-top">{rankings('active')}</Card></Col><Col xs={24} xl={12}><Card className="activity-table-card" title="Least active" data-testid="activity-quiet">{rankings('inactive')}</Card></Col></Row><NewPeople data={data} /></div>
         </> }] : []),
       ]} />
     </>}
@@ -95,7 +94,7 @@ function PersonActivity({ person }: { person: AccountActivity }) {
   </div>;
 }
 
-function OrganizationOverview({ days, data }: { days: number; data: Overview }) {
+function OrganizationOverview({ days, data, throughput }: { days: number; data: Overview; throughput: import('react').ReactNode }) {
   const x = data?.days.map((d) => shortDay(d.day)) ?? [];
   const sum = (k: 'items' | 'calls' | 'newAccounts') => data?.days.reduce((n, d) => n + d[k], 0) ?? 0;
   const d = data?.directory;
@@ -143,16 +142,9 @@ function OrganizationOverview({ days, data }: { days: number; data: Overview }) 
             }} /> : <Skeleton active />}
           </ChartCard>
         </Col>
+        <Col xs={24} xl={12}>{throughput}</Col>
         <Col xs={24} xl={12}>
-          <ChartCard title="New people" description={<>first sign-in per day</>}>
-            {data ? <Chart label="New accounts per day" height={240} option={{
-              xAxis: { type: 'category', data: x }, yAxis: { type: 'value', minInterval: 1 },
-              series: [{ name: 'New people', type: 'bar', barMaxWidth: 18, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: data.days.map((v) => v.newAccounts) }],
-            }} /> : <Skeleton active />}
-          </ChartCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <ChartCard title="Calls" description={<>started per day</>}>
+          <ChartCard title="Calls" data-testid="overview-calls" description={<>started per day</>}>
             {data ? <Chart label="Calls per day by type" height={240} option={{
               xAxis: { type: 'category', data: x }, yAxis: { type: 'value', minInterval: 1 },
               series: [
@@ -167,4 +159,11 @@ function OrganizationOverview({ days, data }: { days: number; data: Overview }) 
       <p className="privacy-note" style={{ marginTop: 16 }}>Activity is kept for {data?.retentionDays ?? 90} days at day granularity. Encrypted items include messages, receipts, reactions and typing signals; the server cannot tell them apart.</p>
     </div>
   );
+}
+
+function NewPeople({ data }: { data: Overview }) {
+  return <ChartCard title="New people" description="First sign-in per day" data-testid="new-people-chart"><Chart label="New accounts per day" height={190} option={{
+    xAxis: { type: 'category', data: data.days.map((d) => shortDay(d.day)) }, yAxis: { type: 'value', minInterval: 1 },
+    series: [{ name: 'New people', type: 'bar', barMaxWidth: 18, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: data.days.map((d) => d.newAccounts) }],
+  }} /></ChartCard>;
 }

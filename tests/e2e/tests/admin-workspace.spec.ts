@@ -48,6 +48,13 @@ test('merged workspace, scoped activity, role explorer and renewable sessions', 
     await expect(admin.getByTestId('kpi-accounts')).toBeVisible();
     await admin.getByRole('tab', { name: 'Adoption & engagement' }).click();
     await expect(admin.getByTestId('activity-kpi-active')).toBeVisible();
+    await admin.getByRole('tab', { name: 'People', exact: true }).click();
+    await expect(admin.getByTestId('activity-top').getByRole('row').nth(1)).toBeVisible();
+    const peopleWidth = async () => admin.getByTestId('activity-top').evaluate((e) => ({ card: e.getBoundingClientRect().width, table: e.querySelector('.remote-table')!.getBoundingClientRect().width, right: e.getBoundingClientRect().right, viewport: innerWidth }));
+    await expect.poll(async () => { const r = await peopleWidth(); return r.table <= r.card && r.right <= r.viewport; }).toBe(true);
+    await expect(admin.getByTestId('new-people-chart')).toBeVisible();
+    await admin.screenshot({ path: 'test-results/admin-people-layout.png', fullPage: true });
+
 
     await adminGo(admin, 'roles');
     await admin.getByRole('button', { name: /Helpdesk.*permissions/ }).click();
@@ -244,7 +251,16 @@ test('system throughput reports accepted operations per minute', async ({ browse
     const before = initial.minutes.reduce((sum: number, m: { items: number }) => sum + m.items, 0);
     await startChat(person, peerU); await send(person, 'throughput counter');
     await expect.poll(async () => (await adminApi(page, '/stats/throughput?minutes=60')).minutes.reduce((sum: number, m: { items: number }) => sum + m.items, 0)).toBeGreaterThan(before);
-    await page.getByRole('tab', { name: 'System throughput' }).click();
+    await expect(page.getByRole('tab', { name: 'System throughput' })).toHaveCount(0);
+    const throughput = page.getByTestId('system-throughput');
+    await expect(throughput).toBeVisible();
+    await expect(page.getByTestId('new-people-chart')).not.toBeVisible();
+    const bounds = await throughput.boundingBox();
+    const calls = await page.getByTestId('overview-calls').boundingBox();
+    expect(Math.abs(bounds!.y - calls!.y)).toBeLessThan(2);
+    expect(bounds!.x).toBeLessThan(calls!.x);
+    await throughput.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'test-results/admin-throughput-overview.png', fullPage: true });
     await expect(page.getByTestId('system-throughput')).toContainText('operations');
     const times = initial.minutes.map((m: { minute: string }) => Date.parse(m.minute));
     expect(times.slice(1).every((t: number, i: number) => t - times[i] === 60_000)).toBe(true);
