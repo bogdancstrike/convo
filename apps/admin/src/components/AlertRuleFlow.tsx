@@ -1,4 +1,4 @@
-import { Alert, Button, Descriptions, Empty, Modal, Segmented, Space, Spin, Typography } from 'antd';
+import { Alert, Button, Descriptions, Empty, Modal, Select, Space, Spin, Typography } from 'antd';
 import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { AlertRule } from '../api';
@@ -7,12 +7,15 @@ import { DiagramView } from './DiagramView';
 import { ALERT_RULE_NAMES, SEVERITY_COLORS, ruleSentence, sortRules } from './AlertRules';
 
 import { useDark } from './useDark';
+import { businessHoursText, ruleKind } from './alertRuleText';
 
 /** One card in the flow, with the explanation shown when it is selected. */
 interface Step { id: string; title: string; subtitle: string; color: string; description: string; facts: [string, string][]; muted?: boolean }
 
 const COLUMN = 320; const ROW = 140; const WIDTH = 270; const HEIGHT = 112;
 const SOURCE = '#2596BE'; const CONDITION = '#8075c6'; const MUTED = '#8a99a6';
+/** Short noun phrase for what each burst rule counts. */
+const COUNTED: Record<string, string> = { 'failed-logins': 'failed sign-ins', 'device-burst': 'device enrollments', 'bulk-device-unlink': 'device unlinks', 'bulk-account-disable': 'account disables', 'credential-reset-burst': 'credential resets', 'session-end-burst': 'ended sessions' };
 const minutes = (n: number) => `${n} ${n === 1 ? 'minute' : 'minutes'}`;
 const SOURCES: Record<string, { subtitle: string; description: string; facts: [string, string][] }> = {
   'failed-logins': { subtitle: 'Keycloak sign-in failures imported into the audit log',
@@ -27,26 +30,49 @@ const SOURCES: Record<string, { subtitle: string; description: string; facts: [s
   'audit-sync': { subtitle: 'Health of the identity audit importer',
     description: 'Every detection pass checks when the identity audit importer last copied Keycloak events successfully. This rule does not depend on new audit entries arriving.',
     facts: [['Signal', 'Time of the last successful identity import (or backend startup)'], ['Also fails when', 'The importer is not configured or reports an error'], ['Why it matters', 'Without imports, failed sign-ins cannot be detected']] },
+  'audit-export': { subtitle: 'Audit log exports by administrators',
+    description: 'Exporting the audit log writes an audit.export entry with the administrator and reason. Detection reads new audit entries in order, every 15 seconds.',
+    facts: [['Audit action', 'audit.export'], ['Counted per', 'Each export'], ['Why it matters', 'An export copies identities and administrative history out of the console']] },
+  'bulk-device-unlink': { subtitle: 'Devices unlinked by administrators',
+    description: 'Unlinking a person’s messaging device from the console writes a device.revoke entry naming the administrator. Detection reads new audit entries in order, every 15 seconds.',
+    facts: [['Audit action', 'device.revoke'], ['Counted per', 'Administrator performing the unlink'], ['Not counted', 'People removing or signing out their own devices']] },
+  'bulk-account-disable': { subtitle: 'Convo accounts disabled by administrators',
+    description: 'Disabling a Convo account from the console writes an account.disable entry naming the administrator. Detection reads new audit entries in order, every 15 seconds.',
+    facts: [['Audit action', 'account.disable'], ['Counted per', 'Administrator performing the change']] },
+  'credential-reset-burst': { subtitle: 'Password resets, required actions and recovery-kit revocations',
+    description: 'Resetting a password, requiring sign-in actions or revoking a recovery kit from the console writes an audit entry naming the administrator. Detection reads new audit entries in order, every 15 seconds.',
+    facts: [['Audit actions', 'user.password-reset, user.require-actions, recovery.revoke'], ['Counted per', 'Administrator performing the changes']] },
+  'session-end-burst': { subtitle: 'Sessions ended and people signed out by administrators',
+    description: 'Ending one live session or signing a person out everywhere writes an audit entry naming the administrator. Detection reads new audit entries in order, every 15 seconds.',
+    facts: [['Audit actions', 'session.end, user.sign-out'], ['Counted per', 'Administrator performing the changes']] },
+  'off-hours-admin': { subtitle: 'Every privileged administrator change',
+    description: 'Account, device, credential, session, role, audit-export and rule changes made through the console are all audited with the administrator and time. Detection reads new audit entries in order, every 15 seconds.',
+    facts: [['Audit actions', 'account.*, device.revoke, user.*, role.*, recovery.revoke, session.end, audit.export, push.redrive, alert.rule-update'], ['Counted per', 'Administrator'], ['Time zone', 'Business hours are evaluated in UTC']] },
 };
 
 /** Steps 1–5 for one enabled rule, filled in with the rule's live settings. */
 function ruleSteps(rule: AlertRule): Step[] {
   const name = ALERT_RULE_NAMES[rule.id] ?? rule.id; const sev = rule.severity.toUpperCase(); const window = minutes(rule.windowMinutes);
   const source = SOURCES[rule.id] ?? { subtitle: 'Audit events', description: 'New audit entries are evaluated in order.', facts: [] };
-  const counted = rule.id === 'failed-logins' ? 'failed sign-ins' : 'device enrollments';
-  const condition: Step = rule.id === 'role-grant'
-    ? { id: 'condition', title: '2 · Every grant counts', subtitle: 'No threshold or time window', color: CONDITION, description: 'Each privileged role grant is significant on its own, so the rule triggers for every grant. Its threshold and window are fixed at 1.', facts: [['Threshold', '1 grant (fixed)'], ['Window', 'Not used']] }
-    : rule.id === 'audit-sync'
+  const kind = ruleKind(rule.id); const per = rule.id === 'failed-logins' ? 'person' : kind === 'target' ? 'account' : 'administrator';
+  const counted = COUNTED[rule.id] ?? 'matching events';
+  const condition: Step = kind === 'event'
+    ? { id: 'condition', title: `2 · Every ${rule.id === 'audit-export' ? 'export' : 'grant'} counts`, subtitle: 'No threshold or time window', color: CONDITION, description: `Each ${rule.id === 'audit-export' ? 'audit export' : 'privileged role grant'} is significant on its own, so the rule triggers every time. Its threshold and window are fixed at 1.`, facts: [['Threshold', '1 (fixed)'], ['Window', 'Not used']] }
+    : kind === 'health'
       ? { id: 'condition', title: `2 · No successful sync in ${window}`, subtitle: 'Grace period after the last good import', color: CONDITION, description: `The rule triggers when the importer has not completed a successful import for ${window}, measured from the last success or from backend startup.`, facts: [['Grace period', window], ['Recovery', 'A successful import ends the outage episode']] }
-      : { id: 'condition', title: `2 · ${rule.threshold} ${counted} in ${window}`, subtitle: `Rolling window per ${rule.id === 'failed-logins' ? 'person' : 'account'}, checked at each event`, color: CONDITION,
-        description: `At each new event the detector counts matching events for the same ${rule.id === 'failed-logins' ? 'person' : 'account'} in the preceding ${window}. When the count reaches ${rule.threshold}, the rule triggers.`,
-        facts: [['Threshold', `${rule.threshold} events (allowed 1–1000)`], ['Window', `${window} (allowed 1–1440)`], ['Boundaries', 'The event time is included; the exact lower boundary is excluded']] };
-  const episode: Step = rule.id === 'role-grant'
-    ? { id: 'episode', title: '4 · One alert per grant', subtitle: 'Grants are never merged', color: SOURCE, description: 'Every grant creates its own alert so each one is reviewed separately.', facts: [['Deduplication', 'By audit entry, so retries never create duplicates']] }
-    : rule.id === 'audit-sync'
+      : kind === 'offHours'
+        ? { id: 'condition', title: '2 · Outside business hours', subtitle: rule.businessHours ? `Business hours: ${businessHoursText(rule.businessHours)}` : 'Business hours not configured', color: CONDITION,
+          description: 'Each privileged change is checked against the configured business hours in UTC. A change on a non-business day, before the start hour or from the end hour onwards triggers the rule.',
+          facts: [['Business hours', rule.businessHours ? businessHoursText(rule.businessHours) : 'Not configured'], ['Threshold', '1 change (fixed)']] }
+        : { id: 'condition', title: `2 · ${rule.threshold} ${counted} in ${window}`, subtitle: `Rolling window per ${per}, checked at each event`, color: CONDITION,
+          description: `At each new event the detector counts matching events by the same ${per} in the preceding ${window}. When the count reaches ${rule.threshold}, the rule triggers.`,
+          facts: [['Threshold', `${rule.threshold} events (allowed 1–1000)`], ['Window', `${window} (allowed 1–1440)`], ['Boundaries', 'The event time is included; the exact lower boundary is excluded']] };
+  const episode: Step = kind === 'event'
+    ? { id: 'episode', title: `4 · One alert per ${rule.id === 'audit-export' ? 'export' : 'grant'}`, subtitle: 'Events are never merged', color: SOURCE, description: 'Every matching event creates its own alert so each one is reviewed separately.', facts: [['Deduplication', 'By audit entry, so retries never create duplicates']] }
+    : kind === 'health'
       ? { id: 'episode', title: '4 · One alert per outage', subtitle: 'Recovery does not resolve it for you', color: SOURCE, description: 'While the outage continues, the same alert is updated. When imports recover, the outage marker is cleared but the alert stays open for review. A later outage raises a new alert.', facts: [['While failing', 'The existing alert is updated'], ['After recovery', 'The alert remains until an operator resolves it']] }
       : { id: 'episode', title: '4 · Extend the open alert', subtitle: `More events within ${window} update the same alert`, color: SOURCE,
-        description: `While an unresolved alert exists whose latest event is within the last ${window}, new matching events extend its event count and evidence times instead of creating another alert.`,
+        description: `While an unresolved alert for the same ${per} exists whose latest event is within the last ${window}, new matching events extend its event count and evidence times instead of creating another alert.`,
         facts: [['New alert when', `The alert is resolved, or events pause for longer than ${window}`], ['Acknowledged alerts', 'Stay acknowledged while they are extended']] };
   const steps: Step[] = [
     { id: 'source', title: '1 · Event source', subtitle: source.subtitle, color: SOURCE, description: source.description, facts: source.facts },
@@ -99,12 +125,14 @@ export function AlertRuleFlow({ rules, error, rule, onRule, selected, onSelect }
   const edges: Edge[] = steps.slice(1).map((s, i) => ({ id: `${steps[i]!.id}-${s.id}`, source: steps[i]!.id, target: s.id, type: 'straight', markerEnd: { type: MarkerType.ArrowClosed, color: '#7192a8' }, style: { stroke: '#7192a8', strokeWidth: 1.5, strokeDasharray: muted ? '5 4' : undefined } }));
   return <div className="diagram-frame alert-flow" data-testid="alert-rule-flow">
     <div className="alert-flow-picker">
-      <Segmented size="middle" value={shown.id} onChange={(id) => onRule(String(id))} aria-label="Rule to explain" options={ordered.map((r) => ({ value: r.id,
-        label: <span className={`rule-severity-option${r.enabled ? '' : ' alert-flow-off'}`} style={{ ['--severity' as string]: r.enabled ? SEVERITY_COLORS[r.severity] : MUTED }} data-testid={`alert-flow-pick-${r.id}`}><i aria-hidden="true" />{ALERT_RULE_NAMES[r.id] ?? r.id}{r.enabled ? '' : ' (off)'}</span> }))} />
+      <Select className="alert-flow-select" value={shown.id} onChange={(id) => onRule(id)} aria-label="Rule to explain" data-testid="alert-flow-picker" popupMatchSelectWidth={false} showSearch optionFilterProp="title"
+        options={ordered.map((r) => ({ value: r.id, title: ALERT_RULE_NAMES[r.id] ?? r.id,
+          label: <span className={`rule-severity-option${r.enabled ? '' : ' alert-flow-off'}`} style={{ ['--severity' as string]: r.enabled ? SEVERITY_COLORS[r.severity] : MUTED }} data-testid={`alert-flow-pick-${r.id}`}><i aria-hidden="true" />{ALERT_RULE_NAMES[r.id] ?? r.id}{r.enabled ? '' : ' (off)'}</span> }))} />
+      <Typography.Text type="secondary" data-testid="alert-flow-count">{ordered.length - disabled.length} of {ordered.length} rules on{disabled.length > 0 ? ' · disabled rules are marked “off”' : ''}</Typography.Text>
     </div>
     {muted ? <Alert className="alert-flow-note" type="warning" showIcon data-testid="alert-flow-disabled-note"
       message={<><strong>{ALERT_RULE_NAMES[shown.id] ?? shown.id} is disabled.</strong> It does not check new events or notify anyone; earlier alerts stay in the inbox. Greyed out below is what it would do when switched on.</>} />
-      : <Typography.Paragraph className="alert-flow-sentence" data-testid="alert-flow-sentence">{ruleSentence(shown)}{disabled.length > 0 && <Typography.Text type="secondary" data-testid="alert-flow-disabled-count"> · {disabled.length} disabled {disabled.length === 1 ? 'rule' : 'rules'} marked “off”.</Typography.Text>}</Typography.Paragraph>}
+      : <Typography.Paragraph className="alert-flow-sentence" data-testid="alert-flow-sentence">{ruleSentence(shown)}</Typography.Paragraph>}
     <div className="access-canvas alert-flow-canvas"><DiagramView id="alert-rules" nodes={nodes} edges={edges} onSelect={onSelect}><ReactFlow key={`${shown.id}:${muted}`} nodes={nodes} edges={edges} fitView fitViewOptions={{ padding: { top: '16px', bottom: '16px', left: '56px', right: '16px' }, minZoom: 0.8, maxZoom: 1 }} minZoom={0.5} maxZoom={1.5} colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }} onNodeClick={(_, n) => onSelect(n.id)}>
       <Background gap={24} /><Controls showInteractive={false} />
     </ReactFlow></DiagramView></div>

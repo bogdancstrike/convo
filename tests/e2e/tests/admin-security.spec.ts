@@ -127,12 +127,14 @@ test('real failed logins produce one durable alert with evidence, audited lifecy
     // Readable without zooming: cards render at (close to) their natural width.
     expect((await flow.locator('.react-flow__node').first().boundingBox())!.width).toBeGreaterThanOrEqual(200);
     await page.screenshot({ path: 'test-results/admin-alert-rule-flow.png', fullPage: true });
-    await flow.getByTestId('alert-flow-pick-audit-sync').click();
+    await page.getByTestId('alert-flow-picker').click();
+    await page.locator('.ant-select-item-option').filter({ hasText: 'Identity audit sync unavailable' }).click();
     await expect(page).toHaveURL(/flowRule=audit-sync/);
     await expect(page.getByTestId('alert-flow-disabled-note')).toContainText('Identity audit sync unavailable is disabled');
     await expect(flow.locator('.react-flow__node.alert-flow-muted')).toHaveCount(6);
     await page.screenshot({ path: 'test-results/admin-alert-rule-flow-disabled.png', fullPage: true });
-    await flow.getByTestId('alert-flow-pick-failed-logins').click();
+    await page.getByTestId('alert-flow-picker').click();
+    await page.locator('.ant-select-item-option').filter({ hasText: 'Repeated failed logins' }).click();
     await flow.getByTestId('alert-flow-failed-logins-episode').click();
     await expect(page).toHaveURL(/ruleNode=failed-logins%3Aepisode/);
     await expect(page.getByTestId('alert-flow-details')).toContainText('extend its event count');
@@ -222,5 +224,57 @@ test('device enrollment and role grants trigger alerts while helpdesk and audito
   } finally {
     if (saved) await adminApi(root, '/alerts/rules/device-burst', 'POST', { ...saved, reason: 'restore rule after verification' });
     await closeAll(root, helper, auditor, person);
+  }
+});
+
+test('admin activity rules detect real audit exports and session termination bursts', async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  const rootUser = await createUser(request, 'activityadmin', { realmRoles: ['convo-admin'] });
+  const target = await createUser(request, 'activitytarget');
+  const page = await newPage(browser);
+  let saved: Record<string, unknown> | null = null;
+  try {
+    await adminSignIn(page, rootUser); await adminGo(page, 'alerts');
+    const rules = (await adminApi(page, '/alerts/rules')).body as Array<Record<string, unknown> & { id: string }>;
+    expect(rules.map((r) => r.id)).toEqual(expect.arrayContaining(['audit-export', 'bulk-device-unlink', 'bulk-account-disable', 'credential-reset-burst', 'session-end-burst', 'off-hours-admin']));
+    expect(rules.find((r) => r.id === 'off-hours-admin')!.businessHours).toEqual({ startHour: 7, endHour: 19, days: [1, 2, 3, 4, 5] });
+    saved = rules.find((r) => r.id === 'session-end-burst')!;
+    expect((await adminApi(page, '/alerts/rules/session-end-burst', 'POST', { ...saved, enabled: true, threshold: 2, windowMinutes: 10, reason: 'exercise session burst detection' })).status).toBe(200);
+    // Server-side validation: event rules keep threshold 1 and only the off-hours rule takes business hours.
+    expect((await adminApi(page, '/alerts/rules/audit-export', 'POST', { ...rules.find((r) => r.id === 'audit-export'), threshold: 2, reason: 'invalid' })).status).toBe(400);
+    expect((await adminApi(page, '/alerts/rules/off-hours-admin', 'POST', { ...rules.find((r) => r.id === 'off-hours-admin'), businessHours: { startHour: 19, endHour: 7, days: [1] }, reason: 'invalid' })).status).toBe(400);
+    expect((await adminApi(page, '/audit/export', 'POST', { reason: 'quarterly evidence export' })).status).toBe(200);
+    const subject = await userId(page, target.username);
+    for (let i = 0; i < 2; i++) expect((await adminApi(page, `/idp/users/${subject}/sign-out`, 'POST', { reason: `burst sign-out ${i}` })).status).toBe(200);
+    const mine = async (ruleId: string) => ((await adminApi(page, `/tables/alerts?ruleId=${ruleId}&status=all&sort=createdAt&order=desc&size=100`)).body.rows as Array<{ id: string; subject: string; occurrences: number }>)
+      .filter((r) => r.subject.includes(`(${rootUser.username})`));
+    await expect.poll(async () => (await mine('audit-export')).length, { timeout: 65_000 }).toBe(1);
+    await expect.poll(async () => (await mine('session-end-burst')).length, { timeout: 65_000 }).toBe(1);
+    expect((await mine('session-end-burst'))[0]!.occurrences).toBe(2);
+    const exported = (await mine('audit-export'))[0]!;
+    await adminGo(page, `alerts/${exported.id}`);
+    await expect(page.getByTestId('alert-details')).toContainText('Audit log exported');
+    await expect(page.getByTestId('alert-details')).toContainText('exported the audit log');
+    await expect(page.getByRole('button', { name: 'Manage administrator' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    // Rule cards: ten rules in three groups; off-hours exposes business hours, event rules hide threshold/window.
+    await page.getByRole('tab', { name: 'Detection rules' }).click();
+    await expect(page.locator('[data-testid^=alert-rule-summary-]')).toHaveCount(10);
+    await expect(page.getByTestId('alert-rule-summary-session-end-burst')).toContainText('ends 2 sessions within 10 minutes');
+    const offHours = page.getByTestId('alert-rule-off-hours-admin');
+    await expect(offHours.getByLabel('Business hours start (UTC hour)')).toHaveValue('7');
+    await expect(offHours.getByRole('checkbox', { name: 'Sat' })).not.toBeChecked();
+    await expect(page.getByTestId('alert-rule-audit-export').getByLabel('Window in minutes')).toHaveCount(0);
+    await offHours.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'test-results/admin-alert-rules-admin-activity.png', fullPage: true });
+    await page.getByRole('tab', { name: 'Enabled rules' }).click();
+    await page.getByTestId('alert-flow-picker').click();
+    await page.locator('.ant-select-item-option').filter({ hasText: 'Session termination burst' }).click();
+    await expect(page.getByTestId('alert-flow-session-end-burst-condition')).toContainText('2 ended sessions in 10 minutes');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/admin-alert-rule-flow-session-burst.png', fullPage: true });
+  } finally {
+    if (saved) await adminApi(page, '/alerts/rules/session-end-burst', 'POST', { ...saved, reason: 'restore rule after verification' });
+    await closeAll(page);
   }
 });

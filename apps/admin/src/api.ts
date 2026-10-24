@@ -53,7 +53,9 @@ export type AlertStatus = 'open' | 'acknowledged' | 'resolved';
 export interface SecurityAlert { id: string; ruleId: string; severity: AlertSeverity; status: AlertStatus; title: string; subject: string; subjectName: string; detail: string; occurrences: number; firstSeq: number | null; lastSeq: number | null; firstSeen: string; lastSeen: string; createdAt: string; updatedAt: string }
 export interface AlertHistory { id: number; at: string; actor: string; status: AlertStatus; reason: string }
 export interface AlertDetail { alert: SecurityAlert; history: AlertHistory[] }
-export interface AlertRule { id: string; enabled: boolean; severity: AlertSeverity; threshold: number; windowMinutes: number; notificationsEnabled: boolean; updatedAt: string; updatedBy: string }
+/** UTC business hours for the off-hours rule: `days` are ISO weekdays (1 = Monday … 7 = Sunday); `endHour` is exclusive. */
+export interface BusinessHours { startHour: number; endHour: number; days: number[] }
+export interface AlertRule { id: string; enabled: boolean; severity: AlertSeverity; threshold: number; windowMinutes: number; notificationsEnabled: boolean; updatedAt: string; updatedBy: string; businessHours: BusinessHours | null }
 export interface AlertSummary { open: number; acknowledged: number; critical: number; notifications: number; processedAt: string | null; error: string | null; recent: SecurityAlert[] }
 
 export class AdminError extends Error {

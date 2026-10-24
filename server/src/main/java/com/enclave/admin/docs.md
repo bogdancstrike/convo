@@ -167,5 +167,14 @@ permissions. `SessionObservations` stores coarse browser/OS families from succes
 `SecurityAlertProcessor` projects audit sequences transactionally into the `SecurityAlerts` inbox
 and monitors identity-import outages. `SecurityAlertsController` enforces separate read, lifecycle
 and rule-edit permissions; status/rule changes share the hash-chained audit transaction. V30 owns
-the five security-operations tables. See [the operator/API specification](../../../../../../../docs/admin-security.md)
+the five security-operations tables; V31 adds six admin-activity rules and off-hours business-hour
+columns. `SecurityAlerts.DEFINITIONS` is the rule catalogue: each built-in rule declares its kind
+(`EVENT`, `ACTOR_BURST`, `TARGET_BURST`, `OFF_HOURS`, `SOURCE_HEALTH`) and the audit actions it
+reads; `SecurityAlertProcessor.rulesFor` evaluates every enabled rule for an action (an action can
+feed both its specific rule and off-hours detection). Per-kind validation fixes event-rule
+thresholds/windows and requires business hours only for the off-hours rule. Rules only use
+server-visible audit metadata: message content and attachments are end-to-end encrypted, so
+content rules (file types, link domains) cannot exist server-side. `POST /alerts/resolve-all`
+resolves matching open/acknowledged alerts in one statement with per-alert history and one audit
+entry. See [the operator/API specification](../../../../../../../docs/admin-security.md)
 for defaults, roles, endpoints, notification limits, logout semantics and deployment.

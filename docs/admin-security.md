@@ -60,8 +60,28 @@ revoke sessions automatically.
 | Device enrollment burst | Medium | 3 `device.add` events in 10 minutes | Convo account |
 | Privileged role granted | High | Each `role.grant` through the Convo admin API | Unique audit entry |
 | Identity audit sync unavailable | Critical | No successful identity import within 2 minutes | One alert per observed outage episode |
+| Audit log exported | Medium | Each `audit.export` (fixed threshold 1) | Unique audit entry; subject is the exporting administrator |
+| Bulk device unlinking | High | 5 `device.revoke` by one administrator in 10 minutes | Administrator |
+| Bulk account disabling | High | 3 `account.disable` by one administrator in 10 minutes | Administrator |
+| Credential reset burst | Medium | 5 `user.password-reset`, `user.require-actions` or `recovery.revoke` by one administrator in 10 minutes | Administrator |
+| Session termination burst | Medium | 10 `session.end` or `user.sign-out` by one administrator in 10 minutes | Administrator |
+| Off-hours admin activity (disabled by default) | Medium | Any privileged admin change outside business hours (default 07:00–19:00 UTC, Mon–Fri) | Administrator; changes within 60 minutes form one alert |
 
-The first two rules count a rolling source-time window ending at each newly processed event,
+Every rule can be switched off. Off-hours detection starts disabled because business hours are
+organization specific; configure its UTC start/end hour and business days on the rule card before
+enabling it. Privileged changes are account enable/disable, device unlink, sign-in account
+creation, password reset, required actions, sign-out, sign-in block/allow, role grant/revoke,
+recovery-kit revocation, session end, audit export, push redrive and alert rule updates. The same
+action can feed both its specific rule and off-hours detection.
+
+**Server-visible rules only.** Rules read the admin audit stream (administrative actions, imported
+identity events and device enrollment metadata). Messages, attachments and links are end-to-end
+encrypted on clients; the server never sees file names, file types or URLs, so content rules such
+as "executable attachment" or "link to a given domain" cannot be implemented server-side without
+breaking end-to-end encryption.
+
+Burst rules (failed logins, device enrollment and the four administrator bursts) count a rolling
+source-time window ending at each newly processed event,
 bounded by that event's committed audit sequence. Repeated triggers form one episode per rule and
 identity: while an unresolved alert exists whose latest event falls within the rule window, new
 matching events extend its count and evidence times (an acknowledged alert stays acknowledged).
@@ -75,20 +95,22 @@ identity import. The sync-outage rule runs independently of source-event ingesti
 configured grace period after backend startup. Source recovery clears the episode marker; it
 does not silently resolve the existing investigation. A later outage creates a new alert.
 
-**Enabled rules** explains one rule at a time (pick it from a severity-coded switcher; the choice
+**Enabled rules** explains one rule at a time (pick it from a severity-coded rule selector; the choice
 is kept in the URL as `flowRule`) as a React Flow diagram using its live settings: event
-source → condition (threshold within window, every grant, or no successful sync within the grace
-period) → alert with its severity → episode deduplication → notification (or "no notification"
+source → condition (threshold within window, every grant/export, outside business hours, or no
+successful sync within the grace period) → alert with its severity → episode deduplication → notification (or "no notification"
 when the rule's notifications are off) → audited operator review (acknowledge, resolve, reopen).
 Selecting a card explains that step; the selection is kept in the URL (`ruleNode`). Disabled rules
 are marked "(off)" in the switcher; selecting one shows a note and its flow greyed out. The diagram
 also has a table view.
 
-**Detection rules** shows one card per rule with a plain-language summary that follows the current
+**Detection rules** groups the cards (sign-in and devices, administrator activity, system health)
+and shows one card per rule with a plain-language summary that follows the current
 draft (for example "Raise a HIGH alert when one person fails to sign in 5 times within 5
 minutes"). Administrators/security operators can switch a rule on or off in the card header,
-choose severity, edit the threshold/window inline and control notifications. Role grants have no
-editable threshold or window (both fixed at 1); audit sync only has a grace period. The reason
+choose severity, edit the threshold/window inline and control notifications. Role grants and audit
+exports have no editable threshold or window (both fixed at 1); audit sync only has a grace
+period; off-hours detection has UTC business hours/days and a grouping window. The reason
 field, **Reset** and **Save rule** appear only when a card has unsaved changes. Users without
 rule-management permission see the same cards read-only. Changes require a reason and recent
 sign-in. They apply to subsequently processed events, including pending ingestion, without
@@ -141,7 +163,7 @@ The operations client already has `manage-users`, `view-users`, `view-realm` and
 | `POST /alerts/{id}/status` | `{status: open\|acknowledged\|resolved, reason?}`; blank reason stored as "No reason given" |
 | `POST /alerts/resolve-all` | Resolve open and acknowledged alerts matching the `/tables/alerts` query parameters; `{reason?}` → `{resolved}` |
 | `GET /alerts/rules` | Current persisted rule configuration |
-| `POST /alerts/rules/{id}` | `{enabled, severity, threshold, windowMinutes, notificationsEnabled, reason}` |
+| `POST /alerts/rules/{id}` | `{enabled, severity, threshold, windowMinutes, notificationsEnabled, businessHours, reason}`; `businessHours` (`{startHour, endHour, days}`, UTC, ISO weekdays) is required for `off-hours-admin` and must be null otherwise |
 
 Reads return `Cache-Control: no-store`. Session IDs and observation rows remain internal metadata;
 responses never contain access/refresh tokens or arbitrary user-agent strings. Alert database

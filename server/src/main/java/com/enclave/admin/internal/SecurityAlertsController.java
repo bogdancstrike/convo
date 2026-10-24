@@ -19,7 +19,7 @@ class SecurityAlertsController {
     record Transition(@NotBlank String status,@Size(max=500) String reason) {}
     record BulkResolve(@Size(max=500) String reason) {}
     record BulkResult(long resolved) {}
-    record RuleUpdate(boolean enabled,@NotBlank String severity,@Min(1) @Max(1000) int threshold,@Min(1) @Max(1440) int windowMinutes,boolean notificationsEnabled,@NotBlank @Size(max=500) String reason) {}
+    record RuleUpdate(boolean enabled,@NotBlank String severity,@Min(1) @Max(1000) int threshold,@Min(1) @Max(1440) int windowMinutes,boolean notificationsEnabled,SecurityAlerts.BusinessHours businessHours,@NotBlank @Size(max=500) String reason) {}
     private final AdminGuard guard;
     private final SecurityAlerts alerts;
     private final SecurityAlertProcessor processor;
@@ -47,7 +47,7 @@ class SecurityAlertsController {
     }
     @PostMapping("/alerts/rules/{id}") ResponseEntity<List<SecurityAlerts.Rule>> rule(@AuthenticationPrincipal Jwt admin,@PathVariable String id,@Valid @RequestBody RuleUpdate body) {
         guard.requireAudited(admin,ALERT_RULES_MANAGE,"alert.rule-update","alert-rule:"+id); guard.requireRecentSignIn(admin);
-        alerts.updateRule(id,body.enabled(),body.severity(),body.threshold(),body.windowMinutes(),body.notificationsEnabled(),guard.actor(admin),body.reason()); return noStore(alerts.rules());
+        alerts.updateRule(id,body.enabled(),body.severity(),body.threshold(),body.windowMinutes(),body.notificationsEnabled(),body.businessHours(),guard.actor(admin),body.reason()); return noStore(alerts.rules());
     }
     private static <T> ResponseEntity<T> noStore(T body) { return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body); }
 }

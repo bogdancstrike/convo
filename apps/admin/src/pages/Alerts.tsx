@@ -6,6 +6,7 @@ import { AdminTable } from '../components/AdminTable';
 import { AlertRules, ALERT_RULE_NAMES, useAlertRules } from '../components/AlertRules';
 import { AlertRuleFlow } from '../components/AlertRuleFlow';
 import { ChartCard } from '../components/ChartCard';
+import { ruleKind } from '../components/alertRuleText';
 import { useAlertInbox } from '../components/SecurityAlertContext';
 import { useReason } from '../components/confirm';
 import { useViewState } from '../components/useViewState';
@@ -25,7 +26,8 @@ export function AlertsPage({ can, navigate, param }: PageProps) {
     if (param) void api.alertDetail(param).then((data) => { if (active) setDetail(data); }).catch((e) => { if (active) setError(errorText(e)); });
     return () => { active = false; };
   }, [param, version]);
-  const rules = useAlertRules(version);
+  // Reload rules when a rules tab is opened so changes made elsewhere (another operator, the API) are shown.
+  const rules = useAlertRules(`${version}:${view.tab === 'inbox' ? '' : view.tab}`);
   const refresh = () => { inbox.refresh(); setVersion((v) => v + 1); };
   const close = () => navigate(link('alerts'));
   const expanded = view.display === 'page';
@@ -54,6 +56,9 @@ export function AlertsPage({ can, navigate, param }: PageProps) {
     } catch (e) { message.error(errorText(e)); }
   };
   const a = detail?.alert;
+  // Sign-in identities are "idp:<id> …"; administrator-activity rules record the administrator as "<id> (<username>)".
+  const subjectId = a ? a.subject.replace(/^idp:/, '').split(' ')[0]! : '';
+  const personId = a && (a.subject.startsWith('idp:') || ['actor', 'offHours'].includes(ruleKind(a.ruleId)) && a.ruleId !== 'failed-logins' || a.ruleId === 'audit-export') && /^[0-9a-f-]{36}$/.test(subjectId) ? subjectId : null;
   const detailContent = <div className="security-detail-content" data-testid="alert-details">{error && <Alert type="error" showIcon message={error} />}{a ? <>
     <Space wrap><Tag color={COLORS[a.severity]}>{a.severity.toUpperCase()}</Tag><Tag>{STATUS[a.status]}</Tag><Typography.Text type="secondary">{ALERT_RULE_NAMES[a.ruleId]}</Typography.Text></Space>
     <Typography.Title level={3}>{a.title}</Typography.Title><Typography.Paragraph>{a.detail}</Typography.Paragraph>
@@ -67,7 +72,7 @@ export function AlertsPage({ can, navigate, param }: PageProps) {
       {a.status !== 'resolved' && <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => void transition('resolved')} data-testid="alert-resolve">Resolve</Button>}
       {a.status !== 'open' && <Button onClick={() => void transition('open')} data-testid="alert-reopen">Reopen</Button>}
     </>}{can('AUDIT_READ') && a.firstSeq != null && <Button onClick={() => navigate(`audit?${new URLSearchParams({ table_audit: JSON.stringify({ q: '', sort: 'seq', order: 'asc', page: 1, size: 50, filters: {} }), user: a.subject.replace(/^idp:/, '').split(' ')[0]!, from: a.firstSeen, to: a.lastSeen })}`)}>View audit evidence</Button>}
-    {can('ACCOUNTS_READ') && a.subject.startsWith('idp:') && /^[0-9a-f-]{36}$/.test(a.subject.slice(4).split(' ')[0]!) && <Button onClick={() => navigate(`users/sign-in/${a.subject.slice(4).split(' ')[0]}/security?display=page`)}>Manage person</Button>}
+    {can('ACCOUNTS_READ') && personId && <Button onClick={() => navigate(`users/sign-in/${personId}/security?display=page`)}>{a.subject.startsWith('idp:') ? 'Manage person' : 'Manage administrator'}</Button>}
     {a.ruleId === 'audit-sync' && can('HEALTH_READ') && <Button onClick={() => navigate('health')}>Inspect system health</Button>}</Space>
     <Typography.Title level={5}>Alert history</Typography.Title><Typography.Text type="secondary">Latest 100 changes</Typography.Text>
     <Timeline items={detail.history.map((h) => ({ key: h.id, color: h.status === 'resolved' ? 'green' : 'blue', children: <div><Typography.Text strong>{STATUS[h.status]} · {h.actor}</Typography.Text><div>{h.reason}</div><Typography.Text type="secondary">{fmtTime(h.at)}</Typography.Text></div> }))} />

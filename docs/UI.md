@@ -322,7 +322,7 @@ Live sessions has a remote person picker and a full-width, backend-controlled se
 User details includes the same Sessions tab. A session opens a lateral detail surface with a
 maximize action and explicit termination scope. Security alerts has an operational count strip,
 Inbox (with Resolve all for the current filters), Enabled rules (a readable step-by-step flow
-for one rule at a time, chosen with a severity-coded switcher; disabled rules greyed out) and Detection rules (one card per rule with a plain-language summary; reason and Save
+for one rule at a time, chosen with a severity-coded rule selector; disabled rules greyed out) and Detection rules (ten server-visible rules grouped by area, one card per rule with a plain-language summary; reason and Save
 appear only for unsaved changes) tabs, severity/status/rule filters, and a detail surface containing
 evidence links, lifecycle actions and history. Both surfaces preserve browser Back/Forward state
 and use component scrolling. Desktop alerts require explicit per-administrator browser opt-in.

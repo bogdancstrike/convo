@@ -22,9 +22,47 @@ import org.springframework.transaction.annotation.Transactional;
 /** Durable inbox and configuration. Resolved/disabled alerts and their evidence are retained. */
 @Service
 class SecurityAlerts {
-    static final Map<String, String> LABELS = Map.of("failed-logins", "Repeated failed logins", "device-burst", "Device enrollment burst", "role-grant", "Privileged role granted", "audit-sync", "Identity audit sync unavailable");
+    /** How a rule groups and counts audit entries. */
+    enum Kind {
+        /** Every matching entry raises its own alert (threshold and window fixed at 1). */ EVENT,
+        /** N matching entries by the same actor within the window. */ ACTOR_BURST,
+        /** N matching entries for the same target account within the window. */ TARGET_BURST,
+        /** Privileged actions outside the configured business hours, grouped per actor within the window. */ OFF_HOURS,
+        /** Health of the identity audit importer, independent of audit entries. */ SOURCE_HEALTH
+    }
+    /** A built-in rule: label, detection kind and the audit actions it reads. Configuration lives in {@code admin_alert_rule}. */
+    record Definition(String id, String label, Kind kind, Set<String> actions, String counted) {
+        boolean fixedThreshold() { return kind==Kind.EVENT || kind==Kind.OFF_HOURS || kind==Kind.SOURCE_HEALTH; }
+        boolean fixedWindow() { return kind==Kind.EVENT; }
+    }
+    /** Administrative changes that count as privileged for off-hours detection. */
+    static final Set<String> PRIVILEGED = Set.of("account.disable","account.enable","device.revoke","user.create","user.password-reset","user.require-actions","user.sign-out",
+            "user.sign-in-block","user.sign-in-allow","role.grant","role.revoke","recovery.revoke","session.end","audit.export","push.redrive","alert.rule-update");
+    static final Map<String, Definition> DEFINITIONS = definitions(
+            new Definition("failed-logins","Repeated failed logins",Kind.ACTOR_BURST,Set.of("auth.login.failed"),"failed sign-ins"),
+            new Definition("device-burst","Device enrollment burst",Kind.TARGET_BURST,Set.of("device.add"),"device enrollments"),
+            new Definition("role-grant","Privileged role granted",Kind.EVENT,Set.of("role.grant"),"role grants"),
+            new Definition("audit-sync","Identity audit sync unavailable",Kind.SOURCE_HEALTH,Set.of(),"failed imports"),
+            new Definition("audit-export","Audit log exported",Kind.EVENT,Set.of("audit.export"),"audit exports"),
+            new Definition("bulk-device-unlink","Bulk device unlinking",Kind.ACTOR_BURST,Set.of("device.revoke"),"device unlinks"),
+            new Definition("bulk-account-disable","Bulk account disabling",Kind.ACTOR_BURST,Set.of("account.disable"),"account disables"),
+            new Definition("credential-reset-burst","Credential reset burst",Kind.ACTOR_BURST,Set.of("user.password-reset","recovery.revoke","user.require-actions"),"credential resets"),
+            new Definition("session-end-burst","Session termination burst",Kind.ACTOR_BURST,Set.of("session.end","user.sign-out"),"session terminations"),
+            new Definition("off-hours-admin","Off-hours admin activity",Kind.OFF_HOURS,PRIVILEGED,"privileged actions"));
+    static final Map<String, String> LABELS = DEFINITIONS.values().stream().collect(Collectors.toMap(Definition::id,Definition::label,(a,b)->a,java.util.LinkedHashMap::new));
+    private static Map<String, Definition> definitions(Definition... all) {
+        var map=new java.util.LinkedHashMap<String, Definition>(); for (var d:all) map.put(d.id(),d); return java.util.Collections.unmodifiableMap(map);
+    }
     static final Set<String> SEVERITIES = Set.of("critical", "high", "medium", "low");
-    record Rule(String id, boolean enabled, String severity, int threshold, int windowMinutes, boolean notificationsEnabled, Instant updatedAt, String updatedBy) {}
+    /** Business hours in UTC: actions on {@code days} (ISO 1=Monday … 7=Sunday) from {@code startHour} inclusive to {@code endHour} exclusive. */
+    record BusinessHours(int startHour, int endHour, List<Integer> days) {
+        boolean contains(Instant at) {
+            var time=at.atOffset(ZoneOffset.UTC);
+            return days.contains(time.getDayOfWeek().getValue()) && time.getHour()>=startHour && time.getHour()<endHour;
+        }
+        boolean valid() { return startHour>=0 && startHour<endHour && endHour<=24 && days!=null && !days.isEmpty() && days.stream().allMatch(d->d!=null && d>=1 && d<=7) && days.stream().distinct().count()==days.size(); }
+    }
+    record Rule(String id, boolean enabled, String severity, int threshold, int windowMinutes, boolean notificationsEnabled, Instant updatedAt, String updatedBy, BusinessHours businessHours) {}
     record Alert(UUID id, String ruleId, String severity, String status, String title, String subject, String subjectName, String detail,
             long occurrences, Long firstSeq, Long lastSeq, Instant firstSeen, Instant lastSeen, Instant createdAt, Instant updatedAt) {}
     record History(long id, Instant at, String actor, String status, String reason) {}
@@ -35,7 +73,11 @@ class SecurityAlerts {
     private final AuditLog audit;
     SecurityAlerts(JdbcClient jdbc, Clock clock, AuditLog audit) { this.jdbc = jdbc; this.clock = clock; this.audit = audit; }
     List<Rule> rules() { return jdbc.sql("SELECT * FROM admin_alert_rule ORDER BY id").query((r,n) -> rule(r)).list(); }
-    static Rule rule(ResultSet r) throws SQLException { return new Rule(r.getString("id"), r.getBoolean("enabled"), r.getString("severity"), r.getInt("threshold"), r.getInt("window_minutes"), r.getBoolean("notify"), time(r,"updated_at"), r.getString("updated_by")); }
+    static Rule rule(ResultSet r) throws SQLException {
+        Integer start=r.getObject("business_start_hour",Integer.class), end=r.getObject("business_end_hour",Integer.class); String days=r.getString("business_days");
+        var hours=start==null || end==null || days==null ? null : new BusinessHours(start,end,java.util.Arrays.stream(days.split(",")).map(Integer::valueOf).toList());
+        return new Rule(r.getString("id"), r.getBoolean("enabled"), r.getString("severity"), r.getInt("threshold"), r.getInt("window_minutes"), r.getBoolean("notify"), time(r,"updated_at"), r.getString("updated_by"), hours);
+    }
     static Alert alert(ResultSet r) throws SQLException {
         return new Alert(r.getObject("id", UUID.class), r.getString("rule_id"), r.getString("severity"), r.getString("status"), r.getString("title"), r.getString("subject"), r.getString("subject_name"), r.getString("detail"),
                 r.getLong("occurrences"), r.getObject("first_seq", Long.class), r.getObject("last_seq", Long.class), time(r,"first_seen"), time(r,"last_seen"), time(r,"created_at"), time(r,"updated_at"));
@@ -105,12 +147,21 @@ class SecurityAlerts {
         audit.append(actor,"alert.resolve-all","alerts",why+" [count="+count+(q.search().isBlank()?"":", search="+q.search())+(scoped.isEmpty()?"":", "+scoped)+(q.filters().isEmpty()?"":", filters="+q.filters())+"]");
         return count;
     }
-    @Transactional void updateRule(String id, boolean enabled, String severity, int threshold, int minutes, boolean notificationsEnabled, String actor, String reason) {
-        if (!LABELS.containsKey(id) || !SEVERITIES.contains(severity) || threshold<1 || threshold>1000 || minutes<1 || minutes>1440 || (id.equals("role-grant") || id.equals("audit-sync")) && threshold!=1 || id.equals("role-grant") && minutes!=1)
+    /** Validates per-rule constraints (fixed thresholds/windows, business hours only for off-hours) before persisting and auditing. */
+    @Transactional void updateRule(String id, boolean enabled, String severity, int threshold, int minutes, boolean notificationsEnabled, BusinessHours hours, String actor, String reason) {
+        var definition=DEFINITIONS.get(id);
+        boolean offHours=definition!=null && definition.kind()==Kind.OFF_HOURS;
+        if (definition==null || !SEVERITIES.contains(severity) || threshold<1 || threshold>1000 || minutes<1 || minutes>1440
+                || definition.fixedThreshold() && threshold!=1 || definition.fixedWindow() && minutes!=1
+                || offHours && (hours==null || !hours.valid()) || !offHours && hours!=null)
             throw new EnclaveException(ErrorCode.INVALID_REQUEST,"invalid alert rule values");
-        jdbc.sql("UPDATE admin_alert_rule SET enabled=:enabled,severity=:severity,threshold=:threshold,window_minutes=:minutes,notify=:notify,updated_at=:at,updated_by=:actor WHERE id=:id")
-                .param("enabled",enabled).param("severity",severity).param("threshold",threshold).param("minutes",minutes).param("notify",notificationsEnabled).param("at",date(clock.instant())).param("actor",actor).param("id",id).update();
-        audit.append(actor,"alert.rule-update","alert-rule:"+id,reason+" [enabled="+enabled+", severity="+severity+", threshold="+threshold+", windowMinutes="+minutes+", notify="+notificationsEnabled+"]");
+        jdbc.sql("UPDATE admin_alert_rule SET enabled=:enabled,severity=:severity,threshold=:threshold,window_minutes=:minutes,notify=:notify,business_start_hour=:start,business_end_hour=:end,business_days=:days,updated_at=:at,updated_by=:actor WHERE id=:id")
+                .param("enabled",enabled).param("severity",severity).param("threshold",threshold).param("minutes",minutes).param("notify",notificationsEnabled)
+                .param("start",hours==null?null:hours.startHour(),java.sql.Types.SMALLINT).param("end",hours==null?null:hours.endHour(),java.sql.Types.SMALLINT)
+                .param("days",hours==null?null:hours.days().stream().sorted().map(String::valueOf).collect(Collectors.joining(",")),java.sql.Types.VARCHAR)
+                .param("at",date(clock.instant())).param("actor",actor).param("id",id).update();
+        audit.append(actor,"alert.rule-update","alert-rule:"+id,reason+" [enabled="+enabled+", severity="+severity+", threshold="+threshold+", windowMinutes="+minutes+", notify="+notificationsEnabled
+                +(hours==null?"":", businessHours="+hours.startHour()+"-"+hours.endHour()+" UTC days "+hours.days())+"]");
     }
     /** Deduplication key of the unresolved alert for this rule and subject whose latest event is after {@code since}. */
     Optional<String> activeEpisode(String ruleId,String subject,Instant since) {

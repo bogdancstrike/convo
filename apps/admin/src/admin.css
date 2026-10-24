@@ -317,9 +317,13 @@ html, body, #root { height: 100%; overflow: hidden; }
 .rule-save .ant-form-item { margin-bottom: 10px; }
 .rule-updated { font-size: 11px; margin: 12px 0 0 !important; overflow-wrap: anywhere; }
 .diagram-frame > .alert-flow-note { flex-shrink: 0; margin-bottom: 12px; }
-.alert-flow-picker { flex-shrink: 0; margin-bottom: 12px; max-width: 100%; overflow-x: auto; }
+.alert-flow-picker { flex-shrink: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.alert-flow-select { min-width: 300px; }
+.alert-rule-group { display: flex; flex-direction: column; gap: 10px; }
+.alert-rule-group-title { margin: 4px 0 0 !important; }
+.rule-days { display: flex; flex-wrap: wrap; gap: 0 2px; margin-top: 2px; }
+.rule-hour-number { width: 56px; }
 .alert-flow-picker .rule-severity-option { font-weight: 500; }
-.alert-flow-picker .ant-segmented-item-selected .rule-severity-option { color: inherit; }
 .alert-flow-off { opacity: .6; }
 .diagram-frame > .alert-flow-sentence { margin-bottom: 12px; }
 .alert-flow-canvas { min-height: 260px; }

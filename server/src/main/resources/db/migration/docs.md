@@ -26,3 +26,11 @@ Rules for contributors:
 `V30__admin_security.sql` adds durable alert rules, inbox/history, processing cursor and coarse
 session observations. It starts projection at the existing audit head and adds an action/time
 detection index. No cleanup job or data deletion is introduced.
+
+`V31__admin_alert_rules_admin_activity.sql` adds six admin-activity alert rules (audit export,
+bulk device unlink, bulk account disable, credential reset burst, session end burst and off-hours
+admin activity), nullable business-hours columns used only by the off-hours rule, and an
+actor/action/time index for per-administrator burst windows. Off-hours detection is disabled by
+default because business hours are organization specific. Content rules (attachments, links) are
+not possible: messages are end-to-end encrypted and never visible to the server.
+
