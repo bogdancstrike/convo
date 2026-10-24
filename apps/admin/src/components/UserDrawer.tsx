@@ -6,6 +6,7 @@ import { UserSystemChart } from './UserSystemChart';
 import { Chart } from './Chart';
 import { fmtDay, fmtTime, LEVEL, nameOf, shortDay } from '../format';
 import { useReason } from './confirm';
+import { SessionTable } from './SessionTable';
 import { AuditTrail } from './AuditTrail';
 import { SignInSections, useSignIn } from './SignInPanel';
 
@@ -100,6 +101,7 @@ export function UserDrawer({ accountId: requestedAccountId, subjectId, tab = 'ov
               </List.Item>)} />) }] : []),
           ...(can('AUDIT_READ') ? [{ key: 'audit', label: 'Audit', children: <AuditTrail subjects={[account?.accountId ?? '', u?.id ?? '']} version={auditVersion} /> }] : []),
           { key: 'roles', label: 'Roles', children: <SignInSections {...signIn} can={can} onChanged={changed} sections={['roles']} /> },
+          ...(u && can('SESSIONS_READ') ? [{ key: 'sessions', label: 'Sessions', children: <div className="user-sessions-tab"><SessionTable userId={u.id} can={can} onOpen={(s) => { window.location.hash = `/sessions/${s.id}?user=${encodeURIComponent(u.id)}`; }} /></div> }] : []),
           { key: 'security', label: 'Security', children: (
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
               <SignInSections {...signIn} can={can} onChanged={changed} sections={['actions']} />

@@ -28,7 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
  * dedicated confidential client ({@code enclave.admin.idp.client-id}, realm-management
  * {@code manage-users}/{@code view-users} only). Convo never stores or logs passwords: a generated
  * temporary password is returned once to the administrator and must be changed at next sign-in.
- * Session details are reduced to counts and last-access times (no IP addresses).
+ * Online sessions are exposed only through the session-read scope; tokens and arbitrary details are never returned.
  */
 @Service
 class KeycloakUsers {
@@ -60,7 +60,7 @@ class KeycloakUsers {
             List<String> requiredActions, Map<String, List<String>> attributes) {}
     record CredentialRep(String type) {}
     record RoleRep(String id, String name) {}
-    record SessionRep(Long lastAccess) {}
+    record SessionRep(String id, String userId, String username, String ipAddress, Long start, Long lastAccess, Map<String, String> clients) {}
 
     private final AdminProperties properties;
     private final RestClient http;
@@ -160,6 +160,18 @@ class KeycloakUsers {
     /** Ends every IdP session of the user (they must sign in again; Convo devices stay linked). */
     void signOut(String id) {
         call(() -> http.post().uri(admin(b -> b.pathSegment("users", id, "logout"))).headers(h -> h.setBearerAuth(accessToken())).retrieve().toBodilessEntity());
+    }
+
+    List<SessionRep> sessions(String userId) {
+        List<SessionRep> sessions = call(() -> http.get().uri(admin(b -> b.pathSegment("users", userId, "sessions")))
+                .headers(h -> h.setBearerAuth(accessToken())).retrieve().body(new ParameterizedTypeReference<List<SessionRep>>() {}));
+        return sessions == null ? List.of() : sessions;
+    }
+
+    /** The controller verifies ownership against the live user-session list before calling this. */
+    void endSession(String sessionId) {
+        call(() -> http.delete().uri(admin(b -> b.pathSegment("sessions", sessionId))).headers(h -> h.setBearerAuth(accessToken()))
+                .retrieve().toBodilessEntity());
     }
 
     /** Grants or removes one managed admin role. */

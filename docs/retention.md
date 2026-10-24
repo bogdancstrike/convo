@@ -26,7 +26,7 @@ runtime state, not retention of persistent application records. User-selected di
 messages remain a user-requested action.
 
 The remaining recurring application work is operational: identity audit synchronization, audit
-name projection backfill, audit checkpoints, idle-socket management, and push delivery/retries.
+name projection backfill, audit checkpoints, idle-socket management, security-alert projection/outage monitoring, and push delivery/retries.
 A regression test restricts the set of annotation-based schedules so retention jobs cannot be
 silently reintroduced. Maintenance helper methods have no scheduled or HTTP entry point.
 
@@ -46,3 +46,6 @@ snapshots (current account/device counts and last device activity) remain explic
 current state. Longer throughput queries aggregate into at most 1,440 buckets, displaying
 per-minute averages rather than relabelling bucket totals as per-minute traffic. Missing
 observations remain absent and do not become fabricated history.
+
+Security alerts, alert lifecycle history, rule configuration and coarse session observations also
+have no automatic retention purge. Resolution changes alert state without deleting evidence.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntApp, Avatar, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tooltip, Typography } from 'antd';
-import { ApartmentOutlined, AuditOutlined, DashboardOutlined, EllipsisOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
+import { App as AntApp, Avatar, Badge, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tooltip, Typography } from 'antd';
+import { ApartmentOutlined, AuditOutlined, BellOutlined, DesktopOutlined, DashboardOutlined, EllipsisOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
 import { AdminError, api, type Me, type Permission } from './api';
 import { session, signIn, signOut } from './auth';
 import { themeConfig } from './theme';
@@ -10,6 +10,9 @@ import { OverviewPage } from './pages/Overview';
 import { UsersPage } from './pages/Users';
 import { AuditPage } from './pages/Audit';
 import { HealthPage } from './pages/Health';
+import { SessionsPage } from './pages/Sessions';
+import { AlertsPage } from './pages/Alerts';
+import { SecurityAlertContext, useSecurityAlertInbox } from './components/SecurityAlertContext';
 import { RolesPage } from './pages/Roles';
 
 /** Pages, the permission each needs, and their menu entry. */
@@ -17,6 +20,8 @@ const PAGES = [
   { key: 'overview', label: 'Overview & activity', icon: <DashboardOutlined />, needs: 'STATS_READ' as Permission },
   { key: 'users', label: 'Users', icon: <TeamOutlined />, needs: 'ACCOUNTS_READ' as Permission },
   { key: 'roles', label: 'Roles & permissions', icon: <ApartmentOutlined />, needs: 'ACCOUNTS_READ' as Permission },
+  { key: 'sessions', label: 'Live sessions', icon: <DesktopOutlined />, needs: 'SESSIONS_READ' as Permission },
+  { key: 'alerts', label: 'Security alerts', icon: <BellOutlined />, needs: 'ALERTS_READ' as Permission },
   { key: 'audit', label: 'Audit log', icon: <AuditOutlined />, needs: 'AUDIT_READ' as Permission },
   { key: 'health', label: 'Health', icon: <HeartOutlined />, needs: 'HEALTH_READ' as Permission },
 ] as const;
@@ -58,6 +63,7 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
   // A signed-in person without an admin role is refused by the API: show "no role", not an outage.
   useEffect(() => { if (admin) void api.me().then(setMe).catch((e) => (e instanceof AdminError && (e.status === 403 || e.status === 401) ? setMe({ actor: admin, roles: [], permissions: [] }) : setFailed(true))); }, [admin]);
   const can = useCallback((p: Permission) => !!me?.permissions.includes(p), [me]);
+  const alertInbox = useSecurityAlertInbox(can('ALERTS_READ'), me?.actor ?? '');
   const visible = useMemo(() => PAGES.filter((p) => can(p.needs)), [can]);
   const [routePath = '', routeQuery] = route.split('?');
   const canonicalPath = routePath.replace(/^activity(?=\/|$)/, 'overview').replace(/^sign-in(?:\/(.*))?$/, (_, id: string | undefined) => id ? `users/sign-in/${id}` : 'users');
@@ -76,11 +82,11 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
   }
   const props = { can, navigate, param: rest.join('/') };
   return (
-    <Layout className="console-frame">
+    <SecurityAlertContext.Provider value={alertInbox}><Layout className="console-frame">
       <Layout.Sider collapsible trigger={null} collapsed={collapsed} onCollapse={setCollapsed} breakpoint="lg" collapsedWidth={64} width={232} theme={dark ? 'dark' : 'light'} style={{ borderRight: '1px solid var(--ant-color-border-secondary, transparent)' }}>
         <div className={`brand${collapsed ? ' brand-collapsed' : ''}`}><img src="/logo.svg" alt="" />{!collapsed && <span>Convo<small>Admin console</small></span>}</div>
         <Menu mode="inline" inlineCollapsed={collapsed} selectedKeys={page ? [page] : []} onClick={(e) => navigate(e.key)} data-testid="admin-menu"
-          items={visible.map((p) => ({ key: p.key, icon: p.icon, label: p.label, 'data-testid': `admin-tab-${p.key}` }))} />
+          items={visible.map((p) => ({ key: p.key, icon: p.icon, label: p.key === 'alerts' ? <span className="sidebar-alert-label">{p.label}<Badge size="small" count={alertInbox.summary?.open ?? 0} overflowCount={99} /></span> : p.label, 'data-testid': `admin-tab-${p.key}` }))} />
         <div className="sidebar-footer">
           <Dropdown trigger={['click', 'hover']} placement="topRight" menu={{ items: [{ key: 'out', icon: <LogoutOutlined />, label: 'Sign out', onClick: () => void signOut() }] }}>
             <button type="button" className="sidebar-account" aria-label={`Account menu for ${admin}`}>
@@ -101,11 +107,13 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
           {page === 'overview' && <OverviewPage {...props} />}
           {page === 'users' && <UsersPage {...props} />}
           {page === 'roles' && <RolesPage {...props} />}
+          {page === 'sessions' && <SessionsPage {...props} />}
+          {page === 'alerts' && <AlertsPage {...props} />}
           {page === 'audit' && <AuditPage {...props} />}
           {page === 'health' && <HealthPage {...props} />}
         </Layout.Content>
       </Layout>
-    </Layout>
+    </Layout></SecurityAlertContext.Provider>
   );
 }
 

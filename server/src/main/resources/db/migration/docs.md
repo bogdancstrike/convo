@@ -22,3 +22,7 @@ Rules for contributors:
 * Never edit a released migration; add a new `V<n>__<module>_<change>.sql`.
 * Use expand → migrate → contract for breaking changes (ARF §16, OPS-03).
 * Store only public keys, ciphertext and the minimum metadata. No plaintext content columns.
+
+`V30__admin_security.sql` adds durable alert rules, inbox/history, processing cursor and coarse
+session observations. It starts projection at the existing audit head and adds an action/time
+detection index. No cleanup job or data deletion is introduced.

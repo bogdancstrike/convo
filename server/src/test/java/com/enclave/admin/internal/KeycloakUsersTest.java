@@ -67,6 +67,14 @@ class KeycloakUsersTest {
                 .isInstanceOfSatisfying(EnclaveException.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CONFLICT));
     }
 
+    @Test void listsOnlineSessionsAndEndsOnlyTheSelectedSession() {
+        token();
+        server.expect(requestTo(BASE + "/users/person/sessions")).andRespond(withSuccess("[{\"id\":\"session-one\",\"userId\":\"person\",\"username\":\"ana\",\"start\":1000,\"lastAccess\":2000,\"clients\":{\"client-id\":\"enclave-web\"}}]", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/sessions/session-one")).andExpect(method(HttpMethod.DELETE)).andRespond(withNoContent());
+        assertThat(users.sessions("person").getFirst().clients()).containsEntry("client-id", "enclave-web");
+        users.endSession("session-one"); server.verify();
+    }
+
     private static HttpHeaders location(String uri) {
         HttpHeaders h = new HttpHeaders();
         h.setLocation(URI.create(uri));

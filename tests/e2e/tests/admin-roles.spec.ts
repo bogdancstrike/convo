@@ -25,7 +25,7 @@ test('helpdesk and auditor roles see only their own duties; exports are audited'
     await drawer.getByRole('tab', { name: 'Security' }).click();
     await expect(drawer.getByTestId('admin-toggle-status')).toHaveCount(0);
     await expect(drawer.getByTestId('admin-revoke-recovery')).toHaveCount(1);
-    await adminGo(helpdesk, 'health');
+    await adminGo(helpdesk, 'health?tab=delivery');
     // Health is readable (counts only); re-queueing failed wake-ups is a security duty.
     await expect(helpdesk.getByTestId('admin-push-pending')).toHaveText(/^\d+$/);
     await expect(helpdesk.getByTestId('admin-push-redrive')).toHaveCount(0);

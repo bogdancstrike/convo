@@ -26,7 +26,17 @@ class AdminPermissions {
         /** Revoke a user's recovery kit (lost or leaked); the app asks them for a new one. */
         RECOVERY_RESET,
         /** Grant or remove Convo admin roles (superuser only). */
-        ROLES_MANAGE
+        ROLES_MANAGE,
+        /** See a person's live identity-provider sessions (browser family, source IP, times). */
+        SESSIONS_READ,
+        /** End one sign-in session or all of a person's sessions (reason and recent sign-in required). */
+        SESSIONS_REVOKE,
+        /** Read the security alerts inbox, alert history and detection rules. */
+        ALERTS_READ,
+        /** Acknowledge, resolve and reopen security alerts. */
+        ALERTS_MANAGE,
+        /** Change detection thresholds, severities and notification settings. */
+        ALERT_RULES_MANAGE
     }
 
     private final Map<String, Set<Permission>> byRole;
@@ -36,12 +46,12 @@ class AdminPermissions {
         this.byRole = Map.of(
                 properties.role(), EnumSet.allOf(Permission.class),
                 r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.HEALTH_READ,
-                        Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET),
+                        Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE),
                 r.orgAdmin(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ, Permission.STATS_READ,
-                        Permission.USERS_CREATE, Permission.USERS_CREDENTIALS),
+                        Permission.USERS_CREATE, Permission.USERS_CREDENTIALS, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE),
                 r.security(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ,
-                        Permission.HEALTH_READ, Permission.PUSH_REDRIVE, Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET),
-                r.auditor(), EnumSet.of(Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT, Permission.STATS_READ));
+                        Permission.HEALTH_READ, Permission.PUSH_REDRIVE, Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE, Permission.ALERTS_READ, Permission.ALERTS_MANAGE, Permission.ALERT_RULES_MANAGE),
+                r.auditor(), EnumSet.of(Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT, Permission.STATS_READ, Permission.ALERTS_READ));
     }
 
     /** Admin roles held by this token (realm roles that are known admin roles). */

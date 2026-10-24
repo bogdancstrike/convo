@@ -37,11 +37,11 @@ class AdminPermissionsTest {
     }
 
     @Test void rolesMapToLeastPrivilege() {
-        assertThat(permissions.of(token("convo-helpdesk"))).containsExactlyInAnyOrder(ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, HEALTH_READ, STATS_READ, USERS_CREDENTIALS, RECOVERY_RESET);
-        assertThat(permissions.of(token("convo-org-admin"))).containsExactlyInAnyOrder(ACCOUNTS_READ, ACCOUNT_STATUS, HEALTH_READ, STATS_READ, USERS_CREATE, USERS_CREDENTIALS);
-        assertThat(permissions.of(token("convo-auditor"))).containsExactlyInAnyOrder(AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT, STATS_READ);
-        assertThat(permissions.of(token("convo-security"))).doesNotContain(AUDIT_EXPORT).contains(PUSH_REDRIVE);
-        assertThat(permissions.of(token("convo-auditor"))).doesNotContain(PUSH_REDRIVE, HEALTH_READ, USERS_CREDENTIALS, RECOVERY_RESET);
+        assertThat(permissions.of(token("convo-helpdesk"))).containsExactlyInAnyOrder(ACCOUNTS_READ, DEVICES_READ, DEVICE_REVOKE, HEALTH_READ, STATS_READ, USERS_CREDENTIALS, RECOVERY_RESET, SESSIONS_READ, SESSIONS_REVOKE);
+        assertThat(permissions.of(token("convo-org-admin"))).containsExactlyInAnyOrder(ACCOUNTS_READ, ACCOUNT_STATUS, HEALTH_READ, STATS_READ, USERS_CREATE, USERS_CREDENTIALS, SESSIONS_READ, SESSIONS_REVOKE);
+        assertThat(permissions.of(token("convo-auditor"))).containsExactlyInAnyOrder(AUDIT_READ, AUDIT_EXPORT, AUDIT_CHECKPOINT, STATS_READ, ALERTS_READ);
+        assertThat(permissions.of(token("convo-security"))).doesNotContain(AUDIT_EXPORT).contains(PUSH_REDRIVE, ALERTS_READ, ALERTS_MANAGE, ALERT_RULES_MANAGE, SESSIONS_READ, SESSIONS_REVOKE);
+        assertThat(permissions.of(token("convo-auditor"))).doesNotContain(PUSH_REDRIVE, HEALTH_READ, USERS_CREDENTIALS, RECOVERY_RESET, ALERTS_MANAGE, ALERT_RULES_MANAGE, SESSIONS_READ, SESSIONS_REVOKE);
         // Only the superuser role may grant admin roles.
         for (String role : new String[] {"convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"}) assertThat(permissions.of(token(role))).doesNotContain(ROLES_MANAGE);
         assertThat(permissions.of(token("convo-admin"))).hasSize(AdminPermissions.Permission.values().length);

@@ -315,3 +315,13 @@ All capabilities in specs §30.9 are present in Android/web launch UI. Topics/fo
 Scheduled send names the executing device and explains next-allowed execution offline. Backup setup requires saving the distinct client recovery key; account recovery cannot replace it. Assistance previews selected sources and editable results, never auto-sends or invokes tools. Polls disclose visible ballots; topic screens do not imply a private audience. Every enabled optional feature has real functionality; opt-in/default-off status is a privacy preference, not a deferred feature.
 
 Specs §31 supplies test scripts, methods and pass/fail criteria for all journeys. UI-01/AND-02/WEB-02/03 supply accessible interactive fixtures and real-client evidence; catalogue coverage is required before launch.
+
+## Admin security workspace
+
+Live sessions has a remote person picker and a full-width, backend-controlled session table.
+User details includes the same Sessions tab. A session opens a lateral detail surface with a
+maximize action and explicit termination scope. Security alerts has an operational count strip,
+Inbox and Detection rules tabs, severity/status/rule filters, and a detail surface containing
+evidence links, lifecycle actions and history. Both surfaces preserve browser Back/Forward state
+and use component scrolling. Desktop alerts require explicit per-administrator browser opt-in.
+See [admin security operations](admin-security.md) for behavior and role restrictions.

@@ -7,7 +7,7 @@ import { accessToken } from './auth';
  */
 export type Permission =
   | 'ACCOUNTS_READ' | 'DEVICES_READ' | 'DEVICE_REVOKE' | 'ACCOUNT_STATUS' | 'AUDIT_READ' | 'AUDIT_EXPORT' | 'AUDIT_CHECKPOINT'
-  | 'HEALTH_READ' | 'PUSH_REDRIVE' | 'STATS_READ' | 'USERS_CREATE' | 'USERS_CREDENTIALS' | 'RECOVERY_RESET' | 'ROLES_MANAGE';
+  | 'HEALTH_READ' | 'PUSH_REDRIVE' | 'STATS_READ' | 'USERS_CREATE' | 'USERS_CREDENTIALS' | 'RECOVERY_RESET' | 'ROLES_MANAGE' | 'SESSIONS_READ' | 'SESSIONS_REVOKE' | 'ALERTS_READ' | 'ALERTS_MANAGE' | 'ALERT_RULES_MANAGE';
 
 export interface Me { actor: string; roles: string[]; permissions: Permission[] }
 export interface AccountSummary {
@@ -47,6 +47,15 @@ export interface ComponentHealth { id: string; name: string; group: string; requ
 export interface SystemHealth { status: ComponentStatus; checkedAt: string; cacheSeconds: number; components: ComponentHealth[] }
 export interface Health { push: { pending: number; oldestPending: string; deadLetters: Record<string, number> } }
 
+export interface LiveSession { id: string; userId: string; username: string; ipAddress: string | null; startedAt: string | null; lastAccess: string | null; clients: string[]; browser: string; operatingSystem: string; observedAt: string | null; current: boolean }
+export type AlertSeverity = 'critical' | 'high' | 'medium' | 'low';
+export type AlertStatus = 'open' | 'acknowledged' | 'resolved';
+export interface SecurityAlert { id: string; ruleId: string; severity: AlertSeverity; status: AlertStatus; title: string; subject: string; subjectName: string; detail: string; occurrences: number; firstSeq: number | null; lastSeq: number | null; firstSeen: string; lastSeen: string; createdAt: string; updatedAt: string }
+export interface AlertHistory { id: number; at: string; actor: string; status: AlertStatus; reason: string }
+export interface AlertDetail { alert: SecurityAlert; history: AlertHistory[] }
+export interface AlertRule { id: string; enabled: boolean; severity: AlertSeverity; threshold: number; windowMinutes: number; notificationsEnabled: boolean; updatedAt: string; updatedBy: string }
+export interface AlertSummary { open: number; acknowledged: number; critical: number; notifications: number; processedAt: string | null; error: string | null; recent: SecurityAlert[] }
+
 export class AdminError extends Error {
   constructor(readonly status: number, readonly code?: string, readonly detail?: string) { super(detail ?? `request failed: ${status}`); this.name = 'AdminError'; }
 }
@@ -78,6 +87,12 @@ export const api = {
     const params = new URLSearchParams({ ...scope, q: query.q, sort: query.sort, order: query.order, page: String(query.page), size: String(query.size), ...Object.fromEntries(Object.entries(query.filters).map(([k, v]) => [`f_${k}`, v])) });
     return call<TablePage<T>>('GET', `/tables/${q(resource)}?${params}`);
   },
+  endSession: (user: string, id: string, reason: string) => call<AuditEntry>('POST', `/idp/users/${q(user)}/sessions/${q(id)}/end`, { reason }),
+  alertSummary: () => call<AlertSummary>('GET', '/alerts/summary'),
+  alertDetail: (id: string) => call<AlertDetail>('GET', `/alerts/${q(id)}`),
+  alertRules: () => call<AlertRule[]>('GET', '/alerts/rules'),
+  alertStatus: (id: string, status: AlertStatus, reason: string) => call<AlertDetail>('POST', `/alerts/${q(id)}/status`, { status, reason }),
+  updateAlertRule: (rule: AlertRule, reason: string) => call<AlertRule[]>('POST', `/alerts/rules/${q(rule.id)}`, { ...rule, reason }),
   me: () => call<Me>('GET', '/me'),
   throughput: (minutes: number, range?: DateRange) => call<Throughput>('GET', `/stats/throughput?minutes=${minutes}${dateQuery(range)}`),
   overview: (days: number, range?: DateRange) => call<Overview>('GET', `/stats/overview?days=${days}${dateQuery(range)}`),

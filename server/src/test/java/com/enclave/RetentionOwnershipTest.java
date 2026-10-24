@@ -13,6 +13,6 @@ class RetentionOwnershipTest {
         Set<String> scheduled = new ClassFileImporter().importPackages("com.enclave").stream()
                 .flatMap(c -> c.getMethods().stream()).filter(m -> m.isAnnotatedWith(Scheduled.class))
                 .map(m -> m.getOwner().getSimpleName() + "." + m.getName()).collect(Collectors.toSet());
-        assertThat(scheduled).containsExactlyInAnyOrder("AuditCheckpoints.checkpoint", "AuditNames.backfill", "IdentityAuditImporter.poll", "DeviceSessionRegistry.closeIdle");
+        assertThat(scheduled).containsExactlyInAnyOrder("AuditCheckpoints.checkpoint", "AuditNames.backfill", "IdentityAuditImporter.poll", "DeviceSessionRegistry.closeIdle", "SecurityAlertProcessor.poll");
     }
 }

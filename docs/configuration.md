@@ -157,3 +157,12 @@ mailbox retention. Entries are capped at 256 KiB; pages contain at most 100 entr
 uses device authentication; recovery download and new enrollment use account authentication plus
 an independent recovery-code authorization verifier. Backup ciphertext is capped at 8 KiB. The
 server never holds the recovery code or archive encryption key. See ADR-0004.
+
+## Admin security alerts
+
+`ENCLAVE_ADMIN_ALERT_POLL_INTERVAL` (`enclave.admin.alert-poll-interval`, default `PT15S`) controls
+the bounded security-alert projection and audit-source outage check. Configure rule enablement,
+severity, event thresholds/windows and notification eligibility in **Security alerts → Detection
+rules**; values persist in PostgreSQL across deployments. Existing admin-ops Keycloak permissions
+are sufficient. No new secret, webhook or email service is configured. Browser notifications
+require explicit opt-in and an open console. See [admin-security.md](admin-security.md).

@@ -159,3 +159,13 @@ All management and chart-data tables initially split available width equally. Po
 column-boundary resizing adjusts adjacent columns and saves per-table preferences locally.
 Double-clicking a separator or resetting equal widths in table settings restores equal columns.
 Column visibility/density preferences and backend search/sort/filter/paging continue independently.
+
+## Sessions and security alerts
+
+`AdminSessionsController` verifies live Keycloak session ownership and applies scoped read/revoke
+permissions. `SessionObservations` stores coarse browser/OS families from successful JWT requests.
+`SecurityAlertProcessor` projects audit sequences transactionally into the `SecurityAlerts` inbox
+and monitors identity-import outages. `SecurityAlertsController` enforces separate read, lifecycle
+and rule-edit permissions; status/rule changes share the hash-chained audit transaction. V30 owns
+the five security-operations tables. See [the operator/API specification](../../../../../../../docs/admin-security.md)
+for defaults, roles, endpoints, notification limits, logout semantics and deployment.

@@ -132,7 +132,7 @@ contents, names and keys remain end-to-end encrypted.
 | Calls | 1:1 and group audio/video through a self-hosted LiveKit SFU with frame E2EE (no unencrypted fallback), coturn relay, multi-device ringing, key rotation when someone leaves, ringing via push |
 | Notifications | Generic previews by default, per-chat All/Mentions/Muted, timed snooze, UnifiedPush (ntfy) wake-ups without content, optional Android background connection |
 | Privacy | Passkeys from Settings, app lock and per-chat locks (passkey on web, biometrics on Android), browser passphrase lock (Argon2id), disappearing messages, blocking, message requests |
-| Administration | Separate admin console: account/device support with reasons, scoped helpdesk/org-admin/security/auditor roles, step-up, hash-chained audit with external checkpoints and export |
+| Administration | Separate admin console: user/device support, live sign-in sessions, configurable security alerts with investigation history, scoped roles, step-up, hash-chained audit with external checkpoints and export |
 | Platform | Spring Modulith backend (identity, messaging, groups, communities, attachments, calls, push, admin) with verified boundaries, PostgreSQL mailbox, Valkey hints, S3 object storage; Compose for development, Helm charts and CI-built images for Kubernetes |
 
 ## Complete launch feature inventory
@@ -333,3 +333,12 @@ This sequence describes internal development milestones, not partial public rele
 Keep requirements, architecture decisions, client flows, and tasks consistent. A change to encryption, identity, group membership, browser trust, or recovery needs explicit rationale and relevant failure-case evidence. Avoid custom cryptographic constructions, plaintext server fallbacks, hidden content recipients, and promises that exceed the tested deployment profile.
 
 Do not commit credentials, private keys, user databases, or payload-bearing diagnostics. Choose and document the project's distribution license before shipping; dependency licenses are tracked separately in the release bill of materials.
+
+### Admin security operations
+
+The admin console now includes **Live sessions** (also in each user’s Sessions tab) and a
+**Security alerts** inbox with failed-login/device-burst detection, privileged-role alerts, audit
+sync monitoring, configurable rules and optional desktop notifications. Session termination and
+alert handling require scoped permissions and recorded reasons. See [admin security operations](docs/admin-security.md)
+for permission mapping, API contracts, token/device limitations and deployment details. No automatic
+retention deletion is enabled.

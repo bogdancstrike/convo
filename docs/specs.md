@@ -1325,6 +1325,37 @@ This example is the Android/web pilot profile. Hardened deployments may set `web
 
 Every authenticated administrative action, read/export of audit data, denied sensitive request, and policy mutation writes a canonical hash-chained entry (§13). Serialize chain append with a transaction/advisory lock; periodically sign and export checkpoints to an independently controlled append-only destination. A database-only chain can be rewritten by a privileged operator; independent checkpoints detect rewriting only after anchoring. Admin identities are **not** anonymized (accountability), user targets are hashed.
 
+### 19.2.1 Live sessions and security alerts (implemented admin extension)
+
+The separate admin origin provides a selected-user online-session manager and a Sessions tab in
+user details. Keycloak is authoritative for session membership, client applications and times.
+Browser/OS families are optional self-reported observations from successful authenticated requests;
+missing metadata is explicit, and sessions are never equated with encrypted messaging devices.
+`SESSIONS_READ` permits inspection; `SESSIONS_REVOKE`, a reason and recent sign-in permit ending
+one owned session or all of a person's online sessions. Already issued stateless access tokens
+expire normally; separate device revocation is required to stop enrolled messaging devices.
+
+A durable security inbox detects repeated failed authentication, device enrollment bursts,
+privileged role grants through Convo, and identity-audit sync outages. Rules configure severity,
+threshold/window, enablement and notifications. `ALERTS_READ` permits inspection; `ALERTS_MANAGE`
+permits reasoned acknowledgment/resolution/reopen; `ALERT_RULES_MANAGE` plus recent sign-in permits
+rule changes. Security and full administrators manage alerts/rules; auditors have read-only access.
+Helpdesk and organization administrators manage sessions without gaining security-inbox access.
+
+Detection projects new committed audit records using a transactional cursor and unique keys;
+failed batches do not advance it. Startup migration begins at the current audit head. Outage
+monitoring runs independently of imported source events. Existing alerts/history are retained,
+including resolved alerts and records from disabled rules. No automatic blocking or data deletion
+occurs. Browser notifications require explicit opt-in and an open signed-in console; the durable
+inbox is authoritative. Source coverage, deduplication windows, endpoints and deployment details
+are specified in [admin-security.md](admin-security.md).
+
+Acceptance: two independent sessions can be listed and one ended while the other remains; session
+ownership mismatches and unauthorized/stale mutations fail; failed-login/device/role signals
+produce deduplicated alerts; lifecycle/rule changes are audited and survive reload; auditors cannot
+mutate alerts; table state, details and maximize are restored by Back/Forward. Sync-outage and
+projection-failure paths preserve source cursors and expose sanitized errors.
+
 ### 19.3 Compliance archive agent (P0)
 
 A headless device type `archive_agent` (server-side process operated by the compliance team, holding its own keys in an HSM-backed keystore) that joins designated groups through a normal MLS Add committed by a group admin after admin-console designation. Clients render the archive member with a distinct, non-dismissible banner. The agent writes decrypted content to a customer-controlled WORM store. It cannot be added to 1:1 conversations in v1.
@@ -2023,6 +2054,6 @@ recorded product decision. Progress per task lives in the repository root `tasks
 | Communities (§30) | Root announcement channel, linked groups with dual authorization, discoverable/private links, ask-to-join, acknowledgements (revision-bound, named reviewers, optional due/closing times), welcome/rules/checklist onboarding, parent-removal delegation | Custom reviewer selection, withdrawal, polls/events not yet | COM-01/02/03 |
 | Calls (§8) | Self-hosted LiveKit SFU + coturn, `calls` module issues per-device tokens, E2EE call signalling, frame encryption with no unencrypted fallback, group key rotation on leave, ringing via push | Screen sharing and call links not yet; media needs direct UDP reachability (not tunnelled) | [ADR-0006](decisions/0006-calls-livekit.md) |
 | Push (§15) | Content-free UnifiedPush wake-ups via self-hosted ntfy to allow-listed distributor origins, urgent call rings, bounded retries | Retries are in memory (not durable intents); FCM and Web Push not yet | MSG-02 |
-| Administration (§19) | Separate console, scoped helpdesk/org-admin/security/auditor roles, step-up, hash-chained audit with external checkpoints, export with reason | Signed client policies, aggregate health and platform/compliance roles not yet | ADM-01 |
+| Administration (§19) | Separate console, scoped roles, step-up, hash-chained audit/checkpoints/export, system health, live sessions and configurable security alerts | Signed client policies and platform/compliance roles not yet | ADM-01 |
 | Deployment | Compose (development) and Kubernetes Helm charts with CI-published images (`deploy/k8s.md`) | Small single-node profile only; HA, backups/restore drills and signed offline bundles open | OPS |
 | Not started / release work | Post-quantum prekeys/MLS, federation, policy system, operational backups, iOS | An encrypted account archive is not a deployment disaster-recovery backup | `tasks.md` |

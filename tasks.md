@@ -220,6 +220,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   roles with a least-privilege permission matrix enforced per endpoint; denied sensitive attempts
   audited; console shows only permitted tabs/actions (`/v1/admin/me`); accountable audit export
   (reason recorded first). `admin-roles.spec.ts` (Chromium/Firefox) + unit tests.
+- Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
+  online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
+  reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment
+  bursts, privileged role grants and identity-audit outages with severity, acknowledge/resolve/
+  reopen history, editable rules and optional desktop notifications. Transactional audit cursor,
+  episode deduplication. `admin-security.spec.ts` (Chromium/Firefox) + unit tests.
 - Parent-removal delegation (specs §30.3, V22): owners opt a linked group into "remove people here
   when they leave the community" (link/accept); leaving or being removed from the community
   marks them departed in those groups (fan-out stops at once, `GROUPS_CHANGED` hint, a member's

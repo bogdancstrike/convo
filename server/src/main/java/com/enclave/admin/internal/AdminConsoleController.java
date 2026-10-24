@@ -227,7 +227,8 @@ class AdminConsoleController {
 
     @PostMapping("/idp/users/{id}/sign-out")
     AuditLog.Entry signOut(@AuthenticationPrincipal Jwt admin, @PathVariable String id, @Valid @RequestBody Reason body) {
-        guard.requireAudited(admin, Permission.USERS_CREDENTIALS, "user.sign-out", "idp:" + id);
+        guard.requireAudited(admin, Permission.SESSIONS_REVOKE, "user.sign-out", "idp:" + id);
+        guard.requireRecentSignIn(admin);
         idp.signOut(id);
         return audit.append(guard.actor(admin), "user.sign-out", "idp:" + id, body.reason());
     }
