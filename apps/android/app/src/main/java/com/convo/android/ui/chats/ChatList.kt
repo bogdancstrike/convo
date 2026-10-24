@@ -70,7 +70,16 @@ import org.json.JSONObject
                 if (showLocked) showLocked = false else app.locks.authenticate("Show locked chats", "Confirm it’s you") { showLocked = true }
             }
         }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 88.dp)) {
+        // LazyColumn anchors its position to the first visible row's key, so a chat that moves to the
+        // top (new message, new request) would otherwise appear above the viewport. Like WhatsApp,
+        // a list that was showing its top keeps showing it.
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val topKey = conversations.firstOrNull()?.optString("id")
+        var wasAtTop by remember { mutableStateOf(true) }
+        // Recorded when a user scroll ends; layout shifts from inserted rows do not count as scrolling.
+        LaunchedEffect(listState) { snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (!scrolling) wasAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 } }
+        LaunchedEffect(topKey) { if (wasAtTop) listState.scrollToItem(0) }
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
             if (!archived && !showLocked && archivedCount > 0 && query.isBlank()) item(key = "archived") {
                 Row(Modifier.fillMaxWidth().combinedClickable { archived = true }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Archive, null, tint = colors.accentText) }

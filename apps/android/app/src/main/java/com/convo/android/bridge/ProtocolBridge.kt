@@ -122,7 +122,8 @@ class ProtocolBridge(context: Context, private val origin: String, private val r
             javaScriptCanOpenWindowsAutomatically = false; setSupportMultipleWindows(false)
             cacheMode = WebSettings.LOAD_NO_CACHE
         }
-        WebView.setWebContentsDebuggingEnabled(false)
+        // Debug builds only: lets developers inspect the protocol runtime with chrome://inspect.
+        WebView.setWebContentsDebuggingEnabled(com.convo.android.BuildConfig.DEBUG)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.addJavascriptInterface(object {
             @JavascriptInterface fun emit(json: String) {
