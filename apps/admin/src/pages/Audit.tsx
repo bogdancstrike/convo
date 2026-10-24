@@ -45,7 +45,9 @@ export function AuditPage({ can }: PageProps) {
             try {
               const data = await api.exportAudit(reason);
               const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-              const a = document.createElement('a'); a.href = url; a.download = `convo-audit-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(url);
+              const a = document.createElement('a'); a.href = url; a.download = `convo-audit-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); a.remove();
+              // Firefox resolves the object URL asynchronously after the click.
+              setTimeout(() => URL.revokeObjectURL(url), 10_000);
               load();
             } catch (e) { message.error(errorText(e)); }
           }}>Export</Button>}

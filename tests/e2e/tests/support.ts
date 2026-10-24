@@ -142,7 +142,7 @@ export const ADMIN_URL = process.env.ADMIN_URL ?? 'https://localhost:9443';
 
 /** Signs in to the admin console on its own origin. */
 export async function adminSignIn(page: Page, user: { username: string; password: string }): Promise<void> {
-  await page.goto(ADMIN_URL);
+  await page.goto(ADMIN_URL, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('admin-sign-in').click();
   await page.locator('#username').fill(user.username);
   await page.locator('#password').fill(user.password);
@@ -153,7 +153,7 @@ export async function adminSignIn(page: Page, user: { username: string; password
 /** Fills the admin console's reason dialog and confirms (every change needs a reason). */
 export async function confirmReason(page: Page, reason: string): Promise<void> {
   await page.getByTestId('reason-input').fill(reason);
-  await page.getByTestId('reason-confirm').click();
+  await page.getByTestId('reason-confirm').press('Enter');
 }
 
 /** Opens an admin console page by URL (closes any open drawer). */

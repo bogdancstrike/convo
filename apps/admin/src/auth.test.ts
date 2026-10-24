@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ getUser: vi.fn(), signinSilent: vi.fn(), removeUser: vi.fn(), signoutRedirect: vi.fn(), stopSilentRenew: vi.fn(), events: { addAccessTokenExpiring: vi.fn() } }));
+const mock = vi.hoisted(() => ({ getUser: vi.fn(), signinSilent: vi.fn(), removeUser: vi.fn(), signoutRedirect: vi.fn(), stopSilentRenew: vi.fn(), signinRedirect: vi.fn(), events: { addAccessTokenExpiring: vi.fn() } }));
 vi.mock('oidc-client-ts', () => ({ UserManager: class { constructor() { return mock; } }, WebStorageStateStore: class {} }));
 vi.stubGlobal('window', { location: { origin: 'https://admin.test', href: 'https://admin.test/' }, sessionStorage: {}, history: { replaceState: vi.fn() } });
-const { accessToken, session, signOut } = await import('./auth');
+const { accessToken, session, signOut, signIn } = await import('./auth');
 const user = (expires_in: number, refresh_token = 'refresh') => ({ access_token: 'old', refresh_token, expires_in, expired: expires_in <= 0, id_token: 'id', profile: { sub: 'subject', preferred_username: 'ana' } });
 
-beforeEach(() => { vi.clearAllMocks(); mock.getUser.mockResolvedValue(user(120)); });
+beforeEach(async () => { vi.clearAllMocks(); mock.getUser.mockResolvedValue(user(120)); await signIn(); });
 describe('admin token renewal', () => {
   it('keeps a valid access token', async () => { expect(await accessToken()).toBe('old'); expect(mock.signinSilent).not.toHaveBeenCalled(); });
   it('renews an expired session before deciding it has ended', async () => {
@@ -26,6 +26,19 @@ describe('admin token renewal', () => {
     expect(await accessToken()).toBeNull(); expect(mock.removeUser).toHaveBeenCalledTimes(1);
     mock.removeUser.mockClear(); mock.signinSilent.mockRejectedValue(new TypeError('offline'));
     await expect(accessToken()).rejects.toThrow('offline'); expect(mock.removeUser).not.toHaveBeenCalled();
+  });
+  it('does not start or join token renewal after logout begins', async () => {
+    mock.getUser.mockResolvedValue(user(10));
+    let finish!: (value: unknown) => void;
+    mock.signinSilent.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const first = accessToken();
+    await vi.waitFor(() => expect(mock.signinSilent).toHaveBeenCalledTimes(1));
+    const logout = signOut();
+    const duringLogout = accessToken();
+    finish({ ...user(300), access_token: 'new' });
+    await first; await logout;
+    expect(await duringLogout).toBeNull();
+    expect(mock.signinSilent).toHaveBeenCalledTimes(1);
   });
   it('stops renewal before logout and clears the local user', async () => {
     await signOut(); expect(mock.stopSilentRenew).toHaveBeenCalled(); expect(mock.removeUser).toHaveBeenCalled(); expect(mock.signoutRedirect).toHaveBeenCalledWith({ id_token_hint: 'id' });

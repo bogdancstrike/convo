@@ -31,9 +31,12 @@ export async function session(): Promise<string | null> {
   return user ? (user.profile.preferred_username ?? user.profile.sub) : null;
 }
 
-export function signIn(): Promise<void> { return users.signinRedirect({ prompt: 'login' }); }
+let signingOut = false;
+
+export function signIn(): Promise<void> { signingOut = false; return users.signinRedirect({ prompt: 'login' }); }
 
 export async function signOut(): Promise<void> {
+  signingOut = true;
   users.stopSilentRenew();
   if (renewing) await renewing.catch(() => undefined);
   const user = await users.getUser();
@@ -44,8 +47,9 @@ export async function signOut(): Promise<void> {
 let renewing: Promise<User | null> | null = null;
 
 async function currentUser(force = false): Promise<User | null> {
+  if (signingOut) return null;
   const user = await users.getUser();
-  if (!user) return null;
+  if (signingOut || !user) return null;
   if (!force && !user.expired && (user.expires_in ?? Infinity) > 60) return user;
   if (!user.refresh_token) return user.expired ? null : user;
   if (!renewing) {
