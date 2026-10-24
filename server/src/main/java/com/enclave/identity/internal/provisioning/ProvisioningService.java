@@ -11,7 +11,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -162,7 +161,6 @@ public class ProvisioningService {
         sessions.clearMessage(provisioningId);
     }
 
-    @Scheduled(fixedDelayString = "${enclave.identity.provisioning-purge-interval:PT1H}")
     @Transactional
     void purgeExpired() {
         sessions.purgeExpired();

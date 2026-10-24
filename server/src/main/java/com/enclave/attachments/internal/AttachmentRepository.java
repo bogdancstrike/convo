@@ -38,7 +38,7 @@ class AttachmentRepository {
     Optional<Multipart> findMultipart(UUID id) {
         return jdbc.sql("""
                 SELECT object_key, size_bytes, upload_id, upload_secret_hash, upload_deadline, completed_at IS NOT NULL AS done
-                FROM attachments WHERE attachment_id = :id AND upload_id IS NOT NULL AND expires_at > now()""")
+                FROM attachments WHERE attachment_id = :id AND upload_id IS NOT NULL""")
                 .param("id", id)
                 .query((rs, i) -> new Multipart(rs.getString(1), rs.getLong(2), rs.getString(3), rs.getBytes(4), rs.getTimestamp(5).toInstant(), rs.getBoolean(6)))
                 .optional();
@@ -56,9 +56,9 @@ class AttachmentRepository {
                 .param("l", limit).query((rs, i) -> new String[] {rs.getString(1), rs.getString(2)}).list();
     }
 
-    /** @return object key of an unexpired attachment (multipart uploads only once completed) */
+    /** @return object key of a retained attachment (multipart uploads only once completed) */
     Optional<String> findLiveObjectKey(UUID id) {
-        return jdbc.sql("SELECT object_key FROM attachments WHERE attachment_id = :id AND expires_at > now() AND (upload_id IS NULL OR completed_at IS NOT NULL)")
+        return jdbc.sql("SELECT object_key FROM attachments WHERE attachment_id = :id AND (upload_id IS NULL OR completed_at IS NOT NULL)")
                 .param("id", id).query(String.class).optional();
     }
 

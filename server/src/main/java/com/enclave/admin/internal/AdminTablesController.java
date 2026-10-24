@@ -88,12 +88,13 @@ class AdminTablesController {
     }
     @GetMapping("/activity") ResponseEntity<AdminTableQuery.Page<AdminConsoleController.UserActivity>> activity(@AuthenticationPrincipal Jwt admin, @RequestParam Map<String, String> params) {
         guard.require(admin, AdminPermissions.Permission.STATS_READ); guard.require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
-        int days; try { days = Math.max(7, Math.min(90, Integer.parseInt(params.getOrDefault("days", "30")))); } catch (NumberFormatException e) { days = 30; }
+        int days; try { days = Math.max(1, Math.min(3660, Integer.parseInt(params.getOrDefault("days", "30")))); } catch (NumberFormatException e) { days = 30; }
+        var range = StatsRange.of(days, StatsRange.parse(params.get("from")), StatsRange.parse(params.get("to")), activity.today());
         var accounts = new ArrayList<AccountSummary>();
         for (int offset = 0; ; offset += 1000) { var page = identity.accountDirectory(offset, 1000); accounts.addAll(page); if (page.size() < 1000) break; }
         var totals = new HashMap<UUID, ActivityStore.AccountActivity>();
-        for (int offset = 0; offset < accounts.size(); offset += 1000) for (var a : activity.of(accounts.subList(offset, Math.min(accounts.size(), offset + 1000)).stream().map(AccountSummary::accountId).toList(), activity.today().minusDays(days - 1L))) totals.put(a.accountId(), a);
-        final int window = days;
+        for (int offset = 0; offset < accounts.size(); offset += 1000) for (var a : activity.of(accounts.subList(offset, Math.min(accounts.size(), offset + 1000)).stream().map(AccountSummary::accountId).toList(), range.from(), range.to())) totals.put(a.accountId(), a);
+        final int window = range.days();
         var rows = accounts.stream().filter(a -> a.status().equals("active")).map(a -> AdminConsoleController.level(a, totals.get(a.accountId()), window)).toList();
         return noStore(AdminTableQuery.from(params).apply(rows, r -> {
             Map<String, Object> fields = new HashMap<>(); fields.put("person", (r.account().displayName() == null ? "" : r.account().displayName()) + " " + r.account().username()); fields.put("level", switch(r.level()) { case "high" -> "Very active"; case "medium" -> "Active"; case "low" -> "Occasional"; default -> "Inactive"; }); fields.put("items", r.items()); fields.put("activeDays", r.activeDays()); fields.put("last", r.lastActiveDay()); return fields;

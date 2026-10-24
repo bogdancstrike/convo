@@ -56,6 +56,27 @@ class AdminConsoleControllerTest {
         assertThatThrownBy(() -> controller.overview(fresh("offline_access"), 30)).isInstanceOf(EnclaveException.class);
     }
 
+    @Test void explicitHistoricalRangeBoundsBothSeriesAndPersonQueries() {
+        var from = LocalDate.of(2020, 1, 1); var to = from.plusDays(2);
+        when(activity.today()).thenReturn(LocalDate.of(2026, 10, 21));
+        when(activity.daily(from, to)).thenReturn(List.of(new ActivityStore.Day(from, 9, 1, 1, 1, 0)));
+        when(identity.newAccountsPerDay(from)).thenReturn(List.of());
+        when(calls.callsPerDay(from)).thenReturn(List.of(new CallsApi.CallDay(to.plusDays(1), 100, 0, 0)));
+        var result = controller.overview(fresh("convo-auditor"), 30, from, to).getBody();
+        assertThat(result.days()).hasSize(3);
+        assertThat(result.days().getFirst().items()).isEqualTo(9);
+        assertThat(result.days().stream().mapToLong(AdminConsoleController.DayStats::calls).sum()).isZero();
+        assertThat(result.retentionDays()).isNull();
+        UUID id = UUID.randomUUID();
+        when(identity.account(id)).thenReturn(Optional.of(new IdentityAdminApi.AccountSummary(id, "ana", "Ana", "active", 1, now, null)));
+        when(activity.account(id, from, to)).thenReturn(List.of(new ActivityStore.AccountDay(to, 4, true, true, false)));
+        var person = controller.accountActivity(fresh("convo-helpdesk"), id, 30, from, to).getBody();
+        assertThat(person.window()).isEqualTo(3);
+        assertThat(person.from()).isEqualTo(from); assertThat(person.to()).isEqualTo(to);
+        assertThat(person.summary().items()).isEqualTo(4);
+        verify(activity).account(id, from, to);
+    }
+
     @Test void activityLevelsComeFromTheShareOfActiveDays() {
         UUID id = UUID.randomUUID();
         var account = new IdentityAdminApi.AccountSummary(id, "ana", "Ana", "active", 1, now, null);

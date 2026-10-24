@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.modulith.events.ApplicationModuleListener;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -256,7 +255,6 @@ class GroupService {
         groups.removeDeviceEverywhere(event.address());
     }
 
-    @Scheduled(fixedDelayString = "${enclave.groups.purge-interval:PT1H}")
     @Transactional
     void purge() {
         groups.purgeSubmissions();

@@ -103,5 +103,5 @@ else
 fi
 
 # Existing realms also need event storage; empty types select Keycloak default user events.
-k update "realms/$REALM/events/config" -s eventsEnabled=true -s eventsExpiration=604800 -s 'enabledEventTypes=[]'
-echo "Identity audit events enabled (7 day source retention)"
+k update "realms/$REALM/events/config" -s eventsEnabled=true -s eventsExpiration=0 -s 'enabledEventTypes=[]'
+echo "Identity audit events enabled (retention managed externally)"

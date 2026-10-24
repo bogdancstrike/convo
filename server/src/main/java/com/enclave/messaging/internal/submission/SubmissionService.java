@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -106,7 +105,6 @@ public class SubmissionService {
     }
 
     /** Deletes expired idempotency records. */
-    @Scheduled(fixedDelayString = "${enclave.messaging.submission-purge-interval:PT1H}")
     @Transactional
     public void purgeExpired() {
         submissions.purgeExpired();

@@ -10,7 +10,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +33,18 @@ class ThroughputStore {
         return jdbc.sql("SELECT minute, items, calls, uploads FROM admin_throughput_minute WHERE minute >= :from ORDER BY minute")
                 .param("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC)).query((rs, i) -> new Minute(rs.getObject(1, OffsetDateTime.class).toInstant(), rs.getLong(2), rs.getLong(3), rs.getLong(4))).list();
     }
+    List<Minute> between(Instant from, Instant to, int bucketMinutes) {
+        return jdbc.sql("""
+                SELECT date_bin(make_interval(mins => :bucket), minute, :origin) AS bucket,
+                       sum(items) AS items, sum(calls) AS calls, sum(uploads) AS uploads
+                FROM admin_throughput_minute WHERE minute >= :from AND minute < :to
+                GROUP BY 1 ORDER BY 1""")
+                .param("bucket", bucketMinutes).param("origin", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .param("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC)).param("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC))
+                .query((rs, i) -> new Minute(rs.getObject(1, OffsetDateTime.class).toInstant(), rs.getLong(2), rs.getLong(3), rs.getLong(4))).list();
+    }
     Instant startedAt() { return jdbc.sql("SELECT started_at FROM admin_throughput_start WHERE singleton").query(OffsetDateTime.class).single().toInstant(); }
-    @Scheduled(fixedDelayString = "PT1H") int purge() {
+    int purge() {
         return jdbc.sql("DELETE FROM admin_throughput_minute WHERE minute < :cutoff").param("cutoff", OffsetDateTime.ofInstant(clock.instant().minus(2, ChronoUnit.DAYS), ZoneOffset.UTC)).update();
     }
 }

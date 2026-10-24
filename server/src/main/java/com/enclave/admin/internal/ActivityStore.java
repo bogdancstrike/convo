@@ -8,12 +8,11 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Repository;
 
 /**
  * Day-granular activity counts for the admin dashboard (V25). Incremented synchronously inside the
- * submission transaction (one upsert per accepted item), purged after the retention window. When
+ * submission transaction (one upsert per accepted item). Retention is managed externally. When
  * {@code enclave.admin.activity.enabled=false} nothing is recorded and per-user activity is empty.
  */
 @Repository
@@ -66,55 +65,64 @@ class ActivityStore {
                 .param("a", event.accountId()).param("d", today()).param("w", web).param("n", android).update();
     }
 
-    @Scheduled(fixedDelayString = "PT6H", initialDelayString = "PT5M")
     int purge() {
         return jdbc.sql("DELETE FROM account_activity_daily WHERE day < :cutoff")
                 .param("cutoff", today().minusDays(properties.activity().retention().toDays())).update();
     }
 
     /** Totals per day since {@code from} (days without activity are omitted). */
-    List<Day> daily(LocalDate from) {
+    List<Day> daily(LocalDate from) { return daily(from, today()); }
+
+    List<Day> daily(LocalDate from, LocalDate to) {
         return jdbc.sql("""
                 SELECT day, sum(items) AS items, count(*) AS accounts, count(*) FILTER (WHERE items > 0) AS senders,
                        count(*) FILTER (WHERE web) AS web, count(*) FILTER (WHERE android) AS android
-                FROM account_activity_daily WHERE day >= :from GROUP BY day ORDER BY day""")
-                .param("from", from).query((rs, i) -> new Day(rs.getObject("day", LocalDate.class), rs.getLong("items"), rs.getLong("accounts"),
+                FROM account_activity_daily WHERE day >= :from AND day <= :to GROUP BY day ORDER BY day""")
+                .param("from", from).param("to", to).query((rs, i) -> new Day(rs.getObject("day", LocalDate.class), rs.getLong("items"), rs.getLong("accounts"),
                         rs.getLong("senders"), rs.getLong("web"), rs.getLong("android"))).list();
     }
 
     /** Most active accounts since {@code from}. */
-    List<AccountActivity> top(LocalDate from, int limit) {
+    List<AccountActivity> top(LocalDate from, int limit) { return top(from, today(), limit); }
+
+    List<AccountActivity> top(LocalDate from, LocalDate to, int limit) {
         return jdbc.sql("""
                 SELECT account_id, sum(items) AS items, count(*) AS days, max(day) AS last_day FROM account_activity_daily
-                WHERE day >= :from GROUP BY account_id ORDER BY items DESC, account_id LIMIT :n""")
-                .param("from", from).param("n", Math.max(1, Math.min(limit, 100))).query(ActivityStore::activity).list();
+                WHERE day >= :from AND day <= :to GROUP BY account_id ORDER BY items DESC, account_id LIMIT :n""")
+                .param("from", from).param("to", to).param("n", Math.max(1, Math.min(limit, 100))).query(ActivityStore::activity).list();
     }
 
     /** Totals for some accounts since {@code from} (accounts without activity are absent). */
-    List<AccountActivity> of(List<UUID> accountIds, LocalDate from) {
+    List<AccountActivity> of(List<UUID> accountIds, LocalDate from) { return of(accountIds, from, today()); }
+
+    List<AccountActivity> of(List<UUID> accountIds, LocalDate from, LocalDate to) {
         if (accountIds.isEmpty()) return List.of();
         return jdbc.sql("""
                 SELECT account_id, sum(items) AS items, count(*) AS days, max(day) AS last_day FROM account_activity_daily
-                WHERE day >= :from AND account_id IN (:ids) GROUP BY account_id""")
-                .param("from", from).param("ids", accountIds).query(ActivityStore::activity).list();
+                WHERE day >= :from AND day <= :to AND account_id IN (:ids) GROUP BY account_id""")
+                .param("from", from).param("to", to).param("ids", accountIds).query(ActivityStore::activity).list();
     }
 
     /** People per activity level since {@code from}: active-day thresholds for high and medium. */
     record LevelCounts(long high, long medium, long low) {}
 
-    LevelCounts levels(LocalDate from, int highDays, int mediumDays) {
+    LevelCounts levels(LocalDate from, int highDays, int mediumDays) { return levels(from, today(), highDays, mediumDays); }
+
+    LevelCounts levels(LocalDate from, LocalDate to, int highDays, int mediumDays) {
         return jdbc.sql("""
                 SELECT count(*) FILTER (WHERE days >= :h) AS high, count(*) FILTER (WHERE days < :h AND days >= :m) AS medium,
                        count(*) FILTER (WHERE days < :m) AS low
-                FROM (SELECT account_id, count(*) AS days FROM account_activity_daily WHERE day >= :from GROUP BY account_id) a""")
-                .param("from", from).param("h", highDays).param("m", mediumDays)
+                FROM (SELECT account_id, count(*) AS days FROM account_activity_daily WHERE day >= :from AND day <= :to GROUP BY account_id) a""")
+                .param("from", from).param("to", to).param("h", highDays).param("m", mediumDays)
                 .query((rs, i) -> new LevelCounts(rs.getLong("high"), rs.getLong("medium"), rs.getLong("low"))).single();
     }
 
     /** One account's daily items since {@code from}. */
-    List<AccountDay> account(UUID accountId, LocalDate from) {
-        return jdbc.sql("SELECT day, items, opened, web, android FROM account_activity_daily WHERE account_id = :a AND day >= :from ORDER BY day")
-                .param("a", accountId).param("from", from).query((rs, i) -> new AccountDay(rs.getObject("day", LocalDate.class), rs.getLong("items"),
+    List<AccountDay> account(UUID accountId, LocalDate from) { return account(accountId, from, today()); }
+
+    List<AccountDay> account(UUID accountId, LocalDate from, LocalDate to) {
+        return jdbc.sql("SELECT day, items, opened, web, android FROM account_activity_daily WHERE account_id = :a AND day >= :from AND day <= :to ORDER BY day")
+                .param("a", accountId).param("from", from).param("to", to).query((rs, i) -> new AccountDay(rs.getObject("day", LocalDate.class), rs.getLong("items"),
                         rs.getBoolean("opened"), rs.getBoolean("web"), rs.getBoolean("android"))).list();
     }
 

@@ -1,7 +1,7 @@
 {
   "realm": "enclave",
   "eventsEnabled": true,
-  "eventsExpiration": 604800,
+  "eventsExpiration": 0,
   "enabledEventTypes": [],
   "displayName": "Convo (development)",
   "enabled": true,

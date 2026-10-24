@@ -11,7 +11,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,7 +70,6 @@ public class WebSocketTicketService {
                 .filter(identity::isActive);
     }
 
-    @Scheduled(fixedDelayString = "${enclave.messaging.websocket.ticket-purge-interval:PT10M}")
     @Transactional
     void purgeExpired() {
         tickets.purgeExpired();

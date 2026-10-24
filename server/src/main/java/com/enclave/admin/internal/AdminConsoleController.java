@@ -70,26 +70,30 @@ class AdminConsoleController {
      * @param retentionDays how far back activity exists
      */
     record Overview(IdentityAdminApi.DirectoryStats directory, GroupsApi.Counts groups, long communities, List<DayStats> days,
-            boolean activityTracking, long retentionDays, boolean accountManagement) {}
+            boolean activityTracking, Long retentionDays, boolean accountManagement) {}
 
     @GetMapping("/stats/overview")
-    ResponseEntity<Overview> overview(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "30") int days) {
+    ResponseEntity<Overview> overview(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "30") int days, @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate from, @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate to) {
         guard.require(admin, Permission.STATS_READ);
-        int window = Math.max(7, Math.min(days, 90));
-        LocalDate today = activity.today(), from = today.minusDays(window - 1L);
-        Map<LocalDate, ActivityStore.Day> items = byDay(activity.daily(from), ActivityStore.Day::day);
-        Map<LocalDate, IdentityAdminApi.DayCount> created = byDay(identity.newAccountsPerDay(from), IdentityAdminApi.DayCount::day);
-        Map<LocalDate, CallsApi.CallDay> callDays = byDay(calls.callsPerDay(from), CallsApi.CallDay::day);
+        var range = StatsRange.of(days, from, to, activity.today());
+        LocalDate today = activity.today();
+        Map<LocalDate, ActivityStore.Day> items = byDay((from == null ? activity.daily(range.from()) : activity.daily(range.from(), range.to())), ActivityStore.Day::day);
+        Map<LocalDate, IdentityAdminApi.DayCount> created = byDay(identity.newAccountsPerDay(range.from()), IdentityAdminApi.DayCount::day);
+        Map<LocalDate, CallsApi.CallDay> callDays = byDay(calls.callsPerDay(range.from()), CallsApi.CallDay::day);
         List<DayStats> series = new ArrayList<>();
-        for (LocalDate d = from; !d.isAfter(today); d = d.plusDays(1)) {
+        for (LocalDate d = range.from(); !d.isAfter(range.to()); d = d.plusDays(1)) {
             var a = items.get(d); var n = created.get(d); var c = callDays.get(d);
             series.add(new DayStats(d, a == null ? 0 : a.items(), a == null ? 0 : a.activeAccounts(), a == null ? 0 : a.senders(),
                     a == null ? 0 : a.web(), a == null ? 0 : a.android(), n == null ? 0 : n.count(),
                     c == null ? 0 : c.calls(), c == null ? 0 : c.video(), c == null ? 0 : c.group()));
         }
         return noStore(new Overview(identity.directoryStats(today), groups.counts(), communities.count(), series,
-                properties.activity().enabled(), properties.activity().retention().toDays(), idp.available()));
+                properties.activity().enabled(), null, idp.available()));
     }
+
+    ResponseEntity<Overview> overview(Jwt admin, int days) { return overview(admin, days, null, null); }
+    ResponseEntity<Levels> levels(Jwt admin, int days) { return levels(admin, days, null, null); }
+    ResponseEntity<AccountActivityView> accountActivity(Jwt admin, UUID accountId, int days) { return accountActivity(admin, accountId, days, null, null); }
 
     /**
      * Activity level from the share of active days in the window: {@code high} (≥ 50 %),
@@ -125,30 +129,31 @@ class AdminConsoleController {
     record Levels(long high, long medium, long low, long none, int window) {}
 
     @GetMapping("/stats/levels")
-    ResponseEntity<Levels> levels(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "30") int days) {
+    ResponseEntity<Levels> levels(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "30") int days, @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate from, @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate to) {
         guard.require(admin, Permission.STATS_READ);
-        int window = Math.max(7, Math.min(days, 90));
+        var range = StatsRange.of(days, from, to, activity.today());
+        int window = range.days();
         LocalDate today = activity.today();
-        var counts = activity.levels(today.minusDays(window - 1L), (int) Math.ceil(window * 0.5), (int) Math.ceil(window * 0.15));
+        var counts = from == null ? activity.levels(range.from(), (int) Math.ceil(window * 0.5), (int) Math.ceil(window * 0.15)) : activity.levels(range.from(), range.to(), (int) Math.ceil(window * 0.5), (int) Math.ceil(window * 0.15));
         var directory = identity.directoryStats(today);
         long none = Math.max(0, directory.accounts() - directory.disabled() - counts.high() - counts.medium() - counts.low());
         return noStore(new Levels(counts.high(), counts.medium(), counts.low(), none, window));
     }
 
-    record AccountActivityView(UserActivity summary, List<ActivityStore.AccountDay> days, int window) {}
+    record AccountActivityView(UserActivity summary, List<ActivityStore.AccountDay> days, int window, LocalDate from, LocalDate to) {}
 
     /** One account's activity: daily encrypted items sent over the window (counts only). */
     @GetMapping("/accounts/{accountId}/activity")
-    ResponseEntity<AccountActivityView> accountActivity(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @RequestParam(defaultValue = "30") int days) {
+    ResponseEntity<AccountActivityView> accountActivity(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @RequestParam(defaultValue = "30") int days, @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate from, @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate to) {
         guard.require(admin, Permission.STATS_READ);
         guard.require(admin, Permission.ACCOUNTS_READ);
-        int window = Math.max(7, Math.min(days, 90));
-        LocalDate from = activity.today().minusDays(window - 1L);
+        var range = StatsRange.of(days, from, to, activity.today());
+        int window = range.days();
         AccountSummary account = identity.account(accountId).orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "unknown account"));
-        List<ActivityStore.AccountDay> series = activity.account(accountId, from);
+        List<ActivityStore.AccountDay> series = from == null ? activity.account(accountId, range.from()) : activity.account(accountId, range.from(), range.to());
         long items = series.stream().mapToLong(ActivityStore.AccountDay::items).sum();
         var totals = series.isEmpty() ? null : new ActivityStore.AccountActivity(accountId, items, series.size(), series.getLast().day());
-        return noStore(new AccountActivityView(level(account, totals, window), series, window));
+        return noStore(new AccountActivityView(level(account, totals, window), series, window, range.from(), range.to()));
     }
 
     static UserActivity level(AccountSummary account, ActivityStore.AccountActivity a, int window) {

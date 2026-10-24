@@ -17,11 +17,7 @@ class NonceRepository {
     void store(UUID accountId, int deviceId, String nonce, Instant expiresAt, int maxOutstanding) {
         jdbc.sql("INSERT INTO device_nonces (account_id, device_id, nonce_hash, expires_at) VALUES (:a, :d, :h, :e) ON CONFLICT DO NOTHING")
                 .param("a", accountId).param("d", deviceId).param("h", hash(nonce)).param("e", Timestamp.from(expiresAt)).update();
-        // Bound storage per device: drop the oldest beyond the cap.
-        jdbc.sql("""
-                DELETE FROM device_nonces WHERE account_id = :a AND device_id = :d AND nonce_hash IN (
-                  SELECT nonce_hash FROM device_nonces WHERE account_id = :a AND device_id = :d ORDER BY created_at DESC OFFSET :max)""")
-                .param("a", accountId).param("d", deviceId).param("max", maxOutstanding).update();
+
     }
 
     /** Consumes a live nonce exactly once (atomic delete). */

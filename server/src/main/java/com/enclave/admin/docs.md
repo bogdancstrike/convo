@@ -137,3 +137,25 @@ service; subsequent realm access and synchronization are checked through identit
 The admin Health page refreshes every 30 seconds. It preserves the last snapshot on a refresh
 failure and warns when results exceed 90 seconds. Search/status filters, details and tabs live in
 the URL for Back/Forward. Push diagnostics load independently, and retain audited retry controls.
+
+## External retention and reporting windows
+
+The current policy in `docs/retention.md` supersedes the finite retention periods described above:
+no application retention purge is scheduled, activity has no automatic 90-day limit, throughput
+has no automatic two-day deletion, identity audit deduplication persists, and Keycloak event
+expiration is disabled by realm setup. External operations own data cleanup.
+
+`/stats/overview`, `/stats/levels`, `/accounts/{id}/activity` and the activity table accept inclusive
+`from`/`to` UTC dates. Both are required together; reversed/future ranges are rejected. Single-day
+requests are supported. Queries are bounded to 3,660 days per request, without limiting how far
+back the selected window may start. The legacy `days` query remains supported.
+
+`/stats/throughput` additionally accepts these dates, returning `bucketMinutes`, `from` and an
+exclusive `to`. Counts in each returned bucket remain operation totals; the frontend divides by
+observed minutes to display rates. Long windows use at most 1,440 buckets. The existing rolling
+`minutes` query retains its previous semantics when explicit dates are absent.
+
+All management and chart-data tables initially split available width equally. Pointer/keyboard
+column-boundary resizing adjusts adjacent columns and saves per-table preferences locally.
+Double-clicking a separator or resetting equal widths in table settings restores equal columns.
+Column visibility/density preferences and backend search/sort/filter/paging continue independently.

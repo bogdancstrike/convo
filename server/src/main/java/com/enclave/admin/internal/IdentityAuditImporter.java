@@ -55,8 +55,6 @@ class IdentityAuditImporter {
             if (offset >= 100_000) throw new IllegalStateException("identity audit backlog exceeds one import batch");
         }
         jdbc.sql("UPDATE identity_audit_cursor SET through_millis = :to WHERE source = 'keycloak'").param("to", until).update();
-        jdbc.sql("DELETE FROM identity_audit_import WHERE source_time < :cutoff")
-                .param("cutoff", OffsetDateTime.ofInstant(clock.instant().minusSeconds(8 * 86400), ZoneOffset.UTC)).update();
     }
     void ingest(KeycloakUsers.IdentityEvent event) {
         String action = action(event);

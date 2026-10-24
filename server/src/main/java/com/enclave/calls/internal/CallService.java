@@ -11,7 +11,6 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,7 +97,6 @@ class CallService {
         if (!properties.usable()) throw new EnclaveException(ErrorCode.POLICY_VIOLATION, "calls are not configured");
     }
 
-    @Scheduled(fixedDelayString = "PT1H")
     @Transactional
     void purge() { calls.purgeBefore(clock.instant().minus(properties.maxCallAge()).minus(properties.maxCallAge())); }
 }

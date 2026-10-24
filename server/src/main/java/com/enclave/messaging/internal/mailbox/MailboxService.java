@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,8 +58,7 @@ public class MailboxService {
         log.info("Purged {} envelopes of revoked device {}", n, device);
     }
 
-    /** Periodically deletes expired envelopes in bounded batches. */
-    @Scheduled(fixedDelayString = "${enclave.messaging.expiry-purge-interval:PT5M}")
+    /** Explicit maintenance helper for expired envelopes; never scheduled by the application. */
     @Transactional
     public void purgeExpired() {
         int n = mailbox.purgeExpired(PURGE_BATCH);

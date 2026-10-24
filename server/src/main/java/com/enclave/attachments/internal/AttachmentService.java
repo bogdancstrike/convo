@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -147,12 +146,11 @@ class AttachmentService {
     @Transactional(readOnly = true)
     Download download(UUID id, String endpoint) {
         String key = attachments.findLiveObjectKey(id)
-                .orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "attachment expired or unknown"));
+                .orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "attachment not found"));
         return new Download(store.presignDownload(key, properties.downloadUrlTtl(), endpoint), clock.instant().plus(properties.downloadUrlTtl()));
     }
 
-    /** Deletes expired objects, then their registry rows (object first so nothing is orphaned). */
-    @Scheduled(fixedDelayString = "${enclave.attachments.purge-interval:PT1H}")
+    /** Explicit maintenance helper for expired objects and registry rows; never scheduled. */
     void purgeExpired() {
         // Abandoned resumable uploads first: abort so their parts do not linger in storage.
         for (String[] open : attachments.abandonedMultiparts(PURGE_BATCH)) {

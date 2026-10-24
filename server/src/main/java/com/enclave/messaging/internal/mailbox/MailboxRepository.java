@@ -37,22 +37,22 @@ public class MailboxRepository {
                 .update();
     }
 
-    /** @return oldest-first page of unexpired envelopes (specs §24.5) */
+    /** @return oldest-first page of retained envelopes (specs §24.5) */
     public List<Envelope> page(DeviceAddress device, int limit) {
         return jdbc.sql("""
                 SELECT account_id, device_id, guid, type, source_account, source_device, server_ts, expires_at, urgent, content,
                        group_id, epoch, group_seq
                   FROM envelopes
-                 WHERE account_id = :a AND device_id = :d AND expires_at > now()
+                 WHERE account_id = :a AND device_id = :d
                  ORDER BY server_ts, guid
                  LIMIT :l""")
                 .param("a", device.accountId()).param("d", device.deviceId()).param("l", limit)
                 .query(MailboxRepository::map).list();
     }
 
-    /** @return whether at least one unexpired envelope is pending */
+    /** @return whether at least one retained envelope is pending */
     public boolean hasPending(DeviceAddress device) {
-        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM envelopes WHERE account_id = :a AND device_id = :d AND expires_at > now())")
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM envelopes WHERE account_id = :a AND device_id = :d)")
                 .param("a", device.accountId()).param("d", device.deviceId()).query(Boolean.class).single();
     }
 

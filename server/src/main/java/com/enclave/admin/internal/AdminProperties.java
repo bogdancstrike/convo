@@ -32,7 +32,7 @@ public record AdminProperties(
 
     /**
      * @param enabled record encrypted items sent per account and day (counts only)
-     * @param retention how long daily counts are kept
+     * @param retention legacy explicit-maintenance threshold; no automatic deletion is performed
      */
     public record Activity(@DefaultValue("true") boolean enabled, @DefaultValue("90d") @NotNull Duration retention) {}
 

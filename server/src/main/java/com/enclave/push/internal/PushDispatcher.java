@@ -28,7 +28,6 @@ import org.springframework.stereotype.Component;
 @Component
 class PushDispatcher implements SmartLifecycle {
     private static final Logger log = LoggerFactory.getLogger(PushDispatcher.class);
-    private static final Duration PURGE_EVERY = Duration.ofMinutes(10);
 
     private final PushIntentStore store;
     private final PushService push;
@@ -47,7 +46,6 @@ class PushDispatcher implements SmartLifecycle {
         if (!properties.enabled() || scheduler != null) return;
         scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("push-dispatcher").daemon().factory());
         scheduler.scheduleWithFixedDelay(this::safePoll, properties.pollInterval().toMillis(), properties.pollInterval().toMillis(), TimeUnit.MILLISECONDS);
-        scheduler.scheduleWithFixedDelay(this::safePurge, PURGE_EVERY.toMillis(), PURGE_EVERY.toMillis(), TimeUnit.MILLISECONDS);
         push.onIntent(() -> { ScheduledExecutorService s = scheduler; if (s != null && !s.isShutdown()) s.execute(this::safePoll); });
     }
 
@@ -65,10 +63,6 @@ class PushDispatcher implements SmartLifecycle {
         } catch (RuntimeException e) {
             log.warn("Push dispatch poll failed: {}", e.getClass().getSimpleName());
         }
-    }
-
-    private void safePurge() {
-        try { purge(); } catch (RuntimeException e) { log.warn("Push dead-letter purge failed: {}", e.getClass().getSimpleName()); }
     }
 
     /** Claims and handles one batch of due intents; returns how many were claimed. */
@@ -109,7 +103,7 @@ class PushDispatcher implements SmartLifecycle {
         log.info("Push wake dead-lettered: {}", reason);
     }
 
-    /** Diagnostics are kept only for the retention window (specs: intent outcomes ≤ 24 h). */
+    /** Explicit maintenance helper; diagnostics are never purged automatically. */
     int purge() {
         return store.purge(clock.instant().minus(properties.deadLetterRetention()));
     }

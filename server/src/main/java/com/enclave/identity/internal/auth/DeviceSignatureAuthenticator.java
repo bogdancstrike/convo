@@ -17,7 +17,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.regex.Pattern;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -152,8 +151,7 @@ class DeviceSignatureAuthenticator implements DeviceRequestAuthenticator {
         return out;
     }
 
-    /** Hourly cleanup of expired replay-cache rows. */
-    @Scheduled(fixedDelayString = "${enclave.identity.device-auth.purge-interval:PT1H}")
+    /** Explicit maintenance helper for expired replay-cache rows; never scheduled. */
     void purgeExpiredRequestIds() {
         requestIds.purgeExpired();
         nonces.purgeExpired();

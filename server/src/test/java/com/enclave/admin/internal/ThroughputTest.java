@@ -27,6 +27,22 @@ class ThroughputTest {
         assertThat(controller.throughput(null, 1).getBody().minutes()).hasSize(15);
         assertThat(controller.throughput(null, 10000).getBody().minutes()).hasSize(1440);
     }
+    @Test void historicalThroughputUsesBoundedBucketsWithoutChangingOperationTotals() {
+        Instant now = Instant.parse("2026-10-24T12:23:45Z");
+        var from = java.time.LocalDate.of(2026, 1, 1); var to = java.time.LocalDate.of(2026, 1, 30);
+        Instant start = from.atStartOfDay().toInstant(ZoneOffset.UTC), end = to.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        var store = mock(ThroughputStore.class); when(store.startedAt()).thenReturn(start);
+        when(store.between(eq(start), eq(end), anyInt())).thenReturn(List.of(new ThroughputStore.Minute(start, 42, 7, 3)));
+        var props = mock(AdminProperties.class); when(props.activity()).thenReturn(new AdminProperties.Activity(true, java.time.Duration.ofDays(90)));
+        var controller = new ThroughputController(mock(AdminGuard.class), store, Clock.fixed(now, ZoneOffset.UTC), props);
+        var view = controller.throughput(null, 60, from, to).getBody();
+        assertThat(view.minutes()).hasSizeLessThanOrEqualTo(1440);
+        assertThat(view.bucketMinutes()).isEqualTo(30);
+        assertThat(view.minutes().stream().mapToLong(ThroughputStore.Minute::items).sum()).isEqualTo(42);
+        assertThat(view.minutes().getFirst().minute()).isEqualTo(start);
+        assertThat(view.to()).isEqualTo(end);
+    }
+
     @Test void disabledActivityDoesNotCollectOperationCounters() {
         var jdbc = mock(org.springframework.jdbc.core.simple.JdbcClient.class);
         AdminProperties properties = mock(AdminProperties.class);

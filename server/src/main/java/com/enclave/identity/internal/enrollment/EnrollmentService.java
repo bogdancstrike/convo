@@ -25,7 +25,6 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -175,8 +174,7 @@ public class EnrollmentService {
         return complete(account, reservation, cmd, false);
     }
 
-    /** Daily cleanup of abandoned reservations. */
-    @Scheduled(fixedDelayString = "${enclave.identity.reservation-purge-interval:PT6H}")
+    /** Explicit maintenance helper for abandoned reservations; never scheduled. */
     @Transactional
     void purgeAbandonedReservations() {
         reservations.purgeExpired();
