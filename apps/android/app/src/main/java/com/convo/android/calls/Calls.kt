@@ -305,8 +305,10 @@ class CallManager(private val app: MainActivity) {
         track.setAudioBufferCallback(object : io.livekit.android.audio.AudioBufferCallback {
             override fun onBuffer(buffer: java.nio.ByteBuffer, audioFormat: Int, channelCount: Int, sampleRate: Int, bytesRead: Int, captureTimeNs: Long): Long {
                 val pcm = buffer.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                // Pulsed (0.5 s on / 0.5 s off) so noise suppression does not learn it as background.
+                val on = (captureTimeNs / 500_000_000L) % 2 == 0L
                 for (frame in 0 until bytesRead / 2 / channelCount) {
-                    val sample = (Math.sin(phase) * 6000).toInt().toShort()
+                    val sample = if (on) (Math.sin(phase) * 6000).toInt().toShort() else 0
                     phase += 2 * Math.PI * 440 / sampleRate
                     for (c in 0 until channelCount) pcm.putShort((frame * channelCount + c) * 2, sample)
                 }

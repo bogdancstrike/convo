@@ -22,3 +22,17 @@ docker compose --profile e2e run --rm e2e          # Chromium + Firefox
   fan-out reaches both devices and sent messages mirror across own devices.
 
 Artifacts (traces, screenshots, HTML report) are written to `tests/e2e/test-results/`.
+
+## Android interoperability (`android/`)
+
+`android/call-android.spec.ts` checks that web ↔ Android calls really work: a browser calls the
+Android user, and for 5 minutes (configurable) both directions must keep carrying audio — with
+decoded Android audio audible, via the debug build's opt-in test tone — and, with `VIDEO=1`, video
+frames. `run-call.sh` builds the e2e image, accepts the call on the emulator and prints the
+Android-side counters (logcat tag `ConvoCallStats`).
+
+```bash
+adb reverse tcp:8443 tcp:8443                      # emulator signed in as PK_USER on https://localhost:8443
+PK_USER=droid tests/e2e/android/run-call.sh        # voice, 5 minutes
+PK_USER=droid VIDEO=1 MINUTES=5 tests/e2e/android/run-call.sh
+```
