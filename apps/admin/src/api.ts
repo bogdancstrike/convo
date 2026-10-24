@@ -24,7 +24,7 @@ export interface DayStats { day: string; items: number; activeAccounts: number; 
 export interface Overview {
   directory: { accounts: number; disabled: number; devices: number; seenToday: number; seen7d: number; seen30d: number };
   groups: { groups: number; channels: number }; communities: number; days: DayStats[];
-  activityTracking: boolean; retentionDays: number; accountManagement: boolean;
+  activityTracking: boolean; retentionDays?: number | null; accountManagement: boolean;
 }
 export type Level = 'high' | 'medium' | 'low' | 'none';
 export interface UserActivity { account: AccountSummary; items: number; activeDays: number; lastActiveDay: string | null; level: Level }
@@ -35,12 +35,15 @@ export interface IdpUser {
   createdAt: string | null; requiredActions: string[]; credentialTypes: string[]; roles: string[]; sessions: number; lastAccess: string | null;
 }
 export interface SignInAccount { user: IdpUser; convoAccountId: string | null }
-export interface RoleHolder { id: string; username: string; firstName: string | null; lastName: string | null; enabled: boolean }
+export interface RoleHolder { id: string; username: string; firstName: string | null; lastName: string | null; phone: string | null; enabled: boolean }
 export interface RoleView { role: string; permissions: Permission[]; holders: RoleHolder[] }
 export interface Levels { high: number; medium: number; low: number; none: number; window: number }
 export interface Throughput { minutes: { minute: string; items: number; calls: number; uploads: number }[]; recordingSince: string; capturedAt: string; enabled: boolean }
 export interface TableQuery { q: string; sort: string; order: 'asc' | 'desc'; page: number; size: number; filters: Record<string, string> }
 export interface TablePage<T> { rows: T[]; total: number; page: number; size: number; warnings: string[] }
+export type ComponentStatus = 'UP' | 'DOWN' | 'DEGRADED' | 'DISABLED' | 'UNKNOWN';
+export interface ComponentHealth { id: string; name: string; group: string; required: boolean; scope: string; status: ComponentStatus; detail: string; latencyMs: number; checkedAt: string }
+export interface SystemHealth { status: ComponentStatus; checkedAt: string; cacheSeconds: number; components: ComponentHealth[] }
 export interface Health { push: { pending: number; oldestPending: string; deadLetters: Record<string, number> } }
 
 export class AdminError extends Error {
@@ -102,6 +105,7 @@ export const api = {
   checkpoint: () => call<AuditVerification>('POST', '/audit/checkpoint'),
   exportAudit: (reason: string) => call<unknown>('POST', '/audit/export', { reason }),
   health: () => call<Health>('GET', '/health'),
+  systemHealth: () => call<SystemHealth>('GET', '/health/system'),
   redrive: (reason: string) => call<{ queued: number }>('POST', '/push/redrive', { reason }),
 };
 

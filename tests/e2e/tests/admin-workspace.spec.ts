@@ -60,6 +60,9 @@ test('merged workspace, scoped activity, role explorer and renewable sessions', 
     await admin.getByRole('button', { name: /Helpdesk.*permissions/ }).click();
     await admin.getByPlaceholder('Search name or username').fill(pendingU.username);
     await expect(admin.getByTestId('role-card-convo-helpdesk')).toContainText(pendingU.username);
+    await expect(admin.getByTestId('role-card-convo-helpdesk')).toContainText(pendingU.phone);
+    const phoneMatch = await adminApi(admin, `/tables/role-holders?role=convo-helpdesk&f_phone=${encodeURIComponent(pendingU.phone)}`);
+    expect(phoneMatch.total).toBe(1);
     await admin.getByRole('tab', { name: 'Compare permissions' }).click();
     await expect(admin.getByRole('cell', { name: 'Grant and remove admin roles' })).toBeVisible();
     await admin.getByRole('tab', { name: 'Organization chart' }).click();

@@ -171,8 +171,8 @@ class KeycloakUsers {
                 .headers(h -> h.setBearerAuth(accessToken())).contentType(MediaType.APPLICATION_JSON).body(List.of(rep)).retrieve().toBodilessEntity());
     }
 
-    /** A role holder (no credentials or attributes). */
-    record Holder(String id, String username, String firstName, String lastName, boolean enabled) {}
+    /** A role holder with directory contact details; no credentials. */
+    record Holder(String id, String username, String firstName, String lastName, boolean enabled, String phone) {}
 
     /** Holders of one managed admin role. */
     List<Holder> holders(String role) {
@@ -180,9 +180,9 @@ class KeycloakUsers {
         List<Holder> out = new ArrayList<>();
         for (int offset = 0; offset < 100_000; offset += 200) {
             final int first = offset;
-            List<UserRep> page = call(() -> http.get().uri(admin(b -> b.pathSegment("roles", role, "users").queryParam("first", first).queryParam("max", 200))).headers(h -> h.setBearerAuth(accessToken()))
+            List<UserRep> page = call(() -> http.get().uri(admin(b -> b.pathSegment("roles", role, "users").queryParam("briefRepresentation", false).queryParam("first", first).queryParam("max", 200))).headers(h -> h.setBearerAuth(accessToken()))
                     .retrieve().body(new ParameterizedTypeReference<List<UserRep>>() {}));
-            if (page != null) for (var u : page) out.add(new Holder(u.id(), u.username(), u.firstName(), u.lastName(), Boolean.TRUE.equals(u.enabled())));
+            if (page != null) for (var u : page) out.add(new Holder(u.id(), u.username(), u.firstName(), u.lastName(), Boolean.TRUE.equals(u.enabled()), u.attributes() == null ? null : u.attributes().getOrDefault("phoneNumber", List.of()).stream().findFirst().orElse(null)));
             if (page == null || page.size() < 200) return out.stream().sorted(java.util.Comparator.comparing(Holder::username)).toList();
         }
         throw new EnclaveException(ErrorCode.UNAVAILABLE, "role exceeds the supported table source size");

@@ -97,7 +97,7 @@ function RoleCards({ roles, can, onChanged, view, update, onPerson }: {
                 {permissions.map((p) => <Tag key={p} style={{ borderInlineStart: `3px solid ${color}` }}>{PERMISSIONS[p]?.label ?? p}</Tag>)}
               </Space></div> : null;
             })}</div> }]} />
-            <AdminTable<RoleView['holders'][number]> fitColumns id="role-holders" resource="role-holders" rowKey="id" defaultSort="person" defaultSize={20} refreshKey={roles}
+            <AdminTable<RoleView['holders'][number]> minWidth={760} displayVersion={2} id="role-holders" resource="role-holders" rowKey="id" defaultSort="person" defaultSize={20} refreshKey={roles}
               scope={{ role: r.role, status: view.holderStatus }} searchPlaceholder="Search name or username" testId="role-holders-table" controls={<>
               {manage && <Popover trigger="click" title={`Grant ${ROLE_LABELS[r.role] ?? r.role}`} content={<AutoComplete style={{ width: 300, maxWidth: '100%' }} value={query[r.role] ?? ''} aria-label="Assign this role to a person" placeholder="Grant this role: search by username"
                 data-testid={`role-add-${r.role}`} onChange={(v) => search(r.role, v)}
@@ -106,10 +106,12 @@ function RoleCards({ roles, can, onChanged, view, update, onPerson }: {
               <Select aria-label="Filter role holders by sign-in status" value={view.holderStatus} onChange={(holderStatus) => update({ holderStatus, holderPage: '1' })} options={[{ value: 'all', label: 'All sign-in statuses' }, { value: 'allowed', label: 'Sign-in allowed' }, { value: 'blocked', label: 'Sign-in blocked' }]} style={{ width: 170 }} />
               </>}
               columns={[
-                { title: 'Person', key: 'person', width: 300, render: (_, h) => <div className="role-person-cell"><Avatar style={{ background: BRAND.ocean }}>{h.username.slice(0, 1).toUpperCase()}</Avatar><div>
-                  <Button type="link" className="person-link" title={[h.firstName, h.lastName].filter(Boolean).join(' ') || h.username} onClick={() => onPerson(h.id)}>{[h.firstName, h.lastName].filter(Boolean).join(' ') || h.username}</Button><Typography.Text type="secondary" title={`@${h.username}`}>@{h.username}</Typography.Text></div></div> },
-                { title: 'Sign-in', key: 'status', width: 130, render: (_, h) => <Tag color={h.enabled ? 'green' : 'red'}>{h.enabled ? 'Allowed' : 'Blocked'}</Tag> },
-                ...(manage ? [{ title: 'Actions', key: 'actions', width: 110, render: (_: unknown, h: RoleView['holders'][number]) => <Button size="small" danger type="text" icon={<DeleteOutlined />} aria-label={`Remove ${h.username}`} data-testid={`role-remove-${h.username}`} onClick={() => void change(r.role, h.id, h.username, false)}>Remove</Button> }] : []),
+                { title: 'Person', key: 'person', width: 220, render: (_, h) => <div className="role-person-cell"><Avatar style={{ background: BRAND.ocean }}>{h.username.slice(0, 1).toUpperCase()}</Avatar><div>
+                  <Button type="link" className="person-link" title={[h.firstName, h.lastName].filter(Boolean).join(' ') || h.username} onClick={() => onPerson(h.id)}>{[h.firstName, h.lastName].filter(Boolean).join(' ') || h.username}</Button></div></div> },
+                { title: 'Username', key: 'username', dataIndex: 'username', ellipsis: true, render: (name: string) => <Typography.Text type="secondary" title={`@${name}`}>@{name}</Typography.Text> },
+                { title: 'Phone', key: 'phone', dataIndex: 'phone', width: 150, ellipsis: true, render: (phone: string | null) => phone || '—' },
+                { title: 'Sign-in', key: 'status', width: 110, render: (_, h) => <Tag color={h.enabled ? 'green' : 'red'}>{h.enabled ? 'Allowed' : 'Blocked'}</Tag> },
+                ...(manage ? [{ title: 'Actions', key: 'actions', width: 100, render: (_: unknown, h: RoleView['holders'][number]) => <Button size="small" danger type="text" icon={<DeleteOutlined />} aria-label={`Remove ${h.username}`} data-testid={`role-remove-${h.username}`} onClick={() => void change(r.role, h.id, h.username, false)}>Remove</Button> }] : []),
               ]} />
 
           </Card>

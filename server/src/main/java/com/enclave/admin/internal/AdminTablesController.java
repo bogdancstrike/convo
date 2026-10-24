@@ -63,7 +63,7 @@ class AdminTablesController {
         var rows = idp.holders(params.getOrDefault("role", ""));
         String status = params.getOrDefault("status", "all");
         if (!status.equals("all")) rows = rows.stream().filter(h -> h.enabled() == status.equals("allowed")).toList();
-        return noStore(AdminTableQuery.from(params).apply(rows, h -> Map.of("person", (h.firstName() == null ? "" : h.firstName()) + " " + (h.lastName() == null ? "" : h.lastName()) + " " + h.username(), "username", h.username(), "status", h.enabled() ? "Allowed" : "Blocked")));
+        return noStore(AdminTableQuery.from(params).apply(rows, h -> Map.of("person", (h.firstName() == null ? "" : h.firstName()) + " " + (h.lastName() == null ? "" : h.lastName()) + " " + h.username(), "username", h.username(), "phone", h.phone() == null ? "" : h.phone(), "status", h.enabled() ? "Allowed" : "Blocked")));
     }
     @GetMapping("/audit") ResponseEntity<AdminTableQuery.Page<AuditNames.View>> audit(@AuthenticationPrincipal Jwt admin, @RequestParam Map<String, String> params) {
         guard.require(admin, AdminPermissions.Permission.AUDIT_READ);
