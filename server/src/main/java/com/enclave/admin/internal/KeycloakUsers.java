@@ -102,6 +102,12 @@ class KeycloakUsers {
         return details(rep, true);
     }
 
+    /** Username only, for audit labels without loading credentials, sessions or roles. */
+    String username(String id) {
+        UserRep rep = call(() -> http.get().uri(admin(b -> b.pathSegment("users", id))).headers(h -> h.setBearerAuth(accessToken())).retrieve().body(UserRep.class));
+        return rep.username();
+    }
+
     Created create(Draft draft) {
         String password = temporaryPassword();
         List<String> actions = new ArrayList<>(List.of("UPDATE_PASSWORD"));
@@ -164,6 +170,18 @@ class KeycloakUsers {
                 .retrieve().body(new ParameterizedTypeReference<List<UserRep>>() {}));
         return users == null ? List.of() : users.stream().map(u -> new Holder(u.id(), u.username(), u.firstName(), u.lastName(), Boolean.TRUE.equals(u.enabled())))
                 .sorted(java.util.Comparator.comparing(Holder::username)).toList();
+    }
+
+    /** Authoritative identity events. Never copy arbitrary details (tokens/credential data) into audit. */
+    record IdentityEvent(String id, long time, String type, String clientId, String userId, String sessionId,
+            String error, Map<String, String> details) {}
+
+    List<IdentityEvent> events(long from, long to, int offset, int limit) {
+        URI uri = admin(b -> b.pathSegment("events").queryParam("dateFrom", from).queryParam("dateTo", to)
+                .queryParam("direction", "asc").queryParam("first", offset).queryParam("max", limit));
+        List<IdentityEvent> events = call(() -> http.get().uri(uri).headers(h -> h.setBearerAuth(accessToken())).retrieve()
+                .body(new ParameterizedTypeReference<List<IdentityEvent>>() {}));
+        return events == null ? List.of() : events;
     }
 
     private void update(String id, Map<String, Object> changes) {

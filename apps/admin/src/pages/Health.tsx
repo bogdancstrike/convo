@@ -19,7 +19,7 @@ export function HealthPage({ can }: PageProps) {
   const dead = Object.entries(health?.push.deadLetters ?? {}).map(([key, n]) => { const [reason = '', kind = ''] = key.split('/'); return { key, reason, kind, n }; });
   const messageDead = dead.filter((d) => d.kind === 'message').reduce((s, d) => s + d.n, 0);
   return (
-    <div data-testid="admin-health">
+    <div className="page-frame page-health" data-testid="admin-health">
       <div className="page-head">
         <div><h1>Health</h1><p>Push wake-ups tell offline phones to fetch their encrypted messages. A missed wake-up loses nothing: messages wait in the device's mailbox.</p></div>
         <Button icon={<ReloadOutlined />} onClick={load} data-testid="admin-health-refresh">Refresh</Button>

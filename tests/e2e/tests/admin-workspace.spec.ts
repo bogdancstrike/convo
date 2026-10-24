@@ -1,0 +1,251 @@
+import { expect, test, type Page } from '@playwright/test';
+import { ADMIN_URL, adminGo, adminSignIn, closeAll, createUser, enroll, newPage, signIn } from './support';
+
+async function adminApi(page: Page, path: string) {
+  return page.evaluate(async (url) => {
+    const key = Object.keys(sessionStorage).find((k) => k.startsWith('oidc.user:'))!;
+    const token = JSON.parse(sessionStorage.getItem(key)!).access_token;
+    const response = await fetch(`/v1/admin${url}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`Admin API returned ${response.status}`);
+    return response.json();
+  }, path);
+}
+
+test('merged workspace, scoped activity, role explorer and renewable sessions', async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  const adminU = await createUser(request, 'workspaceadmin', { realmRoles: ['convo-admin'] });
+  const memberU = await createUser(request, 'workspaceperson');
+  const pendingU = await createUser(request, 'workspacepending', { realmRoles: ['convo-helpdesk'] });
+  const [admin, member] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    await enroll(member, memberU);
+    await adminSignIn(admin, adminU);
+    await expect(admin.getByTestId('admin-tab-sign-in')).toHaveCount(0);
+    await expect(admin.getByTestId('admin-tab-activity')).toHaveCount(0);
+    await admin.getByTestId('admin-tab-users').click();
+    await admin.getByTestId('admin-search').fill(pendingU.username);
+    await expect(admin.getByTestId(`idp-user-${pendingU.username}`)).toContainText('Not joined yet');
+    await admin.getByTestId('admin-search').fill(memberU.username);
+    await expect(admin.getByTestId(`admin-account-${memberU.username}`)).toContainText(memberU.name);
+    await expect(admin.getByText('Manage sign-in', { exact: true })).toHaveCount(0);
+    await admin.getByTestId(`admin-account-${memberU.username}`).getByRole('button', { name: memberU.name }).click();
+    await admin.getByTestId('user-drawer').getByRole('tab', { name: 'Security' }).click();
+    await expect(admin.getByTestId('user-drawer').getByTestId('signin-reset-password')).toBeVisible();
+    await admin.getByTestId('maximize-view').click();
+    await expect(admin.getByTestId('user-full-page')).toBeVisible();
+    await expect(admin.getByTestId('user-full-page').getByTestId('signin-reset-password')).toBeVisible();
+    await admin.goBack();
+    await expect(admin.getByTestId('user-drawer')).toBeVisible();
+    const accounts = await adminApi(admin, `/accounts?q=${memberU.username}`);
+    const account = accounts[0].accountId;
+    await adminGo(admin, `activity/${account}`);
+    await expect(admin).toHaveURL(new RegExp(`#/overview/${account}(?:\\?.*)?$`));
+    await expect(admin.getByTestId('person-activity')).toContainText(memberU.username);
+    await expect(admin.getByTestId('kpi-accounts')).toHaveCount(0);
+    await admin.getByTestId('overview-window').getByText('7 days').click();
+    await expect(admin.getByTestId('person-activity')).toContainText('/ 7');
+    await admin.getByRole('button', { name: 'All users', exact: true }).click();
+    await expect(admin.getByTestId('kpi-accounts')).toBeVisible();
+    await admin.getByRole('tab', { name: 'Adoption & engagement' }).click();
+    await expect(admin.getByTestId('activity-kpi-active')).toBeVisible();
+
+    await adminGo(admin, 'roles');
+    await admin.getByRole('button', { name: /Helpdesk.*permissions/ }).click();
+    await admin.getByPlaceholder('Search name or username').fill(pendingU.username);
+    await expect(admin.getByTestId('role-card-convo-helpdesk')).toContainText(pendingU.username);
+    await admin.getByRole('tab', { name: 'Compare permissions' }).click();
+    await expect(admin.getByRole('cell', { name: 'Grant and remove admin roles' })).toBeVisible();
+    await admin.getByRole('tab', { name: 'Organization chart' }).click();
+    const graph = admin.getByTestId('role-organigram');
+    await expect(graph.locator('.react-flow__node').first()).toBeVisible();
+    await graph.getByPlaceholder('Search people or roles').fill(pendingU.username);
+    await graph.locator('.react-flow__node').filter({ hasText: `@${pendingU.username}` }).click();
+    await expect(admin.getByTestId('organization-details')).toContainText(pendingU.username);
+    await admin.getByTestId('organization-details').getByRole('button', { name: 'Open user', exact: true }).click();
+    await expect(admin.getByTestId('user-drawer')).toContainText(pendingU.username);
+    const identity = await adminApi(admin, `/idp/users?q=${pendingU.username}`);
+    await adminGo(admin, `sign-in/${identity[0].user.id}`);
+    await expect(admin).toHaveURL(new RegExp(`#/users/sign-in/${identity[0].user.id}(?:\\?.*)?$`));
+
+    // The OIDC refresh token survives access-token expiry, including a sleeping tab/reload.
+    await admin.evaluate(() => {
+      const key = Object.keys(sessionStorage).find((k) => k.startsWith('oidc.user:'))!;
+      const saved = JSON.parse(sessionStorage.getItem(key)!);
+      saved.expires_at = Math.floor(Date.now() / 1000) - 10;
+      sessionStorage.setItem(key, JSON.stringify(saved));
+    });
+    const refresh = admin.waitForRequest((r) => r.url().endsWith('/openid-connect/token') && (r.postData() ?? '').includes('refresh_token'));
+    await admin.reload(); await refresh;
+    await expect(admin.getByTestId('admin-name')).toContainText(adminU.username);
+    await adminGo(admin, 'overview');
+    await expect(admin.getByTestId('kpi-accounts')).toBeVisible();
+    await admin.setViewportSize({ width: 390, height: 844 });
+    await admin.screenshot({ path: 'test-results/admin-overview-mobile.png', fullPage: true });
+  } finally { await closeAll(admin, member); }
+});
+
+test('identity audit records real login, device linking, removal and logout without duplicates', async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  const adminU = await createUser(request, 'auditobserver', { realmRoles: ['convo-admin'] });
+  const memberU = await createUser(request, 'auditedperson');
+  const [admin, member, linked] = await Promise.all([newPage(browser), newPage(browser), newPage(browser)]);
+  try {
+    await enroll(member, memberU);
+    await signIn(linked, memberU);
+    await expect(linked.getByTestId('link-code')).toBeVisible({ timeout: 45_000 });
+    await member.getByTestId('nav-settings').click(); await member.getByTestId('settings-devices').click();
+    await member.getByTestId('link-request').getByRole('button', { name: 'Codes match — approve' }).click();
+    await expect(linked.getByTestId('nav-settings')).toBeVisible({ timeout: 30_000 });
+    await expect(member.getByTestId('device-row')).toHaveCount(2);
+    member.once('dialog', (d) => void d.accept());
+    await member.getByTestId('device-row').getByRole('button', { name: 'Unlink', exact: true }).click();
+    await expect(member.getByTestId('device-row')).toHaveCount(1);
+    await adminSignIn(admin, adminU);
+    const identity = (await adminApi(admin, `/idp/users?q=${memberU.username}`))[0];
+    const user = `${identity.user.id},${identity.convoAccountId}`;
+    await expect.poll(async () => (await adminApi(admin, `/audit?user=${encodeURIComponent(user)}&limit=100`)).map((e: { action: string }) => e.action), { timeout: 45_000 }).toEqual(expect.arrayContaining(['device.add', 'device.link-request', 'device.link-approve', 'device.remove', 'auth.login']));
+    await expect.poll(async () => (await adminApi(admin, `/audit?user=${encodeURIComponent(user)}&action=auth.login`)).length, { timeout: 45_000 }).toBe(2);
+    const events = await adminApi(admin, `/audit?user=${encodeURIComponent(user)}&limit=100`);
+    const loginSeqs = events.filter((e: { action: string }) => e.action === 'auth.login').map((e: { seq: number }) => e.seq);
+    expect(loginSeqs.length).toBe(2);
+    const source = await adminApi(admin, '/audit/sources'); expect(source.configured).toBe(true); expect(source.error).toBeFalsy();
+    await expect.poll(async () => (await adminApi(admin, '/audit/sources')).lastSuccess, { timeout: 30_000 }).not.toBe(source.lastSuccess);
+    const again = await adminApi(admin, `/audit?user=${encodeURIComponent(user)}&action=auth.login&limit=100`);
+    expect(again.map((e: { seq: number }) => e.seq).sort()).toEqual(loginSeqs.sort());
+    await adminGo(admin, 'audit');
+    await admin.getByTestId('audit-search').fill(memberU.username);
+    await expect(admin.getByTestId('admin-audit-entry').filter({ hasText: 'device.add' })).toHaveCount(2);
+    await admin.getByTestId('admin-verify').click();
+    await expect(admin.getByTestId('admin-verification')).toContainText('Chain intact');
+    await admin.getByTestId('audit-search').fill('');
+    await admin.screenshot({ path: 'test-results/admin-audit-desktop.png', fullPage: true });
+    // Real RP-initiated logout at Keycloak, observed by a second admin session.
+    const observer = await newPage(browser);
+    try {
+      await adminSignIn(observer, adminU);
+      const subject = await admin.evaluate(() => JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find((k) => k.startsWith('oidc.user:'))!)!).profile.sub);
+      await admin.getByTestId('admin-name').hover();
+      await admin.getByRole('menuitem', { name: 'Sign out' }).click();
+      await expect(admin.getByTestId('admin-sign-in')).toBeVisible({ timeout: 30_000 });
+      await expect.poll(async () => (await adminApi(observer, `/audit?user=${subject}&action=auth.logout`)).length, { timeout: 45_000 }).toBeGreaterThan(0);
+    } finally { await closeAll(observer); }
+  } finally { await closeAll(admin, member, linked); }
+});
+
+test('passkey registration is captured from Keycloak', async ({ browser, browserName, baseURL, request }) => {
+  test.skip(browserName !== 'chromium' || new URL(baseURL!).hostname !== 'convo.doncik.ro', 'Needs deployment RP hostname and Chromium virtual authenticator');
+  test.setTimeout(120_000);
+  const adminU = await createUser(request, 'passkeyauditor', { realmRoles: ['convo-admin'] });
+  const user = await createUser(request, 'passkeyaudited');
+  const [admin, member] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    const cdp = await member.context().newCDPSession(member);
+    await cdp.send('WebAuthn.enable');
+    await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+    member.on('dialog', (d) => void d.accept('Audit test passkey'));
+    await enroll(member, user);
+    await member.getByTestId('nav-settings').click(); await member.getByTestId('settings-card-privacy').click();
+    await member.goto((await member.getByTestId('setup-passkey').getAttribute('href'))!);
+    await member.locator('#registerWebAuthn').click();
+    await expect(member.getByRole('heading', { name: 'Your passkey is ready' })).toBeVisible();
+    await adminSignIn(admin, adminU);
+    const identity = (await adminApi(admin, `/idp/users?q=${user.username}`))[0];
+    await expect.poll(async () => (await adminApi(admin, `/audit?user=${identity.user.id}&action=passkey.add`)).length, { timeout: 45_000 }).toBe(1);
+  } finally { await closeAll(admin, member); }
+});
+
+test('overview person picker keeps its width while searching', async ({ browser, request }) => {
+  const user = await createUser(request, 'pickeradmin', { realmRoles: ['convo-admin'] });
+  const member = await createUser(request, 'pickerperson');
+  const [admin, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    await enroll(person, member); await adminSignIn(admin, user);
+    const picker = admin.getByTestId('activity-search');
+    await expect(picker).toBeVisible();
+    const original = (await picker.boundingBox())!.width;
+    for (const letter of member.username) await picker.locator('input').pressSequentially(letter);
+    const typed = (await picker.boundingBox())!.width;
+    await admin.screenshot({ path: 'test-results/overview-picker-search.png', fullPage: true });
+    expect(typed).toBeGreaterThanOrEqual(280); expect(Math.abs(typed - original)).toBeLessThan(2);
+    await expect(admin.locator('.ant-select-item-option').filter({ hasText: member.username })).toBeVisible();
+  } finally { await closeAll(admin, person); }
+});
+
+test('Back restores graph scope and filters; diagram details and sidebar controls work', async ({ browser, request }) => {
+  test.setTimeout(120_000);
+  const user = await createUser(request, 'historyadmin', { realmRoles: ['convo-admin'] });
+  const page = await newPage(browser);
+  try {
+    await adminSignIn(page, user);
+    await page.getByTestId('sidebar-toggle').click(); await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await page.getByTestId('sidebar-toggle').click(); await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await adminGo(page, 'roles');
+    await page.getByRole('tab', { name: 'Organization chart' }).click();
+    const graph = page.getByTestId('role-organigram');
+    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    await graph.locator('.react-flow__node[data-id="role:convo-helpdesk"]').click();
+    await expect(page.getByTestId('organization-details')).toContainText('Helpdesk');
+    await expect(page).toHaveURL(/chartRole=convo-helpdesk/);
+    await page.goBack();
+    await expect(page.getByRole('tab', { name: 'Organization chart' })).toHaveAttribute('aria-selected', 'true');
+    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    await page.getByRole('tab', { name: 'Permission map' }).click();
+    const map = page.getByTestId('permission-map');
+    await map.locator('[data-id="convo-helpdesk"]').hover();
+    await expect(map.locator('[data-id="convo-helpdesk"]')).toHaveClass(/permission-focused/);
+    await expect(map.locator('.permission-edge-highlighted')).not.toHaveCount(0);
+    await map.locator('[data-id="ROLES_MANAGE"]').hover();
+    await expect(map.locator('[data-id="ROLES_MANAGE"]')).toHaveClass(/permission-focused/);
+    await expect(map.locator('.permission-edge-highlighted')).toHaveCount(1);
+    await page.getByRole('tab', { name: 'How access works' }).click();
+    await page.getByTestId('access-flow').locator('[data-id="stepup"]').click();
+    await expect(page.getByTestId('access-details')).toContainText('ten minutes');
+    await page.goBack(); await expect(page.getByTestId('access-details')).not.toBeVisible();
+    await page.getByRole('tab', { name: 'Role explorer' }).click();
+    await page.getByRole('button', { name: /Helpdesk.*permissions/ }).click();
+    await page.getByPlaceholder('Search name or username').fill('remember-search');
+    await page.getByTestId('admin-tab-users').click();
+    await page.goBack();
+    await expect(page.getByPlaceholder('Search name or username')).toHaveValue('remember-search');
+    await page.screenshot({ path: 'test-results/admin-role-explorer.png', fullPage: true });
+  } finally { await closeAll(page); }
+});
+
+test('organization details scroll internally without enlarging the page', async ({ browser, request }) => {
+  const user = await createUser(request, 'scrolladmin', { realmRoles: ['convo-admin'] });
+  const page = await newPage(browser);
+  try {
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await adminSignIn(page, user); await adminGo(page, 'roles?tab=organization');
+    const graph = page.getByTestId('role-organigram');
+    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    const before = await page.evaluate(() => document.documentElement.scrollHeight);
+    await graph.locator('[data-id="role:convo-admin"]').click();
+    const inspector = page.getByTestId('organization-details');
+    await expect(inspector).toContainText('Effective permissions');
+    const after = await page.evaluate(() => document.documentElement.scrollHeight);
+    expect(after).toBeLessThanOrEqual(before + 2);
+    await expect.poll(() => inspector.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+    await inspector.evaluate((e) => { e.scrollTop = 200; });
+    expect(await inspector.evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
+    await page.screenshot({ path: 'test-results/admin-organization-desktop.png', fullPage: true });
+  } finally { await closeAll(page); }
+});
+
+test('system throughput reports accepted operations per minute', async ({ browser, request }) => {
+  const user = await createUser(request, 'throughputadmin', { realmRoles: ['convo-admin'] });
+  const member = await createUser(request, 'throughputsender');
+  const [page, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    await enroll(person, member); await adminSignIn(page, user);
+    const initial = await adminApi(page, '/stats/throughput?minutes=60');
+    expect(initial.minutes).toHaveLength(60);
+    await person.getByTestId('new-chat').click(); await person.getByTestId('note-to-self').click();
+    await person.getByTestId('composer').fill('throughput counter'); await person.getByTestId('composer').press('Enter');
+    // Note-to-self is local-only; actual transport traffic is tested by the messaging suite.
+    await page.getByRole('tab', { name: 'System throughput' }).click();
+    await expect(page.getByTestId('system-throughput')).toContainText('operations');
+    const times = initial.minutes.map((m: { minute: string }) => Date.parse(m.minute));
+    expect(times.slice(1).every((t: number, i: number) => t - times[i] === 60_000)).toBe(true);
+  } finally { await closeAll(page, person); }
+});

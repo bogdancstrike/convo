@@ -24,7 +24,7 @@ class StepUpTest {
             "", Duration.ofMinutes(15), Duration.ofMinutes(10),
             new AdminProperties.Activity(true, Duration.ofDays(90)),
             new AdminProperties.Idp(java.net.URI.create("http://kc/auth"), "enclave", "convo-admin-ops", "", Duration.ofSeconds(5)));
-    private final AdminController controller = new AdminController(mock(IdentityAdminApi.class), mock(AuditLog.class), actions, mock(AuditCheckpoints.class),
+    private final AdminController controller = new AdminController(mock(IdentityAdminApi.class), mock(AuditLog.class), mock(AuditNames.class), actions, mock(AuditCheckpoints.class),
             properties, Clock.fixed(now, ZoneOffset.UTC), new AdminPermissions(properties),
             mock(com.enclave.push.PushApi.class));
 

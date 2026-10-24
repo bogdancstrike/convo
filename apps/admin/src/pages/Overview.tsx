@@ -1,31 +1,110 @@
 import { useEffect, useState } from 'react';
-import { Alert, Card, Col, Row, Segmented, Skeleton, Statistic, Typography } from 'antd';
-import { api, errorText, type Overview } from '../api';
+import { Alert, AutoComplete, Button, Card, Col, Row, Segmented, Skeleton, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import { api, errorText, type AccountActivity, type AccountSummary, type Levels, type Overview, type UserActivity } from '../api';
 import { Chart } from '../components/Chart';
-import { compact, shortDay } from '../format';
+import { useViewState } from '../components/useViewState';
+import { ThroughputChart } from '../components/ThroughputChart';
+import { ActivityStats } from '../components/ActivityStats';
+import { compact, fmtDay, LEVEL, nameOf, shortDay } from '../format';
 import { SERIES } from '../theme';
 import type { PageProps } from '../Shell';
 
-/** Organization overview: directory totals and 7/30/90-day trends (counts only). */
-export function OverviewPage(_: PageProps) {
-  const [days, setDays] = useState(30);
+/** Shared date window and person scope for all metrics on this page. */
+export function OverviewPage({ can, navigate, param }: PageProps) {
+  const { view, update, link } = useViewState({ days: '30', tab: 'trends', personQuery: '', throughput: '60' });
+  const days = [7, 30, 90].includes(Number(view.days)) ? Number(view.days) : 30;
   const [data, setData] = useState<Overview | null>(null);
+  const [person, setPerson] = useState<AccountActivity | null>(null);
+  const [levels, setLevels] = useState<Levels | null>(null);
+  const [top, setTop] = useState<UserActivity[]>([]);
+  const [quiet, setQuiet] = useState<UserActivity[]>([]);
+  const query = view.personQuery;
+  const [options, setOptions] = useState<AccountSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setData(null); void api.overview(days).then(setData).catch((e) => setError(errorText(e))); }, [days]);
+  const [rankError, setRankError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
+  const selected = can('ACCOUNTS_READ') ? param : '';
+  useEffect(() => {
+    let active = true;
+    setBusy(true); setError(null); setRankError(null); setPerson(null); setData(null); setLevels(null); setTop([]); setQuiet([]);
+    if (selected) {
+      void api.accountActivity(selected, days).then((v) => { if (active) setPerson(v); }).catch((e) => { if (active) setError(errorText(e)); }).finally(() => { if (active) setBusy(false); });
+    } else {
+      void Promise.all([api.overview(days), api.levels(days)]).then(([o, l]) => { if (active) { setData(o); setLevels(l); } }).catch((e) => { if (active) setError(errorText(e)); }).finally(() => { if (active) setBusy(false); });
+      if (can('ACCOUNTS_READ')) void Promise.all([api.usersByActivity('active', days), api.usersByActivity('inactive', days)]).then(([t, q]) => { if (active) { setTop(t); setQuiet(q); } }).catch((e) => { if (active) setRankError(errorText(e)); });
+    }
+    return () => { active = false; };
+  }, [days, selected, can]);
+  useEffect(() => {
+    let active = true;
+    if (!can('ACCOUNTS_READ')) return;
+    const timer = setTimeout(() => void api.accounts(query).then((v) => { if (active) setOptions(v); }).catch(() => { if (active) setOptions([]); }), 200);
+    return () => { active = false; clearTimeout(timer); };
+  }, [query, can]);
+  const rankings = (rows: UserActivity[]) => <Table rowKey={(r) => r.account.accountId} dataSource={rows} pagination={false} scroll={{ x: 450 }} size="middle"
+    columns={[
+      { title: 'Person', key: 'name', render: (_, r) => <Button type="link" className="person-link" onClick={() => navigate(link(`overview/${r.account.accountId}`))}>{nameOf(r.account)}</Button> },
+      { title: 'Level', key: 'level', render: (_, r) => <Tag color={LEVEL[r.level].color}>{LEVEL[r.level].label}</Tag> },
+      { title: 'Items', dataIndex: 'items', align: 'right' },
+      { title: 'Days used', dataIndex: 'activeDays', align: 'right' },
+      { title: 'Last active', key: 'last', render: (_, r) => fmtDay(r.lastActiveDay) },
+    ]} />;
+  return <div className="page-frame page-overview" data-testid="admin-overview">
+    <div className="page-head"><div><div className="eyebrow">Usage & adoption</div><h1>Overview &amp; activity</h1><p>Follow adoption across your organization or focus on one person's activity. Counts only; message content stays private.</p></div>
+      <Segmented aria-label="Activity date window" value={days} onChange={(v) => update({ days: String(v) })} options={[7, 30, 90].map((v) => ({ label: `${v} days`, value: v }))} data-testid="overview-window" /></div>
+    <Card className="scope-bar" size="small"><div className="scope-controls"><Tag color="blue">{selected ? 'Individual activity' : 'Entire organization'}</Tag>
+      {can('ACCOUNTS_READ') && <AutoComplete className="person-picker" popupClassName="activity-picker-popup" popupMatchSelectWidth={false} value={query} onChange={(personQuery) => update({ personQuery }, true)} placeholder={person ? `${nameOf(person.summary.account)} (@${person.summary.account.username})` : 'Select a person or search by name'}
+        aria-label="Select user activity" data-testid="activity-search" options={options.map((a) => ({ value: a.accountId, label: `${nameOf(a)} (@${a.username})` }))}
+        onSelect={(id: string) => { update({ personQuery: '', throughput: '60' }, true); navigate(link(`overview/${id}`)); }} />}
+      {!!selected && <Button onClick={() => { update({ personQuery: '', throughput: '60' }, true); navigate(link('overview')); }}>All users</Button>}
+      {person && <Button onClick={() => navigate(`users/${person.summary.account.accountId}`)}>Open user profile</Button>}
+      <Typography.Text type="secondary">Last {days} days · UTC</Typography.Text>
+    </div></Card>
+    {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+    {busy ? <Card><Skeleton active /></Card> : selected ? person && <PersonActivity person={person} /> : data && <>
+      {!data.activityTracking && <Alert type="info" showIcon message="Activity tracking is turned off for this deployment." style={{ marginBottom: 16 }} />}
+<Tabs activeKey={view.tab} onChange={(tab) => update({ tab })} items={[
+        { key: 'trends', label: 'Usage trends', children: <OrganizationOverview days={days} data={data} /> },
+        { key: 'throughput', label: 'System throughput', children: <ThroughputChart minutes={[60, 360, 1440].includes(Number(view.throughput)) ? Number(view.throughput) : 60} onWindowChange={(minutes) => update({ throughput: String(minutes) })} /> },
+        { key: 'adoption', label: 'Adoption & engagement', children: <ActivityStats days={days} levels={levels} overview={data} /> },
+        ...(can('ACCOUNTS_READ') ? [{ key: 'people', label: 'People', children: <>
+          {rankError && <Alert type="warning" showIcon message={rankError} style={{ marginBottom: 16 }} />}
+          <Row gutter={[16, 16]}><Col xs={24} xl={12}><Card title="Most active" data-testid="activity-top">{rankings(top)}</Card></Col><Col xs={24} xl={12}><Card title="Least active" data-testid="activity-quiet">{rankings(quiet)}</Card></Col></Row>
+        </> }] : []),
+      ]} />
+    </>}
+  </div>;
+}
+
+function PersonActivity({ person }: { person: AccountActivity }) {
+  const { account, items, activeDays, lastActiveDay, level } = person.summary;
+  const byDay = new Map(person.days.map((d) => [d.day, d]));
+  const today = new Date().toISOString().slice(0, 10);
+  const dates = Array.from({ length: person.window }, (_, i) => new Date(Date.parse(`${today}T00:00:00Z`) - (person.window - 1 - i) * 86400000).toISOString().slice(0, 10));
+  const metrics = [
+    { label: 'Encrypted items', value: items }, { label: 'Days used', value: activeDays, suffix: `/ ${person.window}` },
+    { label: 'Days with items sent', value: person.days.filter((d) => d.items > 0).length },
+    { label: 'Web activity', value: person.days.filter((d) => d.web).length, suffix: 'days' },
+    { label: 'Android activity', value: person.days.filter((d) => d.android).length, suffix: 'days' },
+    { label: 'Last active', value: fmtDay(lastActiveDay) },
+  ];
+  return <div data-testid="person-activity"><div className="section-heading"><h2>{nameOf(account)} <Typography.Text type="secondary">@{account.username}</Typography.Text></h2><Tag color={LEVEL[level].color}>{LEVEL[level].label}</Tag></div>
+    <Row gutter={[16, 16]}>{metrics.map((m) => <Col key={m.label} xs={24} sm={12} xl={4}><Card className="kpi"><Statistic title={m.label} value={m.value} suffix={m.suffix} valueStyle={typeof m.value === 'string' ? { fontSize: 20 } : undefined} /></Card></Col>)}
+      <Col span={24}><Card title="Daily activity" extra={<Typography.Text type="secondary">{person.window} days · UTC</Typography.Text>}><Chart label={`Daily activity of ${account.username}`} option={{
+        xAxis: { type: 'category', data: dates.map(shortDay) }, yAxis: [{ type: 'value', name: 'items', minInterval: 1 }, { type: 'value', min: 0, max: 1, show: false }],
+        series: [{ name: 'Encrypted items', type: 'bar', barMaxWidth: 18, data: dates.map((d) => byDay.get(d)?.items ?? 0) },
+          { name: 'Used Convo', type: 'scatter', yAxisIndex: 1, data: dates.map((d) => { const v = byDay.get(d); return v && (v.opened || v.items > 0) ? 1 : null; }), itemStyle: { color: '#2E9D6A' } }],
+      }} /></Card></Col>
+    </Row><p className="privacy-note">Encrypted items include messages, receipts, reactions and typing signals. Activity is recorded by day; no message content or recipients are shown.</p>
+  </div>;
+}
+
+function OrganizationOverview({ days, data }: { days: number; data: Overview }) {
   const x = data?.days.map((d) => shortDay(d.day)) ?? [];
   const sum = (k: 'items' | 'calls' | 'newAccounts') => data?.days.reduce((n, d) => n + d[k], 0) ?? 0;
   const d = data?.directory;
   return (
-    <div data-testid="admin-overview">
-      <div className="page-head">
-        <div>
-          <h1>Overview</h1>
-          <p>How Convo is used across the organization. Counts only: the server sees that encrypted items were sent, never what they contain or who they went to.</p>
-        </div>
-        <Segmented value={days} onChange={(v) => setDays(Number(v))} options={[{ label: '7 days', value: 7 }, { label: '30 days', value: 30 }, { label: '90 days', value: 90 }]} data-testid="overview-window" />
-      </div>
-      {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
-      {data && !data.activityTracking && <Alert type="info" showIcon style={{ marginBottom: 16 }} message="Activity tracking is turned off for this deployment (enclave.admin.activity.enabled); activity charts stay empty." />}
+    <div>
       <Row gutter={[16, 16]}>
         {[
           { title: 'People', value: d?.accounts, sub: `${d?.disabled ?? 0} disabled`, testId: 'kpi-accounts' },

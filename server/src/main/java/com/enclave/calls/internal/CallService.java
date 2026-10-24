@@ -31,14 +31,16 @@ class CallService {
     private final LiveKitTokens tokens;
     private final CallsProperties properties;
     private final Clock clock;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
-    CallService(CallRepository calls, IdentityApi identity, GroupsApi groups, LiveKitTokens tokens, CallsProperties properties, Clock clock) {
+    CallService(CallRepository calls, IdentityApi identity, GroupsApi groups, LiveKitTokens tokens, CallsProperties properties, Clock clock, org.springframework.context.ApplicationEventPublisher events) {
         this.calls = calls;
         this.identity = identity;
         this.groups = groups;
         this.tokens = tokens;
         this.properties = properties;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional
@@ -56,7 +58,9 @@ class CallService {
         RANDOM.nextBytes(name);
         var row = new CallRepository.CallRow(UUID.randomUUID(), Base64.getUrlEncoder().withoutPadding().encodeToString(name), me.accountId(), peer, groupId, video, clock.instant(), null);
         calls.insert(row);
-        return join(me, row);
+        var joined = join(me, row);
+        events.publishEvent(new com.enclave.contracts.HandledOperation(com.enclave.contracts.HandledOperation.Kind.CALL_STARTED));
+        return joined;
     }
 
     @Transactional(readOnly = true)

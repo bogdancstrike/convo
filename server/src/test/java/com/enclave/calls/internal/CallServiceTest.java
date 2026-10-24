@@ -34,7 +34,7 @@ class CallServiceTest {
     private final GroupsApi groups = mock(GroupsApi.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-21T10:00:00Z"), ZoneOffset.UTC);
     private final CallsProperties properties = new CallsProperties(true, "/rtc", "convo", SECRET, Duration.ofMinutes(10), Duration.ofHours(12), 16, "");
-    private final CallService service = new CallService(repository, identity, groups, new LiveKitTokens(properties, clock), properties, clock);
+    private final CallService service = new CallService(repository, identity, groups, new LiveKitTokens(properties, clock), properties, clock, mock(org.springframework.context.ApplicationEventPublisher.class));
     private final AtomicReference<CallRepository.CallRow> stored = new AtomicReference<>();
 
     private AuthenticatedDevice device(UUID account) { return new AuthenticatedDevice(new DeviceAddress(account, 2), "web"); }
@@ -76,7 +76,7 @@ class CallServiceTest {
 
     @Test void disabledOrWeakSecretRefusesCalls() {
         var weak = new CallsProperties(true, "/rtc", "convo", "short", Duration.ofMinutes(10), Duration.ofHours(12), 16, "");
-        var disabled = new CallService(repository, identity, groups, new LiveKitTokens(weak, clock), weak, clock);
+        var disabled = new CallService(repository, identity, groups, new LiveKitTokens(weak, clock), weak, clock, mock(org.springframework.context.ApplicationEventPublisher.class));
         assertThatThrownBy(() -> disabled.create(device(alice), bob, null, false)).isInstanceOf(EnclaveException.class);
     }
 }

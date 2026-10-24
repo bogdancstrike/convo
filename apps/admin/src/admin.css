@@ -13,3 +13,134 @@ body { font-feature-settings: 'cv11', 'ss01'; }
 .signin-card img { width: 64px; height: 64px; }
 .privacy-note { font-size: 13px; opacity: 0.65; }
 .clickable-row { cursor: pointer; }
+
+.eyebrow { color: #2596be; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; }
+.scope-bar { margin-bottom: 20px; border-inline-start: 3px solid #2596be; }
+.person-picker { width: min(380px, 100%); }
+.section-heading { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; flex-wrap: wrap; }
+.section-heading h2 { margin: 0; font-size: 21px; }
+.section-heading h2 .ant-typography { font-size: 14px; font-weight: 400; }
+.directory-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+.directory-toolbar .ant-input-search { width: min(360px, 100%); }
+.directory-toolbar .ant-select { min-width: 180px; }
+.person-link.ant-btn { padding: 0; height: auto; font-weight: 600; text-align: start; }
+.role-summary { display: flex; flex-wrap: wrap; gap: 24px 40px; padding: 22px 0; border-block: 1px solid #91a9b333; margin-bottom: 14px; align-items: center; }
+.role-summary > div { display: flex; flex-direction: column; gap: 3px; }
+.role-summary strong { font-size: 28px; letter-spacing: -.04em; }
+.role-summary span { font-size: 12px; opacity: .65; }
+.role-summary > .ant-typography { max-width: 340px; margin-inline-start: auto; }
+.role-explorer { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
+.role-nav { display: flex; flex-direction: column; gap: 8px; }
+.role-nav button { font: inherit; text-align: start; background: transparent; color: inherit; border: 1px solid #91a9b333; border-radius: 10px; padding: 16px; display: grid; grid-template-columns: 1fr auto; cursor: pointer; }
+.role-nav button[aria-pressed=true] { border-color: #2596be; background: #2596be14; box-shadow: inset 3px 0 #2596be; }
+.role-nav button:hover { background: #2596be0c; }
+.role-nav button:focus-visible { outline: 2px solid #2596be; outline-offset: 2px; }
+.role-nav small { opacity: .6; margin-top: 6px; }
+.organization-canvas { height: 650px; border: 1px solid #91a9b333; border-radius: 12px; overflow: hidden; }
+@media (max-width: 900px) { .role-explorer { grid-template-columns: 1fr; } .role-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } .role-summary > .ant-typography { margin-inline-start: 0; } }
+@media (max-width: 600px) { .person-picker { width: 100%; min-width: 220px; } .organization-canvas { height: 480px; } .ant-layout-content { padding: 16px !important; } }
+.permission-groups { display: grid; gap: 14px; margin-block: 16px 24px; }
+.permission-group-name { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.brand-collapsed { padding-inline: 16px; }
+.ant-layout, .ant-layout-content { min-width: 0; }
+.scope-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
+.scope-controls .person-picker { width: 380px; max-width: 100%; min-width: 0; flex: 0 1 380px; }
+.activity-picker-popup { width: 440px; max-width: calc(100vw - 32px); }
+.activity-picker-popup .ant-select-item-option-content { white-space: normal; overflow-wrap: anywhere; }
+.chart-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.chart-toolbar .ant-select { width: 225px; }
+.chart-toolbar .ant-input-search { width: 280px; max-width: 100%; }
+.chart-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 20px; }
+.chart-inspector { padding: 18px; border: 1px solid #91a9b333; border-radius: 12px; min-width: 0; overflow-wrap: anywhere; }
+.chart-inspector h2 { margin: 0 0 12px; font-size: 20px; }
+.chart-caption { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; padding-top: 12px; }
+.inspector-permissions { display: grid; gap: 10px; }
+.inspector-permissions > div { border-top: 1px solid #91a9b322; padding-top: 8px; display: grid; gap: 2px; font-size: 12px; }
+.inspector-permissions small { opacity: .6; }
+.access-node { display: grid; gap: 6px; }
+.access-node strong { font-size: 14px; }
+.access-node span { opacity: .7; font-size: 12px; }
+.access-node small { color: #2596be; font-size: 11px; }
+.react-flow__node:hover { cursor: pointer; }
+@media (max-width: 1200px) { .chart-workspace { grid-template-columns: 1fr; } .chart-inspector { max-height: 450px; overflow: auto; } }
+@media (max-width: 600px) { .scope-controls .person-picker { flex-basis: 100%; width: 100%; } .directory-toolbar > .ant-select { max-width: 100%; } }
+.throughput-facts { display: flex; flex-wrap: wrap; gap: 20px 40px; margin-block: 20px; }
+.audit-identity { cursor: help; border-bottom: 1px dotted #91a9b3; }
+.role-summary { padding-block: 10px; gap: 12px 28px; }
+.role-summary > div { flex-direction: row; align-items: baseline; gap: 8px; }
+.role-summary strong { font-size: 20px; }
+.role-summary > .ant-typography { font-size: 12px; }
+.role-explorer { grid-template-columns: 225px minmax(0, 1fr); gap: 18px; }
+.role-explorer .directory-toolbar { gap: 8px; margin-block: 12px; }
+.role-explorer .directory-toolbar .ant-input-search { flex: 1 1 220px; width: auto; }
+.role-explorer .ant-card-body { padding-top: 12px; }
+.role-permission-disclosure .ant-collapse-header { padding-inline: 0 !important; font-size: 12px; }
+.role-permission-disclosure .permission-groups { margin-top: 0; margin-bottom: 8px; }
+@media (max-width: 900px) { .role-explorer { grid-template-columns: 1fr; } }
+/* Role details scroll inside their panel; selection must not change the document height. */
+.chart-workspace { --chart-height: clamp(320px, calc(100dvh - 330px), 650px); align-items: start; }
+.chart-workspace .organization-canvas { height: var(--chart-height); }
+.chart-inspector { box-sizing: border-box; height: var(--chart-height); max-height: var(--chart-height); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 1200px) { .chart-inspector { height: auto; max-height: 340px; } }
+/* The workspace owns the viewport; only the panel with overflowing content scrolls. */
+html, body, #root { height: 100%; overflow: hidden; }
+.console-frame { height: 100dvh; min-height: 0; }
+.console-frame > .ant-layout { min-height: 0; }
+.console-content { padding: 20px 24px; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.page-frame { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.page-frame > .page-head, .page-frame > .role-summary, .page-frame > .scope-bar, .page-frame > .ant-alert { flex: 0 0 auto; }
+.page-head { margin-bottom: 12px; }
+.page-head p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.console-frame .ant-layout-sider-children { display: flex; flex-direction: column; }
+.sidebar-toggle { margin: 0 8px 12px; width: calc(100% - 16px); text-align: start; flex: 0 0 auto; }
+.console-frame .ant-menu { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.sidebar-footer { flex: 0 0 auto; display: flex; flex-direction: column; gap: 14px; padding: 16px; border-top: 1px solid #91a9b333; }
+.sidebar-footer .ant-dropdown-trigger { display: flex; min-width: 0; }
+.sidebar-footer [data-testid=admin-name] { max-width: 155px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-name-collapsed, .sidebar-roles-collapsed { display: none !important; }
+.ant-layout-sider-collapsed .sidebar-footer { padding: 14px 8px; align-items: center; }
+.ant-layout-sider-collapsed .sidebar-footer > .ant-space:first-child { flex-direction: column; }
+.page-frame > .ant-tabs { flex: 1; min-height: 0; }
+.page-frame > .ant-tabs > .ant-tabs-content-holder { min-height: 0; overflow: hidden; }
+.page-frame > .ant-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.page-frame > .ant-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane { height: 100%; }
+.page-overview > .ant-tabs > .ant-tabs-content-holder { overflow: auto; overscroll-behavior: contain; }
+.page-health { overflow-y: auto; }
+.table-surface { flex: 1; min-height: 0; }
+.table-surface > .ant-card-body { height: 100%; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; }
+.table-surface .directory-toolbar, .table-surface > .ant-card-body > .ant-space { flex-shrink: 0; }
+.table-surface .ant-table-wrapper, .role-explorer .ant-table-wrapper { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.table-surface .ant-spin-nested-loading, .role-explorer .ant-table-wrapper .ant-spin-nested-loading { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.table-surface .ant-spin-container, .role-explorer .ant-table-wrapper .ant-spin-container { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.table-surface .ant-table, .role-explorer .ant-table { flex: 1; min-height: 0; }
+.table-surface .ant-table-container, .role-explorer .ant-table-container { height: 100%; display: flex; flex-direction: column; }
+.table-surface .ant-table-header, .role-explorer .ant-table-header { flex-shrink: 0; }
+.table-surface .ant-table-body, .role-explorer .ant-table-body { min-height: 0; flex: 1; max-height: none !important; overflow: auto !important; overscroll-behavior: contain; }
+.table-surface .ant-table-pagination, .role-explorer .ant-table-pagination { flex-shrink: 0; margin-block: 10px 0; }
+.role-explorer { height: 100%; min-height: 0; }
+.role-explorer > div, .role-explorer .ant-row, .role-explorer .ant-col { min-height: 0; height: 100%; }
+.role-explorer .ant-card { height: 100%; display: flex; flex-direction: column; }
+.role-explorer .ant-card-head { flex-shrink: 0; }
+.role-explorer .ant-card-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.role-explorer .ant-card-body > .ant-typography, .role-explorer .role-permission-disclosure, .role-explorer .directory-toolbar { flex-shrink: 0; }
+.role-permission-disclosure .ant-collapse-content-box { max-height: 180px; overflow: auto; }
+.role-nav { overflow: auto; min-height: 0; }
+.organization-card, .diagram-surface, .scroll-surface { height: 100%; min-height: 0; }
+.organization-card > .ant-card-body, .diagram-surface > .ant-card-body { height: 100%; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; }
+.scroll-surface > .ant-card-body { height: 100%; box-sizing: border-box; overflow: auto; }
+.organization-card .chart-toolbar { flex-shrink: 0; }
+.organization-card .chart-workspace { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) 290px; align-items: stretch; }
+.chart-workspace > div { display: flex; flex-direction: column; min-height: 0; }
+.chart-workspace .organization-canvas { height: auto; flex: 1; min-height: 0; }
+.organization-card .chart-inspector { height: 100%; max-height: 100%; overflow-y: auto; }
+.chart-caption { flex-shrink: 0; }
+.diagram-frame { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.diagram-frame > .ant-space, .diagram-frame > .ant-typography { flex-shrink: 0; }
+.permission-canvas, .access-canvas { flex: 1; min-height: 0; }
+.user-detail-page, [data-testid=user-full-page] { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+[data-testid=user-full-page] > .ant-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+[data-testid=user-full-page] > .ant-card > .ant-card-body { flex: 1; min-height: 0; overflow: auto; }
+@media (max-width: 900px) { .organization-card .chart-workspace { grid-template-columns: 1fr; grid-template-rows: minmax(180px, 1fr) minmax(100px, 35%); } .role-explorer { grid-template-rows: auto minmax(0, 1fr); } .role-nav { display: flex; flex-direction: row; overflow-x: auto; padding-bottom: 4px; } .role-nav button { min-width: 180px; padding: 10px; } }
+@media (max-width: 600px) { .console-content { padding: 12px !important; } .page-head h1 { font-size: 21px; } .page-head p { -webkit-line-clamp: 1; } .role-summary > .ant-typography { display: none; } .role-summary { gap: 8px 20px; } .role-summary strong { font-size: 17px; } }
+.chart-view-controls { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+.data-chart { min-width: 0; }

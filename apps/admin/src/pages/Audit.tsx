@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Card, Input, Select, Space, Table, Tag, Typography } from 'antd';
-import { CloudDownloadOutlined, SafetyCertificateOutlined, SaveOutlined } from '@ant-design/icons';
-import { api, errorText, type AuditEntry, type AuditVerification } from '../api';
+import { useEffect, useState } from 'react';
+import { Alert, App, Button, AutoComplete, Card, DatePicker, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { CloudDownloadOutlined, SafetyCertificateOutlined, SaveOutlined, ReloadOutlined } from '@ant-design/icons';
+import { api, errorText, type AuditEntry, type AuditSource, type AuditVerification } from '../api';
+import dayjs from 'dayjs';
+import { useViewState } from '../components/useViewState';
+import { AuditIdentity } from '../components/AuditIdentity';
 import { useReason } from '../components/confirm';
 import { fmtTime } from '../format';
 import type { PageProps } from '../Shell';
 
-const COLORS: Record<string, string> = { account: 'blue', device: 'orange', user: 'geekblue', role: 'purple', recovery: 'magenta', push: 'cyan', audit: 'default', admin: 'default' };
+const COLORS: Record<string, string> = { auth: 'green', passkey: 'cyan', credential: 'purple', profile: 'blue', privacy: 'blue', group: 'default', community: 'default', call: 'default', account: 'blue', device: 'orange', user: 'geekblue', role: 'purple', recovery: 'magenta', push: 'cyan', audit: 'default', admin: 'default' };
 
 /** The hash-chained audit log: every administrative change with its reason, verifiable and exportable. */
 export function AuditPage({ can }: PageProps) {
@@ -14,19 +17,41 @@ export function AuditPage({ can }: PageProps) {
   const ask = useReason();
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [verification, setVerification] = useState<AuditVerification | null>(null);
-  const [text, setText] = useState('');
-  const [kind, setKind] = useState<string>('all');
+  const { view, update } = useViewState({ search: '', category: 'all', user: '', userQuery: '', from: '', to: '', before: '', page: '1', size: '50' });
+  const text = view.search, kind = view.category, user = view.user, userQuery = view.userQuery;
+  const before = Number(view.before) || undefined;
+  const range = view.from && view.to ? [view.from, view.to] : null;
   const [error, setError] = useState<string | null>(null);
-  const load = () => void api.audit().then(setEntries).catch((e) => setError(errorText(e)));
-  useEffect(load, []);
-  const kinds = useMemo(() => [...new Set((entries ?? []).map((e) => e.action.replace(/^denied:/, '').split('.')[0] ?? ''))].sort(), [entries]);
-  const shown = (entries ?? []).filter((e) => (kind === 'all' || e.action.replace(/^denied:/, '').startsWith(`${kind}.`) || (kind === 'denied' && e.action.startsWith('denied:')))
-    && (!text.trim() || `${e.actor} ${e.action} ${e.target} ${e.reason}`.toLowerCase().includes(text.trim().toLowerCase())));
+  const [version, setVersion] = useState(0);
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [userOptions, setUserOptions] = useState<{ value: string; label: string }[]>([]);
+  const [source, setSource] = useState<AuditSource | null>(null);
+  const load = () => { update({ before: '', page: '1' }, true); setVersion((v) => v + 1); };
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(() => {
+      setBusy(true); setError(null);
+      void api.audit({ q: text.trim(), action: kind === 'all' ? undefined : kind, user, before, from: range?.[0], to: range?.[1] }).then((r) => {
+        if (active) { setEntries(r); setMore(r.length === 100); }
+      }).catch((e) => { if (active) setError(errorText(e)); }).finally(() => { if (active) setBusy(false); });
+      void api.auditSources().then((s) => { if (active) setSource(s); }).catch(() => { if (active) setSource(null); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [text, kind, user, view.from, view.to, before, version]);
+  useEffect(() => {
+    let active = true;
+    if (!can('ACCOUNTS_READ')) return;
+    const timer = setTimeout(() => void api.idpUsers(userQuery).then((rows) => { if (active) setUserOptions(rows.map((r) => ({ value: [r.user.id, r.convoAccountId].filter(Boolean).join(','), label: r.user.username }))); }).catch(() => { if (active) setUserOptions([]); }), 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [userQuery, can]);
+  const shown = entries ?? [];
   return (
-    <div data-testid="admin-audit">
+    <div className="page-frame page-audit" data-testid="admin-audit">
       <div className="page-head">
-        <div><h1>Audit log</h1><p>Every administrative action and refused attempt, with who, when and why. Each entry's hash covers the previous one, and chain heads are written to an independent checkpoint file, so a database rewrite is detected.</p></div>
+        <div><h1>Audit log</h1><p>Sign-ins, sign-outs, devices, passkeys, account changes and administrative actions, with who, when and why. Each entry's hash covers the previous one, and chain heads are written to an independent checkpoint file, so a database rewrite is detected.</p></div>
         <Space wrap>
+          <Button icon={<ReloadOutlined />} onClick={load} loading={busy}>Refresh</Button>
           <Button icon={<SafetyCertificateOutlined />} onClick={() => void api.verify().then(setVerification).catch((e) => message.error(errorText(e)))} data-testid="admin-verify">Verify chain</Button>
           {can('AUDIT_CHECKPOINT') && <Button icon={<SaveOutlined />} onClick={() => void api.checkpoint().then(setVerification).catch((e) => message.error(errorText(e)))} data-testid="admin-checkpoint">Checkpoint now</Button>}
           {can('AUDIT_EXPORT') && <Button icon={<CloudDownloadOutlined />} data-testid="admin-export" onClick={async () => {
@@ -42,27 +67,35 @@ export function AuditPage({ can }: PageProps) {
         </Space>
       </div>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+      <Alert style={{ marginBottom: 16 }} showIcon type={source?.error || source?.configured === false ? 'warning' : 'info'}
+        message={source?.error ?? (source?.configured === false ? 'Identity audit is not configured. Configure the admin operations service account to capture sign-in and credential events.' : source?.lastSuccess ? `Identity events synced ${fmtTime(source.lastSuccess)} · refresh to see new events` : 'Identity event sync is awaiting its first successful poll.')}
+        description="Device changes are recorded immediately. Identity-provider events are imported every 15 seconds. Local-only settings and encrypted message content are not recorded." />
       {verification && <Alert style={{ marginBottom: 16 }} showIcon data-testid="admin-verification" type={verification.valid ? 'success' : 'error'}
         message={verification.valid ? `Chain intact · ${verification.entries} entries · ${verification.checkpointsChecked} checkpoints match`
           : verification.checkpointMismatchSeq ? `Database disagrees with the independent checkpoint at entry ${verification.checkpointMismatchSeq}` : `Chain broken at entry ${verification.firstBrokenSeq}`}
         description={<Typography.Text code copyable style={{ fontSize: 12 }}>{verification.head}</Typography.Text>} />}
-      <Card>
+      <Card className="table-surface">
         <Space style={{ marginBottom: 12 }} wrap>
-          <Input.Search allowClear placeholder="Search actor, action, target or reason" style={{ width: 340 }} value={text} onChange={(e) => setText(e.target.value)} data-testid="audit-search" />
-          <Select value={kind} onChange={setKind} style={{ width: 180 }} options={[{ value: 'all', label: 'All actions' }, { value: 'denied', label: 'Refused attempts' }, ...kinds.map((k) => ({ value: k, label: k }))]} />
-          <Typography.Text type="secondary">{shown.length} entries</Typography.Text>
+          <Input.Search allowClear placeholder="Search actor, action, target or reason" style={{ width: 340 }} value={text} onChange={(e) => update({ search: e.target.value, before: '', page: '1' }, true)} data-testid="audit-search" />
+          <Select aria-label="Audit action category" value={kind} onChange={(category) => update({ category, before: '', page: '1' })} style={{ width: 180 }} options={[{ value: 'all', label: 'All actions' }, { value: 'denied', label: 'Refused attempts' }, ...Object.keys(COLORS).map((k) => ({ value: k, label: k === 'auth' ? 'Sign-in & sessions' : k === 'passkey' ? 'Passkeys' : k.charAt(0).toUpperCase() + k.slice(1) }))]} />
+          {can('ACCOUNTS_READ') && <AutoComplete allowClear aria-label="Filter audit by user" placeholder="Filter by user" value={userQuery} options={userOptions} style={{ width: 230 }}
+            onChange={(userQuery) => update({ userQuery, user: '', before: '', page: '1' }, true)} onSelect={(user: string, option) => update({ user, userQuery: String(option.label), before: '', page: '1' })} />}
+          <DatePicker.RangePicker aria-label="Audit date range" value={range ? [dayjs(range[0]), dayjs(range[1])] : null} onChange={(v) => update({ from: v?.[0] ? dayjs(v[0]).startOf('day').toISOString() : '', to: v?.[1] ? dayjs(v[1]).endOf('day').toISOString() : '', before: '', page: '1' })} />
+          <Typography.Text type="secondary">{shown.length} loaded entries</Typography.Text>
         </Space>
-        <Table rowKey="seq" loading={!entries} dataSource={shown} pagination={{ pageSize: 50, hideOnSinglePage: true }}
+        <Table rowKey="seq" loading={busy || !entries} scroll={{ x: 1100, y: 1 }} dataSource={shown} pagination={{ current: Number(view.page) || 1, pageSize: Number(view.size) || 50, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], hideOnSinglePage: false, onChange: (page, size) => update({ page: String(size) !== view.size ? '1' : String(page), size: String(size) }) }}
           onRow={() => ({ 'data-testid': 'admin-audit-entry' } as never)}
           columns={[
             { title: '#', dataIndex: 'seq', width: 64 },
             { title: 'When', dataIndex: 'at', width: 170, render: fmtTime },
-            { title: 'Who', dataIndex: 'actor', width: 220, ellipsis: true },
+            { title: 'Who', dataIndex: 'actor', width: 220, render: (raw: string, row) => <AuditIdentity name={row.actorName} raw={raw} /> },
             { title: 'Action', dataIndex: 'action', width: 200, render: (a: string) => a.startsWith('denied:')
               ? <Tag color="red">refused · {a.slice(7)}</Tag> : <Tag color={COLORS[a.split('.')[0] ?? ''] ?? 'default'}>{a}</Tag> },
-            { title: 'Target', dataIndex: 'target', ellipsis: true },
+            { title: 'Target', dataIndex: 'target', render: (raw: string, row) => <AuditIdentity name={row.targetName} raw={raw} /> },
             { title: 'Reason', dataIndex: 'reason', ellipsis: true },
           ]} />
+        {!!before && <Button style={{ marginTop: 16, marginRight: 8 }} onClick={() => update({ before: '', page: '1' })}>Newest events</Button>}
+        {more && <Button style={{ marginTop: 16 }} loading={busy} onClick={() => update({ before: String(entries?.at(-1)?.seq ?? ''), page: '1' })}>Load older events</Button>}
       </Card>
     </div>
   );

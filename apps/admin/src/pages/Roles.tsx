@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, App, AutoComplete, Avatar, Button, Card, Col, Empty, List, Row, Space, Tabs, Tag, Typography } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
-import { Background, Controls, MarkerType, ReactFlow, type Edge, type Node } from '@xyflow/react';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, App, AutoComplete, Avatar, Button, Card, Col, Collapse, Empty, Input, Row, Select, Popover, Space, Tabs, Table, Tag, Typography } from 'antd';
+import { DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
 import '@xyflow/react/dist/style.css';
 import { api, errorText, type RoleView, type SignInAccount } from '../api';
 import { useReason } from '../components/confirm';
-import { useDark } from '../components/useDark';
 import { PERMISSIONS, ROLE_LABELS } from '../format';
 import { BRAND, SERIES } from '../theme';
+import { PermissionMap } from '../components/PermissionMap';
+import { AccessFlow } from '../components/AccessFlow';
+import { useViewState } from '../components/useViewState';
+import { RoleOrgChart } from '../components/RoleOrgChart';
 import type { PageProps } from '../Shell';
 
 const ROLE_HELP: Record<string, string> = {
@@ -20,27 +22,50 @@ const ROLE_HELP: Record<string, string> = {
 const GROUP_COLOR: Record<string, string> = { People: SERIES[0], 'Sign-in': SERIES[2], Audit: SERIES[3], Operations: SERIES[4] };
 
 /** Admin roles: who has them, what they allow (diagram), and how an admin request is checked. */
-export function RolesPage({ can }: PageProps) {
+export function RolesPage({ can, navigate }: PageProps) {
   const [roles, setRoles] = useState<RoleView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => { void api.roles().then(setRoles).catch((e) => setError(errorText(e))); }, []);
+  const load = useCallback(() => { setError(null); void api.roles().then(setRoles).catch((e) => setError(errorText(e))); }, []);
+  const { view, update } = useViewState({ tab: 'roles', role: 'convo-admin', holderSearch: '', holderStatus: 'all', holderPage: '1', holderSize: '20', holderSort: 'name-asc', chartRole: 'all', chartSearch: '', chartNode: '', chartPage: '1', permission: '', accessNode: '' });
+  const selected = view.role;
   useEffect(load, [load]);
   return (
-    <div data-testid="admin-roles-page">
+    <div className="page-frame page-roles" data-testid="admin-roles-page">
       <div className="page-head">
-        <div><h1>Roles &amp; permissions</h1><p>Administrator roles at the organization's sign-in service. The server enforces each permission on every request; this console only hides what a role cannot do.</p></div>
+        <div><h1>Roles &amp; permissions</h1><p>Administrator roles at the organization's sign-in service. Explore who has access, compare permissions, and manage assignments from one place.</p></div>
       </div>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
-      <Tabs items={[
-        { key: 'roles', label: 'Roles and people', children: <RoleCards roles={roles} can={can} onChanged={load} /> },
-        { key: 'map', label: 'Permission map', children: <Card><PermissionMap roles={roles ?? []} /></Card> },
-        { key: 'flow', label: 'How access works', children: <Card><AccessFlow /></Card> },
+      <div className="role-summary">
+        <div><strong>{roles?.length ?? '—'}</strong><span>Administrator roles</span></div>
+        <div><strong>{roles ? new Set(roles.flatMap((r) => r.holders.map((h) => h.id))).size : '—'}</strong><span>People with access</span></div>
+        <div><strong>{Object.keys(PERMISSIONS).length}</strong><span>Scoped permissions</span></div>
+        <Typography.Text type="secondary">Roles are additive. A person with several roles receives their combined permissions.</Typography.Text>
+      </div>
+      <Tabs activeKey={view.tab} onChange={(tab) => update({ tab })} items={[
+        { key: 'roles', label: 'Role explorer', children: <div className="role-explorer">
+          <nav aria-label="Administrator roles" className="role-nav">{(roles ?? []).map((r) => <button key={r.role} type="button" aria-pressed={selected === r.role} onClick={() => update({ role: r.role, holderPage: '1' })}>
+            <span>{ROLE_LABELS[r.role] ?? r.role}</span><Tag>{r.holders.length}</Tag><small>{r.permissions.length} permissions</small>
+          </button>)}</nav>
+          <div><RoleCards roles={roles?.filter((r) => r.role === selected) ?? null} can={can} onChanged={load} view={view} update={update} onPerson={(id) => navigate(`users/sign-in/${id}`)} /></div>
+        </div> },
+        { key: 'organization', label: 'Organization chart', children: <RoleOrgChart roles={roles ?? []} view={view} update={update} canManage={can('ROLES_MANAGE')} onPerson={(id, tab) => navigate(`users/sign-in/${id}${tab ? `/${tab}` : ''}`)} onRole={(role) => update({ role, tab: 'roles', holderPage: '1' })} /> },
+        { key: 'compare', label: 'Compare permissions', children: <Card className="scroll-surface"><Typography.Paragraph type="secondary">Compare exactly which permissions each role grants. Assignments are independent.</Typography.Paragraph>
+          <Table rowKey="key" pagination={false} scroll={{ x: 1000 }} size="middle" dataSource={Object.entries(PERMISSIONS).map(([key, meta]) => ({ key, ...meta }))}
+            columns={[{ title: 'Permission', dataIndex: 'label', fixed: 'left', width: 300, render: (label: string, row) => <><Typography.Text strong>{label}</Typography.Text><br /><Typography.Text type="secondary">{row.group}</Typography.Text></> },
+              ...(roles ?? []).map((r) => ({ title: ROLE_LABELS[r.role] ?? r.role, key: r.role, align: 'center' as const, render: (_: unknown, row: { key: string }) => r.permissions.includes(row.key as never) ? <Tag color="green">Allowed</Tag> : <span aria-label="Not granted">—</span> }))]} />
+        </Card> },
+        { key: 'map', label: 'Permission map', children: <Card className="diagram-surface"><PermissionMap roles={roles ?? []} focus={view.permission} onFocus={(permission) => update({ permission })} /></Card> },
+        { key: 'flow', label: 'How access works', children: <Card className="diagram-surface"><AccessFlow selected={view.accessNode} onSelect={(accessNode) => update({ accessNode }, !accessNode)} /></Card> },
       ]} />
     </div>
   );
 }
 
-function RoleCards({ roles, can, onChanged }: { roles: RoleView[] | null; can: PageProps['can']; onChanged: () => void }) {
+interface HolderView { holderSearch: string; holderStatus: string; holderPage: string; holderSize: string; holderSort: string }
+function RoleCards({ roles, can, onChanged, view, update, onPerson }: {
+  roles: RoleView[] | null; can: PageProps['can']; onChanged: () => void; view: HolderView;
+  update: (patch: Partial<HolderView>, replace?: boolean) => void; onPerson: (id: string) => void;
+}) {
   const { message } = App.useApp();
   const ask = useReason();
   const [query, setQuery] = useState<Record<string, string>>({});
@@ -48,13 +73,13 @@ function RoleCards({ roles, can, onChanged }: { roles: RoleView[] | null; can: P
   const manage = can('ROLES_MANAGE');
   const search = (role: string, q: string) => {
     setQuery((s) => ({ ...s, [role]: q }));
-    if (q.trim().length < 2) return;
+    if (q.trim().length < 2) { setOptions((s) => ({ ...s, [role]: [] })); return; }
     void api.idpUsers(q).then((u) => setOptions((s) => ({ ...s, [role]: u.slice(0, 8) }))).catch(() => undefined);
   };
   const change = async (role: string, id: string, username: string, grant: boolean) => {
     const label = ROLE_LABELS[role] ?? role;
     const reason = await ask(grant ? `Grant ${label} to ${username}` : `Remove ${label} from ${username}`,
-      grant ? 'Takes effect at their next sign-in to this console.' : 'They lose these permissions at their next sign-in.', grant);
+      grant ? 'Takes effect when their access token renews or they sign in again.' : 'Takes effect when their access token renews or they sign in again.', grant);
     if (!reason) return;
     try { await api.setRole(id, role, grant, reason); message.success(grant ? 'Role granted' : 'Role removed'); setQuery((s) => ({ ...s, [role]: '' })); onChanged(); }
     catch (e) { message.error(errorText(e)); }
@@ -63,94 +88,40 @@ function RoleCards({ roles, can, onChanged }: { roles: RoleView[] | null; can: P
   return (
     <Row gutter={[16, 16]}>
       {roles.map((r) => (
-        <Col key={r.role} xs={24} lg={12} xxl={8}>
+        <Col key={r.role} span={24}>
           <Card title={<Space>{ROLE_LABELS[r.role] ?? r.role}<Tag>{r.holders.length}</Tag></Space>} data-testid={`role-card-${r.role}`}
             extra={<Typography.Text type="secondary" code>{r.role}</Typography.Text>}>
-            <Typography.Paragraph type="secondary">{ROLE_HELP[r.role]}</Typography.Paragraph>
-            <Space wrap size={[4, 6]} style={{ marginBottom: 12 }}>
-              {r.permissions.map((p) => <Tag key={p} color={GROUP_COLOR[PERMISSIONS[p]?.group ?? ''] ? undefined : 'default'} style={{ borderColor: GROUP_COLOR[PERMISSIONS[p]?.group ?? ''] }}>{PERMISSIONS[p]?.label ?? p}</Tag>)}
-            </Space>
-            <List size="small" dataSource={r.holders} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nobody has this role" /> }}
-              renderItem={(h) => (
-                <List.Item actions={manage ? [<Button key="x" size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Remove ${h.username}`}
-                  data-testid={`role-remove-${h.username}`} onClick={() => void change(r.role, h.id, h.username, false)} />] : []}>
-                  <List.Item.Meta avatar={<Avatar style={{ background: BRAND.ocean }}>{h.username.slice(0, 1).toUpperCase()}</Avatar>}
-                    title={h.username} description={[h.firstName, h.lastName].filter(Boolean).join(' ') || (h.enabled ? '' : 'sign-in blocked')} />
-                </List.Item>)} />
-            {manage && (
-              <AutoComplete style={{ width: '100%', marginTop: 12 }} value={query[r.role] ?? ''} placeholder="Add a person (type a username)"
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>{ROLE_HELP[r.role]}</Typography.Paragraph>
+            <Collapse ghost size="small" className="role-permission-disclosure" items={[{ key: 'permissions', label: `View ${r.permissions.length} permissions across ${new Set(r.permissions.map((p) => PERMISSIONS[p]?.group)).size} areas`, children: <div className="permission-groups">{Object.entries(GROUP_COLOR).map(([group, color]) => {
+              const permissions = r.permissions.filter((p) => PERMISSIONS[p]?.group === group);
+              return permissions.length ? <div key={group}><Typography.Text className="permission-group-name" type="secondary">{group}</Typography.Text><Space wrap size={[4, 6]}>
+                {permissions.map((p) => <Tag key={p} style={{ borderInlineStart: `3px solid ${color}` }}>{PERMISSIONS[p]?.label ?? p}</Tag>)}
+              </Space></div> : null;
+            })}</div> }]} />
+            <div className="directory-toolbar">
+              {manage && <Popover trigger="click" title={`Grant ${ROLE_LABELS[r.role] ?? r.role}`} content={<AutoComplete style={{ width: 300, maxWidth: '100%' }} value={query[r.role] ?? ''} aria-label="Assign this role to a person" placeholder="Grant this role: search by username"
                 data-testid={`role-add-${r.role}`} onChange={(v) => search(r.role, v)}
                 options={(options[r.role] ?? []).filter((o) => !r.holders.some((h) => h.id === o.user.id)).map((o) => ({ value: o.user.id, label: o.user.username }))}
-                onSelect={(id: string) => { const u = options[r.role]?.find((o) => o.user.id === id); if (u) void change(r.role, id, u.user.username, true); }} />
-            )}
+                onSelect={(id: string) => { const u = options[r.role]?.find((o) => o.user.id === id); if (u) void change(r.role, id, u.user.username, true); }} />}><Button icon={<UserAddOutlined />}>Assign person</Button></Popover>}
+              <Input.Search allowClear aria-label="Search people in selected role" placeholder="Search name or username" value={view.holderSearch} onChange={(e) => update({ holderSearch: e.target.value, holderPage: '1' }, true)} />
+              <Select aria-label="Filter role holders by sign-in status" style={{ minWidth: 150 }} value={view.holderStatus} onChange={(holderStatus) => update({ holderStatus, holderPage: '1' })} options={[{ value: 'all', label: 'All sign-in statuses' }, { value: 'allowed', label: 'Sign-in allowed' }, { value: 'blocked', label: 'Sign-in blocked' }]} />
+              <Select aria-label="Sort role holders" style={{ minWidth: 140 }} value={view.holderSort} onChange={(holderSort) => update({ holderSort, holderPage: '1' })} options={[{ value: 'name-asc', label: 'Name · A to Z' }, { value: 'name-desc', label: 'Name · Z to A' }, { value: 'username', label: 'Username · A to Z' }]} />
+            </div>
+            <Table rowKey="id" size="middle" scroll={{ x: 440, y: 'max(300px, calc(100vh - 410px))' }} data-testid="role-holders-table" locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={r.holders.length ? 'No people match these filters' : 'No people assigned yet'} /> }}
+              dataSource={r.holders.filter((h) => `${h.username} ${h.firstName ?? ''} ${h.lastName ?? ''}`.toLowerCase().includes(view.holderSearch.toLowerCase()) && (view.holderStatus === 'all' || h.enabled === (view.holderStatus === 'allowed')))
+                .sort((a, b) => view.holderSort === 'username' ? a.username.localeCompare(b.username) : `${a.firstName ?? ''} ${a.lastName ?? ''} ${a.username}`.localeCompare(`${b.firstName ?? ''} ${b.lastName ?? ''} ${b.username}`) * (view.holderSort === 'name-desc' ? -1 : 1))}
+              pagination={{ current: Math.max(1, Number(view.holderPage) || 1), pageSize: Math.max(1, Number(view.holderSize) || 20), pageSizeOptions: [20, 50, 100], showSizeChanger: true, showTotal: (total) => `${total} matching people`, onChange: (page, size) => update({ holderPage: String(page), holderSize: String(size) }) }}
+              columns={[
+                { title: 'Person', key: 'person', render: (_, h) => <Space><Avatar style={{ background: BRAND.ocean }}>{h.username.slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}>
+                  <Button type="link" className="person-link" onClick={() => onPerson(h.id)}>{[h.firstName, h.lastName].filter(Boolean).join(' ') || h.username}</Button><Typography.Text type="secondary">@{h.username}</Typography.Text></Space></Space> },
+                { title: 'Sign-in', key: 'status', width: 130, render: (_, h) => <Tag color={h.enabled ? 'green' : 'red'}>{h.enabled ? 'Allowed' : 'Blocked'}</Tag> },
+                ...(manage ? [{ title: 'Actions', key: 'actions', width: 110, render: (_: unknown, h: RoleView['holders'][number]) => <Button size="small" danger type="text" icon={<DeleteOutlined />} aria-label={`Remove ${h.username}`} data-testid={`role-remove-${h.username}`} onClick={() => void change(r.role, h.id, h.username, false)}>Remove</Button> }] : []),
+              ]} />
+            {r.holders.length >= 500 && <Typography.Paragraph type="secondary">Showing the first 500 role holders returned by the sign-in service.</Typography.Paragraph>}
+
           </Card>
         </Col>
       ))}
     </Row>
-  );
-}
-
-/** Roles on the left, permissions (grouped) on the right; click a role to highlight what it allows. */
-function PermissionMap({ roles }: { roles: RoleView[] }) {
-  const dark = useDark();
-  const [focus, setFocus] = useState<string | null>(null);
-  const { nodes, edges } = useMemo(() => {
-    const perms = Object.entries(PERMISSIONS).sort((a, b) => a[1].group.localeCompare(b[1].group));
-    const nodes: Node[] = [
-      ...roles.map((r, i) => ({ id: r.role, position: { x: 0, y: 40 + i * 110 }, data: { label: `${ROLE_LABELS[r.role] ?? r.role} · ${r.holders.length}` },
-        style: { width: 210, fontWeight: 600, border: `2px solid ${BRAND.ocean}`, borderRadius: 10, opacity: !focus || focus === r.role ? 1 : 0.35 },
-        sourcePosition: 'right', targetPosition: 'left' } as Node)),
-      ...perms.map(([p, meta], i) => ({ id: p, position: { x: 520, y: i * 46 }, data: { label: `${meta.label}` },
-        style: { width: 300, fontSize: 12, borderRadius: 8, borderLeft: `5px solid ${GROUP_COLOR[meta.group]}`,
-          opacity: !focus || roles.find((r) => r.role === focus)?.permissions.includes(p as never) ? 1 : 0.3 },
-        sourcePosition: 'right', targetPosition: 'left' } as Node)),
-    ];
-    const edges: Edge[] = roles.flatMap((r) => r.permissions.map((p) => ({ id: `${r.role}-${p}`, source: r.role, target: p,
-      animated: focus === r.role, style: { stroke: focus === r.role ? BRAND.ocean : dark ? '#3a404c' : '#cbd5e1', strokeWidth: focus === r.role ? 2 : 1, opacity: !focus || focus === r.role ? 1 : 0.15 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: focus === r.role ? BRAND.ocean : '#94a3b8' } })));
-    return { nodes, edges };
-  }, [roles, focus, dark]);
-  return (
-    <div data-testid="permission-map">
-      <Space wrap style={{ marginBottom: 8 }}>
-        {Object.entries(GROUP_COLOR).map(([g, c]) => <Tag key={g} style={{ borderLeft: `5px solid ${c}` }}>{g}</Tag>)}
-        <Typography.Text type="secondary">Click a role to highlight its permissions; click the background to clear.</Typography.Text>
-      </Space>
-      <div style={{ height: 720 }}>
-        <ReactFlow nodes={nodes} edges={edges} fitView colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}
-          onNodeClick={(_, n) => setFocus(roles.some((r) => r.role === n.id) ? (focus === n.id ? null : n.id) : focus)} onPaneClick={() => setFocus(null)}>
-          <Background gap={20} /><Controls showInteractive={false} />
-        </ReactFlow>
-      </div>
-    </div>
-  );
-}
-
-/** The path every admin request takes: sign-in, permission check, action, audit. */
-function AccessFlow() {
-  const dark = useDark();
-  const box = (bg: string) => ({ width: 220, borderRadius: 10, border: `2px solid ${bg}`, fontSize: 12, padding: 10 });
-  const nodes: Node[] = [
-    { id: 'admin', position: { x: 0, y: 140 }, data: { label: 'Administrator browser\nconvo-admin.doncik.ro' }, style: box(SERIES[2]) },
-    { id: 'kc', position: { x: 300, y: 0 }, data: { label: 'Keycloak (Convo realm)\nsign-in + PKCE, passkey/2FA\nrealm role in the token' }, style: box(SERIES[3]) },
-    { id: 'proxy', position: { x: 300, y: 160 }, data: { label: 'Console proxy\nonly /v1/admin + realm sign-in\nconsoles & messenger API: 404' }, style: box(BRAND.ocean) },
-    { id: 'api', position: { x: 600, y: 160 }, data: { label: 'Admin API\nrole → permission check\nstep-up for credentials/roles\nno self-changes' }, style: box(BRAND.ocean) },
-    { id: 'denied', position: { x: 600, y: 330 }, data: { label: 'Refused attempt\n(recorded in the audit chain)' }, style: box('#D14B4B') },
-    { id: 'action', position: { x: 900, y: 60 }, data: { label: 'Action with a reason\naccounts · devices · recovery\nstatistics · health' }, style: box(SERIES[4]) },
-    { id: 'ops', position: { x: 900, y: 220 }, data: { label: 'convo-admin-ops\nKeycloak users only\n(no realm admin)' }, style: box(SERIES[3]) },
-    { id: 'audit', position: { x: 1200, y: 140 }, data: { label: 'Hash-chained audit log\n+ independent checkpoints' }, style: box(SERIES[0]) },
-  ];
-  const edge = (source: string, target: string, label: string, color = '#94a3b8'): Edge => ({ id: `${source}-${target}`, source, target, label, animated: true,
-    style: { stroke: color }, labelStyle: { fontSize: 11 }, markerEnd: { type: MarkerType.ArrowClosed, color } });
-  const edges = [edge('admin', 'kc', 'sign in'), edge('admin', 'proxy', 'token'), edge('proxy', 'api', '/v1/admin'),
-    edge('api', 'denied', 'no permission', '#D14B4B'), edge('api', 'action', 'allowed', SERIES[4]), edge('api', 'ops', 'sign-in accounts', SERIES[3]),
-    edge('action', 'audit', 'append'), edge('ops', 'audit', 'append')];
-  return (
-    <div style={{ height: 460 }} data-testid="access-flow">
-      <ReactFlow nodes={nodes.map((n) => ({ ...n, data: { label: <div style={{ whiteSpace: 'pre-line', textAlign: 'center' }}>{n.data.label as string}</div> } }))}
-        edges={edges} fitView colorMode={dark ? 'dark' : 'light'} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}>
-        <Background gap={20} /><Controls showInteractive={false} />
-      </ReactFlow>
-    </div>
   );
 }

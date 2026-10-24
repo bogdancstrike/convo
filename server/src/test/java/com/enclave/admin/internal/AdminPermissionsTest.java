@@ -29,7 +29,7 @@ class AdminPermissionsTest {
     private final IdentityAdminApi identity = mock(IdentityAdminApi.class);
     private final AuditLog audit = mock(AuditLog.class);
     private final AdminActions actions = mock(AdminActions.class);
-    private final AdminController controller = new AdminController(identity, audit, actions, mock(AuditCheckpoints.class), properties, Clock.systemUTC(), permissions, mock(com.enclave.push.PushApi.class));
+    private final AdminController controller = new AdminController(identity, audit, mock(AuditNames.class), actions, mock(AuditCheckpoints.class), properties, Clock.systemUTC(), permissions, mock(com.enclave.push.PushApi.class));
 
     private static Jwt token(String... roles) {
         return Jwt.withTokenValue("t").header("alg", "RS256").subject("sub").claim("preferred_username", "op")

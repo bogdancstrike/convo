@@ -1,8 +1,6 @@
 # `admin` — organization administration (ADM-01, first slice)
 
-**Architecture position:** a leaf module. Depends on `identity.IdentityAdminApi` (account/device
-metadata, disable, revoke). Nothing depends on it. It never touches messages, keys, archives or
-group membership, so administrators cannot read content or silently add themselves to chats.
+**Architecture position:** a leaf module. Depends on public identity, statistics and domain-event APIs. Nothing depends on it. It never touches message content, keys, archives or private group membership, so administrators cannot read content or silently add themselves to chats.
 
 | Type | Role |
 |---|---|
@@ -13,8 +11,7 @@ group membership, so administrators cannot read content or silently add themselv
 
 Security: a dedicated filter chain (`SecurityConfig.adminChain`) accepts only Keycloak tokens
 whose `realm_access.roles` contains `enclave.admin.role` (default `convo-admin`). No device
-signature is involved. The web console is `apps/web/admin.html`, served at `/admin`; production
-deployments should serve it from a separate origin.
+signature is involved. The web console is `apps/admin`, served on a separate origin.
 
 Step-up: disable/enable/revoke require the token's `auth_time` to be within
 `enclave.admin.step-up-max-age` (default 10 min); otherwise `STEP_UP_REQUIRED` and the console
@@ -30,4 +27,46 @@ hides the rest); `POST /v1/admin/audit/export {reason}` records `audit.export` b
 the full chain with its verification. Role names: `enclave.admin.roles.*`; `keycloak-setup`
 creates the roles.
 
-Not yet: signed policies, and auditing of read-only lookups/denials.
+Not yet: signed policies and auditing of read-only lookups.
+
+## Identity and user audit (V27)
+
+The console is `apps/admin`, served on a separate origin. Its Users directory combines enrolled
+Convo accounts and pending Keycloak accounts. Overview & activity shares a date window and optional
+person scope. Older `#/activity/{account}` and `#/sign-in/{subject}` links redirect to the merged pages.
+
+`UserActionAudit` consumes `DeviceRegistered` and `DeviceRevoked` synchronously: device enrollment,
+unlinking and unregistering the current device are committed with their audit entry. Actors include
+the authenticated IdP subject or originating device. `UserRequestAudit` records recovery setup/use,
+link approval/cancellation, privacy changes and group/community/call mutations and failed attempts.
+It stores route templates and status codes, never bodies, encrypted content, recipient/chat IDs,
+keys or recovery secrets. Encrypted transport, attachment/history sync, automatic heartbeats and
+client-local settings are not individual audit events.
+
+`IdentityAuditImporter` polls Keycloak's user events every 15 seconds (override
+`enclave.admin.audit-poll-interval`). Login/logout, failed authentication, profile updates,
+password changes, credential/passkey additions/removals and other saved identity events enter the
+same hash chain with their original timestamps. Protocol exchanges and service-account logins are
+excluded. Only username, event type, client and error code are copied; arbitrary event details,
+IP addresses, credential IDs, session IDs and tokens are never copied. A database cursor and
+source event IDs commit with the chain append, making retries/restarts idempotent. The importer
+uses a fixed upper bound and a 60-second overlap to accommodate late commits. It catches up from
+the persisted cursor after outages; Keycloak retains the source for seven days. Events predating
+event-storage enablement cannot be reconstructed. Keep the importer outage shorter than source
+retention; externalize the audit/checkpoints for longer-term protection.
+
+The idempotent Keycloak setup enables event storage on existing realms and grants `view-events`
+to `convo-admin-ops`, alongside existing user-management roles. Re-run `docker compose run --rm
+keycloak-setup` after upgrading an existing deployment. The console reports configuration/sync
+failures from `GET /v1/admin/audit/sources` (requires `AUDIT_READ`). A successful poll means the
+source request completed; event storage must remain enabled in Keycloak.
+
+`GET /v1/admin/audit` applies `q`, `action` (exact or category prefix), `user` (comma-separated IdP
+and/or Convo identifiers), ISO `from`/`to`, and `before` sequence filters before a bounded page is
+returned. User drawers use both identifiers. The page exposes search, user/category/date filters,
+refresh and older-event loading; verification and exports still operate on the whole hash chain.
+
+Admin tokens stay in sessionStorage. A single-flight refresh renews within 60 seconds of expiry
+and on resumed/expired sessions, with one refresh/retry for an API 401. Temporary connectivity
+failures retain refresh credentials. Explicit logout clears the session and redirects to Keycloak.
+Refreshing a token does not reset `auth_time`: sensitive actions retain the ten-minute step-up.

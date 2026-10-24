@@ -23,8 +23,13 @@ export type Section = 'details' | 'actions' | 'roles';
 export function useSignIn(load: () => Promise<SignInAccount>) {
   const [account, setAccount] = useState<SignInAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const refresh = useCallback(() => { setError(null); void load().then(setAccount).catch((e) => setError(errorText(e))); }, [load]);
-  useEffect(refresh, [refresh]);
+  const [version, setVersion] = useState(0);
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+  useEffect(() => {
+    let active = true; setError(null);
+    void load().then((v) => { if (active) setAccount(v); }).catch((e) => { if (active) setError(errorText(e)); });
+    return () => { active = false; };
+  }, [load, version]);
   return { account, error, refresh };
 }
 
@@ -101,7 +106,7 @@ export function SignInSections({ account, error, refresh, can, onChanged, sectio
           <Space wrap>{Object.entries(ROLE_LABELS).map(([role, label]) => {
             const has = u.roles.includes(role);
             return <Button key={role} type={has ? 'primary' : 'default'} ghost={has} data-testid={`role-${role}`} onClick={async () => {
-              const reason = await ask(has ? `Remove ${label}` : `Grant ${label}`, has ? 'The role is removed at the next sign-in.' : 'Grants administrator rights in this console.', !has);
+              const reason = await ask(has ? `Remove ${label}` : `Grant ${label}`, has ? 'The role is removed when the access token renews or they sign in again.' : 'Grants administrator rights in this console.', !has);
               if (reason) await run(api.setRole(u.id, role, !has, reason), has ? 'Role removed' : 'Role granted');
             }}>{has ? '✓ ' : ''}{label}</Button>;
           })}</Space>

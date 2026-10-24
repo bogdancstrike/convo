@@ -77,7 +77,7 @@ fi
 admin_client=$(k get clients -r "$REALM" -q clientId=convo-admin --fields id --format csv --noquotes | head -n1)
 admin_settings=(-s enabled=true -s publicClient=true -s standardFlowEnabled=true -s directAccessGrantsEnabled=false -s implicitFlowEnabled=false
   -s serviceAccountsEnabled=false -s 'rootUrl=${authBaseUrl}' -s 'redirectUris=["/convo/admin"]' -s 'webOrigins=["+"]'
-  -s 'attributes."pkce.code.challenge.method"=S256' -s 'attributes."post.logout.redirect.uris"=/*' -s 'description=Convo admin console')
+  -s 'attributes."pkce.code.challenge.method"=S256' -s 'attributes."post.logout.redirect.uris"=/convo/admin' -s 'description=Convo admin console')
 if [[ -z "$admin_client" ]]; then
   k create clients -r "$REALM" -s clientId=convo-admin "${admin_settings[@]}" >/dev/null && echo "Created convo-admin"
 else
@@ -94,10 +94,14 @@ if [[ -n "${ADMIN_OPS_SECRET:-}" ]]; then
   else
     k update "clients/$ops" -r "$REALM" "${ops_settings[@]}" && echo "Updated convo-admin-ops"
   fi
-  for role in manage-users view-users view-realm; do
+  for role in manage-users view-users view-realm view-events; do
     k add-roles -r "$REALM" --uusername service-account-convo-admin-ops --cclientid realm-management --rolename "$role"
   done
-  echo "Granted realm-management/manage-users, view-users, view-realm to convo-admin-ops"
+  echo "Granted realm-management/manage-users, view-users, view-realm, view-events to convo-admin-ops"
 else
   echo "CONVO_ADMIN_OPS_SECRET is not set; sign-in account management stays unavailable." >&2
 fi
+
+# Existing realms also need event storage; empty types select Keycloak default user events.
+k update "realms/$REALM/events/config" -s eventsEnabled=true -s eventsExpiration=604800 -s 'enabledEventTypes=[]'
+echo "Identity audit events enabled (7 day source retention)"

@@ -15,7 +15,9 @@ export interface AccountSummary {
   createdAt: string; lastSeenDay: string | null;
 }
 export interface DeviceSummary { deviceId: number; platform: string; createdAt: string; lastSeenDay: string | null }
-export interface AuditEntry { seq: number; at: string; actor: string; action: string; target: string; reason: string; hash: string }
+export interface AuditEntry { seq: number; at: string; actor: string; actorName?: string; action: string; target: string; targetName?: string; reason: string; hash: string }
+export interface AuditFilters { before?: number; q?: string; action?: string; user?: string; from?: string; to?: string }
+export interface AuditSource { configured: boolean; lastSuccess: string | null; error: string | null }
 export interface AuditVerification { valid: boolean; entries: number; head: string; firstBrokenSeq: number | null; checkpointsChecked: number; checkpointMismatchSeq: number | null }
 /** One day: activeAccounts = opened Convo or sent; senders = sent at least one item; web/androidUsers = people per platform. */
 export interface DayStats { day: string; items: number; activeAccounts: number; senders: number; webUsers: number; androidUsers: number; newAccounts: number; calls: number; videoCalls: number; groupCalls: number }
@@ -36,6 +38,7 @@ export interface SignInAccount { user: IdpUser; convoAccountId: string | null }
 export interface RoleHolder { id: string; username: string; firstName: string | null; lastName: string | null; enabled: boolean }
 export interface RoleView { role: string; permissions: Permission[]; holders: RoleHolder[] }
 export interface Levels { high: number; medium: number; low: number; none: number; window: number }
+export interface Throughput { minutes: { minute: string; items: number; calls: number; uploads: number }[]; recordingSince: string; capturedAt: string; enabled: boolean }
 export interface Health { push: { pending: number; oldestPending: string; deadLetters: Record<string, number> } }
 
 export class AdminError extends Error {
@@ -43,13 +46,18 @@ export class AdminError extends Error {
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = await accessToken();
+  let token = await accessToken();
   if (!token) throw new AdminError(401);
-  const response = await fetch(`/v1/admin${path}`, {
+  const request = () => fetch(`/v1/admin${path}`, {
     method, cache: 'no-store',
     headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
+  let response = await request();
+  if (response.status === 401) {
+    token = await accessToken(true);
+    if (token) response = await request();
+  }
   if (!response.ok) {
     const problem = await response.json().catch(() => ({})) as { code?: string; detail?: string };
     throw new AdminError(response.status, problem.code, problem.detail);
@@ -60,10 +68,12 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 const q = encodeURIComponent;
 export const api = {
   me: () => call<Me>('GET', '/me'),
+  throughput: (minutes: number) => call<Throughput>('GET', `/stats/throughput?minutes=${minutes}`),
   overview: (days: number) => call<Overview>('GET', `/stats/overview?days=${days}`),
   usersByActivity: (order: 'active' | 'inactive', days: number, limit = 10) => call<UserActivity[]>('GET', `/stats/users?order=${order}&days=${days}&limit=${limit}`),
   accountActivity: (id: string, days: number) => call<AccountActivity>('GET', `/accounts/${id}/activity?days=${days}`),
   accounts: (search: string) => call<AccountSummary[]>('GET', `/accounts?q=${q(search)}&limit=200`),
+  account: (id: string) => call<AccountSummary>('GET', `/accounts/${q(id)}`),
   devices: (id: string) => call<DeviceSummary[]>('GET', `/accounts/${id}/devices`),
   setDisabled: (id: string, disabled: boolean, reason: string) => call<AuditEntry>('POST', `/accounts/${id}/${disabled ? 'disable' : 'enable'}`, { reason }),
   revokeDevice: (id: string, deviceId: number, reason: string) => call<AuditEntry>('POST', `/accounts/${id}/devices/${deviceId}/revoke`, { reason }),
@@ -80,7 +90,8 @@ export const api = {
   setRole: (id: string, role: string, granted: boolean, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/roles`, { role, granted, reason }),
   roles: () => call<RoleView[]>('GET', '/roles'),
   levels: (days: number) => call<Levels>('GET', `/stats/levels?days=${days}`),
-  audit: () => call<AuditEntry[]>('GET', '/audit?limit=500'),
+  audit: (filters: AuditFilters = {}) => call<AuditEntry[]>('GET', `/audit?limit=100&${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]))}`),
+  auditSources: () => call<AuditSource>('GET', '/audit/sources'),
   verify: () => call<AuditVerification>('GET', '/audit/verify'),
   checkpoint: () => call<AuditVerification>('POST', '/audit/checkpoint'),
   exportAudit: (reason: string) => call<unknown>('POST', '/audit/export', { reason }),

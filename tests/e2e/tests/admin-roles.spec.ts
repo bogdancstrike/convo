@@ -18,7 +18,7 @@ test('helpdesk and auditor roles see only their own duties; exports are audited'
     await expect(helpdesk.getByTestId('admin-tab-audit')).toHaveCount(0);
     await helpdesk.getByTestId('admin-tab-users').click();
     await helpdesk.getByTestId('admin-search').fill(memberU.username);
-    await helpdesk.getByTestId(`admin-account-${memberU.username}`).click();
+    await helpdesk.getByTestId(`admin-account-${memberU.username}`).getByRole('button', { name: memberU.name, exact: true }).click();
     const drawer = helpdesk.getByTestId('user-drawer');
     await drawer.getByRole('tab', { name: /Devices/ }).click();
     await expect(drawer.getByTestId('admin-device-list').getByTestId('admin-revoke')).toHaveCount(1);

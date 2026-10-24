@@ -1,44 +1,54 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, App, Button, Descriptions, Drawer, Empty, List, Segmented, Space, Spin, Tabs, Tag, Typography } from 'antd';
-import { DeleteOutlined, KeyOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Alert, App, Button, Card, Descriptions, Drawer, Empty, List, Segmented, Space, Spin, Tabs, Tag, Typography } from 'antd';
+import { DeleteOutlined, KeyOutlined, StopOutlined, CheckCircleOutlined, ExpandOutlined, CompressOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { api, errorText, type AccountActivity, type AccountSummary, type DeviceSummary, type Permission } from '../api';
 import { Chart } from './Chart';
 import { fmtDay, fmtTime, LEVEL, nameOf, shortDay } from '../format';
 import { useReason } from './confirm';
-import { SignInPanel } from './SignInPanel';
+import { AuditTrail } from './AuditTrail';
+import { SignInSections, useSignIn } from './SignInPanel';
 
 /** Everything about one Convo account an administrator may see and do (never message content). */
-export function UserDrawer({ accountId, onClose, can, onChanged }: { accountId: string | null; onClose: () => void; can: (p: Permission) => boolean; onChanged?: () => void }) {
+export function UserDrawer({ accountId: requestedAccountId, subjectId, tab = 'overview', days = 30, expanded = false, onMaximize, onDaysChange, onTabChange, onClose, can, onChanged }: {
+  expanded?: boolean; onMaximize?: () => void; days?: number; onDaysChange?: (days: number) => void; accountId: string | null; subjectId?: string | null; tab?: string; onTabChange?: (tab: string) => void;
+  onClose: () => void; can: (p: Permission) => boolean; onChanged?: () => void;
+}) {
   const { message } = App.useApp();
   const ask = useReason();
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [activity, setActivity] = useState<AccountActivity | null>(null);
   const [devices, setDevices] = useState<DeviceSummary[] | null>(null);
-  const [days, setDays] = useState(30);
+  const loadSignIn = useCallback(() => subjectId ? api.idpUser(subjectId) : api.signInOf(requestedAccountId!), [subjectId, requestedAccountId]);
+  const signIn = useSignIn(loadSignIn);
+  const accountId = requestedAccountId ?? signIn.account?.convoAccountId ?? null;
+  const [auditVersion, setAuditVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => {
     if (!accountId) return;
     setError(null);
     if (can('STATS_READ')) void api.accountActivity(accountId, days).then((a) => { setActivity(a); setAccount(a.summary.account); }).catch((e) => setError(errorText(e)));
-    else void api.accounts('').then((all) => setAccount(all.find((a) => a.accountId === accountId) ?? null)).catch((e) => setError(errorText(e)));
+    else void api.account(accountId).then(setAccount).catch((e) => setError(errorText(e)));
     if (can('DEVICES_READ')) void api.devices(accountId).then(setDevices).catch(() => setDevices([]));
   }, [accountId, days, can]);
   useEffect(() => { setAccount(null); setActivity(null); setDevices(null); }, [accountId]);
   useEffect(load, [load]);
-  const changed = () => { load(); onChanged?.(); };
+  const changed = () => { setAuditVersion((v) => v + 1); signIn.refresh(); load(); onChanged?.(); };
   const run = async (work: Promise<unknown>, done: string) => { try { await work; message.success(done); changed(); } catch (e) { message.error(errorText(e)); } };
-  const loadSignIn = useCallback(() => api.signInOf(accountId!), [accountId]);
+  const u = signIn.account?.user;
+  const personName = account ? nameOf(account) : u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username : 'User';
   const level = activity?.summary.level;
   return (
-    <Drawer open={!!accountId} onClose={onClose} width={640} destroyOnClose data-testid="user-drawer"
-      title={account ? <Space>{nameOf(account)}<Typography.Text type="secondary">@{account.username}</Typography.Text>
-        {account.status === 'disabled' && <Tag color="red">Disabled</Tag>}{level && <Tag color={LEVEL[level].color}>{LEVEL[level].label}</Tag>}</Space> : 'Account'}>
+    <DetailSurface expanded={expanded} onClose={onClose} onMaximize={onMaximize}
+      title={<Space wrap>{personName}<Typography.Text type="secondary">@{account?.username ?? u?.username ?? ''}</Typography.Text>
+        {account?.status === 'disabled' && <Tag color="red">Disabled</Tag>}{u && <Tag color={u.enabled ? 'green' : 'red'}>{u.enabled ? 'Sign-in allowed' : 'Sign-in blocked'}</Tag>}
+        {u && !accountId && <Tag>Not joined yet</Tag>}{level && <Tag color={LEVEL[level].color}>{LEVEL[level].label}</Tag>}</Space>}>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />}
-      {!account ? <Spin /> : (
-        <Tabs items={[
-          ...(can('STATS_READ') ? [{ key: 'activity', label: 'Activity', children: (
+      {((accountId && !account && !error) || (!accountId && !u && !signIn.error)) ? <Spin /> : (
+        <Tabs activeKey={tab} onChange={onTabChange} items={[
+          { key: 'overview', label: 'Overview', children: <SignInSections {...signIn} can={can} onChanged={changed} sections={['details']} /> },
+          ...(account && can('STATS_READ') ? [{ key: 'activity', label: 'Activity', children: (
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
-              <Segmented value={days} onChange={(v) => setDays(Number(v))} options={[{ label: '30 days', value: 30 }, { label: '90 days', value: 90 }]} />
+              <Segmented value={days} onChange={(v) => onDaysChange?.(Number(v))} options={[{ label: '30 days', value: 30 }, { label: '90 days', value: 90 }]} />
               {activity && (() => {
                 const used = activity.days.filter((d) => d.opened || d.items > 0);
                 return <Descriptions column={2} bordered data-testid="activity-facts">
@@ -78,7 +88,7 @@ export function UserDrawer({ accountId, onClose, can, onChanged }: { accountId: 
                 </>;
               })() : <Empty description="No activity in this period" />}
             </Space>) }] : []),
-          ...(can('DEVICES_READ') ? [{ key: 'devices', label: `Devices${devices ? ` (${devices.length})` : ''}`, children: (
+          ...(account && can('DEVICES_READ') ? [{ key: 'devices', label: `Devices${devices ? ` (${devices.length})` : ''}`, children: (
             <List data-testid="admin-device-list" dataSource={devices ?? []} locale={{ emptyText: 'No linked devices' }} renderItem={(d) => (
               <List.Item actions={can('DEVICE_REVOKE') ? [<Button key="r" size="small" danger icon={<DeleteOutlined />} data-testid="admin-revoke" onClick={async () => {
                 const reason = await ask('Unlink device', `Device ${d.deviceId} (${d.platform}) is signed out at once and can no longer receive messages.`, true);
@@ -86,9 +96,12 @@ export function UserDrawer({ accountId, onClose, can, onChanged }: { accountId: 
               }}>Unlink</Button>] : []}>
                 <List.Item.Meta title={`${d.platform} · device ${d.deviceId}`} description={`Linked ${fmtTime(d.createdAt)} · last active ${fmtDay(d.lastSeenDay)}`} />
               </List.Item>)} />) }] : []),
-          { key: 'signin', label: 'Sign-in', children: <SignInPanel load={loadSignIn} can={can} onChanged={changed} /> },
+          ...(can('AUDIT_READ') ? [{ key: 'audit', label: 'Audit', children: <AuditTrail subjects={[account?.accountId ?? '', u?.id ?? '']} version={auditVersion} /> }] : []),
+          { key: 'roles', label: 'Roles', children: <SignInSections {...signIn} can={can} onChanged={changed} sections={['roles']} /> },
           { key: 'security', label: 'Security', children: (
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
+              <SignInSections {...signIn} can={can} onChanged={changed} sections={['actions']} />
+              {account && <>
               <Descriptions column={1} bordered>
                 <Descriptions.Item label="Status">{account.status === 'active' ? <Tag color="green">Active</Tag> : <Tag color="red">Disabled</Tag>}</Descriptions.Item>
                 <Descriptions.Item label="First sign-in">{fmtTime(account.createdAt)}</Descriptions.Item>
@@ -116,9 +129,18 @@ export function UserDrawer({ accountId, onClose, can, onChanged }: { accountId: 
                   </Typography.Paragraph>
                 </div>
               )}
+              </>}
             </Space>) },
         ]} />
       )}
-    </Drawer>
+    </DetailSurface>
   );
+}
+
+function DetailSurface({ expanded, onClose, onMaximize, title, children }: {
+  expanded: boolean; onClose: () => void; onMaximize?: () => void; title: ReactNode; children: ReactNode;
+}) {
+  const toggle = <Button type="text" icon={expanded ? <CompressOutlined /> : <ExpandOutlined />} onClick={onMaximize} aria-label={expanded ? 'Minimize view' : 'Maximize view'} data-testid="maximize-view" />;
+  if (expanded) return <div data-testid="user-full-page"><div className="page-head"><Button icon={<ArrowLeftOutlined />} onClick={onClose}>Back to users</Button>{toggle}</div><Card title={title}>{children}</Card></div>;
+  return <Drawer open onClose={onClose} width={720} destroyOnClose data-testid="user-drawer" title={title} extra={toggle}>{children}</Drawer>;
 }

@@ -43,12 +43,17 @@ class AuditLog {
 
     @Transactional
     Entry append(String actor, String action, String target, String reason) {
+        return appendAt(clock.instant(), actor, action, target, reason);
+    }
+
+    @Transactional
+    Entry appendAt(Instant sourceTime, String actor, String action, String target, String reason) {
         jdbc.sql("LOCK TABLE admin_audit IN EXCLUSIVE MODE").update();
         var last = jdbc.sql("SELECT seq, hash FROM admin_audit ORDER BY seq DESC LIMIT 1")
                 .query((rs, i) -> new Object[] {rs.getLong(1), rs.getBytes(2)}).optional();
         long seq = last.map(r -> (long) r[0] + 1).orElse(1L);
         byte[] prev = last.map(r -> (byte[]) r[1]).orElse(GENESIS);
-        Instant at = clock.instant().truncatedTo(ChronoUnit.MICROS); // PostgreSQL precision, so verify recomputes identically
+        Instant at = sourceTime.truncatedTo(ChronoUnit.MICROS); // PostgreSQL precision, so verify recomputes identically
         byte[] hash = hash(prev, seq, at, actor, action, target, reason);
         jdbc.sql("INSERT INTO admin_audit (seq, at, actor, action, target, reason, prev_hash, hash) VALUES (:seq, :at, :actor, :action, :target, :reason, :prev, :hash)")
                 .param("seq", seq).param("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC)).param("actor", actor).param("action", action)
@@ -68,6 +73,26 @@ class AuditLog {
     List<Entry> page(long before, int limit) {
         return jdbc.sql("SELECT seq, at, actor, action, target, reason, hash FROM admin_audit WHERE seq < :before ORDER BY seq DESC LIMIT :limit")
                 .param("before", before).param("limit", Math.max(1, Math.min(limit, 500)))
+                .query((rs, i) -> new Entry(rs.getLong(1), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6), HexFormat.of().formatHex(rs.getBytes(7)))).list();
+    }
+
+    /** Filters run before pagination so older matches are not hidden by recent traffic. */
+    @Transactional(readOnly = true)
+    List<Entry> search(long before, int limit, String query, String action, String user, Instant from, Instant to, List<String> matchingIds) {
+        return jdbc.sql("""
+                SELECT seq, at, actor, action, target, reason, hash FROM admin_audit
+                WHERE seq < :before
+                  AND (:query = '' OR position(lower(:query) in lower(actor || ' ' || action || ' ' || target || ' ' || reason)) > 0 OR EXISTS (SELECT 1 FROM unnest(string_to_array(:matchingIds, ',')) AS m WHERE m <> '' AND (position(m in actor) > 0 OR position(m in target) > 0)))
+                  AND (:action = '' OR action = :action OR starts_with(action, :action || '.') OR (:action = 'denied' AND starts_with(action, 'denied:')))
+                  AND (:user = '' OR EXISTS (SELECT 1 FROM unnest(string_to_array(:user, ',')) AS u WHERE position(u in actor) > 0 OR position(u in target) > 0))
+                  AND at >= :from AND at <= :to
+                ORDER BY seq DESC LIMIT :limit
+                """)
+                .param("before", before).param("limit", Math.max(1, Math.min(limit, 500)))
+                .param("query", query).param("action", action).param("user", user).param("matchingIds", String.join(",", matchingIds))
+                .param("from", OffsetDateTime.ofInstant(from == null ? Instant.parse("1970-01-01T00:00:00Z") : from, ZoneOffset.UTC))
+                .param("to", OffsetDateTime.ofInstant(to == null ? Instant.parse("9999-12-31T23:59:59Z") : to, ZoneOffset.UTC))
                 .query((rs, i) -> new Entry(rs.getLong(1), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getString(3), rs.getString(4),
                         rs.getString(5), rs.getString(6), HexFormat.of().formatHex(rs.getBytes(7)))).list();
     }

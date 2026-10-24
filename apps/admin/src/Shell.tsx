@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntApp, Avatar, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tag, Typography } from 'antd';
-import { ApartmentOutlined, AuditOutlined, BarChartOutlined, DashboardOutlined, HeartOutlined, IdcardOutlined, LogoutOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, AuditOutlined, DashboardOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
 import { AdminError, api, type Me, type Permission } from './api';
 import { session, signIn, signOut } from './auth';
 import { themeConfig } from './theme';
@@ -8,18 +8,14 @@ import { DarkContext } from './components/useDark';
 import { ROLE_LABELS } from './format';
 import { OverviewPage } from './pages/Overview';
 import { UsersPage } from './pages/Users';
-import { SignInPage } from './pages/SignInAccounts';
-import { ActivityPage } from './pages/Activity';
 import { AuditPage } from './pages/Audit';
 import { HealthPage } from './pages/Health';
 import { RolesPage } from './pages/Roles';
 
 /** Pages, the permission each needs, and their menu entry. */
 const PAGES = [
-  { key: 'overview', label: 'Overview', icon: <DashboardOutlined />, needs: 'STATS_READ' as Permission },
+  { key: 'overview', label: 'Overview & activity', icon: <DashboardOutlined />, needs: 'STATS_READ' as Permission },
   { key: 'users', label: 'Users', icon: <TeamOutlined />, needs: 'ACCOUNTS_READ' as Permission },
-  { key: 'sign-in', label: 'Sign-in accounts', icon: <IdcardOutlined />, needs: 'ACCOUNTS_READ' as Permission },
-  { key: 'activity', label: 'Activity', icon: <BarChartOutlined />, needs: 'STATS_READ' as Permission },
   { key: 'roles', label: 'Roles & permissions', icon: <ApartmentOutlined />, needs: 'ACCOUNTS_READ' as Permission },
   { key: 'audit', label: 'Audit log', icon: <AuditOutlined />, needs: 'AUDIT_READ' as Permission },
   { key: 'health', label: 'Health', icon: <HeartOutlined />, needs: 'HEALTH_READ' as Permission },
@@ -56,14 +52,19 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
   const [me, setMe] = useState<Me | null>(null);
   const [failed, setFailed] = useState(false);
   const [route, navigate] = useHashRoute();
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('convo-admin-sidebar') === 'collapsed'; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem('convo-admin-sidebar', collapsed ? 'collapsed' : 'expanded'); } catch { /* private mode */ } }, [collapsed]);
   useEffect(() => { void session().then(setAdmin).catch(() => setAdmin(null)); }, []);
   // A signed-in person without an admin role is refused by the API: show "no role", not an outage.
   useEffect(() => { if (admin) void api.me().then(setMe).catch((e) => (e instanceof AdminError && (e.status === 403 || e.status === 401) ? setMe({ actor: admin, roles: [], permissions: [] }) : setFailed(true))); }, [admin]);
   const can = useCallback((p: Permission) => !!me?.permissions.includes(p), [me]);
   const visible = useMemo(() => PAGES.filter((p) => can(p.needs)), [can]);
-  const [section = '', ...rest] = route.split('/');
+  const [routePath = '', routeQuery] = route.split('?');
+  const canonicalPath = routePath.replace(/^activity(?=\/|$)/, 'overview').replace(/^sign-in(?:\/(.*))?$/, (_, id: string | undefined) => id ? `users/sign-in/${id}` : 'users');
+  const canonical = canonicalPath + (routeQuery ? `?${routeQuery}` : '');
+  const [section = '', ...rest] = canonicalPath.split('/');
   const page = (visible.find((p) => p.key === section)?.key ?? visible[0]?.key) as PageKey | undefined;
-  useEffect(() => { if (me && page && section !== page) navigate(page); }, [me, page, section, navigate]);
+  useEffect(() => { if (me && page && (section !== page || canonical !== route)) navigate(section === page ? canonical : page); }, [me, page, section, navigate, canonical, route]);
 
   if (admin === undefined) return <div className="signin"><Spin size="large" /></div>;
   if (!admin) return <SignInScreen />;
@@ -75,26 +76,25 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
   }
   const props = { can, navigate, param: rest.join('/') };
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Layout.Sider breakpoint="lg" collapsedWidth={0} width={232} theme={dark ? 'dark' : 'light'} style={{ borderRight: '1px solid var(--ant-color-border-secondary, transparent)' }}>
-        <div className="brand"><img src="/logo.svg" alt="" /><span>Convo<small>Admin console</small></span></div>
-        <Menu mode="inline" selectedKeys={page ? [page] : []} onClick={(e) => navigate(e.key)} data-testid="admin-menu"
+    <Layout className="console-frame">
+      <Layout.Sider collapsible trigger={null} collapsed={collapsed} onCollapse={setCollapsed} breakpoint="lg" collapsedWidth={64} width={232} theme={dark ? 'dark' : 'light'} style={{ borderRight: '1px solid var(--ant-color-border-secondary, transparent)' }}>
+        <div className={`brand${collapsed ? ' brand-collapsed' : ''}`}><img src="/logo.svg" alt="" />{!collapsed && <span>Convo<small>Admin console</small></span>}</div>
+        <Button type="text" className="sidebar-toggle" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((v) => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-testid="sidebar-toggle">{!collapsed && 'Collapse sidebar'}</Button>
+        <Menu mode="inline" inlineCollapsed={collapsed} selectedKeys={page ? [page] : []} onClick={(e) => navigate(e.key)} data-testid="admin-menu"
           items={visible.map((p) => ({ key: p.key, icon: p.icon, label: p.label, 'data-testid': `admin-tab-${p.key}` }))} />
-      </Layout.Sider>
-      <Layout>
-        <Layout.Header style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, paddingInline: 24 }}>
-          <Space size={6}><MoonOutlined /><Switch size="small" checked={dark} onChange={setDark} aria-label="Dark theme" /></Space>
-          <Space size={4} wrap data-testid="admin-roles">{me.roles.map((r) => <Tag key={r} color="blue">{ROLE_LABELS[r] ?? r}</Tag>)}</Space>
+          <div className="sidebar-footer">
+          <Space size={6}><MoonOutlined />{!collapsed && <span>Dark theme</span>}<Switch size="small" checked={dark} onChange={setDark} aria-label="Dark theme" /></Space>
+          <Space size={4} wrap data-testid="admin-roles" className={collapsed ? 'sidebar-roles-collapsed' : ''}>{me.roles.map((r) => <Tag key={r} color="blue">{ROLE_LABELS[r] ?? r}</Tag>)}</Space>
           <Dropdown menu={{ items: [{ key: 'out', icon: <LogoutOutlined />, label: 'Sign out', onClick: () => void signOut() }] }}>
             <Space style={{ cursor: 'pointer' }}><Avatar size="small" style={{ background: '#2596BE' }}>{admin.slice(0, 1).toUpperCase()}</Avatar>
-              <Typography.Text data-testid="admin-name">{admin}</Typography.Text></Space>
+              <Typography.Text className={collapsed ? 'sidebar-name-collapsed' : ''} data-testid="admin-name">{admin}</Typography.Text></Space>
           </Dropdown>
-        </Layout.Header>
-        <Layout.Content style={{ padding: 24 }}>
+          </div>
+      </Layout.Sider>
+      <Layout>
+        <Layout.Content className="console-content">
           {page === 'overview' && <OverviewPage {...props} />}
           {page === 'users' && <UsersPage {...props} />}
-          {page === 'sign-in' && <SignInPage {...props} />}
-          {page === 'activity' && <ActivityPage {...props} />}
           {page === 'roles' && <RolesPage {...props} />}
           {page === 'audit' && <AuditPage {...props} />}
           {page === 'health' && <HealthPage {...props} />}

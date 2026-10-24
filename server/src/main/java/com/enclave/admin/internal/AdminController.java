@@ -27,6 +27,7 @@ class AdminController {
 
     private final IdentityAdminApi identity;
     private final AuditLog audit;
+    private final AuditNames names;
     private final AdminActions actions;
     private final AuditCheckpoints checkpoints;
 
@@ -41,7 +42,7 @@ class AdminController {
     /** Audit export: the full chain with its head; the export itself is audited first. */
     record AuditExport(String exportedBy, java.time.Instant exportedAt, AuditLog.FullVerification verification, List<AuditLog.Entry> entries) {}
 
-    AdminController(IdentityAdminApi identity, AuditLog audit, AdminActions actions, AuditCheckpoints checkpoints, AdminProperties properties, java.time.Clock clock,
+    AdminController(IdentityAdminApi identity, AuditLog audit, AuditNames names, AdminActions actions, AuditCheckpoints checkpoints, AdminProperties properties, java.time.Clock clock,
             AdminPermissions permissions, com.enclave.push.PushApi push) {
         this.push = push;
         this.permissions = permissions;
@@ -50,6 +51,7 @@ class AdminController {
         this.clock = clock;
         this.identity = identity;
         this.audit = audit;
+        this.names = names;
         this.actions = actions;
     }
 
@@ -72,6 +74,12 @@ class AdminController {
     List<IdentityAdminApi.AccountSummary> accounts(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "50") int limit) {
         require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
         return identity.searchAccounts(q, limit);
+    }
+
+    @GetMapping("/accounts/{accountId}")
+    IdentityAdminApi.AccountSummary account(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId) {
+        require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
+        return identity.account(accountId).orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "unknown account"));
     }
 
     @GetMapping("/accounts/{accountId}/devices")
@@ -103,9 +111,12 @@ class AdminController {
     }
 
     @GetMapping("/audit")
-    ResponseEntity<List<AuditLog.Entry>> audit(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "9223372036854775807") long before, @RequestParam(defaultValue = "100") int limit) {
+    ResponseEntity<List<AuditNames.View>> audit(@AuthenticationPrincipal Jwt admin, @RequestParam(defaultValue = "9223372036854775807") long before, @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "") String action,
+            @RequestParam(defaultValue = "") String user, @RequestParam(required = false) java.time.Instant from,
+            @RequestParam(required = false) java.time.Instant to) {
         require(admin, AdminPermissions.Permission.AUDIT_READ);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(audit.page(before, limit));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(names.resolve(audit.search(before, limit, q, action, user, from, to, names.matchingIds(q))));
     }
 
     /** Recomputes the chain; export {@code head} to an independent store to detect later rewrites. */

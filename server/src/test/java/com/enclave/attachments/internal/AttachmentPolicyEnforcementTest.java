@@ -13,7 +13,7 @@ class AttachmentPolicyEnforcementTest {
         var repository = mock(AttachmentRepository.class);
         var objectStore = mock(ObjectStore.class);
         var policy = new AttachmentPolicy(1);
-        var service = new AttachmentService(repository, objectStore, mock(AttachmentsProperties.class), Clock.systemUTC(), policy);
+        var service = new AttachmentService(repository, objectStore, mock(AttachmentsProperties.class), Clock.systemUTC(), policy, mock(org.springframework.context.ApplicationEventPublisher.class));
         assertThatThrownBy(() -> service.createUpload(policy.maxCiphertextBytes() + 1, "https://example.test"))
                 .isInstanceOfSatisfying(EnclaveException.class, e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
         verifyNoInteractions(repository, objectStore);

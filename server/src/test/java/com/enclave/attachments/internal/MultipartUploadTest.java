@@ -25,7 +25,7 @@ class MultipartUploadTest {
     private final ObjectStore store = mock(ObjectStore.class);
     private final AttachmentsProperties properties = new AttachmentsProperties("http://s3", "http://public", "us-east-1", "b", "a", "s",
             true, false, Duration.ofMinutes(15), Duration.ofMinutes(5), Duration.ofDays(30), 8 * MIB, Duration.ofHours(24));
-    private final AttachmentService service = new AttachmentService(repository, store, properties, Clock.fixed(now, ZoneOffset.UTC), new AttachmentPolicy(100));
+    private final AttachmentService service = new AttachmentService(repository, store, properties, Clock.fixed(now, ZoneOffset.UTC), new AttachmentPolicy(100), mock(org.springframework.context.ApplicationEventPublisher.class));
     private final long size = 20 * MIB + 5; // 3 parts: 8, 8, 4 MiB + 5 B
 
     private String start(UUID[] id) {

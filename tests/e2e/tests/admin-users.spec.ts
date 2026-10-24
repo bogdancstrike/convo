@@ -7,10 +7,10 @@ import { ADMIN_URL, adminSignIn, closeAll, confirmReason, createUser, enroll, ne
  * read activity statistics. Every change is audited; nobody can change their own sign-in.
  */
 async function openSignIn(admin: Page, username: string) {
-  await admin.getByTestId('admin-tab-sign-in').click();
-  await admin.getByTestId('idp-search').fill(username);
-  await admin.getByTestId(`idp-user-${username}`).click();
-  return admin.getByTestId('signin-drawer');
+  await admin.getByTestId('admin-tab-users').click();
+  await admin.getByTestId('admin-search').fill(username);
+  await admin.getByTestId(`idp-user-${username}`).getByRole('button').first().click();
+  return admin.getByTestId('user-drawer');
 }
 
 async function messengerSignIn(page: Page, username: string, password: string) {
@@ -29,7 +29,7 @@ test('create a user, temporary password, reset, block and allow sign-in', async 
   try {
     await adminSignIn(admin, adminU);
     const username = `new-${Date.now() % 100000}`;
-    await admin.getByTestId('admin-tab-sign-in').click();
+    await admin.getByTestId('admin-tab-users').click();
     await admin.getByTestId('admin-create-user').click();
     await admin.getByTestId('create-username').fill(username);
     await admin.getByTestId('create-first').fill('Newly');
@@ -40,7 +40,7 @@ test('create a user, temporary password, reset, block and allow sign-in', async 
     const temporary = (await admin.getByTestId('one-time-secret').innerText()).trim();
     expect(temporary.length).toBeGreaterThanOrEqual(20);
     await admin.getByRole('button', { name: 'OK' }).click();
-    const drawer = admin.getByTestId('signin-drawer');
+    const drawer = admin.getByTestId('user-drawer');
     await expect(drawer.getByTestId('signin-required')).toContainText('Change password');
 
     // The new person signs in with the temporary password and must choose their own.
@@ -107,7 +107,7 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
     await adminSignIn(security, securityU);
     await security.getByTestId('admin-tab-users').click();
     await security.getByTestId('admin-search').fill(memberU.username);
-    await security.getByTestId(`admin-account-${memberU.username}`).click();
+    await security.getByTestId(`admin-account-${memberU.username}`).getByRole('button', { name: memberU.name, exact: true }).click();
     const drawer = security.getByTestId('user-drawer');
     await drawer.getByRole('tab', { name: 'Security' }).click();
     await drawer.getByTestId('admin-revoke-recovery').click();
@@ -121,17 +121,18 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
     // The activity statistics count the member's encrypted items (counts only).
     await adminGo(security, 'overview');
     await expect(security.getByTestId('kpi-items')).toBeVisible();
-    await security.getByTestId('admin-tab-activity').click();
+    await security.getByTestId('admin-tab-overview').click();
     await security.getByTestId('activity-search').locator('input').fill(memberU.username);
     await security.locator('.ant-select-item-option').filter({ hasText: memberU.username }).click();
-    const activity = security.getByTestId('user-drawer');
-    await expect(activity.getByTestId('activity-facts')).toContainText('Days used');
-    await expect(activity.getByTestId('activity-facts')).not.toContainText('Days used0 of');
+    const activity = security.getByTestId('person-activity');
+    await expect(activity).toContainText('Days used');
+    await expect(activity).toContainText(memberU.username);
+    await expect(security.getByTestId('kpi-accounts')).toHaveCount(0);
     await adminGo(security, 'activity');
 
     // Security cannot grant roles; the superuser can, but not to themselves.
-    let signIn = await (async () => { await security.getByTestId('admin-tab-sign-in').click(); await security.getByTestId('idp-search').fill(helperU.username);
-      await security.getByTestId(`idp-user-${helperU.username}`).click(); return security.getByTestId('signin-drawer'); })();
+    let signIn = await (async () => { await security.getByTestId('admin-tab-users').click(); await security.getByTestId('admin-search').fill(helperU.username);
+      await security.getByTestId(`idp-user-${helperU.username}`).getByRole('button').first().click(); return security.getByTestId('user-drawer'); })();
     await signIn.getByRole('tab', { name: 'Roles' }).click();
     await expect(signIn.getByTestId('role-convo-helpdesk')).toHaveCount(0);
     await adminSignIn(root, superU);
@@ -142,6 +143,8 @@ test('revoke a lost recovery kit; roles need the superuser; no admin changes the
     await expect(signIn.getByText('Helpdesk').first()).toBeVisible();
     // The roles page lists the new holder and draws the permission map.
     await adminGo(root, 'roles');
+    await root.getByRole('button', { name: /Helpdesk.*permissions/ }).click();
+    await root.getByPlaceholder('Search name or username').fill(helperU.username);
     await expect(root.getByTestId('role-card-convo-helpdesk')).toContainText(helperU.username);
     await root.getByRole('tab', { name: 'Permission map' }).click();
     await expect(root.getByTestId('permission-map').locator('.react-flow__node')).not.toHaveCount(0);

@@ -28,7 +28,7 @@ test('the console needs an admin role; disable/enable takes effect and is audite
     const row = admin.getByTestId(`admin-account-${memberU.username}`);
     await expect(row.getByTestId('admin-status')).toHaveText('active');
     await expect(row.getByTestId('admin-devices')).toHaveText('1');
-    await row.click();
+    await row.getByRole('button', { name: memberU.name, exact: true }).click();
     const drawer = admin.getByTestId('user-drawer');
     await drawer.getByRole('tab', { name: 'Security' }).click();
     await drawer.getByTestId('admin-toggle-status').click();

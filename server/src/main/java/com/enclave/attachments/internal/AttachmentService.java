@@ -28,13 +28,15 @@ class AttachmentService {
     private final AttachmentsProperties properties;
     private final Clock clock;
     private final AttachmentPolicy policy;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
-    AttachmentService(AttachmentRepository attachments, ObjectStore store, AttachmentsProperties properties, Clock clock, AttachmentPolicy policy) {
+    AttachmentService(AttachmentRepository attachments, ObjectStore store, AttachmentsProperties properties, Clock clock, AttachmentPolicy policy, org.springframework.context.ApplicationEventPublisher events) {
         this.attachments = attachments;
         this.store = store;
         this.properties = properties;
         this.clock = clock;
         this.policy = policy;
+        this.events = events;
     }
 
     /**
@@ -51,7 +53,9 @@ class AttachmentService {
         String key = "a/" + id;
         Instant now = clock.instant();
         attachments.insert(id, key, size, now.plus(properties.retention()));
-        return new UploadForm(id, store.presignUpload(key, size, properties.uploadUrlTtl(), endpoint), now.plus(properties.uploadUrlTtl()));
+        var form = new UploadForm(id, store.presignUpload(key, size, properties.uploadUrlTtl(), endpoint), now.plus(properties.uploadUrlTtl()));
+        events.publishEvent(new com.enclave.contracts.HandledOperation(com.enclave.contracts.HandledOperation.Kind.UPLOAD_STARTED));
+        return form;
     }
 
     /** Size and part count of a multipart upload (all parts {@code partSize} except the last). */
@@ -76,6 +80,7 @@ class AttachmentService {
         Instant now = clock.instant();
         Instant deadline = now.plus(properties.multipartTtl());
         attachments.insertMultipart(id, key, size, now.plus(properties.retention()), store.createMultipart(key), sha256(secret), deadline);
+        events.publishEvent(new com.enclave.contracts.HandledOperation(com.enclave.contracts.HandledOperation.Kind.UPLOAD_STARTED));
         return new MultipartForm(id, Base64.getUrlEncoder().withoutPadding().encodeToString(secret), properties.partSize(), partCount(size, properties.partSize()), deadline);
     }
 
