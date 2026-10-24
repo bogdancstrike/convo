@@ -29,7 +29,7 @@ export interface Overview {
 export type Level = 'high' | 'medium' | 'low' | 'none';
 export interface UserActivity { account: AccountSummary; items: number; activeDays: number; lastActiveDay: string | null; level: Level }
 export interface AccountDay { day: string; items: number; opened: boolean; web: boolean; android: boolean }
-export interface AccountActivity { summary: UserActivity; days: AccountDay[]; window: number }
+export interface AccountActivity { summary: UserActivity; days: AccountDay[]; window: number; from?: string; to?: string }
 export interface IdpUser {
   id: string; username: string; firstName: string | null; lastName: string | null; email: string | null; phone: string | null; enabled: boolean;
   createdAt: string | null; requiredActions: string[]; credentialTypes: string[]; roles: string[]; sessions: number; lastAccess: string | null;
@@ -38,7 +38,8 @@ export interface SignInAccount { user: IdpUser; convoAccountId: string | null }
 export interface RoleHolder { id: string; username: string; firstName: string | null; lastName: string | null; phone: string | null; enabled: boolean }
 export interface RoleView { role: string; permissions: Permission[]; holders: RoleHolder[] }
 export interface Levels { high: number; medium: number; low: number; none: number; window: number }
-export interface Throughput { minutes: { minute: string; items: number; calls: number; uploads: number }[]; recordingSince: string; capturedAt: string; enabled: boolean }
+export interface DateRange { from: string; to: string }
+export interface Throughput { bucketMinutes?: number; from?: string; to?: string; minutes: { minute: string; items: number; calls: number; uploads: number }[]; recordingSince: string; capturedAt: string; enabled: boolean }
 export interface TableQuery { q: string; sort: string; order: 'asc' | 'desc'; page: number; size: number; filters: Record<string, string> }
 export interface TablePage<T> { rows: T[]; total: number; page: number; size: number; warnings: string[] }
 export type ComponentStatus = 'UP' | 'DOWN' | 'DEGRADED' | 'DISABLED' | 'UNKNOWN';
@@ -71,16 +72,17 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 const q = encodeURIComponent;
+const dateQuery = (range?: DateRange) => range ? `&from=${q(range.from)}&to=${q(range.to)}` : '';
 export const api = {
   table: <T,>(resource: string, scope: Record<string, string>, query: TableQuery) => {
     const params = new URLSearchParams({ ...scope, q: query.q, sort: query.sort, order: query.order, page: String(query.page), size: String(query.size), ...Object.fromEntries(Object.entries(query.filters).map(([k, v]) => [`f_${k}`, v])) });
     return call<TablePage<T>>('GET', `/tables/${q(resource)}?${params}`);
   },
   me: () => call<Me>('GET', '/me'),
-  throughput: (minutes: number) => call<Throughput>('GET', `/stats/throughput?minutes=${minutes}`),
-  overview: (days: number) => call<Overview>('GET', `/stats/overview?days=${days}`),
+  throughput: (minutes: number, range?: DateRange) => call<Throughput>('GET', `/stats/throughput?minutes=${minutes}${dateQuery(range)}`),
+  overview: (days: number, range?: DateRange) => call<Overview>('GET', `/stats/overview?days=${days}${dateQuery(range)}`),
   usersByActivity: (order: 'active' | 'inactive', days: number, limit = 10) => call<UserActivity[]>('GET', `/stats/users?order=${order}&days=${days}&limit=${limit}`),
-  accountActivity: (id: string, days: number) => call<AccountActivity>('GET', `/accounts/${id}/activity?days=${days}`),
+  accountActivity: (id: string, days: number, range?: DateRange) => call<AccountActivity>('GET', `/accounts/${id}/activity?days=${days}${dateQuery(range)}`),
   accounts: (search: string) => call<AccountSummary[]>('GET', `/accounts?q=${q(search)}&limit=200`),
   account: (id: string) => call<AccountSummary>('GET', `/accounts/${q(id)}`),
   devices: (id: string) => call<DeviceSummary[]>('GET', `/accounts/${id}/devices`),
@@ -98,7 +100,7 @@ export const api = {
   setSignInEnabled: (id: string, enabled: boolean, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/enabled`, { enabled, reason }),
   setRole: (id: string, role: string, granted: boolean, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/roles`, { role, granted, reason }),
   roles: () => call<RoleView[]>('GET', '/roles'),
-  levels: (days: number) => call<Levels>('GET', `/stats/levels?days=${days}`),
+  levels: (days: number, range?: DateRange) => call<Levels>('GET', `/stats/levels?days=${days}${dateQuery(range)}`),
   audit: (filters: AuditFilters = {}) => call<AuditEntry[]>('GET', `/audit?limit=100&${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]))}`),
   auditSources: () => call<AuditSource>('GET', '/audit/sources'),
   verify: () => call<AuditVerification>('GET', '/audit/verify'),

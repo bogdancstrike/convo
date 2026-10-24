@@ -5,16 +5,17 @@ import type { ColumnType } from 'antd/es/table';
 import { api, errorText, type TablePage, type TableQuery } from '../api';
 import { parseTableState } from './tableState';
 import { useViewState } from './useViewState';
+import { TABLE_COMPONENTS, useTableColumns } from './TableColumns';
 
 interface Props<T extends object> {
   id: string; resource: string; columns: ColumnType<T>[]; rowKey: TableProps<T>['rowKey']; scope?: Record<string, string>;
   defaultSort?: string; defaultOrder?: 'asc' | 'desc'; defaultSize?: number; searchId?: string; searchPlaceholder?: string;
   refreshKey?: unknown; controls?: ReactNode; onRow?: TableProps<T>['onRow']; testId?: string;
-  minWidth?: number; displayVersion?: number;
+  displayVersion?: number;
 }
 
 /** All source-backed admin tables share backend paging, column queries and persistent display settings. */
-export function AdminTable<T extends object>({ id, resource, columns, rowKey, scope = {}, defaultSort = '', defaultOrder = 'asc', defaultSize = 20, searchId, searchPlaceholder = 'Search this table', refreshKey, controls, onRow, testId, minWidth, displayVersion = 1 }: Props<T>) {
+export function AdminTable<T extends object>({ id, resource, columns, rowKey, scope = {}, defaultSort = '', defaultOrder = 'asc', defaultSize = 20, searchId, searchPlaceholder = 'Search this table', refreshKey, controls, onRow, testId, displayVersion = 1 }: Props<T>) {
   const stateKey = `table_${id}`;
   const { view, update } = useViewState({ [stateKey]: '' });
   const query = useMemo<TableQuery>(() => {
@@ -54,18 +55,20 @@ export function AdminTable<T extends object>({ id, resource, columns, rowKey, sc
       </div>,
     };
   });
-  return <div className="remote-table" data-testid={testId}>
+  const sizing = useTableColumns(id, configured);
+  return <div className="remote-table" ref={sizing.container} data-testid={testId}>
     <div className="table-controls">{controls}<Input.Search allowClear value={query.q} onChange={(e) => setQuery({ q: e.target.value, page: 1 }, true)} placeholder={searchPlaceholder} data-testid={searchId} aria-label={searchPlaceholder} />
       <div className="table-tools"><Typography.Text type="secondary">{data?.total ?? '…'} results</Typography.Text><Button type="text" icon={<ReloadOutlined />} aria-label="Refresh table" loading={busy} onClick={() => setVersion((v) => v + 1)} />
         <Popover trigger="click" placement="bottomRight" title="Table settings" content={<Space direction="vertical" size="middle" style={{ width: 260 }}>
           <Typography.Text type="secondary">Visible columns</Typography.Text><Checkbox.Group value={visible} onChange={(values) => { if (values.length) setVisible(values as string[]); }} options={columns.map((c) => ({ value: String(c.key ?? c.dataIndex), label: typeof c.title === 'string' ? c.title : String(c.key) }))} className="column-options" />
           <Typography.Text type="secondary">Row density</Typography.Text><Segmented value={density} onChange={(v) => setDensity(v as typeof density)} options={[{ value: 'small', label: 'Compact' }, { value: 'middle', label: 'Default' }, { value: 'large', label: 'Roomy' }]} />
-          <Button onClick={() => { setVisible(keys); setDensity('middle'); }}>Reset display settings</Button>
+          <Button onClick={sizing.resetWidths}>Reset equal column widths</Button>
+          <Button onClick={() => { setVisible(keys); setDensity('middle'); sizing.resetWidths(); }}>Reset display settings</Button>
         </Space>}><Button icon={<SettingOutlined />} aria-label="Table settings" data-testid={`table-settings-${id}`} /></Popover>
       </div>
     </div>
     {error && <Alert type="error" showIcon message={error} />}{data?.warnings.map((warning) => <Alert key={warning} type="warning" showIcon message={warning} />)}
-    <Table<T> rowKey={rowKey} columns={configured} dataSource={data?.rows ?? []} loading={busy} size={density} scroll={{ x: minWidth ?? 'max-content', y: 1 }} tableLayout={minWidth ? 'fixed' : undefined} onRow={onRow}
+    <Table<T> rowKey={rowKey} columns={sizing.columns} components={TABLE_COMPONENTS} dataSource={data?.rows ?? []} loading={busy} size={density} scroll={{ x: sizing.tableWidth, y: 1 }} tableLayout="fixed" onRow={onRow}
       pagination={{ current: data?.page ?? query.page, pageSize: query.size, total: data?.total ?? 0, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], showTotal: (total, range) => `${range[0]}–${range[1]} of ${total}`, hideOnSinglePage: false }}
       onChange={(pagination, filters, sorter, extra) => {
         const sort = Array.isArray(sorter) ? sorter[0] : sorter;

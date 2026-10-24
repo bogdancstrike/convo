@@ -16,11 +16,13 @@
 - [x] Run backend/admin tests, redeploy and commit/push the retention change.
 
 ### Task 2: Explicit overview ranges
-- [ ] Add a shared inclusive UTC date-range validator: 1d, 7d, 30d and custom start/end, with explicit invalid/reversed/future range errors.
-- [ ] Apply from/to to aggregate series, activity levels, user activity and backend rankings; exclude data outside both bounds. Include actual range metadata for zero-filled client plots.
-- [ ] Extend throughput to from/to with bounded bucket aggregation and per-minute rates; preserve the existing minutes query for API compatibility.
-- [ ] Move the overview date controls from the page heading into the scope card, right aligned beside its period label; use a custom date picker and URL-backed range history.
-- [ ] Verify range boundaries, single-day and old historical data, throughput bucket math, user scope, browser Back, and mobile layout.
-- [ ] Run tests/build, redeploy, update docs and commit/push the completed range milestone.
+- [x] Add a shared inclusive UTC date-range validator: 1d, 7d, 30d and custom start/end, with explicit invalid/reversed/future range errors.
+- [x] Apply from/to to aggregate series, activity levels, user activity and backend rankings; exclude data outside both bounds. Include actual range metadata for zero-filled client plots.
+- [x] Extend throughput to from/to with bounded bucket aggregation and per-minute rates; preserve the existing minutes query for API compatibility.
+- [x] Move the overview date controls from the page heading into the scope card, right aligned beside its period label; use a custom date picker and URL-backed range history.
+- [x] Verify range boundaries, single-day and old historical data, throughput bucket math, user scope, browser Back, and mobile layout.
+- [x] Run tests/build, redeploy, update docs and commit/push the completed range milestone.
 
 Backend validation: 96 JUnit tests and module-boundary checks pass. The application and realm retention changes are deployed. Range and resize browser checks pass in Chromium and Firefox; broader admin regressions are running.
+
+Completed validation: inclusive historical and single-day ranges, custom picker entry, browser Back, scope-card placement and mobile layout pass in Chromium/Firefox. Management and chart-data tables both support equal initial columns, pointer/keyboard resizing, saved widths and reset. Production chart alignment is being validated in the deployment-configs-homelab repository, using the CI-published immutable revision.

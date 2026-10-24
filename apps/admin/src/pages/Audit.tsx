@@ -61,7 +61,7 @@ export function AuditPage({ can }: PageProps) {
           : verification.checkpointMismatchSeq ? `Database disagrees with the independent checkpoint at entry ${verification.checkpointMismatchSeq}` : `Chain broken at entry ${verification.firstBrokenSeq}`}
         description={<Typography.Text code copyable style={{ fontSize: 12 }}>{verification.head}</Typography.Text>} />}
       <Card className="table-surface">
-        <AdminTable<AuditEntry> id="audit" resource="audit" minWidth={1180} rowKey="seq" defaultSort="seq" defaultOrder="desc" defaultSize={50} refreshKey={version} searchId="audit-search" searchPlaceholder="Search actor, action, target or reason"
+        <AdminTable<AuditEntry> id="audit" resource="audit" rowKey="seq" defaultSort="seq" defaultOrder="desc" defaultSize={50} refreshKey={version} searchId="audit-search" searchPlaceholder="Search actor, action, target or reason"
           scope={{ action: kind === 'all' ? '' : kind, user, from: view.from, to: view.to }} controls={<Popover trigger="click" title="Audit filters" placement="bottomLeft" content={<Space style={{ marginBottom: 12 }} wrap>
           <Select aria-label="Audit action category" value={kind} onChange={(category) => update({ category, before: '', page: '1' })} style={{ width: 180 }} options={[{ value: 'all', label: 'All actions' }, { value: 'denied', label: 'Refused attempts' }, ...Object.keys(COLORS).map((k) => ({ value: k, label: k === 'auth' ? 'Sign-in & sessions' : k === 'passkey' ? 'Passkeys' : k.charAt(0).toUpperCase() + k.slice(1) }))]} />
           {can('ACCOUNTS_READ') && <AutoComplete allowClear aria-label="Filter audit by user" placeholder="Filter by user" value={userQuery} options={userOptions} style={{ width: 230 }}

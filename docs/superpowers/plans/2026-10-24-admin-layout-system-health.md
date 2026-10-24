@@ -24,7 +24,9 @@
 ### Task 3: Health UI and deployment
 - [x] Update `api.ts` and `Health.tsx`: overall health, component groups, status/latency/check times, search/status filters and details; retain push KPIs and audited retry controls in a separate tab.
 - [x] Auto-refresh safely, display stale/unreachable snapshots and independent request failures, and keep scrolling inside the active panel.
-- [ ] Add browser coverage for component coverage and degraded/disabled states; verify helpdesk access and refusal for roles without HEALTH_READ.
-- [ ] Build/test backend and admin, redeploy Compose, verify real probes and screenshots, update operational docs, commit and push.
+- [x] Add browser coverage for component coverage and degraded/disabled states; verify helpdesk access and refusal for roles without HEALTH_READ.
+- [x] Build/test backend and admin, redeploy Compose, verify real probes and screenshots, update operational docs, commit and push.
 
 Layout validation: 23 unit tests and eight browser scenarios passed across Chromium and Firefox, including the reproduced People width failure. Throughput counts real accepted operations in the overview row.
+
+Completed validation: 96 backend tests, 23 admin unit tests and 31 applicable Chromium/Firefox admin browser scenarios pass across the full run and the corrected throughput-label assertion. The Firefox-only passkey limitation remains a deliberate skip. Health checks, larger balanced cards, table resizing and current Docker Compose deployment are verified.

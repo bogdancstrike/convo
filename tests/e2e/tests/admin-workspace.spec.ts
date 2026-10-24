@@ -42,7 +42,7 @@ test('merged workspace, scoped activity, role explorer and renewable sessions', 
     await expect(admin).toHaveURL(new RegExp(`#/overview/${account}(?:\\?.*)?$`));
     await expect(admin.getByTestId('person-activity')).toContainText(memberU.username);
     await expect(admin.getByTestId('kpi-accounts')).toHaveCount(0);
-    await admin.getByTestId('overview-window').getByText('7 days').click();
+    await admin.getByTestId('overview-window').getByText('7d', { exact: true }).click();
     await expect(admin.getByTestId('person-activity')).toContainText('/ 7');
     await admin.getByRole('button', { name: 'All users', exact: true }).click();
     await expect(admin.getByTestId('kpi-accounts')).toBeVisible();
@@ -264,7 +264,7 @@ test('system throughput reports accepted operations per minute', async ({ browse
     expect(bounds!.x).toBeLessThan(calls!.x);
     await throughput.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'test-results/admin-throughput-overview.png', fullPage: true });
-    await expect(page.getByTestId('system-throughput')).toContainText('operations');
+    await expect(page.getByTestId('system-throughput')).toContainText(/operations/i);
     const times = initial.minutes.map((m: { minute: string }) => Date.parse(m.minute));
     expect(times.slice(1).every((t: number, i: number) => t - times[i] === 60_000)).toBe(true);
   } finally { await closeAll(page, person, peer); }
@@ -374,6 +374,11 @@ test('data charts and diagrams can switch to inspectable tables and back', async
     const values = page.getByLabel('Encrypted items and active people per day', { exact: true });
     await expect(values.getByRole('columnheader', { name: /Encrypted items/ })).toBeVisible();
     await expect(values.getByRole('columnheader', { name: /Active people/ })).toBeVisible();
+    const resize = values.getByRole('separator').first();
+    const originalWidth = await resize.evaluate((e) => e.closest('th')!.getBoundingClientRect().width);
+    await resize.press('ArrowRight');
+    await expect.poll(async () => await resize.evaluate((e) => e.closest('th')!.getBoundingClientRect().width) - originalWidth).toBeGreaterThan(7);
+
     await page.goBack(); await expect(page.getByRole('img', { name: 'Encrypted items and active people per day', exact: true })).toBeVisible();
     await adminGo(page, 'roles?tab=organization');
     const graph = page.getByTestId('role-organigram');

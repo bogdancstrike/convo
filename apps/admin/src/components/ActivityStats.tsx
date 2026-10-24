@@ -48,8 +48,8 @@ export function ActivityStats({ days, levels, overview }: { days: number; levels
           {overview ? <Chart label="People using Convo per day, split into senders and readers" height={260} option={{
             xAxis: { type: 'category', data: overview.days.map((d) => shortDay(d.day)), boundaryGap: false }, yAxis: { type: 'value', minInterval: 1 },
             series: [
-              { name: 'Sent something', type: 'line', stack: 'people', smooth: true, showSymbol: false, areaStyle: { opacity: 0.35 }, data: overview.days.map((d) => d.senders) },
-              { name: 'Only opened', type: 'line', stack: 'people', smooth: true, showSymbol: false, areaStyle: { opacity: 0.2 }, data: overview.days.map((d) => Math.max(0, d.activeAccounts - d.senders)) },
+              { name: 'Sent something', type: 'line', stack: 'people', smooth: true, showSymbol: overview.days.length === 1, areaStyle: { opacity: 0.35 }, data: overview.days.map((d) => d.senders) },
+              { name: 'Only opened', type: 'line', stack: 'people', smooth: true, showSymbol: overview.days.length === 1, areaStyle: { opacity: 0.2 }, data: overview.days.map((d) => Math.max(0, d.activeAccounts - d.senders)) },
             ],
           }} /> : <Skeleton active />}
         </ChartCard>
