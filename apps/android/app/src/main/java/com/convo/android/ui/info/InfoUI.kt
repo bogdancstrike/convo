@@ -59,7 +59,7 @@ import org.json.JSONObject
     LazyColumn(Modifier.fillMaxSize().background(colors.canvas), contentPadding = PaddingValues(bottom = 24.dp)) {
         // Hero (WhatsApp/web info drawer): photo, name, how to reach them, quick actions.
         item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            PersonAvatar(app, id, c.optString("title"), 120, isGroup)
+            PersonAvatar(app, id, c.optString("title"), 120, isGroup, viewable = true)
             Text(if (c.optString("kind") == "note") "Note to self" else c.optString("title"), Modifier.padding(top = 14.dp), fontSize = 24.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             if (isGroup) RawText((if (c.optBoolean("adminOnly")) tr("Channel") else tr("Group")) + " · " + tr("{count} members").replace("{count}", "${members.size}"), Modifier.padding(top = 4.dp), color = colors.textSecondary, fontSize = 15.sp)
             else if (c.optString("kind") == "direct") HeroContact(app, id)
@@ -180,7 +180,7 @@ import org.json.JSONObject
     val colors = LocalConvoColors.current
     LazyColumn(Modifier.fillMaxSize().background(colors.canvas), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            PersonAvatar(app, id, account?.label() ?: "…", 120)
+            PersonAvatar(app, id, account?.label() ?: "…", 120, viewable = true)
             RawText(account?.label() ?: "…", Modifier.padding(top = 14.dp), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
             LastSeenLabel(app, id)
             Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

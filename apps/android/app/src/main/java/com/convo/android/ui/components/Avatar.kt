@@ -41,6 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -49,17 +53,43 @@ import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Composable fun PersonAvatar(app: MainActivity, id: String, name: String, size: Int = 44, group: Boolean = false) {
+/**
+ * Round avatar: the person's photo, otherwise initials on a stable color (groups show an icon).
+ * With [viewable], tapping a photo opens it full screen (WhatsApp info pages).
+ */
+@Composable fun PersonAvatar(app: MainActivity, id: String, name: String, size: Int = 44, group: Boolean = false, viewable: Boolean = false) {
     val photo = app.snapshot.optJSONObject("profiles")?.optJSONObject(id)?.optString("photo")?.takeIf { it.startsWith("data:image/jpeg;base64,") }
     val bitmap = remember(photo) { try { photo?.substringAfter(',')?.let { android.util.Base64.decode(it, 0) }?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } } catch (_: Exception) { null } }
     val avatarColor = AvatarColors[kotlin.math.abs(id.hashCode().toLong()).rem(AvatarColors.size).toInt()]
     val words = name.removePrefix("@").trim().split(Regex("\\s+")).filter { it.isNotBlank() }
     val initials = if (words.size > 1) "${words.first().first()}${words.last().first()}" else words.firstOrNull()?.take(1) ?: "?"
-    Box(Modifier.size(size.dp).clip(CircleShape).background(avatarColor), contentAlignment = Alignment.Center) {
-        if (bitmap != null && !group) Image(bitmap, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+    var viewing by remember { mutableStateOf(false) }
+    val open = viewable && bitmap != null && !group
+    Box(Modifier.size(size.dp).clip(CircleShape).background(avatarColor).then(if (open) Modifier.clickable(onClickLabel = tr("View profile photo")) { viewing = true } else Modifier), contentAlignment = Alignment.Center) {
+        if (bitmap != null && !group) Image(bitmap, if (open) tr("Profile photo") else null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
         else if (group) Icon(Icons.Outlined.Group, null, Modifier.size((size * 0.55).dp), tint = Color.White) else RawText(initials.uppercase(), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = (size * 0.36).sp)
     }
+    if (viewing && bitmap != null) ProfilePhotoViewer(name, bitmap) { viewing = false }
 }
+
+/** WhatsApp's profile photo view: black full screen, back arrow and name on top, pinch to zoom. */
+@Composable fun ProfilePhotoViewer(name: String, photo: androidx.compose.ui.graphics.ImageBitmap, onClose: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onClose, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        Box(Modifier.fillMaxSize().background(Color.Black)
+            .pointerInput(Unit) { detectTransformGestures { _, pan, zoom, _ -> scale = (scale * zoom).coerceIn(1f, 5f); offset = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else offset + pan } }
+            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { scale = if (scale > 1f) 1f else 2.5f; offset = androidx.compose.ui.geometry.Offset.Zero }) }) {
+            Image(photo, tr("Profile photo"), Modifier.fillMaxWidth().align(Alignment.Center)
+                .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y), contentScale = androidx.compose.ui.layout.ContentScale.FillWidth)
+            Row(Modifier.fillMaxWidth().background(Color(0x99000000)).statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, tr("Back"), tint = Color.White) }
+                RawText(name, Modifier.padding(start = 8.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            }
+        }
+    }
+}
+
 @Composable fun ActionRow(label: String, hint: String? = null, icon: ImageVector = Icons.Outlined.ChevronRight, danger: Boolean = false, onClick: () -> Unit) {
     val colors = LocalConvoColors.current
     // WhatsApp settings row: grey icon column, 16 sp label, optional secondary line.
