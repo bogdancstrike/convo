@@ -16,14 +16,14 @@
 - [x] Build/redeploy admin; commit and push the verified layout milestone.
 
 ### Task 2: Component health backend
-- [ ] Add `SystemHealthProperties`, `SystemHealth`, `SystemHealthController` in `admin/internal`: HEALTH_READ authorization, server-selected probe targets only, 10-second cache, bounded parallel checks, safe failure messages and latency/timestamps.
-- [ ] Check backend readiness, PostgreSQL, Valkey, identity provider, S3 bucket, calls signalling, notification distributor, TURN, web/admin frontends and optional operations UI; include identity audit freshness. Disabled/unconfigured integrations must never appear healthy.
-- [ ] Add internal frontend health listeners and Compose probe addresses, including the TURN service address; do not expose Docker sockets or credentials.
-- [ ] Add JUnit coverage for failure isolation, timeouts, aggregation, caching, disabled/unconfigured states, HTTP status/body validation and TURN response validation. Run backend tests and module boundaries.
+- [x] Add `SystemHealthProperties`, `SystemHealth`, `SystemHealthController` in `admin/internal`: HEALTH_READ authorization, server-selected probe targets only, 10-second cache, bounded parallel checks, safe failure messages and latency/timestamps.
+- [x] Check backend readiness, PostgreSQL, Valkey, identity provider, S3 bucket, calls signalling, notification distributor, TURN, web/admin frontends and optional operations UI; include identity audit freshness. Disabled/unconfigured integrations must never appear healthy.
+- [x] Add internal frontend health listeners and Compose probe addresses, including the TURN service address; do not expose Docker sockets or credentials.
+- [x] Add JUnit coverage for failure isolation, timeouts, aggregation, caching, disabled/unconfigured states, HTTP status/body validation and TURN response validation. Run backend tests and module boundaries.
 
 ### Task 3: Health UI and deployment
-- [ ] Update `api.ts` and `Health.tsx`: overall health, component groups, status/latency/check times, search/status filters and details; retain push KPIs and audited retry controls in a separate tab.
-- [ ] Auto-refresh safely, display stale/unreachable snapshots and independent request failures, and keep scrolling inside the active panel.
+- [x] Update `api.ts` and `Health.tsx`: overall health, component groups, status/latency/check times, search/status filters and details; retain push KPIs and audited retry controls in a separate tab.
+- [x] Auto-refresh safely, display stale/unreachable snapshots and independent request failures, and keep scrolling inside the active panel.
 - [ ] Add browser coverage for component coverage and degraded/disabled states; verify helpdesk access and refusal for roles without HEALTH_READ.
 - [ ] Build/test backend and admin, redeploy Compose, verify real probes and screenshots, update operational docs, commit and push.
 

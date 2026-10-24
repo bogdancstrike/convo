@@ -94,3 +94,46 @@ hours. Upload sessions count starts, not successful object-storage completion; a
 may contribute both one upload session and encrypted submissions. Minutes before recording began
 are shown as missing observations, not invented history. The current minute is partial. This
 telemetry respects `enclave.admin.activity.enabled` and does not reveal text/media/voice types.
+
+## System health
+
+`GET /v1/admin/health/system` requires `HEALTH_READ`. It returns a cached snapshot containing
+component status, check scope, sanitized result, elapsed milliseconds and check time. The existing
+`GET /v1/admin/health` remains the independent push-delivery diagnostic endpoint.
+
+The snapshot checks application readiness, a PostgreSQL connection/query, Valkey PING, Keycloak
+realm signing keys, identity-audit importer freshness, authenticated attachment-bucket access,
+LiveKit signalling readiness, ntfy's health response, local browser-push configuration, a TURN/STUN
+UDP binding exchange, both frontend documents, and the optional database console. Checks run in
+parallel with a total budget; one timeout does not discard other components' results. Required
+failures make overall health unavailable; supporting-service failures and missing required checks
+make it degraded. Disabled and unverified integrations are displayed explicitly.
+
+`enclave.admin.health.timeout` defaults to `2s` (positive, at most `10s`);
+`enclave.admin.health.cache-ttl` defaults to `10s` (between `1s` and `5m`). Requests cannot override
+probe targets or bypass the shared cache. Component results never include configured addresses,
+credentials, exception messages or remote error bodies.
+
+Compose configures these internal targets through the corresponding `ENCLAVE_ADMIN_HEALTH_*`
+variables:
+
+- `WEB_URL`: `http://web:8081/healthz`
+- `ADMIN_URL`: `http://admin:8081/healthz`
+- `OPERATIONS_URL`: `http://pgadmin:80/misc/ping`
+- `TURN_HOST`: `coturn`, with `TURN_PORT` defaulting to `3478`
+
+The frontend nginx templates expose only the static frontend document on their internal health
+listener at port 8081; Compose does not publish that port. Other deployments should set equivalent
+trusted internal targets. Missing targets are unverified, never assumed healthy. The other probes
+use the server's effective database, Redis, identity, attachment, calling and push configuration.
+
+These checks are intentionally read-only: object-storage writes, TURN relay allocation, external
+media routes and delivery through third-party browser push providers are not exercised. The UI
+shows these scopes in the component details. Browser push with configured VAPID credentials is
+unverified for delivery; disabled browser push is displayed as disabled. Database console is an
+optional operations tool. Identity setup is a one-shot deployment job, not a continuously running
+service; subsequent realm access and synchronization are checked through identity and audit probes.
+
+The admin Health page refreshes every 30 seconds. It preserves the last snapshot on a refresh
+failure and warns when results exceed 90 seconds. Search/status filters, details and tabs live in
+the URL for Back/Forward. Push diagnostics load independently, and retain audited retry controls.

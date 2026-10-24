@@ -132,6 +132,10 @@ services:
       ENCLAVE_ADMIN_IDP_ADMIN_URL: http://keycloak:8080/auth
       ENCLAVE_ADMIN_IDP_CLIENT_SECRET: ${CONVO_ADMIN_OPS_SECRET:-}
       ENCLAVE_ADMIN_CHECKPOINT_FILE: /var/lib/convo/audit/checkpoints.log
+      ENCLAVE_ADMIN_HEALTH_WEB_URL: http://web:8081/healthz
+      ENCLAVE_ADMIN_HEALTH_ADMIN_URL: http://admin:8081/healthz
+      ENCLAVE_ADMIN_HEALTH_OPERATIONS_URL: http://pgadmin:80/misc/ping
+      ENCLAVE_ADMIN_HEALTH_TURN_HOST: coturn
       ENCLAVE_PUSH_ENABLED: "true"
       ENCLAVE_PUSH_ALLOWED_ORIGINS: http://${CONVO_HOSTNAME:-convo.doncik.ro}:${CONVO_NTFY_PORT:-8091}
       ENCLAVE_PUSH_INTERNAL_ORIGIN: http://ntfy:80

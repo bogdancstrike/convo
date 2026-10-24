@@ -148,3 +148,12 @@ server {
     location = /logo.svg { }
     location / { try_files /https-required.html =404; }
 }
+
+# Internal, read-only health document. This port is not published on the host.
+server {
+    listen 8081;
+    server_tokens off;
+    root /usr/share/nginx/html;
+    location = /healthz { access_log off; try_files /index.html =503; }
+    location / { return 404; }
+}
