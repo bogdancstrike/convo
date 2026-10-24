@@ -167,7 +167,7 @@ function OrganizationOverview({ days, data, throughput }: { days: number; data: 
 }
 
 function NewPeople({ data }: { data: Overview }) {
-  return <ChartCard title="New people" description="First sign-in per day" data-testid="new-people-chart"><Chart label="New accounts per day" height={190} option={{
+  return <ChartCard title="New people" description="First sign-in per day" data-testid="new-people-chart"><Chart label="New accounts per day" height={320} option={{
     xAxis: { type: 'category', data: data.days.map((d) => shortDay(d.day)) }, yAxis: { type: 'value', minInterval: 1 },
     series: [{ name: 'New people', type: 'bar', barMaxWidth: 18, itemStyle: { borderRadius: [4, 4, 0, 0], color: SERIES[2] }, data: data.days.map((d) => d.newAccounts) }],
   }} /></ChartCard>;

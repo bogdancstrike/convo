@@ -36,8 +36,8 @@ export function UsersPage({ can, navigate, param }: PageProps) {
           controls={<Select aria-label="Filter users" value={view.status} onChange={(status) => update({ status })} options={[{ value: 'all', label: 'Everyone' }, { value: 'joined', label: 'Joined Convo' }, { value: 'pending', label: 'Not joined yet' }, { value: 'blocked', label: 'Access restricted' }]} style={{ width: 170 }} />}
           onRow={(p) => ({ onClick: () => open(p), 'data-testid': p.account ? `admin-account-${p.username}` : `idp-user-${p.username}` } as never)}
           columns={[
-            { title: 'Person', key: 'person', render: (_, p) => <Space><Avatar>{p.name.slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}>
-              <Button type="link" className="person-link" onClick={(e) => { e.stopPropagation(); open(p); }}>{p.name}</Button><Typography.Text type="secondary">@{p.username}</Typography.Text></Space></Space> },
+            { title: 'Person', key: 'person', render: (_, p) => <div className="table-person-cell"><Avatar>{p.name.slice(0, 1).toUpperCase()}</Avatar><div>
+              <Button type="link" className="person-link" title={p.name} onClick={(e) => { e.stopPropagation(); open(p); }}>{p.name}</Button><Typography.Text type="secondary" title={`@${p.username}`}>@{p.username}</Typography.Text></div></div> },
             { title: 'Convo', key: 'convo', render: (_, p) => p.account ? <Tag color={p.account.status === 'active' ? 'green' : 'red'} data-testid="admin-status">{p.account.status}</Tag> : <Tag>{p.identity?.convoAccountId ? 'Joined' : 'Not joined yet'}</Tag> },
             { title: 'Sign-in access', key: 'signin', render: (_, p) => p.identity ? <Space direction="vertical" size={2}><Tag color={p.identity.user.enabled ? 'blue' : 'red'}>{p.identity.user.enabled ? 'Allowed' : 'Blocked'}</Tag>
 

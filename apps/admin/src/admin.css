@@ -205,7 +205,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 .table-controls > .ant-input-search { width: 300px; max-width: 100%; flex: 1 1 220px; }
 .table-tools { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
 .column-options { display: flex; flex-direction: column; gap: 8px; }
-.remote-table .ant-table-wrapper { flex: 1; min-width: 0; max-width: 100%; min-height: 0; }
+.remote-table .ant-table-wrapper { display: flex; flex-direction: column; flex: 1; min-width: 0; max-width: 100%; min-height: 0; }
 .remote-table .ant-spin-nested-loading, .remote-table .ant-spin-container { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .remote-table .ant-table { flex: 1; min-height: 0; }
 .remote-table .ant-table-container { height: 100%; display: flex; flex-direction: column; }
@@ -214,13 +214,13 @@ html, body, #root { height: 100%; overflow: hidden; }
 .remote-table .ant-table-pagination { flex-shrink: 0; margin-block: 10px 0; }
 .drawer-audit { height: clamp(300px, calc(100dvh - 260px), 650px); display: flex; flex-direction: column; }
 .health-table { height: 300px; display: flex; }
-.activity-table-card { height: clamp(320px, calc(100dvh - 390px), 620px); min-width: 0; display: flex; flex-direction: column; }
+.activity-table-card { height: clamp(400px, calc(100dvh - 300px), 680px); min-width: 0; display: flex; flex-direction: column; }
 .activity-table-card > .ant-card-body { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .people-activity-panels { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.role-person-cell { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 275px; min-width: 0; }
-.role-person-cell > .ant-avatar { flex-shrink: 0; }
-.role-person-cell > div { min-width: 0; }
-.role-person-cell .person-link, .role-person-cell .ant-typography { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table-person-cell, .role-person-cell { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 100%; min-width: 0; }
+.table-person-cell > .ant-avatar, .role-person-cell > .ant-avatar { flex-shrink: 0; }
+.table-person-cell > div, .role-person-cell > div { flex: 1; min-width: 0; }
+.table-person-cell .person-link, .table-person-cell .ant-typography, .role-person-cell .person-link, .role-person-cell .ant-typography { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .throughput-summary { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 11px; padding-top: 10px; border-top: 1px solid #91a9b322; opacity: .75; }
 .throughput-summary b { font-weight: 600; font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
 .scroll-surface > .ant-card-body { display: flex; flex-direction: column; overflow: hidden; }
@@ -230,7 +230,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 .diagram-view-content > .local-data-table { height: 100% !important; padding: 10px; box-sizing: border-box; }
 .page-audit .page-head p { max-width: 460px; font-size: 13px; }
 .page-audit > .ant-alert { padding-block: 9px; margin-bottom: 12px !important; }
-.audit-identity { display: inline-block; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.audit-identity { display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 .role-inline-summary { padding-top: 4px; }
 .page-roles > .page-head { align-items: center; }
 .page-roles .page-head p { font-size: 13px; }
@@ -275,3 +275,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 .scope-date-presets > .ant-typography { font-size: 12px; }
 .scope-date-controls .ant-picker { width: 280px; max-width: 100%; }
 @media (max-width: 700px) { .scope-date-controls { width: 100%; } .scope-date-presets { width: 100%; justify-content: space-between; } }
+
+.remote-table .ant-table-cell .ant-btn-link { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.remote-table .ant-table-cell .ant-btn-link > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-table .ant-table-cell .ant-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }

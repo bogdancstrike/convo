@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { adminGo, adminSignIn, closeAll, createUser, newPage } from './support';
+import { adminGo, adminSignIn, closeAll, createUser, enroll, newPage } from './support';
 
 const headerWidths = (page: Page, testId: string) => page.getByTestId(testId).locator('.ant-table-header th:not(.ant-table-cell-scrollbar)').evaluateAll((headers) => headers.map((h) => h.getBoundingClientRect().width));
 async function expectEqual(page: Page, testId: string) {
@@ -73,4 +73,56 @@ test('overview date controls live in the scope card and support one day and cust
     await expect(picker).toBeInViewport();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { await closeAll(page); }
+});
+
+test('People rankings expose ten-row pagination and New people has a larger plot', async ({ browser, request }) => {
+  const user = await createUser(request, 'rankingpages', { realmRoles: ['convo-admin'] });
+  const page = await newPage(browser);
+  try {
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await adminSignIn(page, user); await adminGo(page, 'overview?tab=people');
+    for (const id of ['activity-top', 'activity-quiet']) {
+      const card = page.getByTestId(id);
+      await expect(card.locator('tbody tr.ant-table-row')).toHaveCount(10);
+      await expect(card.locator('.ant-pagination')).toBeInViewport();
+      await expect(card.locator('.ant-pagination-options-size-changer')).toContainText('10 / page');
+      const first = await card.locator('tbody tr.ant-table-row').first().getAttribute('data-row-key');
+      await card.getByTitle('Next Page', { exact: true }).click();
+      await expect(card.locator('tbody tr.ant-table-row')).toHaveCount(10);
+      await expect.poll(() => card.locator('tbody tr.ant-table-row').first().getAttribute('data-row-key')).not.toBe(first);
+      await expect(card.locator('.ant-pagination-item-active')).toHaveText('2');
+    }
+    await page.getByTestId('new-people-chart').scrollIntoViewIfNeeded();
+    const chart = page.getByTestId('new-people-chart').getByRole('img', { name: 'New accounts per day' });
+    expect((await chart.boundingBox())!.height).toBeGreaterThanOrEqual(320);
+    await page.screenshot({ path: 'test-results/admin-people-pagination.png', fullPage: true });
+  } finally { await closeAll(page); }
+});
+
+test('audit labels use the resized column width instead of a fixed text cap', async ({ browser, request }) => {
+  const admin = await createUser(request, 'labeladmin', { realmRoles: ['convo-admin'] });
+  const member = await createUser(request, 'readable-device-account-with-long-name');
+  const [page, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    await enroll(person, member);
+    await page.setViewportSize({ width: 2200, height: 1000 });
+    await adminSignIn(page, admin); await adminGo(page, 'audit');
+    await page.getByTestId('audit-search').fill(member.username);
+    const row = page.getByTestId('admin-audit-entry').filter({ hasText: 'device.add' }).first();
+    await expect(row).toBeVisible();
+    const target = row.locator('.audit-identity').nth(1);
+    const separator = page.getByRole('separator', { name: 'Resize Target column' });
+    const resize = async (delta: number) => {
+      const box = (await separator.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + delta, box.y + box.height / 2, { steps: 5 }); await page.mouse.up();
+    };
+    await resize(170);
+    await expect.poll(() => target.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+    await resize(-230);
+    await expect.poll(() => target.evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true);
+    await resize(230);
+    await expect.poll(() => target.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+    await page.screenshot({ path: 'test-results/admin-audit-dynamic-text-width.png', fullPage: true });
+  } finally { await closeAll(page, person); }
 });
