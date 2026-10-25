@@ -260,7 +260,9 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   wait shown) and receivers drop posts that break it (server receive time, 2 s tolerance), so a
   modified client cannot bypass it for honest members; owners/admins are never limited. Web: group
   info → Slow mode, member menu → Restrict from sending, banner/note in the thread.
-  `memberPolicy.test.ts`, `slow-mode.spec.ts`.
+  Android: group info Slow mode chips, member menu Restrict/Allow, restricted banner, slow-mode
+  note and wait message (verified on the emulator against the web). `memberPolicy.test.ts`,
+  `slow-mode.spec.ts`.
 - Group topics (specs §30.4): owners/admins create, rename, close and reopen topics through
   revisioned E2EE group events (enforced on receipt); messages carry a topic ID; the group view
   filters by topic and posts into the selected one; closed topics are read-only for members. Web:

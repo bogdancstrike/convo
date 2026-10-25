@@ -85,7 +85,9 @@ The attach sheet (Document, Gallery, Audio, Poll, Event) creates WhatsApp-style 
 options, single or multiple choice, visible voters, close by author/admin) and events (date and
 time pickers, location, description, Going/Maybe/Can't go, Add to calendar, edit/cancel by the
 creator or an admin). Events you answer Going or Maybe to remind you on this phone before they
-start (Settings → Notifications → Event reminders; while Convo runs). **View once** sends one photo/video the recipient can open once; its viewer
+start (Settings → Notifications → Event reminders; while Convo runs). Group owners/admins can
+organize a group into **topics**, turn on **slow mode** and **restrict** members from sending (group
+info); the shared core enforces these on send and on receipt. **View once** sends one photo/video the recipient can open once; its viewer
 blocks screenshots (FLAG_SECURE) and nothing is cached, saved or archived. All rules run in the
 shared core, so web and Android always agree. Long-press **Send** for *Send without sound* (no alert
 for recipients) or *Schedule message* (kept encrypted on this phone, sent by it once Convo runs at

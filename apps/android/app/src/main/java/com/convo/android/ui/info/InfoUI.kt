@@ -141,13 +141,16 @@ import org.json.JSONObject
             }
             if (canManage) item { Column(Modifier.background(colors.panel)) { ActionRow("Add participant", icon = Icons.Outlined.PersonAdd) { adding = true } } }
             if (canManage) item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(horizontal = 20.dp, vertical = 8.dp)) { InviteSection(app, id) } }
+            if (canManage && !c.optBoolean("adminOnly")) item { SlowModeSection(app, id, c.optJSONObject("memberPolicy")?.optInt("slowModeSeconds") ?: 0) }
+            val restricted = c.optJSONObject("memberPolicy")?.optJSONArray("restricted")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
             items(shownMembers, key = { it.optString("accountId") }) { member ->
                 val accountId = member.optString("accountId"); var account by remember(accountId) { mutableStateOf<JSONObject?>(null) }; var menu by remember { mutableStateOf(false) }
                 LaunchedEffect(accountId) { app.call("account", obj("id" to accountId)) { account = it as? JSONObject } }
                 val name = account?.label() ?: "…"; val role = member.optString("role")
                 Row(Modifier.fillMaxWidth().background(colors.panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     PersonAvatar(app, accountId, name, 44)
-                    Column(Modifier.weight(1f).clickable { app.route = "contact:$accountId" }.padding(horizontal = 14.dp)) { Text(if (accountId == me) "You" else name); Text("@${account?.optString("username") ?: "…"}", style = MaterialTheme.typography.bodySmall); if (role != "member") Text(role.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+                    Column(Modifier.weight(1f).clickable { app.route = "contact:$accountId" }.padding(horizontal = 14.dp)) { Text(if (accountId == me) "You" else name); Text("@${account?.optString("username") ?: "…"}", style = MaterialTheme.typography.bodySmall); if (role != "member") Text(role.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        else if (accountId in restricted) Text("Restricted", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
                     if (canManage && accountId != me && (role != "owner" || myRole == "owner")) Box {
                         IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "Participant options") }
                         DropdownMenu(menu, { menu = false }) {
@@ -155,6 +158,9 @@ import org.json.JSONObject
                                 if (role != "owner") DropdownMenuItem(text = { Text(if (role == "admin") "Remove admin role" else "Make admin") }, onClick = { menu = false; app.call("role", obj("id" to id, "member" to accountId, "role" to if (role == "admin") "member" else "admin")) })
                                 DropdownMenuItem(text = { Text(if (role == "owner") "Change owner to admin" else "Make owner") }, onClick = { menu = false; roleConfirm = accountId to if (role == "owner") "admin" else "owner" })
                             }
+                            if (role == "member" && !c.optBoolean("adminOnly")) DropdownMenuItem(text = { Text(if (accountId in restricted) "Allow sending" else "Restrict from sending") }, onClick = {
+                                menu = false; app.call("setMemberPolicy", obj("conversationId" to id, "restricted" to JSONArray(if (accountId in restricted) restricted - accountId else restricted + accountId)))
+                            })
                             DropdownMenuItem(text = { Text("Remove", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; roleConfirm = accountId to "remove" })
                             DropdownMenuItem(text = { Text("Remove and ban", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; roleConfirm = accountId to "ban" })
                         }

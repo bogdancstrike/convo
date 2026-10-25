@@ -107,7 +107,11 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val topics = conversation.optJSONArray("topics")?.objects().orEmpty()
     val isGroupAdmin = role in listOf("owner", "admin")
     val topicClosed = topics.find { it.optString("id") == topic }?.optBoolean("closed") == true && !isGroupAdmin
-    val readOnly = conversation.optBoolean("left") || group?.optBoolean("needsJoin") == true || (conversation.optBoolean("adminOnly") && role !in listOf("owner", "admin")) || topicClosed
+    // Member restrictions and slow mode (specs §30.4); the shared core enforces them.
+    val policy = conversation.optJSONObject("memberPolicy")
+    val restrictedHere = kind == "group" && !isGroupAdmin && policy?.optJSONArray("restricted")?.let { a -> (0 until a.length()).any { a.optString(it) == own } } == true
+    val slowMode = if (kind == "group" && !isGroupAdmin) policy?.optInt("slowModeSeconds") ?: 0 else 0
+    val readOnly = conversation.optBoolean("left") || group?.optBoolean("needsJoin") == true || (conversation.optBoolean("adminOnly") && role !in listOf("owner", "admin")) || topicClosed || restrictedHere
     val messages = all.filter { (topics.isEmpty() || it.optString("topic").ifBlank { null } == topic || (it.has("notice") && topic == null)) && (!starredOnly || it.optBoolean("starred")) && (query.isBlank() || it.optString("body").contains(query, true) || it.optJSONArray("attachments")?.objects()?.any { a -> a.optString("fileName").contains(query, true) } == true) }
     val wallpaper = conversation.optString("wallpaper").takeIf { it.isNotBlank() } ?: app.snapshot.optJSONObject("settings")?.optString("wallpaper") ?: "dots"
     if (attachSheet) AttachSheet(app, id, input, allowPoll = kind != "note", onSent = { input = "" }, onPoll = { pollComposer = true }, onEvent = { eventComposer = true }) { attachSheet = false }
@@ -190,8 +194,10 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     Text("You blocked this contact.", Modifier.weight(1f)); TextButton({ app.call("block", obj("id" to id, "blocked" to false), success = "Contact unblocked") }) { Text("Unblock") }
                 }
                 else if (app.selection != null) SelectionBar(app, id, all)
-                else if (readOnly) Text(if (topicClosed) "This topic is closed. You can still read it." else if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
+                else if (readOnly) Text(if (restrictedHere) "An admin restricted you from sending messages in this group. You can still read it." else if (topicClosed) "This topic is closed. You can still read it." else if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
                 else Column {
+                    if (slowMode > 0) RawText(tr("Slow mode is on: one message every {time}.").replace("{time}", com.convo.android.ui.info.formatInterval(slowMode.toLong())),
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp), fontSize = 13.sp, color = LocalConvoColors.current.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     quote?.let { QuotePreview(it.optString("excerpt")) { quote = null } }
                     var voice by remember(id) { mutableStateOf(false) }
                     // Caret position (coerced to the text): moves to the end after inserting a mention.

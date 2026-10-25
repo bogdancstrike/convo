@@ -183,7 +183,12 @@ class MainActivity : FragmentActivity() {
     fun call(method: String, args: JSONObject = JSONObject(), success: String? = null, quiet: Boolean = false, then: (Any?) -> Unit = {}) {
         bridge.command(method, args) { result ->
             if (result.optBoolean("ok")) { if (success != null) notice = success; then(if (result.has("value")) result.opt("value") else JSONObject.NULL) } else {
-                if (!quiet) error = when (result.optString("error")) {
+                val failure = result.optString("error")
+                if (!quiet) error = if (failure.startsWith("slow-mode:")) {
+                    val seconds = maxOf(1L, ((failure.substringAfter(':').toLongOrNull() ?: 0L) - System.currentTimeMillis() + 999) / 1000)
+                    tr("Slow mode: you can send again in {time}.").replace("{time}", formatInterval(seconds))
+                } else when (failure) {
+                    "send-restricted" -> "An admin restricted you from sending messages in this group."
                     "recovery-required" -> "Save a recovery code in Settings → History and recovery before logging out of your last device."
                     "FORBIDDEN_ROLE" -> "Only a group owner or admin can do that."
                     "edit-not-allowed" -> "This message can no longer be edited."

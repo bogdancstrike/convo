@@ -4,7 +4,7 @@ import { MAX_ATTACHMENT_BYTES, configureAttachmentLimit } from '../../web/src/co
 import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
 import { ApiError } from '../../web/src/api/errors';
-import { CallKeyUnavailableError, EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError } from '../../web/src/core/client';
+import { CallKeyUnavailableError, EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError, SendRestrictedError } from '../../web/src/core/client';
 import { createClient, type LocalContext } from '../../web/src/core/bootstrap';
 import { enrollPrimary } from '../../web/src/core/enrollment';
 import { LinkRequest } from '../../web/src/core/linking';
@@ -157,6 +157,10 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, ackOptions(args.requestAck), { silent: args.silent === true, topic: args.topic ? String(args.topic) : undefined });
     // Group topics (specs §30.4): owners/admins manage them; the snapshot carries conversation.topics.
     case 'createTopic': return client.createTopic(String(args.conversationId), String(args.name));
+    // Slow mode and restricted members (owners/admins); the snapshot carries conversation.memberPolicy.
+    case 'setMemberPolicy': return client.setMemberPolicy(String(args.conversationId), {
+      slowModeSeconds: args.slowModeSeconds === undefined ? undefined : Number(args.slowModeSeconds),
+      restricted: Array.isArray(args.restricted) ? args.restricted.map(String) : undefined });
     case 'updateTopic': return client.updateTopic(String(args.conversationId), String(args.id), { name: args.name === undefined ? undefined : String(args.name), closed: args.closed === undefined ? undefined : Boolean(args.closed) });
     // Scheduled send (specs §30.4): device-owned items, sent by the core's timer while the app runs.
     case 'scheduleMessage': return client.scheduleMessage(String(args.conversationId), String(args.body), Number(args.dueAt), { quote: args.quote ?? undefined, mentions: Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, silent: args.silent === true });
@@ -333,7 +337,7 @@ window.ConvoCore = { command(json: string) {
   let request: { id: number; method: string; args?: Record<string, any> };
   try { request = JSON.parse(json); } catch { return; }
   void command(request.method, request.args ?? {}).then((value) => { emit('result', { id: request.id, ok: true, value }); refresh(); })
-    .catch((e) => { emit('diagnostic', { stage: request.method, name: e instanceof Error ? e.name : 'unknown' }); emit('result', { id: request.id, ok: false, error: e instanceof LogoutRecoveryRequiredError ? 'recovery-required' : e instanceof EditNotAllowedError ? 'edit-not-allowed' : e instanceof ApiError ? e.code : 'operation-failed' }); });
+    .catch((e) => { emit('diagnostic', { stage: request.method, name: e instanceof Error ? e.name : 'unknown' }); emit('result', { id: request.id, ok: false, error: e instanceof LogoutRecoveryRequiredError ? 'recovery-required' : e instanceof EditNotAllowedError ? 'edit-not-allowed' : e instanceof SendRestrictedError ? (e.reason === 'slow' ? `slow-mode:${e.retryAt}` : 'send-restricted') : e instanceof ApiError ? e.code : 'operation-failed' }); });
 } };
 void (async () => { context = await openContext(); await startClient(); })().catch(() => emit('phase', { name: 'error' }));
 
