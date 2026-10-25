@@ -108,6 +108,7 @@ object Strings {
         "Audio" to "Audio",
         "Back" to "Înapoi", "View profile photo" to "Vezi fotografia de profil", "Profile photo" to "Fotografie de profil",
         "Turn speaker on" to "Pornește difuzorul", "typing…" to "scrie…",
+        "Withdraw" to "Retrage", "Withdraw your acknowledgement? Reviewers will see you as not responded." to "Îți retragi confirmarea? Recenzenții te vor vedea ca fără răspuns.", "Responses go to you and the owners" to "Răspunsurile ajung la tine și la proprietari", "Responses go to you and selected admins" to "Răspunsurile ajung la tine și la administratorii aleși", "Responses go to" to "Răspunsurile ajung la", "You and the community owners" to "Tine și proprietarii comunității", "You and selected owners/admins" to "Tine și proprietarii/administratorii aleși",
         "Stickers" to "Autocolante", "Sticker" to "Autocolant", "Sticker: {name}" to "Autocolant: {name}",
         "Guest" to "Invitat",
         "Quiz · one try" to "Test · o încercare", "Correct!" to "Corect!", "Not quite" to "Nu chiar", "{correct} of {answered} answered correctly" to "{correct} din {answered} au răspuns corect", "Quiz mode" to "Mod test", "Pick the correct answer. Everyone gets one try; results appear after answering." to "Alege răspunsul corect. Fiecare are o singură încercare; rezultatele apar după răspuns.", "Explanation (optional)" to "Explicație (opțional)",

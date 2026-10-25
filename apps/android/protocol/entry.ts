@@ -180,6 +180,12 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'cancelScheduled': return client.cancelScheduled(String(args.id));
     case 'sendScheduledNow': await client.editScheduled(String(args.id), { dueAt: Date.now() + 1000 }); return client.sendDueScheduled(Date.now() + 2000);
     case 'acknowledge': return client.acknowledge(await target(args));
+    case 'withdrawAcknowledgement': return client.withdrawAcknowledgement(await target(args));
+    // Owners/admins who may review responses, with display names, for the composer picker.
+    case 'ackReviewerCandidates': {
+      const ids = (await client.ackReviewerCandidates(String(args.id))).filter((id) => id !== client!.accountId);
+      return Promise.all(ids.map(async (id) => ({ accountId: id, name: await client!.displayName(id) })));
+    }
     case 'canRequestAck': {
       const record = await client.groupRecord(String(args.id));
       return !!record?.community && !!record.adminOnly && ['owner', 'admin'].includes(record.members.find((m) => m.accountId === client!.accountId)?.role ?? '');
@@ -349,10 +355,11 @@ void (async () => { context = await openContext(); await startClient(); })().cat
 setInterval(() => { if (client && document.visibilityState === 'visible') void client.lastSeenHeartbeat().catch(() => undefined); }, 20000);
 
 /** Acknowledgement request from the composer: false, true, or `{ due?, expires? }` (epoch ms). */
-function ackOptions(value: unknown): boolean | { due?: number; expires?: number } {
+function ackOptions(value: unknown): boolean | { due?: number; expires?: number; reviewers?: string[] } {
   if (value === true) return true;
   if (!value || typeof value !== 'object') return false;
-  const { due, expires } = value as Record<string, unknown>;
+  const { due, expires, reviewers } = value as Record<string, unknown>;
   const time = (v: unknown) => (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : undefined);
-  return { ...(time(due) ? { due: time(due) } : {}), ...(time(expires) ? { expires: time(expires) } : {}) };
+  return { ...(time(due) ? { due: time(due) } : {}), ...(time(expires) ? { expires: time(expires) } : {}),
+    ...(Array.isArray(reviewers) ? { reviewers: reviewers.map(String) } : {}) };
 }

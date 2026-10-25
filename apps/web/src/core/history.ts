@@ -28,7 +28,14 @@ export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming
     .sort((x, y) => y.revision - x.revision || x.pending.length - y.pending.length)[0];
   const acks: NonNullable<ChatMessage['acks']> = { ...incoming.acks };
   for (const [id, ack] of Object.entries(existing.acks ?? {})) if (!acks[id] || acks[id].revision < ack.revision) acks[id] = ack;
-  const ackState = { ...(myAck ? { myAck } : {}), ...(Object.keys(acks).length ? { acks } : {}), ackRequest: existing.ackRequest ?? incoming.ackRequest };
+  // Withdrawals: the latest per member wins and removes responses it follows.
+  const withdrawn: Record<string, number> = { ...incoming.ackWithdrawn };
+  for (const [id, at] of Object.entries(existing.ackWithdrawn ?? {})) withdrawn[id] = Math.max(at, withdrawn[id] ?? 0);
+  for (const [id, at] of Object.entries(withdrawn)) if (acks[id] && acks[id].at <= at) delete acks[id];
+  const myWithdrawnAt = Math.max(existing.myAckWithdrawnAt ?? 0, incoming.myAckWithdrawnAt ?? 0) || undefined;
+  const ownAck = myAck && !(myWithdrawnAt && myAck.at <= myWithdrawnAt) ? myAck : undefined;
+  const ackState = { ...(ownAck ? { myAck: ownAck } : {}), ...(Object.keys(acks).length ? { acks } : {}), ackRequest: existing.ackRequest ?? incoming.ackRequest,
+    ...(Object.keys(withdrawn).length ? { ackWithdrawn: withdrawn } : {}), ...(myWithdrawnAt ? { myAckWithdrawnAt: myWithdrawnAt } : {}) };
   if ((existing.revision ?? 0) !== (incoming.revision ?? 0) && !content.deleted) {
     return { ...content, ...ackState, recipientAccountIds: existing.recipientAccountIds ?? incoming.recipientAccountIds, starred: existing.starred ?? incoming.starred,
       serverAt: existing.serverAt ?? incoming.serverAt };

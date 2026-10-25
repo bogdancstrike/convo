@@ -176,7 +176,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   `acknowledgements.spec.ts` (Chromium/Firefox, repeated); Android emulator acknowledged a web
   announcement and the reviewer count updated. Optional due and closing times (web + Android):
   members see both, responses after the due time are marked late, none are accepted after closing
-  (server acceptance time decides). Not yet: withdraw, custom reviewer selection.
+  (server acceptance time decides). Withdraw (until closing): reviewers drop the response and keep
+  the withdrawal time so an older response delivered late cannot count again; own devices and
+  history merges converge the same way. Custom reviewers: the publisher picks owners/admins (default
+  the owners, at most 10 including the publisher; members are refused). Web + Android;
+  `ackWithdraw.test.ts`, `acknowledgements.spec.ts`, emulator withdraw seen by the web reviewer.
 - Groups created inside a community (WhatsApp-style, 2026-10-21): community admins create a new
   group from the community page (name, description, community members to add, visible/hidden,
   follow community removals); it is linked at once and opens. Redesigned web community page (hero,
@@ -474,7 +478,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Communities: ack withdraw/custom reviewers, membership-operation retries/ownership transfer flow, polls/events | COM-01/02 |
+| Communities: membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |

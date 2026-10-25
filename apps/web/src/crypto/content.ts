@@ -195,6 +195,8 @@ export interface AckResponse {
   /** Announcement content revision that was acknowledged (edits require a new response). */
   contentRevision: number;
   timestamp: number;
+  /** The member withdraws their acknowledgement (allowed until the request closes). */
+  withdrawn?: boolean;
 }
 
 /** Delivery/read receipt for messages sent by the receiver of this content. */
@@ -424,7 +426,8 @@ function isAckResponse(value: unknown): value is AckResponse {
   return isObject(value) && typeof value.requestId === 'string' && ID.test(value.requestId) && Number.isSafeInteger(value.requestRevision)
     && typeof value.conversationId === 'string' && /^g:[A-Za-z0-9_-]{43}$/.test(value.conversationId)
     && typeof value.messageId === 'string' && ID.test(value.messageId) && typeof value.authorId === 'string' && ID.test(value.authorId)
-    && isRevision(value.contentRevision) && Number.isFinite(value.timestamp);
+    && isRevision(value.contentRevision) && Number.isFinite(value.timestamp)
+    && (value.withdrawn === undefined || value.withdrawn === true);
 }
 
 function isCommunityMeta(value: unknown): value is CommunityMeta {

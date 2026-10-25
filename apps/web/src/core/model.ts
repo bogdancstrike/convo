@@ -80,6 +80,10 @@ export interface ChatMessage {
   acks?: Record<string, { at: number; revision: number; late?: boolean }>;
   /** Audience member: own response (content revision; reviewers still waiting for delivery). */
   myAck?: { revision: number; at: number; pending: string[] };
+  /** Reviewer side: when each member last withdrew (server time); older acknowledgements are ignored. */
+  ackWithdrawn?: Record<string, number>;
+  /** This account's own withdrawal time, so a late echo of the earlier response does not restore it. */
+  myAckWithdrawnAt?: number;
   /** Poll message: definition, current ballots and close state (see core/polls.ts). */
   poll?: PollState;
   /** Event message: details, revision, cancellation and RSVPs (see core/events.ts). */

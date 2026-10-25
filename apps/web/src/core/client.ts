@@ -122,6 +122,8 @@ const OUTBOX_RETRY_MS = 15_000;
 export interface AckOptions {
   due?: number;
   expires?: number;
+  /** Reviewers besides the publisher (community owners/admins); default: the owners. */
+  reviewers?: string[];
 }
 
 /** Whether an acknowledgement request no longer takes responses (closing time passed). */
@@ -1921,16 +1923,31 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const request = target?.ackRequest;
     if (!target || !request || target.deleted || request.requestId !== ack.requestId || request.revision !== ack.requestRevision) return;
     if (sender === this.accountId) {
-      if ((target.myAck?.revision ?? -1) >= ack.contentRevision) return;
-      ops.push(this.repos.putMessage({ ...target, myAck: { revision: ack.contentRevision, at: ack.timestamp, pending: [] } }));
+      // Own devices: a withdrawal clears the response it follows; an older response cannot return.
+      if (ack.withdrawn) {
+        if ((target.myAck?.at ?? 0) > ack.timestamp || (target.myAckWithdrawnAt ?? 0) >= ack.timestamp) return;
+        const { myAck: _cleared, ...rest } = target;
+        ops.push(this.repos.putMessage({ ...rest, myAckWithdrawnAt: ack.timestamp }));
+      } else {
+        if ((target.myAck?.revision ?? -1) >= ack.contentRevision || (target.myAckWithdrawnAt ?? 0) >= ack.timestamp) return;
+        ops.push(this.repos.putMessage({ ...target, myAck: { revision: ack.contentRevision, at: ack.timestamp, pending: [] } }));
+      }
     } else {
       if (!request.reviewers.includes(this.accountId) || !request.audience.includes(sender)) return;
-      if ((target.acks?.[sender]?.revision ?? -1) >= ack.contentRevision) return; // dedupe across devices/retries
       // The server's acceptance time decides: closed requests take no new responses, late ones are marked.
       const at = envelope.serverTimestamp;
       if (request.expires !== undefined && at > request.expires) return;
-      const late = request.due !== undefined && at > request.due ? { late: true } : {};
-      ops.push(this.repos.putMessage({ ...target, acks: { ...target.acks, [sender]: { at, revision: ack.contentRevision, ...late } } }));
+      if (ack.withdrawn) {
+        const current = target.acks?.[sender];
+        if (current && current.at > at) return; // a newer response already replaced this withdrawal
+        const { [sender]: _removed, ...acks } = target.acks ?? {};
+        ops.push(this.repos.putMessage({ ...target, acks, ackWithdrawn: { ...target.ackWithdrawn, [sender]: Math.max(at, target.ackWithdrawn?.[sender] ?? 0) } }));
+      } else {
+        if ((target.acks?.[sender]?.revision ?? -1) >= ack.contentRevision) return; // dedupe across devices/retries
+        if ((target.ackWithdrawn?.[sender] ?? 0) >= at) return; // sent before a later withdrawal
+        const late = request.due !== undefined && at > request.due ? { late: true } : {};
+        ops.push(this.repos.putMessage({ ...target, acks: { ...target.acks, [sender]: { at, revision: ack.contentRevision, ...late } } }));
+      }
     }
     changed.add(ack.conversationId);
   }
@@ -1963,13 +1980,50 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   /**
+   * Withdraws this account's acknowledgement while the request is open: reviewers drop it and keep
+   * the withdrawal time, so an older response delivered late does not count again.
+   */
+  async withdrawAcknowledgement(message: ChatMessage): Promise<void> {
+    const request = message.ackRequest;
+    if (!request || !message.myAck || message.deleted) throw new Error('nothing to withdraw');
+    if (ackClosed(request)) throw new Error('acknowledgement request closed');
+    const ack: AckResponse = { requestId: request.requestId, requestRevision: request.revision, conversationId: message.conversationId,
+      messageId: message.id, authorId: message.authorId, contentRevision: message.myAck.revision, timestamp: Math.max(Date.now(), message.myAck.at + 1), withdrawn: true };
+    const reviewers = request.reviewers.filter((id) => id !== this.accountId);
+    await this.mutex.run(async () => {
+      const current = await this.repos.message(message.conversationId, message.authorId, message.id) ?? message;
+      const { myAck: _cleared, ...rest } = current;
+      const updated: ChatMessage = { ...rest, myAckWithdrawnAt: ack.timestamp };
+      if (request.reviewers.includes(this.accountId)) {
+        const { [this.accountId]: _own, ...acks } = current.acks ?? {};
+        Object.assign(updated, { acks, ackWithdrawn: { ...current.ackWithdrawn, [this.accountId]: ack.timestamp } });
+      }
+      await this.repos.store.commit([this.repos.putMessage(updated)]);
+      for (const reviewer of reviewers) await this.enqueue(reviewer, { v: CONTENT_VERSION, kind: 'ack', ack }, false);
+      await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'ack', ack }, false);
+    });
+    this.emit('messages', message.conversationId);
+  }
+
+  /** Owners and admins of a community root who can review acknowledgements (for the reviewer picker). */
+  async ackReviewerCandidates(conversationId: string): Promise<string[]> {
+    const groupId = groupIdOf(conversationId);
+    const group = groupId ? await this.groups.record(groupId) : undefined;
+    return group?.members.filter((m) => m.role === 'owner' || m.role === 'admin').map((m) => m.accountId) ?? [];
+  }
+
+  /**
    * Request for an announcement in a community root this account manages: reviewers are the
-   * publisher and the community owner(s); the audience is everyone else in the community now.
+   * publisher plus chosen owners/admins (default: the owners), at most 10; the audience is
+   * everyone else in the community now.
    */
   private newAckRequest(group: GroupRecord, recipients: string[], options: AckOptions): AckRequest {
     const role = group.members.find((m) => m.accountId === this.accountId)?.role;
     if (!group.community || !group.adminOnly || (role !== 'owner' && role !== 'admin')) throw new Error('acknowledgements are for community announcements');
-    const owners = group.members.filter((m) => m.role === 'owner').map((m) => m.accountId);
+    const managers = new Set(group.members.filter((m) => m.role === 'owner' || m.role === 'admin').map((m) => m.accountId));
+    const owners = options.reviewers
+      ? options.reviewers.filter((id) => managers.has(id))
+      : group.members.filter((m) => m.role === 'owner').map((m) => m.accountId);
     const { due, expires } = options;
     if (expires !== undefined && (expires <= Date.now() || (due !== undefined && due > expires))) throw new Error('invalid acknowledgement times');
     return { requestId: newMessageId(), revision: 1, reviewers: [...new Set([this.accountId, ...owners])].slice(0, 10), audience: recipients.slice(0, 5000),

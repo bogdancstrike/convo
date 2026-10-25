@@ -48,6 +48,8 @@ export function AckBox({ client, message }: { client: EnclaveClient; message: Ch
             {current ? (
               <p className="ack-state" data-testid="ack-state" data-state={mine!.pending.length ? 'pending' : 'sent'}>
                 {mine!.pending.length ? t('ack.pending') : t('ack.sent')}
+                {!closed && <button className="btn btn-ghost ack-withdraw" disabled={busy} data-testid="ack-withdraw"
+                  onClick={() => { if (!window.confirm(t('ack.withdrawConfirm'))) return; setBusy(true); void client.withdrawAcknowledgement(message).finally(() => setBusy(false)); }}>{t('ack.withdraw')}</button>}
               </p>
             ) : closed ? null : (
               <button className="btn btn-primary" disabled={busy} data-testid="ack-button"
@@ -79,5 +81,31 @@ export function AckBox({ client, message }: { client: EnclaveClient; message: Ch
       )}
       {!member && !reviewer && <p className="muted-text">{t('ack.notRequired')}</p>}
     </div>
+  );
+}
+
+/**
+ * Composer option: who reviews the responses. The publisher always does; by default the community
+ * owners join, or the publisher picks owners/admins (at most 9 more, 10 reviewers in total).
+ */
+export function AckReviewerPicker({ client, conversationId, value, onChange }: { client: EnclaveClient; conversationId: string; value: string[] | null; onChange: (ids: string[] | null) => void }) {
+  const { t } = useI18n();
+  const [candidates, setCandidates] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    void client.ackReviewerCandidates(conversationId).then((ids) => Promise.all(ids.filter((id) => id !== client.accountId)
+      .map(async (id) => ({ id, name: await client.displayName(id) })))).then(setCandidates);
+  }, [client, conversationId]);
+  if (!candidates.length) return null;
+  const chosen = value ?? [];
+  return (
+    <fieldset className="ack-reviewers" data-testid="ack-reviewer-picker">
+      <legend>{t('ack.reviewersLabel')}</legend>
+      <label><input type="radio" checked={value === null} onChange={() => onChange(null)} data-testid="ack-reviewers-default" /> {t('ack.reviewersDefault')}</label>
+      <label><input type="radio" checked={value !== null} onChange={() => onChange([])} data-testid="ack-reviewers-custom" /> {t('ack.reviewersCustom')}</label>
+      {value !== null && candidates.map((c) => (
+        <label key={c.id} className="ack-reviewer"><input type="checkbox" checked={chosen.includes(c.id)} disabled={!chosen.includes(c.id) && chosen.length >= 9}
+          onChange={(e) => onChange(e.target.checked ? [...chosen, c.id] : chosen.filter((id) => id !== c.id))} data-testid={`ack-reviewer-${c.name}`} /> {c.name}</label>
+      ))}
+    </fieldset>
   );
 }

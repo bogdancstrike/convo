@@ -217,6 +217,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     // Community announcements: owners/admins may ask for explicit acknowledgements.
                     var canAck by remember(id) { mutableStateOf(false) }; var requestAck by remember(id) { mutableStateOf(false) }
                     var ackDue by remember(id) { mutableStateOf(0) }; var ackExpires by remember(id) { mutableStateOf(0) }
+                    var ackReviewers by remember(id) { mutableStateOf<List<String>?>(null) } // null = publisher + owners
                     LaunchedEffect(id) { if (id.startsWith("g:")) app.call("canRequestAck", obj("id" to id), quiet = true) { canAck = it == true } }
                     if (canAck) Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(requestAck, { requestAck = it }); Text("Ask members to acknowledge this announcement", style = MaterialTheme.typography.bodySmall)
@@ -225,6 +226,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         AckDeadlinePicker("Due", ackDue, listOf(0, 1, 3, 7), noneLabel = "No deadline") { ackDue = it; if (ackExpires in 1 until it) ackExpires = it }
                         AckDeadlinePicker("Closes", ackExpires, listOf(0) + listOf(1, 3, 7, 30).filter { it >= ackDue }, noneLabel = "Stays open") { ackExpires = it }
                     }
+                    if (canAck && requestAck) Box(Modifier.padding(horizontal = 12.dp)) { AckReviewerPicker(app, id, ackReviewers) { ackReviewers = it } }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (!voice) {
                             val colors = LocalConvoColors.current
@@ -246,7 +248,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                             fun send(silent: Boolean = false, dueAt: Long? = null) {
                                 val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
                                 val day = 24L * 60 * 60 * 1000; val now = System.currentTimeMillis()
-                                val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null).toTypedArray())
+                                val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null,
+                                    ackReviewers?.let { "reviewers" to org.json.JSONArray(it) }).toTypedArray())
                                 val done: (Any?) -> Unit = { if (it != null) { app.typingStopped(id); input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } }
                                 if (dueAt != null) app.call("scheduleMessage", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "dueAt" to dueAt, "silent" to silent), success = tr("Message scheduled"), then = done)
                                 else app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack, "silent" to silent, "topic" to topic), then = done)

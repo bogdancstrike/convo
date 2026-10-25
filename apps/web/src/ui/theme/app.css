@@ -2568,3 +2568,9 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .sticker-grid button { border: 0; background: none; padding: 4px; border-radius: 10px; cursor: pointer; }
 .sticker-grid button:hover, .sticker-grid button:focus-visible { background: var(--c-hover, rgba(0,0,0,.06)); }
 .sticker-grid .sticker-image { width: 72px; height: 72px; }
+
+/* Acknowledgement withdraw and reviewer picker (specs §30.6). */
+.ack-withdraw { margin-left: 8px; padding: 2px 8px; font-size: 0.8125rem; }
+.ack-reviewers { display: grid; gap: 4px; border: 0; padding: 4px 0 0; margin: 0; }
+.ack-reviewers legend { font-weight: 600; padding: 0; }
+.ack-reviewer { padding-left: 20px; }

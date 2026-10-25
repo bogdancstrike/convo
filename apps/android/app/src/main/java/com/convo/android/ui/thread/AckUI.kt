@@ -69,7 +69,14 @@ import org.json.JSONObject
             val mine = message.optJSONObject("myAck")
             val current = mine != null && mine.optInt("revision", -1) == revision
             if (mine != null && !current) Text("Updated — please acknowledge again", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            if (current) Text(if ((mine!!.optJSONArray("pending")?.length() ?: 0) > 0) "Pending sync — your acknowledgement will be sent when you’re online" else "Acknowledgement sent", fontWeight = FontWeight.SemiBold)
+            var confirmWithdraw by remember { mutableStateOf(false) }
+            if (current) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if ((mine!!.optJSONArray("pending")?.length() ?: 0) > 0) "Pending sync — your acknowledgement will be sent when you’re online" else "Acknowledgement sent", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                if (!closed) TextButton({ confirmWithdraw = true }) { Text("Withdraw") }
+            }
+            if (confirmWithdraw) AlertDialog(onDismissRequest = { confirmWithdraw = false }, text = { Text("Withdraw your acknowledgement? Reviewers will see you as not responded.") },
+                confirmButton = { TextButton({ confirmWithdraw = false; app.call("withdrawAcknowledgement", obj("conversationId" to message.optString("conversationId"), "id" to message.optString("id"), "authorId" to message.optString("authorId"))) }) { Text("Withdraw") } },
+                dismissButton = { TextButton({ confirmWithdraw = false }) { Text("Cancel") } })
             else if (!closed) Button(onClick = { app.call("acknowledge", obj("conversationId" to message.optString("conversationId"), "id" to message.optString("id"), "authorId" to message.optString("authorId"))) }) { Text("I acknowledge this announcement") }
             RawText(tr("Your response goes only to: {names}").replace("{names}", reviewers.joinToString(", ") { name(it) }), style = MaterialTheme.typography.bodySmall)
         }
@@ -99,4 +106,29 @@ import org.json.JSONObject
             options.forEach { d -> DropdownMenuItem(text = { RawText(text(d)) }, onClick = { onChange(d); open = false }) }
         }
     }
+}
+
+/**
+ * Who reviews the responses: the publisher plus the community owners (default), or chosen
+ * owners/admins (at most 9 more). Validation of reviewers happens in the shared core.
+ */
+@Composable fun AckReviewerPicker(app: MainActivity, conversation: String, value: List<String>?, onChange: (List<String>?) -> Unit) {
+    var candidates by remember(conversation) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var open by remember { mutableStateOf(false) }
+    LaunchedEffect(conversation) { app.call("ackReviewerCandidates", obj("id" to conversation), quiet = true) { v -> (v as? org.json.JSONArray)?.let { candidates = it.objects() } } }
+    if (candidates.isEmpty()) return
+    TextButton({ open = true }) { Text(if (value == null) "Responses go to you and the owners" else "Responses go to you and selected admins") }
+    if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text("Responses go to") }, text = {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(value == null, { onChange(null) }); Text("You and the community owners") }
+            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(value != null, { onChange(emptyList()) }); Text("You and selected owners/admins") }
+            if (value != null) candidates.forEach { c ->
+                val id = c.optString("accountId"); val chosen = id in value
+                Row(Modifier.padding(start = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(chosen, { on -> onChange(if (on) value + id else value - id) }, enabled = chosen || value.size < 9)
+                    RawText(c.optString("name"))
+                }
+            }
+        }
+    }, confirmButton = { TextButton({ open = false }) { Text("Done") } })
 }

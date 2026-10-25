@@ -76,5 +76,11 @@ test('members acknowledge an announcement explicitly; edits ask again', async ({
     await expect(bobTraining.getByTestId('ack-closes-at')).toContainText('Closes');
     await bobTraining.getByTestId('ack-button').click();
     await expect(message(owner, 'Quarterly security training').getByTestId('ack-count')).toHaveText('Acknowledged 1 of 2', { timeout: 30_000 });
+
+    // Bob withdraws while the request is open: the reviewer's count drops and he can respond again.
+    bob.once('dialog', (d) => void d.accept());
+    await bobTraining.getByTestId('ack-withdraw').click();
+    await expect(bobTraining.getByTestId('ack-button')).toBeVisible({ timeout: 20_000 });
+    await expect(message(owner, 'Quarterly security training').getByTestId('ack-count')).toHaveText('Acknowledged 0 of 2', { timeout: 30_000 });
   } finally { await closeAll(owner, bob, carol); }
 });

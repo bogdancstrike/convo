@@ -13,6 +13,7 @@ import { EventComposer } from './Events';
 import { ScheduleDialog, ScheduledBar } from './Scheduled';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration, useVoiceRecorder } from '../useVoiceRecorder';
+import { AckReviewerPicker } from './AckBox';
 
 export type ComposerMode = { kind: 'reply'; target: ChatMessage } | { kind: 'edit'; target: ChatMessage } | null;
 
@@ -80,6 +81,8 @@ export function Composer({
   // Optional deadlines, in days from sending (0 = none).
   const [ackDue, setAckDue] = useState(0);
   const [ackExpires, setAckExpires] = useState(0);
+  // Reviewers besides the publisher; null = default (the community owners).
+  const [ackReviewers, setAckReviewers] = useState<string[] | null>(null);
   useEffect(() => {
     if (!conversation.adminOnly) return;
     void client.groupRecord(conversation.id).then((g) => setCanRequestAck(!!g?.community
@@ -162,7 +165,8 @@ export function Composer({
             ? { messageId: current.target.id, authorId: current.target.authorId, excerpt: (current.target.body ?? '').slice(0, 120) }
             : undefined;
         const day = 24 * 60 * 60 * 1000;
-        const ack = requestAck && { ...(ackDue ? { due: Date.now() + ackDue * day } : {}), ...(ackExpires ? { expires: Date.now() + ackExpires * day } : {}) };
+        const ack = requestAck && { ...(ackDue ? { due: Date.now() + ackDue * day } : {}), ...(ackExpires ? { expires: Date.now() + ackExpires * day } : {}),
+          ...(ackReviewers ? { reviewers: ackReviewers } : {}) };
         if (options.dueAt) await client.scheduleMessage(conversation.id, body, options.dueAt, { quote, mentions: mentionsIn(body, picked), silent: options.silent });
         else await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), ack, { silent: options.silent, topic });
         setPicked([]);
@@ -337,6 +341,7 @@ export function Composer({
                   {[1, 3, 7, 30].filter((d) => d >= ackDue).map((d) => <option key={d} value={d}>{t(d === 1 ? 'ack.in1d' : d === 3 ? 'ack.in3d' : d === 7 ? 'ack.in7d' : 'ack.in30d')}</option>)}
                 </select>
               </label>
+              <AckReviewerPicker client={client} conversationId={conversation.id} value={ackReviewers} onChange={setAckReviewers} />
             </>
           )}
         </div>
