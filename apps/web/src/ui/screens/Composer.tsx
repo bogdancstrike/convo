@@ -1,7 +1,8 @@
 import { activeMentionQuery, mentionsIn, useGroupMembers, useMentionSuggestions, type MentionCandidate } from '../mentions';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { AttachmentRejectedError, MAX_ATTACHMENT_BYTES } from '../../core/attachments';
-import { EditNotAllowedError, type EnclaveClient } from '../../core/client';
+import { EditNotAllowedError, SendRestrictedError, type EnclaveClient } from '../../core/client';
+import { formatInterval } from './MemberPolicy';
 import type { ChatMessage, Conversation } from '../../core/model';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaPreview } from '../components/MediaPreview';
@@ -117,6 +118,10 @@ export function Composer({
     return () => clearTimeout(timer);
   }, [client, conversation.id, conversation.draft, text, mode]);
 
+  /** Group policy refusals: restricted member, or slow mode with the wait left. */
+  const restrictedMessage = (e: SendRestrictedError) => e.reason === 'restricted' ? t('slow.restricted')
+    : t('slow.wait', { time: formatInterval(Math.max(1, Math.ceil(((e.retryAt ?? Date.now()) - Date.now()) / 1000)), t) });
+
   const sendFiles = async () => {
     const selected = files;
     setError(null);
@@ -131,7 +136,7 @@ export function Composer({
       setError(
         e instanceof AttachmentRejectedError
           ? t(e.reason === 'too-large' ? 'attachment.tooLarge' : 'attachment.unreadable', { name: e.fileName, limit: String(MAX_ATTACHMENT_BYTES / 1048576) })
-          : t('attachment.uploadFailed'),
+          : e instanceof SendRestrictedError ? restrictedMessage(e) : t('attachment.uploadFailed'),
       );
     } finally {
       setUpload(null);
@@ -168,6 +173,7 @@ export function Composer({
       void client.sendTyping(conversation.id, 'stopped');
     } catch (e) {
       if (e instanceof EditNotAllowedError) { setError(t('thread.editExpired')); return; }
+      if (e instanceof SendRestrictedError) { setText((typed) => (typed ? typed : body)); setError(restrictedMessage(e)); return; }
       // Local persistence failed (e.g. storage full): give the text back instead of losing it.
       setText((typed) => (typed ? typed : body));
       console.warn('Could not queue message', e instanceof Error ? e.message : e);
@@ -181,8 +187,8 @@ export function Composer({
     setError(null);
     try {
       await client.sendVoiceNote(conversation.id, note.file, note.durationMs);
-    } catch {
-      setError(t('attachment.uploadFailed'));
+    } catch (e) {
+      setError(e instanceof SendRestrictedError ? restrictedMessage(e) : t('attachment.uploadFailed'));
     } finally {
       setUpload(null);
     }

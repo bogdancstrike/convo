@@ -20,6 +20,7 @@ import { ForwardDialog } from './ForwardDialog';
 import { MessageBubble, MessageInfoDialog, messageAnchor } from './MessageBubble';
 import { ReportDialog } from './ReportDialog';
 import { TopicBar } from './Topics';
+import { formatInterval } from './MemberPolicy';
 
 
 
@@ -80,6 +81,9 @@ export function Thread({
   const isGroupAdmin = myRole === 'owner' || myRole === 'admin';
   const currentTopic = conversation.topics?.find((x) => x.id === topic);
   const topicClosed = !!currentTopic?.closed && !isGroupAdmin;
+  // Member restrictions and slow mode (specs §30.4); the core enforces them on send and receipt.
+  const restrictedHere = group && !isGroupAdmin && !!conversation.memberPolicy?.restricted.includes(client.accountId);
+  const slowMode = group && !isGroupAdmin ? conversation.memberPolicy?.slowModeSeconds ?? 0 : 0;
   const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
 
   useEffect(() => {
@@ -362,8 +366,10 @@ export function Thread({
         <div className="channel-read-only" role="status" data-testid="blocked-banner"><Icon name="lock" size={16} />{t('block.banner', { name: title })}
           <button className="btn" onClick={() => void client.setBlocked(conversation.id, false)} data-testid="unblock">{t('block.unblock')}</button></div>
       )}
+      {restrictedHere && !conversation.left && <div className="channel-read-only" role="status" data-testid="restricted-banner"><Icon name="lock" size={16} />{t('slow.restrictedBanner')}</div>}
+      {slowMode > 0 && !restrictedHere && !readOnly && <p className="slow-mode-note muted-text" role="status" data-testid="slow-mode-note">{t('slow.note', { time: formatInterval(slowMode, t) })}</p>}
       {topicClosed && <div className="channel-read-only" role="status" data-testid="topic-closed"><Icon name="lock" size={16} />{t('topics.closedNotice')}</div>}
-      {!conversation.left && !readOnly && !conversation.blocked && !selection && !topicClosed && (
+      {!conversation.left && !readOnly && !conversation.blocked && !selection && !topicClosed && !restrictedHere && (
         <Composer
           key={conversation.id}
           topic={topic ?? undefined}

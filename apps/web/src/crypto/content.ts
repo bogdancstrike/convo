@@ -124,6 +124,8 @@ export interface DataMessage {
   topic?: string;
   /** Group event: create/rename/close a topic (owners/admins; highest revision wins). */
   topicDef?: { id: string; name: string; closed: boolean; revision: number };
+  /** Group event: slow mode and members who may not post (owners/admins; highest revision wins). */
+  memberPolicy?: { slowModeSeconds: number; restricted: string[]; revision: number };
   /** Quiet send: recipients get the message and unread count but no alert. */
   silent?: boolean;
   /** The author's current answer to an event. */
@@ -469,6 +471,10 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
   if (value.event !== undefined && !isEventDefinition(value.event)) return false;
   if (value.silent !== undefined && typeof value.silent !== 'boolean') return false;
+  if (value.memberPolicy !== undefined && (!isObject(value.memberPolicy) || !Number.isSafeInteger(value.memberPolicy.slowModeSeconds)
+    || (value.memberPolicy.slowModeSeconds as number) < 0 || (value.memberPolicy.slowModeSeconds as number) > 86_400
+    || !Array.isArray(value.memberPolicy.restricted) || value.memberPolicy.restricted.length > 1000 || !value.memberPolicy.restricted.every((a) => typeof a === 'string' && a.length > 0 && a.length <= 64)
+    || !Number.isSafeInteger(value.memberPolicy.revision) || (value.memberPolicy.revision as number) < 1)) return false;
   if (value.topic !== undefined && (typeof value.topic !== 'string' || !ID.test(value.topic))) return false;
   if (value.topicDef !== undefined && (!isObject(value.topicDef) || typeof value.topicDef.id !== 'string' || !ID.test(value.topicDef.id) || typeof value.topicDef.name !== 'string'
     || !value.topicDef.name.trim() || value.topicDef.name.length > 48 || typeof value.topicDef.closed !== 'boolean' || !Number.isSafeInteger(value.topicDef.revision) || (value.topicDef.revision as number) < 1)) return false;

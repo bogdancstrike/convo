@@ -52,6 +52,7 @@ import { applyBallot, applyClose, initialState, newPoll } from './polls';
 import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
+import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
@@ -450,6 +451,31 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.emitConversations();
   }
 
+  // --- member restrictions and slow mode (specs §30.4) ------------------------------------------
+
+  /** Sets slow mode and/or the restricted members of a group (owners/admins). */
+  async setMemberPolicy(conversationId: string, patch: { slowModeSeconds?: number; restricted?: string[] }): Promise<void> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId || !(await this.canChangeTimer(groupId, this.accountId))) throw new Error('only owners and admins restrict members');
+    const conversation = this.conversationCache.get(conversationId)!;
+    const current = conversation.memberPolicy ?? { slowModeSeconds: 0, restricted: [], revision: 0 };
+    const policy: MemberPolicy = { slowModeSeconds: patch.slowModeSeconds ?? current.slowModeSeconds, restricted: patch.restricted ?? current.restricted, revision: current.revision + 1 };
+    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), memberPolicy: policy };
+    const updated = { ...conversation, memberPolicy: applyPolicy(conversation.memberPolicy, policy) };
+    await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putConversation(updated)]);
+    this.conversationCache.set(conversationId, updated);
+    this.emitConversations();
+  }
+
+  /** When this account may post next in a group (now when unrestricted), or null when restricted. */
+  async nextPostAt(conversationId: string): Promise<number | null> {
+    const conversation = this.conversationCache.get(conversationId);
+    const groupId = groupIdOf(conversationId);
+    if (!conversation?.memberPolicy || !groupId) return Date.now();
+    const decision = mayPost(conversation.memberPolicy, this.accountId, await this.canChangeTimer(groupId, this.accountId), conversation.lastPostAt?.[this.accountId], Date.now());
+    return decision.ok ? Date.now() : decision.reason === 'slow' ? decision.retryAt : null;
+  }
+
   /** Closed topics are read-only except for owners/admins. */
   private async requireOpenTopic(conversationId: string, topicId: string): Promise<void> {
     const topic = this.conversationCache.get(conversationId)?.topics?.find((t) => t.id === topicId);
@@ -727,6 +753,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (text && utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
     const groupId = groupIdOf(conversationId);
     const group = groupId ? await this.groups.record(groupId) : undefined;
+    const policy = this.conversationCache.get(conversationId)?.memberPolicy;
+    if (group && policy) {
+      const decision = mayPost(policy, this.accountId, await this.canChangeTimer(groupId!, this.accountId), this.conversationCache.get(conversationId)?.lastPostAt?.[this.accountId], Date.now());
+      if (!decision.ok) throw new SendRestrictedError(decision.reason, decision.reason === 'slow' ? decision.retryAt : undefined);
+    }
     const recipients = group ? group.members.map((m) => m.accountId).filter((id) => id !== this.accountId) : conversationId !== this.accountId ? [conversationId] : [];
     const data: DataMessage = {
       recipientAccountIds: recipients,
@@ -777,7 +808,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const ops: StoreOp[] = [this.repos.putMessage(message)];
     const expiry = expiryOp(message); if (expiry) ops.push(expiry);
     if (conversation) {
-      const updated = { ...conversation, lastActivity: data.timestamp, preview: previewOf(data), previewFromMe: true, previewAuthor: this.accountId, draft: undefined, archived: false };
+      const updated = { ...conversation, lastActivity: data.timestamp, preview: previewOf(data), previewFromMe: true, previewAuthor: this.accountId, draft: undefined, archived: false,
+        lastPostAt: policy?.slowModeSeconds ? { ...conversation.lastPostAt, [this.accountId]: data.timestamp } : conversation.lastPostAt };
       ops.push(this.repos.putConversation(updated));
       this.conversationCache.set(conversationId, updated);
     }
@@ -2264,6 +2296,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       return 'mutation';
     }
     if (data.timerUpdate) return this.applyTimerUpdate(conversation, authorId, direction, data, envelope, ops);
+    if (data.memberPolicy) {
+      const groupId = groupIdOf(conversation.id);
+      if (!groupId || !(await this.canChangeTimer(groupId, authorId))) return 'ignored';
+      const memberPolicy = applyPolicy(conversation.memberPolicy, data.memberPolicy);
+      if (memberPolicy === conversation.memberPolicy) return 'ignored';
+      this.stage(ops, { ...conversation, memberPolicy });
+      return 'mutation';
+    }
     if (data.topicDef) {
       const groupId = groupIdOf(conversation.id);
       // Only owners/admins define topics; everyone applies the same revision rule.
@@ -2282,6 +2322,14 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     }
     if (data.body === undefined && !data.attachments?.length) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
+    // Member restrictions and slow mode: drop posts the group policy does not allow.
+    let lastPostAt = conversation.lastPostAt;
+    const policy = conversation.memberPolicy;
+    const policyGroup = groupIdOf(conversation.id);
+    if (policy && policyGroup) {
+      if (direction === 'in' && !mayPost(policy, authorId, await this.canChangeTimer(policyGroup, authorId), lastPostAt?.[authorId], envelope.serverTimestamp, SLOW_MODE_TOLERANCE_MS).ok) return 'ignored';
+      if (policy.slowModeSeconds) lastPostAt = { ...lastPostAt, [authorId]: direction === 'out' ? data.timestamp : envelope.serverTimestamp };
+    }
     ops.push({ type: 'delete', ns: RecordNs.localHiddenConversation, id: conversationId });
 
     const message: ChatMessage = {
@@ -2321,6 +2369,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.stage(ops, {
       ...conversation,
       lastActivity: Math.max(conversation.lastActivity, message.sort),
+      lastPostAt,
       preview: previewOf(data),
       previewFromMe: direction === 'out',
       previewAuthor: authorId,
@@ -2596,6 +2645,11 @@ export interface OnboardingView {
 export interface CommunityGroup extends CommunityLinkDto {
   conversationId: string;
   name?: string;
+}
+
+/** The group's member policy does not allow this post: restricted member, or slow mode until `retryAt`. */
+export class SendRestrictedError extends Error {
+  constructor(readonly reason: 'restricted' | 'slow', readonly retryAt?: number) { super(`send restricted: ${reason}`); this.name = 'SendRestrictedError'; }
 }
 
 /** Sending to a blocked contact (unblock first). */

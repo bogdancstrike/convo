@@ -1,3 +1,4 @@
+import type { MemberPolicy } from './memberPolicy';
 import type { Topic } from './topics';
 import type { AbuseReport } from '../crypto/content';
 import type { EventState } from './events';
@@ -109,6 +110,10 @@ export interface Conversation {
   pinnedMessages?: { authorId: string; id: string; pinnedAt: number; by: string }[];
   /** Group topics (specs §30.4), defined by owners/admins. */
   topics?: Topic[];
+  /** Slow mode and restricted members (groups; owners/admins). */
+  memberPolicy?: MemberPolicy;
+  /** Slow mode bookkeeping: when each member's last accepted post was sent/received. */
+  lastPostAt?: Record<string, number>;
   /** Groups: alert for every message or only when this account is mentioned (mute = none). */
   notify?: 'all' | 'mentions';
   /** An unread message mentions this account (cleared when read). */

@@ -19,6 +19,7 @@ import { Icon } from '../components/Icon';
 import { useAccount, useGroupRecord } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel';
+import { SlowModeSection } from './MemberPolicy';
 
 /**
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
@@ -196,6 +197,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
   const [adminsOnly, setAdminsOnly] = useState(false);
   const shown = members.filter((m) => (!adminsOnly || m.role !== 'member') && matches(memberQuery, m.label, m.username));
   const canManage = myRole !== 'member' && !conversation.left && !record?.needsJoin;
+  const restricted = conversation.memberPolicy?.restricted ?? [];
 
   const run = async (task: () => Promise<void>) => {
     setBusy(true);
@@ -234,6 +236,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
       <GroupAbout client={client} conversation={conversation} description={record?.description} canEdit={canManage} />
       {canManage && <InviteSection client={client} conversation={conversation} />}
       {!conversation.adminOnly && !conversation.left && <CallLinkSection client={client} conversation={conversation} />}
+      {canManage && !conversation.adminOnly && <SlowModeSection client={client} conversation={conversation} onError={setError} />}
       <section className="drawer-section" aria-labelledby="members-title">
         <h4 id="members-title">{t('group.participants', { count: members.length })}</h4>
         {canManage && !adding && (
@@ -292,11 +295,14 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
                 <span className="muted-text">@{m.username}</span>
               </button>
               {m.role !== 'member' && <span className="role-tag">{t(`group.role.${m.role}`)}</span>}
+              {m.role === 'member' && restricted.includes(m.accountId) && <span className="role-tag" data-testid={`restricted-${m.username}`}>{t('slow.restrictedTag')}</span>}
               {canManage && m.accountId !== client.accountId && (m.role !== 'owner' || myRole === 'owner') && (
                 <Menu label={t('group.memberOptions')} items={[
                   ...(myRole === 'owner' && m.role !== 'owner' ? [{ label: t(m.role === 'admin' ? 'group.removeAdmin' : 'group.makeAdmin'), icon: 'shield' as const, onSelect: () => void run(() => client.changeGroupRole(conversation.id, m.accountId, m.role === 'admin' ? 'member' : 'admin')) },
                     { label: t('group.makeOwner'), icon: 'shield' as const, onSelect: () => { if (window.confirm(t('group.confirmOwner', { name: m.label }))) void run(() => client.changeGroupRole(conversation.id, m.accountId, 'owner')); } }] : []),
                   ...(myRole === 'owner' && m.role === 'owner' ? [{ label: t('group.removeOwner'), icon: 'shield' as const, onSelect: () => void run(() => client.changeGroupRole(conversation.id, m.accountId, 'admin')) }] : []),
+                  ...(m.role === 'member' && !conversation.adminOnly ? [{ label: t(restricted.includes(m.accountId) ? 'slow.allow' : 'slow.restrict'), icon: 'lock' as const, testId: 'member-restrict',
+                    onSelect: () => void run(() => client.setMemberPolicy(conversation.id, { restricted: restricted.includes(m.accountId) ? restricted.filter((id) => id !== m.accountId) : [...restricted, m.accountId] })) }] : []),
                   { label: t('group.remove'), icon: 'trash', danger: true, onSelect: () => { if (window.confirm(t('group.confirmRemove', { name: m.label }))) void run(() => client.removeGroupMember(conversation.id, m.accountId)); } },
                   { label: t('group.ban'), icon: 'trash', danger: true, testId: 'member-ban', onSelect: () => { if (window.confirm(t('group.confirmBan', { name: m.label }))) void run(() => client.banMember(conversation.id, m.accountId)); } },
                 ]} trigger={({ open, toggle }) => <button className="icon-btn" disabled={busy} onClick={toggle} aria-label={`${t('group.memberOptions')}: ${m.label}`} aria-expanded={open} data-testid={`member-menu-${m.username}`}><Icon name="more" /></button>} />

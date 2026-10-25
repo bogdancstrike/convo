@@ -255,6 +255,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Slow mode and per-member send restrictions (specs §30.4): owners/admins publish a revisioned
+  E2EE member policy (interval, restricted members); the sender's client refuses (text given back,
+  wait shown) and receivers drop posts that break it (server receive time, 2 s tolerance), so a
+  modified client cannot bypass it for honest members; owners/admins are never limited. Web: group
+  info → Slow mode, member menu → Restrict from sending, banner/note in the thread.
+  `memberPolicy.test.ts`, `slow-mode.spec.ts`.
 - Group topics (specs §30.4): owners/admins create, rename, close and reopen topics through
   revisioned E2EE group events (enforced on receipt); messages carry a topic ID; the group view
   filters by topic and posts into the selected one; closed topics are read-only for members. Web:
