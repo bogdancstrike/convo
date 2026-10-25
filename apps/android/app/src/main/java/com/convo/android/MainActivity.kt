@@ -35,6 +35,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -174,8 +178,15 @@ class MainActivity : FragmentActivity() {
         setContent { ConvoTheme(snapshot.optJSONObject("settings")?.optString("theme") ?: "system") {
             Box {
                 AndroidView(factory = { bridge.webView }, modifier = Modifier.size(1.dp))
-                // Content is not composed at all while locked, so nothing flashes on resume.
-                if (locks.appLock && !locks.appUnlocked && phase == "ready") AppLockScreen(this@MainActivity) else ConvoApp(this@MainActivity)
+                // A minimized call shows a "tap to return" bar above the app (WhatsApp).
+                val miniCall = calls.call != null && calls.minimized
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                    if (miniCall) MinimizedCallBar(this@MainActivity)
+                    Box(Modifier.weight(1f).then(if (miniCall) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier)) {
+                        // Content is not composed at all while locked, so nothing flashes on resume.
+                        if (locks.appLock && !locks.appUnlocked && phase == "ready") AppLockScreen(this@MainActivity) else ConvoApp(this@MainActivity)
+                    }
+                }
                 // Calls stay above navigation (and the lock screen, so an incoming call can be answered).
                 if (calls.call != null) CallScreen(this@MainActivity)
             }
@@ -265,7 +276,8 @@ class MainActivity : FragmentActivity() {
     }
     override fun onStop() {
         super.onStop(); isInForeground = false; PushRegistration.appVisible = false; locks.onBackground()
-        if (!stayConnected && PushRegistration.endpoint(this) != null && !PushRegistration.rejected(this)) handoffHandler.postDelayed(backgroundHandoff, BACKGROUND_HANDOFF_MS)
+        // During a call the connection stays (call signalling, rekeys); the call service keeps us alive.
+        if (!stayConnected && calls.call == null && PushRegistration.endpoint(this) != null && !PushRegistration.rejected(this)) handoffHandler.postDelayed(backgroundHandoff, BACKGROUND_HANDOFF_MS)
     }
     /**
      * WhatsApp-like default: on the first start after sign-in, ask once for Android's notification

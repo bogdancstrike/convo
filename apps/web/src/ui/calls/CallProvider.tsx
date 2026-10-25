@@ -33,7 +33,15 @@ interface CallControls {
   hangUp: () => void;
   /** Re-render tick for media state changes (tracks, mute, speakers). */
   version: number;
+  /** The call screen is minimized to a bar so chats stay usable (WhatsApp). */
+  minimized: boolean;
+  setMinimized: (minimized: boolean) => void;
+  /** The other side's connection dropped briefly; waiting before declaring the call lost. */
+  peerReconnecting: boolean;
 }
+
+/** How long the other side may be gone (network switch, brief background) before "lost". */
+const PEER_RECONNECT_GRACE_MS = 15_000;
 
 const Calls = createContext<CallControls | null>(null);
 export function useCalls(): CallControls {
@@ -47,6 +55,8 @@ export function useCalls(): CallControls {
  * rings while busy are answered with `busy`. The UI is a full-window dialog above the app.
  */
 export function CallProvider({ client, children }: { client: EnclaveClient; children: ReactNode }) {
+  const [minimized, setMinimized] = useState(false);
+  const [peerReconnecting, setPeerReconnecting] = useState(false);
   const [call, setCall] = useState<ActiveCall | null>(null);
   const [version, setVersion] = useState(0);
   const media = useRef<LiveKitCall | null>(null);
@@ -62,6 +72,7 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
     const leaving = media.current; media.current = null;
     await leaving?.leave();
     patch({ phase: 'ended', reason });
+    setMinimized(false); setPeerReconnecting(false);
     setTimeout(() => { if (current.current?.phase === 'ended') update(null); }, 1800);
   }, [patch, update]);
 
@@ -77,13 +88,15 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
       // If the other side vanished without one, their connection dropped (network, call server
       // unreachable): say so instead of pretending they hung up.
       const callId = active.callId;
+      setPeerReconnecting(true);
       setTimeout(() => {
         const still = current.current;
         if (!still || still.callId !== callId || still.phase !== 'connected' || (media.current?.remotes.length ?? 0) > 0) return;
         void client.endCall(callId!, still.conversationId, true).catch(() => undefined);
         void finish('lost');
-      }, 2500);
+      }, PEER_RECONNECT_GRACE_MS);
     }
+    if (others > 0) setPeerReconnecting(false);
   }, [bump, client, finish, patch]);
 
   /** Group call: after someone leaves, the smallest remaining identity rotates the media key. */
@@ -191,7 +204,7 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
   useEffect(() => () => { ringer.current.stop(); void media.current?.leave(); }, []);
 
   return (
-    <Calls.Provider value={{ call, media: media.current, start, joinLink, accept, decline, hangUp, version }}>
+    <Calls.Provider value={{ call, media: media.current, start, joinLink, accept, decline, hangUp, version, minimized: minimized && !!call && call.phase !== 'incoming' && call.phase !== 'ended', setMinimized, peerReconnecting }}>
       {children}
       {call && <Suspense fallback={null}><CallScreen client={client} /></Suspense>}
     </Calls.Provider>

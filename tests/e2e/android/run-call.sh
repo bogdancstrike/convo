@@ -14,7 +14,7 @@ $ADB logcat -c
 docker compose --profile e2e build e2e >/dev/null
 docker compose --profile e2e run --rm \
   -e PK_USER -e MINUTES="${MINUTES:-5}" -e VIDEO="${VIDEO:-}" -e SHARE="${SHARE:-}" -e EXPECT_SCREEN="${EXPECT_SCREEN:-}" e2e \
-  npx playwright test -c android/playwright.android.config.ts &
+  npx playwright test -c android/playwright.android.config.ts android/call-android.spec.ts &
 runner=$!
 # Accept the incoming call as soon as the ring screen shows.
 for _ in $(seq 1 60); do

@@ -41,6 +41,15 @@ test('voice call rings, connects with end-to-end encryption and ends for both si
     await caller.getByTestId('call-mute').click();
     await expect(caller.getByTestId('call-mute')).toHaveAttribute('aria-pressed', 'true');
 
+    // Minimize (WhatsApp): chats stay usable, audio keeps playing, the bar returns to the call.
+    await callee.getByTestId('call-minimize').click();
+    await expect(callee.getByTestId('call-mini-bar')).toBeVisible();
+    await expect(callee.getByTestId('remote-audio')).toHaveCount(1);
+    await send(callee, 'typing during the call');
+    await expect(caller.getByTestId('message-body').filter({ hasText: 'typing during the call' })).toBeAttached({ timeout: 20_000 });
+    await callee.getByTestId('call-return').click();
+    await expect(screen(callee)).toHaveAttribute('data-phase', 'connected');
+
     await callee.getByTestId('call-end').click();
     await expect(screen(callee)).toHaveAttribute('data-reason', 'ended');
     await expect(screen(caller)).toHaveAttribute('data-reason', 'ended', { timeout: 20_000 });

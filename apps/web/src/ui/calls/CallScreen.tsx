@@ -14,7 +14,7 @@ import { useCalls } from './CallProvider';
  */
 export function CallScreen({ client }: { client: EnclaveClient }) {
   const { t } = useI18n();
-  const { call, media, accept, decline, hangUp, version } = useCalls();
+  const { call, media, accept, decline, hangUp, version, minimized, setMinimized, peerReconnecting } = useCalls();
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const dialog = useRef<HTMLDivElement>(null);
@@ -28,7 +28,7 @@ export function CallScreen({ client }: { client: EnclaveClient }) {
   const status = call.phase === 'incoming' ? t(call.video ? 'calls.incomingVideo' : 'calls.incomingVoice')
     : call.phase === 'outgoing' ? t('calls.calling')
     : call.phase === 'connecting' ? t('calls.connecting')
-    : call.phase === 'connected' ? formatDuration(now - (call.connectedAt ?? now))
+    : call.phase === 'connected' ? (peerReconnecting || media?.reconnecting ? t('calls.reconnecting') : formatDuration(now - (call.connectedAt ?? now)))
     : t(`calls.reason.${call.reason ?? 'ended'}`);
   const showVideo = call.video && call.phase === 'connected';
   // Presenter layout: a remote screen share takes the stage in voice and video calls alike.
@@ -40,10 +40,25 @@ export function CallScreen({ client }: { client: EnclaveClient }) {
     try { await media.setScreenShare(!media.screenSharing); } catch { setShareError(true); }
   };
 
+  // Minimized (WhatsApp): a bar along the top keeps the call one tap away while chats stay usable.
+  if (minimized) return (
+    <div className="call-mini-bar" role="region" aria-label={t('calls.dialog', { name: title })} data-testid="call-mini-bar">
+      <button className="call-mini-return" onClick={() => setMinimized(false)} data-testid="call-return">
+        <Icon name={call.video ? 'video' : 'calls'} size={16} /> {title} · {status} <span className="call-mini-hint">{t('calls.tapToReturn')}</span>
+      </button>
+      <button className="icon-btn call-mini-end" onClick={hangUp} aria-label={t('calls.end')} data-testid="call-mini-end"><Icon name="callEnd" size={16} /></button>
+      {/* Audio keeps playing while minimized. */}
+      {remotes.map((p) => <RemoteAudio key={p.identity} participant={p} />)}
+    </div>
+  );
   return (
     <div className={`call-screen${showVideo ? ' video' : ''}`} role="dialog" aria-modal="true" aria-label={t('calls.dialog', { name: title })}
       ref={dialog} data-testid="call-screen" data-phase={call.phase} data-reason={call.reason ?? ''} data-encrypted={media?.encrypted ? 'true' : 'false'} data-key-generation={media?.generation ?? 0}
-      onKeyDown={(e) => { if (e.key === 'Escape' && call.phase !== 'incoming') hangUp(); }}>
+      onKeyDown={(e) => { if (e.key === 'Escape' && call.phase !== 'incoming' && call.phase !== 'ended') setMinimized(true); }}>
+      {call.phase !== 'incoming' && call.phase !== 'ended' && (
+        <button className="icon-btn call-minimize" onClick={() => setMinimized(true)} aria-label={t('calls.minimize')} title={t('calls.minimize')} data-testid="call-minimize"><Icon name="chevronDown" size={22} /></button>
+      )}
+      {media?.cameraFailed && <p className="call-notice" role="status">{t('calls.cameraFailed')}</p>}
       {presenter ? (
         <div className="call-presenting">
           <ScreenStage client={client} participant={presenter} />

@@ -228,6 +228,14 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   choice), ballots/closes as E2EE data messages converging deterministically (`core/polls.ts`),
   author/admin close enforced on receive; web attach menu + poll card, Android attach sheet + poll
   card. `polls.test.ts`, `polls.spec.ts` (Chromium/Firefox), emulator check both directions.
+- Call reliability (2026-10-25): Android call work moved off the activity lifecycle (Back/rotation
+  no longer cancel a live call's events), an "Ongoing call" foreground service (microphone/camera)
+  keeps calls alive on Home and the lock screen (no background socket handoff during a call),
+  ringback tone while ringing, camera failures continue the call with audio (web + Android), the
+  other side may be gone 15 s ("Reconnecting…") before "couldn't stay connected", Back/Escape and a
+  chevron minimize the call to a green "tap to return" bar (audio keeps playing), shared screens
+  go full screen on tap (system bars hidden). Emulator: 2-minute call with Home + lock, media both
+  ways; video call; call link. `calls.spec.ts` minimize flow.
 - History sync fixes (2026-10-25): one entry the server refused (e.g. > 256 KiB with thumbnails) or
   that could not be opened blocked every later entry forever ("History could not sync", phone
   messages missing on web). Refused uploads are dropped, unreadable downloads skipped, oversized

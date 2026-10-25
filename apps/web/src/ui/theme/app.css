@@ -2586,3 +2586,11 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .sticker-menu button { padding: 8px 10px; border: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; border-radius: 6px; }
 .sticker-menu button:hover { background: var(--c-hover, rgba(0,0,0,.06)); }
 .sticker-menu .danger { color: var(--c-danger-text, #c0392b); }
+
+/* Minimized call (WhatsApp): a green bar along the top; the call screen keeps a minimize button. */
+.call-mini-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; display: flex; align-items: center; background: #11713f; color: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 0.2); }
+.call-mini-return { flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 16px; border: 0; background: none; color: inherit; font: inherit; font-size: 0.875rem; text-align: left; cursor: pointer; }
+.call-mini-hint { margin-left: auto; opacity: 0.85; font-size: 0.8125rem; }
+.call-mini-end { color: #fff; background: #c62828; margin-right: 10px; }
+.call-minimize { position: absolute; top: 12px; left: 12px; z-index: 2; color: #fff; }
+.call-notice { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 2; margin: 0; padding: 4px 12px; border-radius: 999px; background: rgb(0 0 0 / 0.5); color: #fff; font-size: 0.8125rem; }

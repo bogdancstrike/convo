@@ -58,9 +58,17 @@ export class LiveKitCall {
     await this.room.setE2EEEnabled(true);
     await this.room.connect(LiveKitCall.url(join), join.token, { autoSubscribe: true });
     await this.room.localParticipant.setMicrophoneEnabled(true);
-    if (video) await this.room.localParticipant.setCameraEnabled(true);
+    // A camera problem (busy, blocked) must not fail the call: it continues with audio.
+    if (video) {
+      try { await this.room.localParticipant.setCameraEnabled(true); } catch { this.cameraFailed = true; }
+    }
     this.onChange();
   }
+
+  /** The camera could not start when the call connected (the call continues with audio). */
+  cameraFailed = false;
+  /** Our media connection is recovering (LiveKit reconnects on network changes). */
+  get reconnecting(): boolean { return this.room.state === 'reconnecting' || this.room.state === 'signalReconnecting'; }
 
   /** Installs a newer media key (rekey); older ones stay in the ring so in-flight frames decrypt. */
   async applyKey(next: CallKey): Promise<void> {

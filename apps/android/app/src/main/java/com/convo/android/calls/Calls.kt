@@ -29,6 +29,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -95,6 +96,16 @@ class CallManager(private val app: MainActivity) {
     private var currentKey: String? = null
     private var events: Job? = null
     private var ringtone: Ringtone? = null
+    private var ringback: android.media.ToneGenerator? = null
+    /**
+     * Call work runs in this scope, not the activity's: Back, rotation or the activity going away must
+     * not cancel a live call's event handling (it previously left calls in a half-dead state).
+     */
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+    /** The call screen is minimized to a bar so chats stay usable (WhatsApp). */
+    var minimized by mutableStateOf(false)
+    /** Media is reconnecting (ours or the other side's connection dropped briefly). */
+    var reconnecting by mutableStateOf(false); private set
 
     val encrypted: Boolean get() {
         val remote = room?.remoteParticipants?.values.orEmpty()
@@ -120,7 +131,7 @@ class CallManager(private val app: MainActivity) {
                 call = call?.copy(callId = join.optString("callId"))
                 ring(outgoing = true)
                 connect(join, result.optString("key"), video)
-                app.lifecycleScope.launch {
+                scope.launch {
                     delay(RING_TIMEOUT_MS)
                     val active = call
                     if (active?.callId == join.optString("callId") && active.phase == "outgoing") { end(answered = false); finish("noAnswer") }
@@ -136,7 +147,7 @@ class CallManager(private val app: MainActivity) {
             if (active != null && active.phase != "ended") { app.call("declineCall", obj("callId" to invite.optString("callId"), "busy" to true), quiet = true); return }
             call = Active(invite.optString("callId"), invite.optString("conversationId"), invite.optBoolean("video"), "in", "incoming")
             ring(outgoing = false)
-            app.lifecycleScope.launch {
+            scope.launch {
                 delay(maxOf(1000L, invite.optLong("at") + RING_TIMEOUT_MS - System.currentTimeMillis()))
                 if (call?.callId == invite.optString("callId") && call?.phase == "incoming") { app.call("missCall", obj("callId" to invite.optString("callId")), quiet = true); finish("noAnswer") }
             }
@@ -200,7 +211,7 @@ class CallManager(private val app: MainActivity) {
         finish("ended")
     }
 
-    fun toggleMic() { val r = room ?: return; app.lifecycleScope.launch { micOn = !micOn; r.localParticipant.setMicrophoneEnabled(micOn) } }
+    fun toggleMic() { val r = room ?: return; scope.launch { micOn = !micOn; r.localParticipant.setMicrophoneEnabled(micOn) } }
     fun toggleSpeaker() { route(!speakerOn) }
 
     /**
@@ -220,7 +231,7 @@ class CallManager(private val app: MainActivity) {
     /** Stops sharing, or asks Android for screen-capture consent ([startScreenShare] follows a grant). */
     fun toggleScreenShare() {
         val r = room ?: return
-        if (screenSharing) app.lifecycleScope.launch { r.localParticipant.setScreenShareEnabled(false); screenSharing = false }
+        if (screenSharing) scope.launch { r.localParticipant.setScreenShareEnabled(false); screenSharing = false }
         else app.requestScreenCapture()
     }
 
@@ -234,14 +245,14 @@ class CallManager(private val app: MainActivity) {
         manager?.createNotificationChannel(android.app.NotificationChannel(SCREEN_CHANNEL, tr("Screen sharing"), android.app.NotificationManager.IMPORTANCE_LOW))
         val notification = androidx.core.app.NotificationCompat.Builder(app, SCREEN_CHANNEL).setSmallIcon(R.drawable.convo_logo)
             .setContentTitle(tr("You are sharing your screen")).setContentText(tr("Everything on your screen is visible in the call.")).setOngoing(true).build()
-        app.lifecycleScope.launch {
+        scope.launch {
             try {
                 screenSharing = r.localParticipant.setScreenShareEnabled(true, io.livekit.android.room.track.screencapture.ScreenCaptureParams(consent, SCREEN_NOTIFICATION, notification) { screenSharing = false })
             } catch (e: Exception) { screenSharing = false; app.error = tr("Screen sharing could not start.") }
         }
     }
 
-    fun toggleCamera() { val r = room ?: return; app.lifecycleScope.launch { cameraOn = !cameraOn; r.localParticipant.setCameraEnabled(cameraOn) } }
+    fun toggleCamera() { val r = room ?: return; scope.launch { cameraOn = !cameraOn; r.localParticipant.setCameraEnabled(cameraOn) } }
 
     private fun end(answered: Boolean) {
         val active = call ?: return
@@ -291,9 +302,11 @@ class CallManager(private val app: MainActivity) {
         val created = LiveKit.create(app.applicationContext, RoomOptions(adaptiveStream = true, dynacast = true, e2eeOptions = E2EEOptions(keyProvider)),
             LiveKitOverrides(okHttpClient = DevelopmentTls(app).okHttp()))
         room = created
-        events = app.lifecycleScope.launch {
+        events = scope.launch {
             created.events.events.collect { event: RoomEvent ->
                 if (event is RoomEvent.TrackE2EEStateEvent) event.publication.sid.let { e2ee[it] = event.state }
+                if (event is RoomEvent.Reconnecting) reconnecting = true
+                if (event is RoomEvent.Reconnected) reconnecting = false
                 if (event is RoomEvent.ParticipantDisconnected) rotateIfLeader()
                 // The server removes devices of accounts that are no longer group members.
                 if (event is RoomEvent.Disconnected && event.reason == io.livekit.android.events.DisconnectReason.PARTICIPANT_REMOVED) { finish("removed"); return@collect }
@@ -303,12 +316,15 @@ class CallManager(private val app: MainActivity) {
                 onRoomChanged()
             }
         }
-        app.lifecycleScope.launch {
+        scope.launch {
             try {
                 val url = app.serverAddress().replace("https://", "wss://") + join.optString("path", "/rtc").removeSuffix("/").removeSuffix("/rtc")
                 created.connect(url, join.optString("token"))
+                startService(video)
                 micOn = true; created.localParticipant.setMicrophoneEnabled(true)
-                cameraOn = video; if (video) created.localParticipant.setCameraEnabled(true)
+                // A camera problem (busy, blocked, failing) must not fail the call: continue with audio.
+                cameraOn = video && runCatching { created.localParticipant.setCameraEnabled(true) }.getOrDefault(false)
+                if (video && !cameraOn) app.notice = tr("Your camera isn’t available. The call continues with audio.")
                 route(speaker = video)
                 version++; onRoomChanged()
                 if (BuildConfig.DEBUG) { logMediaStats(created); if (debugProperty("debug.convo.calltone") == "1") injectTestTone(created) }
@@ -322,7 +338,7 @@ class CallManager(private val app: MainActivity) {
      * Counters only; no media or keys.
      */
     private fun logMediaStats(room: Room) {
-        app.lifecycleScope.launch {
+        scope.launch {
             while (this@CallManager.room === room) {
                 room.getSubscriberRTCStats { report ->
                     val inbound = report.statsMap.values.filter { it.type == "inbound-rtp" }
@@ -371,30 +387,45 @@ class CallManager(private val app: MainActivity) {
     private fun onRoomChanged() {
         val active = call ?: return
         val others = room?.remoteParticipants?.size ?: 0
+        if (others > 0) reconnecting = false
         if (others > 0 && active.phase != "connected" && active.phase != "ended") { stopRing(); call = active.copy(phase = "connected", connectedAt = System.currentTimeMillis()) }
         if (others == 0 && active.phase == "connected" && !active.conversationId.startsWith("g:")) {
             // A hang-up arrives as an encrypted "end" message (finishing as "ended"). If the other side
             // vanished without one, their connection dropped: say so instead of "Call ended".
+            // Their connection may be switching networks or recovering: wait before declaring it lost.
             val callId = active.callId
-            app.lifecycleScope.launch {
-                delay(2500)
+            reconnecting = true
+            scope.launch {
+                delay(PEER_RECONNECT_GRACE_MS)
                 val still = call
                 if (still != null && still.callId == callId && still.phase == "connected" && (room?.remoteParticipants?.size ?: 0) == 0) { end(answered = true); finish("lost") }
             }
         }
     }
 
+    private fun startService(video: Boolean) {
+        val active = call ?: return
+        val title = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == active.conversationId }?.optString("title") ?: tr("Ongoing call")
+        CallService.start(app, title, video)
+    }
+
     private fun finish(reason: String) {
         stopRing()
+        CallService.stop(app)
+        reconnecting = false; minimized = false
         events?.cancel(); events = null
         room?.let { it.disconnect(); it.release() }; room = null; e2ee.clear(); speakerOn = false; screenSharing = false
         call = call?.copy(phase = "ended", reason = reason)
-        app.lifecycleScope.launch { delay(1800); if (call?.phase == "ended") call = null }
+        scope.launch { delay(1800); if (call?.phase == "ended") call = null }
     }
 
     private fun ring(outgoing: Boolean) {
         stopRing()
-        if (outgoing) return // the caller hears nothing until the callee answers (status text instead)
+        if (outgoing) {
+            // Ringback ("ding… ding…") until the callee answers, on the call audio stream.
+            ringback = runCatching { android.media.ToneGenerator(android.media.AudioManager.STREAM_VOICE_CALL, 70).apply { startTone(android.media.ToneGenerator.TONE_SUP_RINGTONE) } }.getOrNull()
+            return
+        }
         try {
             ringtone = RingtoneManager.getRingtone(app, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))?.apply {
                 audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build()
@@ -407,6 +438,7 @@ class CallManager(private val app: MainActivity) {
 
     private fun stopRing() {
         ringtone?.stop(); ringtone = null
+        ringback?.let { it.stopTone(); it.release() }; ringback = null
         app.getSystemService(Vibrator::class.java)?.cancel()
     }
 
@@ -414,6 +446,8 @@ class CallManager(private val app: MainActivity) {
 
     companion object {
         const val RING_TIMEOUT_MS = 45_000L; private const val KEY_RING = 16
+        /** How long the other side may be gone (network switch, brief background) before "lost". */
+        private const val PEER_RECONNECT_GRACE_MS = 15_000L
         private const val SCREEN_CHANNEL = "screen-share"; private const val SCREEN_NOTIFICATION = 7102
     }
 }
@@ -421,6 +455,10 @@ class CallManager(private val app: MainActivity) {
 @Composable fun CallScreen(app: MainActivity) {
     val manager = app.calls
     val call = manager.call ?: return
+    if (manager.minimized) return
+    // Back minimizes an active call (WhatsApp) instead of leaving the screen in a half-closed state.
+    androidx.activity.compose.BackHandler(enabled = call.phase in setOf("outgoing", "connecting", "connected")) { manager.minimized = true }
+    var immersive by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(call.phase) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
     val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == call.conversationId }
@@ -431,7 +469,7 @@ class CallManager(private val app: MainActivity) {
         "incoming" -> if (call.video) "Incoming video call…" else "Incoming voice call…"
         "outgoing" -> "Calling…"
         "connecting" -> "Connecting…"
-        "connected" -> formatDuration(now - (call.connectedAt ?: now))
+        "connected" -> if (manager.reconnecting) "Reconnecting…" else formatDuration(now - (call.connectedAt ?: now))
         else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; "removed" -> "You are no longer in this group"; "lost" -> "The call couldn’t stay connected. One of you may be on a network that can’t reach the call server."; "linkUnavailable" -> "This call link has expired, was revoked, or isn’t for a group you belong to."; "keyUnavailable" -> "This device didn’t receive the key for the running call. Ask someone in the call to add you."; else -> "Call ended" }
     }
     Surface(Modifier.fillMaxSize(), color = Color(0xFF0B141A), contentColor = Color(0xFFF2F5F7)) {
@@ -439,7 +477,11 @@ class CallManager(private val app: MainActivity) {
             val videoTiles = if (call.video && call.phase == "connected") remotes.mapNotNull { p -> videoOf(p)?.let { p to it } } else emptyList()
             // A shared screen (web presenter) takes the stage in voice and video calls alike.
             val presenting = if (call.phase == "connected") remotes.firstNotNullOfOrNull { p -> screenOf(p)?.let { p to it } } else null
-            if (presenting != null) Column(Modifier.fillMaxSize().padding(top = 96.dp, bottom = 170.dp)) {
+            // A shared screen: tap for full screen (controls and system bars hidden), tap again to return.
+            if (presenting != null && immersive) Box(Modifier.fillMaxSize().background(Color.Black).clickable { immersive = false }) {
+                VideoRenderer(manager, presenting.second, Modifier.fillMaxSize(), fit = true)
+            }
+            else if (presenting != null) Column(Modifier.fillMaxSize().padding(top = 96.dp, bottom = 170.dp).clickable { immersive = true }) {
                 VideoRenderer(manager, presenting.second, Modifier.weight(1f).fillMaxWidth(), fit = true)
                 RawText(tr("{name} is presenting").replace("{name}", if (call.conversationId.startsWith("g:")) presenting.first.name ?: "" else title), Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp), color = Color(0xFFC7D0D6), fontSize = 13.sp)
             }
@@ -457,8 +499,12 @@ class CallManager(private val app: MainActivity) {
             }
             if (videoTiles.isNotEmpty()) Text(status, Modifier.align(Alignment.TopCenter).padding(top = 48.dp).background(Color(0x80000000), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp))
             manager.room?.localParticipant?.let { local -> if (call.video && manager.cameraOn) videoOf(local)?.let { VideoRenderer(manager, it, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 160.dp).size(110.dp, 150.dp).clip(RoundedCornerShape(12.dp))) } }
+            // Minimize (top-left chevron), like WhatsApp: chats stay usable with a "return to call" bar.
+            if (!immersive && call.phase in setOf("outgoing", "connecting", "connected")) IconButton({ manager.minimized = true }, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp)) {
+                Icon(Icons.Outlined.KeyboardArrowDown, "Minimize call", tint = Color.White)
+            }
             // Control tray (WhatsApp): rounded sheet along the bottom edge.
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF1F2C34), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).padding(top = 20.dp, bottom = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (!(presenting != null && immersive)) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF1F2C34), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).padding(top = 20.dp, bottom = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (manager.screenSharing) RawText(tr("You are sharing your screen"), Modifier.padding(bottom = 10.dp).background(Color(0x3300A884), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFFD9FDD3), fontSize = 13.sp)
                 if (videoTiles.isNotEmpty() && call.phase == "connected") Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
                     Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp)); Text(if (manager.encrypted) " End-to-end encrypted" else " Securing call…", style = MaterialTheme.typography.bodySmall)
@@ -478,6 +524,31 @@ class CallManager(private val app: MainActivity) {
                 }
             }
         }
+    }
+    // Full-screen presenter view hides the system bars too.
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(immersive) {
+        val controller = androidx.core.view.WindowCompat.getInsetsController(app.window, view)
+        if (immersive) { controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars()); controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
+        else controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        onDispose { controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+    }
+}
+
+/** Bar shown above the app while a call is minimized: who, duration, tap to return, hang up. */
+@Composable fun MinimizedCallBar(app: MainActivity) {
+    val manager = app.calls
+    val call = manager.call ?: return
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(call.phase) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+    val title = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == call.conversationId }?.optString("title") ?: tr("Call")
+    val status = when { call.phase != "connected" -> tr("Calling…"); manager.reconnecting -> tr("Reconnecting…"); else -> formatDuration(now - (call.connectedAt ?: now)) }
+    Row(Modifier.fillMaxWidth().background(Color(0xFF11713F)).statusBarsPadding().clickable { manager.minimized = false }.padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (call.video) Icons.Outlined.Videocam else Icons.Outlined.Call, null, Modifier.size(18.dp), tint = Color.White)
+        RawText("$title · $status", Modifier.weight(1f).padding(horizontal = 10.dp), color = Color.White, fontSize = 14.sp, maxLines = 1)
+        Text("Tap to return", color = Color.White, fontSize = 13.sp)
+        IconButton({ manager.hangUp() }, Modifier.size(36.dp)) { Icon(Icons.Outlined.CallEnd, "End call", tint = Color.White) }
     }
 }
 
