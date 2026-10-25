@@ -23,7 +23,8 @@ import { ReportCard } from './ReportDialog';
 import { AnySticker } from '../components/StickerImage';
 
 /** Quick reactions shown at the top of the message menu. */
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+/** WhatsApp: five quick reactions, then "+" opens every emoji. */
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢'];
 const LONG_PRESS_MS = 500;
 
 export interface MessageActions {
@@ -316,8 +317,8 @@ function MessageMenu({ client, message: m, onClose, actions, anchor, startWithDe
             {emoji}
           </button>
         ))}
-        <button aria-label={t('msg.moreReactions')} onClick={() => setPicker(true)}>
-          <Icon name="smile" size={20} />
+        <button aria-label={t('msg.moreReactions')} onClick={() => setPicker(true)} data-testid="more-reactions">
+          <Icon name="plus" size={20} />
         </button>
       </div>
       <ul className="menu-list static" role="menu" aria-label={t('msg.menu')}>

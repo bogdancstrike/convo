@@ -37,6 +37,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.browser:browser:1.8.0")
+    // Full emoji picker for reactions ("+" after the five quick ones).
+    implementation("androidx.emoji2:emoji2-emojipicker:1.5.0")
     implementation("androidx.biometric:biometric:1.1.0")
     // Calls: official LiveKit SDK (Apache-2.0) with E2EE frame cryptors; see ADR-0006.
     implementation("io.livekit:livekit-android:2.29.0")

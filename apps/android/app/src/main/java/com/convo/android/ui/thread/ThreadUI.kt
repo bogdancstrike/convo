@@ -290,6 +290,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val outgoing = message.optString("direction") == "out"
     val isSticker = message.has("sticker") && !message.isNull("sticker") && !message.optBoolean("deleted")
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
+    var reactionPicker by remember { mutableStateOf(false) }
+    if (reactionPicker) EmojiSheet({ reactionPicker = false }) { emoji -> reactionPicker = false; app.call("react", message.targetArgs(conversation).put("emoji", emoji)) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
         val key = "${message.optString("authorId")}/${message.optString("id")}"
@@ -370,7 +372,11 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     Box {
                         DropdownMenu(menu, { menu = false }) {
                             // Reaction bar first (WhatsApp long-press).
-                            Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) { listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(42.dp)) { RawText(emoji, fontSize = 22.sp) } } }
+                            // WhatsApp: five quick reactions, then "+" for any emoji.
+                            Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                listOf("👍", "❤️", "😂", "😮", "😢").forEach { emoji -> TextButton({ app.call("react", message.targetArgs(conversation).put("emoji", emoji)); menu = false }, contentPadding = PaddingValues(2.dp), modifier = Modifier.width(42.dp)) { RawText(emoji, fontSize = 22.sp) } }
+                                IconButton({ menu = false; reactionPicker = true }, Modifier.size(40.dp)) { Icon(Icons.Outlined.Add, "More reactions") }
+                            }
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("Message info") }, leadingIcon = { Icon(Icons.Outlined.Info, null) }, onClick = { menu = false; info = true })
                             DropdownMenuItem(text = { Text("Select") }, leadingIcon = { Icon(Icons.Outlined.CheckCircleOutline, null) }, onClick = { menu = false; app.selection = setOf("${message.optString("authorId")}/${message.optString("id")}") })

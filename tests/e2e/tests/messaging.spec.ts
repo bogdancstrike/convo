@@ -34,6 +34,14 @@ test.describe('direct encrypted messaging', () => {
     await menu.getByRole('button', { name: 'React 👍' }).click();
     await expect(aliceFirst.getByTestId('reaction')).toHaveText('👍 1');
 
+    // WhatsApp: five quick reactions, then "+" opens every emoji; picking one replaces Bob's reaction.
+    const again = await messageMenu(bob, 'Bună, Bob! bold hello');
+    await expect(again.locator('.quick-reactions button')).toHaveCount(6);
+    await again.getByTestId('more-reactions').click();
+    await bob.getByTestId('emoji-picker').getByLabel('Search emoji').fill('rocket');
+    await bob.getByTestId('emoji-picker').getByRole('button', { name: /rocket/i }).first().click();
+    await expect(aliceFirst.getByTestId('reaction')).toHaveText('🚀 1');
+
     // Alice edits her message; Bob sees the new text marked edited.
     await (await messageMenu(alice, 'Bună, Bob! bold hello')).getByTestId('action-edit').click();
     await alice.getByTestId('composer').fill('Bună, Bob! (edited text)');
