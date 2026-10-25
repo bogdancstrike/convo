@@ -269,6 +269,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Lost commit responses (specs §6, GRP-02): commits are retried with the same submission ID on
+  network failure; if the outcome stays unknown the resulting state is kept as pending and resolved
+  via `GET /v1/groups/{gid}/commits/{submissionId}` at start-up and before processing a later-epoch
+  commit (accepted → applied, not accepted → discarded), so a lost response no longer leaves a
+  device permanently a commit behind. `pendingCommit.test.ts`.
 - Pending-removal gate (specs §4.7, GRP-01): device revocation moves the device from every group
   roster to `mls_group_pending_removals` (V36); the server refuses application messages with
   `PENDING_REMOVAL` until a commit removes the leaf. The sending client removes it when allowed (own

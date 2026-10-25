@@ -141,6 +141,13 @@ class GroupService {
         return new Accepted(newEpoch, seq, false);
     }
 
+    /** The accepted commit with this submission ID, for members resolving a lost response. */
+    @Transactional(readOnly = true)
+    GroupRepository.EventRow acceptedCommit(DeviceAddress caller, byte[] groupId, byte[] submissionId) {
+        if (!groups.members(groupId).containsKey(caller.accountId())) throw new EnclaveException(ErrorCode.NOT_GROUP_MEMBER, "not a member");
+        return groups.eventBySubmission(groupId, submissionId).orElseThrow(() -> new EnclaveException(ErrorCode.NOT_FOUND, "commit not accepted"));
+    }
+
     /** Fans out an application message encrypted for the current epoch. */
     @Transactional
     boolean message(DeviceAddress caller, byte[] groupId, GroupCommands.Message cmd) {

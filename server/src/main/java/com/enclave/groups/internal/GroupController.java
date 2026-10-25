@@ -94,6 +94,16 @@ class GroupController {
         return GroupDto.of(groups.get(me.address(), decode(groupId, "groupId")));
     }
 
+    /**
+     * Resolves a commit whose response was lost (specs §6): whether this submission was accepted, and
+     * the resulting epoch and sequence. 404 when it was not (the client discards its pending commit).
+     */
+    @GetMapping("/v1/groups/{groupId}/commits/{submissionId}")
+    AcceptedDto commitStatus(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId, @PathVariable String submissionId) {
+        var event = groups.acceptedCommit(me.address(), decode(groupId, "groupId"), decode(submissionId, "submissionId"));
+        return new AcceptedDto(event.epoch() + 1, event.seq(), true);
+    }
+
     @PostMapping("/v1/groups/{groupId}/commits")
     AcceptedDto commit(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId, @RequestBody CommitRequest body) {
         var accepted = groups.commit(me.address(), decode(groupId, "groupId"), new GroupCommands.Commit(

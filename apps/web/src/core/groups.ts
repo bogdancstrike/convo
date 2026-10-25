@@ -1,5 +1,5 @@
 import type { BindingVerdict } from '../crypto/mlsBinding';
-import { ApiError } from '../api/errors';
+import { ApiError, NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import type { CreateGroupRequest, DeviceRef, EnvelopeDto, GroupRole } from '../api/types';
 import {
@@ -38,7 +38,15 @@ export const GroupNs = {
   keyPackage: 'mls-kp',
   state: 'mls-state',
   group: 'group',
+  /** A commit sent but with an unknown outcome (lost response): resolved before further group work. */
+  pendingCommit: 'mls-pending-commit',
 } as const;
+
+/** A commit whose acceptance is unknown; `state` is the epoch it produces if it was accepted. */
+interface PendingCommit { groupId: string; submissionId: string; state: string }
+
+/** Network retries of the same commit submission before its outcome is left for later resolution. */
+const COMMIT_RETRIES = 2;
 
 /** Keep at least this many KeyPackages on the server; upload {@link KEY_PACKAGE_BATCH} when below. */
 const KEY_PACKAGE_MIN = 10;
@@ -358,7 +366,9 @@ export class GroupManager {
 
   private async processCommitEnvelope(envelope: EnvelopeDto): Promise<GroupProcessResult | null> {
     const groupId = envelope.groupId!;
-    const state = await this.state(groupId);
+    let state = await this.state(groupId);
+    // A commit for a later epoch than ours: our own earlier commit may have been accepted unseen.
+    if (state && (envelope.epoch ?? 0) > epochOf(state)) { await this.resolvePendingCommit(groupId); state = await this.state(groupId); }
     if (!state || (envelope.epoch ?? 0) < epochOf(state)) return { groupId, ops: [] }; // not joined yet, or already applied
     const result = await processCommit(state, envelope.content);
     const ops: StoreOp[] = [this.stateOp(groupId, result.state)];
@@ -394,21 +404,47 @@ export class GroupManager {
     output: CommitOutput,
     changes: { addMembers?: string[]; removeMembers?: string[]; addDevices?: DeviceRef[]; removeDevices?: DeviceRef[]; roleChanges?: Record<string, GroupRole> },
   ): Promise<void> {
-    try {
-      await this.api.groupCommit(groupId, {
-        epoch: epochOf(before),
-        submissionId: toBase64Url(randomBytes(16)),
-        commit: output.commit!,
-        welcome: output.welcome,
-        ...changes,
-      });
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'EPOCH_CONFLICT') throw new GroupBusyError();
-      throw error;
+    const request = { epoch: epochOf(before), submissionId: toBase64Url(randomBytes(16)), commit: output.commit!, welcome: output.welcome, ...changes };
+    // Submissions are idempotent: a lost response is retried with the same ID; if the outcome is
+    // still unknown, the new state is kept as pending and resolved before any further group work.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.api.groupCommit(groupId, request);
+        break;
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'EPOCH_CONFLICT') throw new GroupBusyError();
+        if (error instanceof NetworkError && attempt < COMMIT_RETRIES) { await new Promise((r) => setTimeout(r, 1000 * (attempt + 1))); continue; }
+        if (error instanceof NetworkError) {
+          const pending: PendingCommit = { groupId, submissionId: request.submissionId, state: serializeState(output.state) };
+          await this.store.put(GroupNs.pendingCommit, groupId, pending);
+        }
+        throw error;
+      }
     }
     // Only an accepted commit advances local state (specs §6.4).
     await this.store.commit([this.stateOp(groupId, output.state)]);
     await this.refreshRecord(groupId);
+  }
+
+  /**
+   * Resolves commits sent with an unknown outcome: an accepted one becomes the group's state, one the
+   * server never accepted is discarded. Unreachable server: kept for the next attempt.
+   */
+  async resolvePendingCommits(): Promise<void> {
+    for (const pending of await this.store.list<PendingCommit>(GroupNs.pendingCommit)) await this.resolvePendingCommit(pending.groupId);
+  }
+
+  private async resolvePendingCommit(groupId: string): Promise<void> {
+    const pending = await this.store.get<PendingCommit>(GroupNs.pendingCommit, groupId);
+    if (!pending) return;
+    try {
+      await this.api.groupCommitStatus(groupId, pending.submissionId);
+      await this.store.commit([{ type: 'put', ns: GroupNs.state, id: groupId, value: pending.state }, { type: 'delete', ns: GroupNs.pendingCommit, id: groupId }]);
+      await this.refreshRecord(groupId);
+    } catch (error) {
+      if (error instanceof ApiError && (error.code === 'NOT_FOUND' || error.status === 404)) await this.store.delete(GroupNs.pendingCommit, groupId);
+      else if (!(error instanceof NetworkError)) throw error;
+    }
   }
 
   /** Claims KeyPackages and checks each one's credential matches the device it was claimed for. */

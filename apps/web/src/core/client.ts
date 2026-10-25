@@ -322,6 +322,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** Keeps MLS KeyPackages stocked and this account's devices in sync across groups. */
   private async maintainGroups(): Promise<void> {
     try {
+      // Commits sent just before a crash or network loss: apply or discard before anything else.
+      await this.mutex.run(() => this.groups.resolvePendingCommits());
       await this.mutex.run(() => this.groups.ensureKeyPackages());
       await this.syncOwnDevicesInGroups();
       await this.refreshAllGroups(); // completes removals that happened while this device was offline
