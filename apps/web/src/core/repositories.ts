@@ -25,6 +25,8 @@ export const RecordNs = {
   anchors: 'anchors',
   /** Reviewer only: rules acknowledgements per root group (current version only). */
   rulesAcks: 'rules-acks',
+  /** Scheduled messages owned by this device (`ScheduledMessage`); sent only from here. */
+  scheduled: 'scheduled',
 } as const;
 
 export class Repositories {

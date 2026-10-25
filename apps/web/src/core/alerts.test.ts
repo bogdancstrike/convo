@@ -29,3 +29,28 @@ it('"mentions only" groups alert just for structured mentions of this account; m
   alert(['self']);
   expect(seen).toEqual([true]);
 });
+
+it('quiet sends never alert, even for a mention', () => {
+  const seen: boolean[] = [];
+  client.on('alert', (a) => seen.push(a.mention));
+  (client as unknown as { emitAlert: (c: string, a: string, d: unknown) => void }).emitAlert('g:abc', 'peer', { messageId: 'q', timestamp: 1, body: 'shh', mentions: ['self'], silent: true });
+  expect(seen).toEqual([]);
+});
+
+it('scheduled messages: schedule, edit, cancel, and send only once when due', async () => {
+  const sent: unknown[] = [];
+  (client as unknown as { sendMessage: (c: string, content: unknown) => Promise<void> }).sendMessage = async (_c, content) => { sent.push(content); };
+  const now = Date.now();
+  await expect(client.scheduleMessage(group.id, 'too late', now - 1000)).rejects.toThrow();
+  const a = await client.scheduleMessage(group.id, 'first', now + 60_000);
+  const b = await client.scheduleMessage(group.id, 'second', now + 120_000, { silent: true });
+  await client.editScheduled(a.id, { body: 'first (edited)' });
+  expect((await client.scheduledMessages(group.id)).map((s) => s.body)).toEqual(['first (edited)', 'second']);
+  await client.cancelScheduled(b.id);
+  await client.sendDueScheduled(now + 30_000);
+  expect(sent).toEqual([]);
+  await client.sendDueScheduled(now + 61_000);
+  await client.sendDueScheduled(now + 62_000);
+  expect(sent).toEqual([{ body: 'first (edited)', quote: undefined, mentions: undefined, silent: undefined }]);
+  expect(await client.scheduledMessages()).toEqual([]);
+});

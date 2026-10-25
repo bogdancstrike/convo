@@ -115,6 +115,8 @@ export interface DataMessage {
    * open once; receiving apps keep no copy, forward, export or history of it. Best effort only.
    */
   viewOnce?: boolean;
+  /** Quiet send: recipients get the message and unread count but no alert. */
+  silent?: boolean;
   /** The author's current answer to an event. */
   rsvp?: { targetMessageId: string; targetAuthorId: string; response: RsvpResponse };
 }
@@ -447,6 +449,7 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.poll !== undefined && !isPollDefinition(value.poll)) return false;
   if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
   if (value.event !== undefined && !isEventDefinition(value.event)) return false;
+  if (value.silent !== undefined && typeof value.silent !== 'boolean') return false;
   if (value.viewOnce !== undefined && (value.viewOnce !== true || !Array.isArray(value.attachments) || value.attachments.length !== 1
     || !isObject(value.attachments[0]) || !/^(image|video)\//.test(String(value.attachments[0].contentType)))) return false;
   if (value.eventUpdate !== undefined && (!isObject(value.eventUpdate) || typeof value.eventUpdate.targetMessageId !== 'string' || typeof value.eventUpdate.targetAuthorId !== 'string'

@@ -9,6 +9,7 @@ import { Icon } from '../components/Icon';
 import { Menu } from '../components/Popover';
 import { PollComposer } from './Polls';
 import { EventComposer } from './Events';
+import { ScheduleDialog, ScheduledBar } from './Scheduled';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration, useVoiceRecorder } from '../useVoiceRecorder';
 
@@ -57,6 +58,8 @@ export function Composer({
   const [pollOpen, setPollOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   const [viewOnce, setViewOnce] = useState(false);
+  const [sendMenu, setSendMenu] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   // @mentions (groups): suggestions for the `@query` at the caret, and the members picked so far.
   const members = useGroupMembers(client, conversation.id);
   const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
@@ -132,7 +135,8 @@ export function Composer({
     }
   };
 
-  const submit = async () => {
+  /** Sends the text; `silent` = quiet send, `dueAt` = schedule it on this device instead. */
+  const submit = async (options: { silent?: boolean; dueAt?: number } = {}) => {
     if (upload) return;
     const body = text.trim();
     if (!body) return;
@@ -151,7 +155,8 @@ export function Composer({
             : undefined;
         const day = 24 * 60 * 60 * 1000;
         const ack = requestAck && { ...(ackDue ? { due: Date.now() + ackDue * day } : {}), ...(ackExpires ? { expires: Date.now() + ackExpires * day } : {}) };
-        await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), ack);
+        if (options.dueAt) await client.scheduleMessage(conversation.id, body, options.dueAt, { quote, mentions: mentionsIn(body, picked), silent: options.silent });
+        else await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), ack, { silent: options.silent });
         setPicked([]);
         setRequestAck(false);
         setAckDue(0);
@@ -239,6 +244,15 @@ export function Composer({
     <div className="composer-wrap">
       {pollOpen && <PollComposer client={client} conversationId={conversation.id} onClose={() => setPollOpen(false)} />}
       {eventOpen && <EventComposer client={client} conversationId={conversation.id} onClose={() => setEventOpen(false)} />}
+      {scheduling && <ScheduleDialog onSchedule={(dueAt) => submit({ dueAt })} onClose={() => setScheduling(false)} />}
+      {sendMenu && (
+        <div className="send-options" role="menu" data-testid="send-options" onKeyDown={(e) => e.key === 'Escape' && setSendMenu(false)}>
+          <button role="menuitem" autoFocus onClick={() => { setSendMenu(false); void submit({ silent: true }); }} data-testid="send-quiet"><Icon name="mute" size={18} /> {t('schedule.sendQuiet')}</button>
+          <button role="menuitem" onClick={() => { setSendMenu(false); setScheduling(true); }} data-testid="send-schedule"><Icon name="clock" size={18} /> {t('schedule.title')}</button>
+          <button role="menuitem" onClick={() => setSendMenu(false)}><Icon name="close" size={18} /> {t('thread.cancel')}</button>
+        </div>
+      )}
+      {conversation.kind !== 'note' && <ScheduledBar client={client} conversationId={conversation.id} />}
       {PICKERS.map((p) => (
         <input
           key={p.key}
@@ -404,6 +418,8 @@ export function Composer({
               <button
                 className="send-btn"
                 onClick={() => void submit()}
+                // Right-click / long-press: quiet send or schedule (not while editing).
+                onContextMenu={(e) => { if (mode?.kind === 'edit') return; e.preventDefault(); setSendMenu(true); }}
                 disabled={!!upload || !!oversized}
                 aria-label={mode?.kind === 'edit' ? t('thread.save') : t('thread.send')}
                 data-testid="send"

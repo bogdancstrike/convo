@@ -234,6 +234,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   forward/shared-media/history copy, unopened items expire after 14 days. `viewOnce.test.ts`,
   `view-once.spec.ts` (Chromium/Firefox). Android: attach-sheet shortcut, ① tile, FLAG_SECURE viewer
   (screenshots come out black), verified on the emulator.
+- Quiet and scheduled send (specs §30.4): quiet messages deliver and count as unread but never
+  alert; scheduled messages are encrypted device-owned outbox items (UTC due time, display zone),
+  editable/cancellable, sent only by the owning device when it runs ("will send when this device is
+  online"). Web: right-click/long-press on send, schedule dialog, "N scheduled" bar with
+  change/send now/cancel. `alerts.test.ts`, `scheduled.spec.ts`.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

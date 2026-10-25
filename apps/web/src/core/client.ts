@@ -49,6 +49,9 @@ import { applyRsvp, applyUpdate, initialEvent, newEvent } from './events';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
+/** A message scheduled on this device (specs §30.4): UTC due time, zone for display. */
+export interface ScheduledMessage { id: string; conversationId: string; body: string; dueAt: number; zone: string; createdAt: number; quote?: Quote; mentions?: string[]; silent?: boolean }
+
 /** A call is running, but this device never received its media key (it cannot decrypt it). */
 export class CallKeyUnavailableError extends Error {
   constructor() { super('call key unavailable'); this.name = 'CallKeyUnavailableError'; }
@@ -67,6 +70,8 @@ export class CallKeyUnavailableError extends Error {
  */
 
 export interface ClientEvents extends Record<string, unknown> {
+  /** Scheduled messages of a conversation changed (scheduled, edited, cancelled or sent). */
+  scheduled: string;
   history: HistoryStatus;
   profiles: Map<string, UserProfile>;
   /** Conversation list changed. */
@@ -200,7 +205,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       });
     });
     this.socket.start();
-    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); void this.sweepSnoozes(); }, OUTBOX_RETRY_MS);
+    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); void this.sweepSnoozes(); void this.sendDueScheduled(); }, OUTBOX_RETRY_MS);
+    void this.sendDueScheduled();
     void this.sweepSnoozes();
     void this.maintainGroups();
   }
@@ -398,8 +404,60 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    *
    * @throws Error if the body is empty or exceeds 64 KiB
    */
-  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck: boolean | AckOptions = false): Promise<void> {
-    await this.sendMessage(conversationId, { body, quote, mentions, requestAck });
+  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck: boolean | AckOptions = false, options: { silent?: boolean } = {}): Promise<void> {
+    await this.sendMessage(conversationId, { body, quote, mentions, requestAck, silent: options.silent });
+  }
+
+  // --- scheduled send (specs §30.4) -------------------------------------------------------------
+
+  /**
+   * Schedules a text message on this device: an encrypted local outbox item with an absolute UTC
+   * due time. Only this device sends it, when it is running at or after that time.
+   */
+  async scheduleMessage(conversationId: string, body: string, dueAt: number, options: { quote?: Quote; mentions?: string[]; silent?: boolean } = {}): Promise<ScheduledMessage> {
+    const text = body.trim();
+    if (!text || utf8(text).length > MAX_BODY_BYTES) throw new Error('empty or too long');
+    if (!Number.isSafeInteger(dueAt) || dueAt <= Date.now()) throw new Error('pick a time in the future');
+    if (!this.conversationCache.has(conversationId)) throw new Error('conversation unavailable');
+    const item: ScheduledMessage = { id: newMessageId(), conversationId, body: text, dueAt, zone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', createdAt: Date.now(), ...options };
+    await this.repos.store.put(RecordNs.scheduled, item.id, item);
+    this.emit('scheduled', conversationId);
+    return item;
+  }
+
+  /** This device's scheduled messages for a conversation (or all), soonest first. */
+  async scheduledMessages(conversationId?: string): Promise<ScheduledMessage[]> {
+    return (await this.repos.store.list<ScheduledMessage>(RecordNs.scheduled)).filter((s) => !conversationId || s.conversationId === conversationId).sort((a, b) => a.dueAt - b.dueAt);
+  }
+
+  /** Changes the text and/or time of a scheduled message that has not been sent yet. */
+  async editScheduled(id: string, patch: { body?: string; dueAt?: number }): Promise<void> {
+    const item = await this.repos.store.get<ScheduledMessage>(RecordNs.scheduled, id);
+    if (!item) throw new Error('already sent or cancelled');
+    const body = patch.body?.trim() ?? item.body;
+    if (!body || utf8(body).length > MAX_BODY_BYTES) throw new Error('empty or too long');
+    if (patch.dueAt !== undefined && (!Number.isSafeInteger(patch.dueAt) || patch.dueAt <= Date.now())) throw new Error('pick a time in the future');
+    await this.repos.store.put(RecordNs.scheduled, id, { ...item, body, dueAt: patch.dueAt ?? item.dueAt });
+    this.emit('scheduled', item.conversationId);
+  }
+
+  async cancelScheduled(id: string): Promise<void> {
+    const item = await this.repos.store.get<ScheduledMessage>(RecordNs.scheduled, id);
+    if (!item) return;
+    await this.repos.store.commit([{ type: 'delete', ns: RecordNs.scheduled, id }]);
+    this.emit('scheduled', item.conversationId);
+  }
+
+  /** Sends scheduled items that are due (called periodically while the client runs). */
+  async sendDueScheduled(now = Date.now()): Promise<void> {
+    for (const item of (await this.scheduledMessages()).filter((s) => s.dueAt <= now)) {
+      // Remove first so a crash between the two steps cannot send it twice.
+      await this.repos.store.commit([{ type: 'delete', ns: RecordNs.scheduled, id: item.id }]);
+      this.emit('scheduled', item.conversationId);
+      const conversation = this.conversationCache.get(item.conversationId);
+      if (!conversation || conversation.left || conversation.blocked) continue;
+      await this.sendMessage(item.conversationId, { body: item.body, quote: item.quote, mentions: item.mentions, silent: item.silent }).catch(() => undefined);
+    }
   }
 
   /**
@@ -554,7 +612,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -582,6 +640,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       poll: content.poll,
       event: content.event,
       viewOnce: content.viewOnce || undefined,
+      silent: content.silent || undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -633,7 +692,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    */
   private emitAlert(conversationId: string, authorId: string, data: DataMessage): void {
     const conversation = this.conversationCache.get(conversationId);
-    if (!conversation || isMuted(conversation) || conversation.blocked) return;
+    // Quiet sends arrive and count as unread, but never alert (mentions included).
+    if (!conversation || isMuted(conversation) || conversation.blocked || data.silent) return;
     // Snoozed: ordinary alerts wait; messages still arrive and count as unread.
     if (conversation.snooze && !isSnoozed(conversation.snooze)) void this.expireSnooze(conversationId);
     else if (isSnoozed(conversation.snooze)) return;
