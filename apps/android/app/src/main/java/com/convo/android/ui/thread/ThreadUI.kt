@@ -349,7 +349,9 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp)); RawText(" ${f.optString("name")} · ${tr(if (message.optString("status") == "failed") "upload failed" else "waiting for connection")}", style = MaterialTheme.typography.bodySmall) }
                     }
                     attachments.forEachIndexed { index, a ->
-                        if (visual.size < 2 || visual.none { it.first == index }) AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
+                        // Voice notes and audio play inline (WhatsApp), never in the full-screen viewer.
+                        if (a.optString("contentType").startsWith("audio/") || a.optBoolean("voiceNote")) com.convo.android.ui.media.VoicePlayer(app, message, conversation, index, a)
+                        else if (visual.size < 2 || visual.none { it.first == index }) AttachmentTile(app, message, conversation, index, a) { selectedAttachment = index }
                     }
                     if (attachments.isNotEmpty() && message.optString("body").isNotBlank()) Box(Modifier.padding(horizontal = 5.dp)) { LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()) }
                 }
