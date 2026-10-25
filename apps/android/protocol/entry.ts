@@ -169,6 +169,16 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     }
     case 'star': return client.setStarred(await target(args), Boolean(args.value));
     case 'react': return client.react(await target(args), String(args.emoji));
+    // Polls (FR-EXT-01): the message snapshot carries poll state; voters' names are resolved here.
+    case 'sendPoll': return client.sendPoll(String(args.conversationId), String(args.question), Array.isArray(args.options) ? args.options.map(String) : [], Boolean(args.multiple));
+    case 'votePoll': return client.votePoll(await target(args), Array.isArray(args.optionIds) ? args.optionIds.map(String) : []);
+    case 'closePoll': return client.closePoll(await target(args));
+    case 'canClosePoll': return client.canClosePoll(await target(args), client.accountId);
+    case 'pollVoters': {
+      const poll = (await target(args)).poll; if (!poll) return {};
+      const named = async (id: string) => id === client!.accountId ? 'You' : client!.displayName(id);
+      return Object.fromEntries(await Promise.all(poll.options.map(async (o) => [o.id, await Promise.all(Object.entries(poll.votes).filter(([, b]) => b.optionIds.includes(o.id)).map(([id]) => named(id)))])));
+    }
     case 'edit': return client.edit(await target(args), String(args.body));
     case 'deleteMessage': return args.everyone ? client.deleteForEveryone(await target(args)) : client.deleteLocally(await target(args));
     case 'forward': return client.forward(await target(args), String(args.destination));

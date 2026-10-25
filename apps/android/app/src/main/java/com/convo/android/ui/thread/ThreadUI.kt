@@ -91,6 +91,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val id = app.active ?: return
     val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == id } ?: return
     val all = app.snapshot.optJSONArray("messages")?.objects().orEmpty()
+    var attachSheet by remember { mutableStateOf(false) }; var pollComposer by remember { mutableStateOf(false) }
     var query by remember(id) { mutableStateOf("") }; var input by remember(id) { mutableStateOf(conversation.optString("draft")) }; var quote by remember(id) { mutableStateOf<JSONObject?>(null) }
     var group by remember(id) { mutableStateOf<JSONObject?>(null) }
     val currentDraft by rememberUpdatedState(input)
@@ -103,6 +104,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val readOnly = conversation.optBoolean("left") || group?.optBoolean("needsJoin") == true || (conversation.optBoolean("adminOnly") && role !in listOf("owner", "admin"))
     val messages = all.filter { (!starredOnly || it.optBoolean("starred")) && (query.isBlank() || it.optString("body").contains(query, true) || it.optJSONArray("attachments")?.objects()?.any { a -> a.optString("fileName").contains(query, true) } == true) }
     val wallpaper = conversation.optString("wallpaper").takeIf { it.isNotBlank() } ?: app.snapshot.optJSONObject("settings")?.optString("wallpaper") ?: "dots"
+    if (attachSheet) AttachSheet(app, id, input, allowPoll = kind != "note", onSent = { input = "" }, onPoll = { pollComposer = true }) { attachSheet = false }
+    if (pollComposer) PollComposer(app, id) { pollComposer = false }
     ChatWallpaper(wallpaper, Modifier.fillMaxSize().background(LocalConvoColors.current.wallpaper)) {
         Column(Modifier.fillMaxSize()) {
             if (app.snapshot.optString("connection") != "online") Text("Waiting for connection. Messages will send when you reconnect.", Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodySmall)
@@ -215,7 +218,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                                     BasicTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> if (v.text != input) app.typing(id, v.text); input = v.text; selection = v.selection }, maxLines = 6,
                                         textStyle = LocalTextStyle.current.copy(color = colors.textPrimary, fontSize = 16.sp), cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
                                 }
-                                IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file", tint = colors.textSecondary) }
+                                IconButton({ attachSheet = true }) { Icon(Icons.Outlined.AttachFile, "Attach file", tint = colors.textSecondary) }
                             }
                         } else Spacer(Modifier.weight(1f))
                         // One VoiceComposer instance for the whole recording (recomposition must not cancel it).
@@ -278,7 +281,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 else {
                     val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
                     // Text first only without attachments; with media the caption goes underneath (WhatsApp).
-                    if (attachments.isEmpty() && message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))
+                    if (message.has("poll") && !message.isNull("poll")) PollCard(app, message, conversation)
+                    else if (attachments.isEmpty() && message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))
                     if (message.has("ackRequest")) AckBox(app, message)
                     val visual = attachments.withIndex().filter { (_, a) -> a.optString("contentType").let { it.startsWith("image/") || it.startsWith("video/") } }.map { it.index to it.value }
                     if (visual.size >= 2) AlbumGrid(app, message, conversation, visual) { selectedAttachment = it }

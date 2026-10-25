@@ -409,7 +409,8 @@ class MainActivity : FragmentActivity() {
             else -> { route = "list"; selectedTab = "Chats" }
         }
     }
-    fun pickFile(callback: (String, String, String) -> Unit, mime: String = "*/*") { fileCallback = callback; picker.launch(arrayOf(mime)) }
+    /** Opens the system file picker; [mime] may list several MIME types separated by commas (images and videos, for example). */
+    fun pickFile(callback: (String, String, String) -> Unit, mime: String = "*/*") { fileCallback = callback; picker.launch(mime.split(",").map { it.trim() }.toTypedArray()) }
     fun export(name: String, mime: String, bytes: ByteArray) {
         io.execute {
             try {

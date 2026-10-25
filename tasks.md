@@ -220,6 +220,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   roles with a least-privilege permission matrix enforced per endpoint; denied sensitive attempts
   audited; console shows only permitted tabs/actions (`/v1/admin/me`); accountable audit export
   (reason recorded first). `admin-roles.spec.ts` (Chromium/Firefox) + unit tests.
+- Polls (FR-EXT-01, AC-COL-01): encrypted poll messages (1–10 immutable options, single or multiple
+  choice), ballots/closes as E2EE data messages converging deterministically (`core/polls.ts`),
+  author/admin close enforced on receive; web attach menu + poll card, Android attach sheet + poll
+  card. `polls.test.ts`, `polls.spec.ts` (Chromium/Firefox), emulator check both directions.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment
