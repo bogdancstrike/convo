@@ -56,6 +56,7 @@ export function Composer({
   const [text, setText] = useState(conversation.draft ?? '');
   const [pollOpen, setPollOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
+  const [viewOnce, setViewOnce] = useState(false);
   // @mentions (groups): suggestions for the `@query` at the caret, and the members picked so far.
   const members = useGroupMembers(client, conversation.id);
   const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
@@ -115,7 +116,8 @@ export function Composer({
     setError(null);
     setUpload({ done: 0, total: selected.length });
     try {
-      await client.sendAttachments(conversation.id, selected, caption.trim(), (done) => setUpload({ done, total: selected.length }));
+      await client.sendAttachments(conversation.id, selected, caption.trim(), (done) => setUpload({ done, total: selected.length }), { viewOnce: viewOnce && selected.length === 1 });
+      setViewOnce(false);
       setCaption('');
       onClearFiles();
       onDone();
@@ -262,6 +264,8 @@ export function Composer({
           progress={upload ? t('thread.uploading', { done: upload.done, total: upload.total }) : null}
           error={oversized ? t('attachment.tooLarge', { name: oversized.name, limit: String(MAX_ATTACHMENT_BYTES / 1048576) }) : error}
           onCaption={setCaption}
+          viewOnce={viewOnce}
+          onViewOnce={conversation.kind === 'note' ? undefined : setViewOnce}
           onRemove={onRemoveFile}
           onAddMore={() => inputs.current.get('document')?.click()}
           onCancel={() => {

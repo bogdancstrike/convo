@@ -77,7 +77,12 @@ export class AccountHistory {
     const entries: StoreOp[] = [];
     for (const op of ops) {
       let record: ArchiveRecord | undefined;
-      if (op.type === 'message') record = { v: 1, kind: 'message', at: Date.now(), value: op.message.value };
+      // View-once media never enters encrypted history: only its consumed label is archived.
+      if (op.type === 'message') {
+        const message = op.message.value as ChatMessage;
+        record = { v: 1, kind: 'message', at: Date.now(), value: message.viewOnce
+          ? { ...message, attachments: undefined, viewOnce: { ...message.viewOnce, state: message.direction === 'out' ? 'sent' : 'opened' } } : message };
+      }
       if (op.type === 'put' && ['conversation', 'profile', 'group'].includes(op.ns)) {
         const value = op.ns === 'conversation' ? { ...(op.value as Conversation), draft: undefined } : op.value;
         record = { v: 1, kind: op.ns as ArchiveRecord['kind'], at: Date.now(), value };

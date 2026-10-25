@@ -8,7 +8,7 @@ export type SharedFilter = { tab: 'media' | 'docs' | 'links'; query: string; sen
 export function sharedEntries(messages: ChatMessage[], conversations: Conversation[]): SharedEntry[] {
   const chats = new Map(conversations.map((c) => [c.id, c])); const entries: SharedEntry[] = [];
   for (const message of messages) {
-    const conversation = chats.get(message.conversationId); if (!conversation || message.deleted || message.undecryptable || message.unsupported) continue;
+    const conversation = chats.get(message.conversationId); if (!conversation || message.deleted || message.undecryptable || message.unsupported || message.viewOnce) continue; // view-once media is never listed
     const prefix = `${message.conversationId}/${message.authorId}/${message.id}`;
     for (const attachment of message.attachments ?? []) entries.push({ key: `${prefix}/a/${attachment.attachmentId}`, message, conversation, attachment, size: attachment.size });
     for (const link of linksIn(message.body ?? '')) entries.push({ key: `${prefix}/l/${link}`, message, conversation, link, size: new TextEncoder().encode(link).length });

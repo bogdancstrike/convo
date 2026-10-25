@@ -229,6 +229,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   responses closed after cancellation or the end, .ics export; web attach menu + card, Android
   attach sheet + card with system date/time pickers. `events.test.ts`, `events.spec.ts`, emulator
   check both directions. Local reminders not yet.
+- View-once photo/video (specs §30.4): exactly one photo/video, the sender keeps only the label,
+  the recipient opens it once in an in-memory viewer, consumption syncs to own devices, no
+  forward/shared-media/history copy, unopened items expire after 14 days. `viewOnce.test.ts`,
+  `view-once.spec.ts` (Chromium/Firefox). Android pending.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

@@ -20,6 +20,8 @@ export function MediaPreview({
   onAddMore,
   onCancel,
   onSend,
+  viewOnce = false,
+  onViewOnce,
 }: {
   files: File[];
   caption: string;
@@ -32,6 +34,9 @@ export function MediaPreview({
   onAddMore: () => void;
   onCancel: () => void;
   onSend: () => void;
+  /** View-once toggle (WhatsApp's "1"): offered only for a single photo or video. */
+  viewOnce?: boolean;
+  onViewOnce?: (on: boolean) => void;
 }) {
   const { t, locale } = useI18n();
   const [index, setIndex] = useState(0);
@@ -81,7 +86,12 @@ export function MediaPreview({
           onKeyDown={(e) => e.key === 'Enter' && !busy && onSend()}
           data-testid="preview-caption"
         />
+        {onViewOnce && files.length === 1 && /^(image|video)\//.test(files[0]!.type) && (
+          <button className={`view-once-toggle${viewOnce ? ' on' : ''}`} aria-pressed={viewOnce} onClick={() => onViewOnce(!viewOnce)}
+            aria-label={t('viewOnce.toggle')} title={viewOnce ? t('viewOnce.on') : t('viewOnce.toggle')} data-testid="preview-view-once">1</button>
+        )}
       </div>
+      {viewOnce && <p className="muted-text media-error" role="status">{t('viewOnce.hint')}</p>}
       <footer className="media-strip">
         <ul>
           {files.map((f, i) => (

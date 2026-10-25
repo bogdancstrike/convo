@@ -110,6 +110,11 @@ export interface DataMessage {
   event?: EventDefinition;
   /** A new revision of an event (details or cancellation): its creator, or a group owner/admin. */
   eventUpdate?: { targetMessageId: string; targetAuthorId: string; revision: number; event: EventDefinition; cancelled?: boolean };
+  /**
+   * View-once photo/video (specs §30.4): exactly one image/video attachment that the recipient may
+   * open once; receiving apps keep no copy, forward, export or history of it. Best effort only.
+   */
+  viewOnce?: boolean;
   /** The author's current answer to an event. */
   rsvp?: { targetMessageId: string; targetAuthorId: string; response: RsvpResponse };
 }
@@ -183,6 +188,8 @@ export interface SyncMessage {
   snooze?: { conversationId: string; until: number | null; zone: string; mutation: number };
   /** Private onboarding checklist progress (own devices only; higher counter wins). */
   onboarding?: { conversationId: string; itemId: string; done: boolean; counter: number };
+  /** A view-once message was opened on another own device: consume it here too. */
+  viewed?: { conversationId: string; authorId: string; messageId: string };
 }
 
 /**
@@ -313,6 +320,10 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
         if (!isObject(z) || typeof z.conversationId !== 'string' || z.conversationId.length > 80 || !(z.until === null || Number.isSafeInteger(z.until))
           || typeof z.zone !== 'string' || z.zone.length > 64 || !Number.isSafeInteger(z.mutation)) throw new Error('malformed snooze sync');
       }
+      if (parsed.sync.viewed !== undefined) {
+        const v = parsed.sync.viewed;
+        if (!isObject(v) || typeof v.conversationId !== 'string' || typeof v.authorId !== 'string' || typeof v.messageId !== 'string') throw new Error('malformed viewed sync');
+      }
       if (parsed.sync.onboarding !== undefined) {
         const o = parsed.sync.onboarding;
         if (!isObject(o) || typeof o.conversationId !== 'string' || typeof o.itemId !== 'string' || !ID.test(o.itemId)
@@ -436,6 +447,8 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.poll !== undefined && !isPollDefinition(value.poll)) return false;
   if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
   if (value.event !== undefined && !isEventDefinition(value.event)) return false;
+  if (value.viewOnce !== undefined && (value.viewOnce !== true || !Array.isArray(value.attachments) || value.attachments.length !== 1
+    || !isObject(value.attachments[0]) || !/^(image|video)\//.test(String(value.attachments[0].contentType)))) return false;
   if (value.eventUpdate !== undefined && (!isObject(value.eventUpdate) || typeof value.eventUpdate.targetMessageId !== 'string' || typeof value.eventUpdate.targetAuthorId !== 'string'
     || !Number.isSafeInteger(value.eventUpdate.revision) || (value.eventUpdate.revision as number) < 1 || !isEventDefinition(value.eventUpdate.event)
     || (value.eventUpdate.cancelled !== undefined && typeof value.eventUpdate.cancelled !== 'boolean'))) return false;

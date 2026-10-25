@@ -2491,3 +2491,16 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .event-dialog input, .event-dialog textarea { width: 100%; }
 .poll-actions { flex-wrap: wrap; }
 .poll-actions .btn.danger { color: var(--c-danger-text); }
+
+/* View-once media (specs §30.4): WhatsApp's ① tile and a bare full-screen viewer. */
+.view-once-tile { display: inline-flex; align-items: center; gap: var(--space-2); padding: 8px 14px 8px 8px; margin: 2px 0; border: 1px solid var(--c-border); border-radius: 999px; background: var(--c-panel); color: var(--c-accent-text); font: inherit; font-weight: 600; cursor: pointer; }
+.view-once-tile:disabled { cursor: default; color: var(--c-text-secondary); font-weight: 400; }
+.view-once-badge { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px dashed currentColor; font-size: 0.75rem; font-weight: 700; }
+.view-once-tile.unopened .view-once-badge { border-style: solid; background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+.view-once-viewer { position: fixed; inset: 0; z-index: 60; display: grid; grid-template-rows: auto 1fr; background: #000; color: #fff; user-select: none; -webkit-user-select: none; }
+.view-once-viewer header { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); font-size: 0.875rem; }
+.view-once-viewer header .icon-btn { color: #fff; }
+.view-once-viewer img, .view-once-viewer video { justify-self: center; align-self: center; max-width: 100%; max-height: calc(100vh - 56px); object-fit: contain; pointer-events: none; }
+.view-once-viewer video { pointer-events: auto; }
+.view-once-toggle { flex: none; width: 32px; height: 32px; margin-left: var(--space-2); border-radius: 50%; border: 2px dashed currentColor; background: none; color: inherit; font-weight: 700; cursor: pointer; }
+.view-once-toggle.on { border-style: solid; background: var(--c-accent); border-color: var(--c-accent); color: #fff; }

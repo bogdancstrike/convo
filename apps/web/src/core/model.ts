@@ -81,6 +81,11 @@ export interface ChatMessage {
   poll?: PollState;
   /** Event message: details, revision, cancellation and RSVPs (see core/events.ts). */
   event?: EventState;
+  /**
+   * View-once photo/video. `unopened` keeps the attachment pointer until it is viewed; `opened`
+   * (or `sent` on the sender's side) has no pointer any more, only the label remains.
+   */
+  viewOnce?: { kind: 'photo' | 'video'; state: 'unopened' | 'opened' | 'sent'; at?: number };
 }
 
 export interface Conversation {

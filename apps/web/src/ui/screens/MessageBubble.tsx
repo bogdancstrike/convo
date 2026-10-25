@@ -18,6 +18,7 @@ import { useI18n } from '../i18n/i18n';
 import { nameColorIndex } from '../theme/tokens';
 import { PollCard } from './Polls';
 import { EventCard } from './Events';
+import { ViewOnceTile } from './ViewOnce';
 
 /** Quick reactions shown at the top of the message menu. */
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -147,7 +148,7 @@ export function MessageBubble({
             t('thread.undecryptable')
           ) : (
             <>
-              <Attachments client={client} message={m} />
+              {m.viewOnce ? <ViewOnceTile client={client} message={m} /> : <Attachments client={client} message={m} />}
               {m.pendingFiles?.map((f, i) => (
                 <div className="attachment-file pending" key={i} data-testid="pending-upload">
                   <Icon name="clock" size={16} />
@@ -331,7 +332,7 @@ function MessageMenu({ client, message: m, onClose, actions, anchor, startWithDe
           void navigator.clipboard?.writeText(m.body ?? '');
         })}
         {item('smile', t('thread.react'), () => setPicker(true))}
-        {item('next', t('msg.forward'), () => {
+        {!m.viewOnce && item('next', t('msg.forward'), () => {
           onClose();
           actions.onForward(m);
         }, 'action-forward')}

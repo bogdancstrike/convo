@@ -408,7 +408,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    *
    * @param onProgress called with the number of completed uploads
    */
-  async sendAttachments(conversationId: string, files: File[], caption: string, onProgress?: (done: number) => void): Promise<void> {
+  async sendAttachments(conversationId: string, files: File[], caption: string, onProgress?: (done: number) => void, options: { viewOnce?: boolean } = {}): Promise<void> {
+    if (options.viewOnce && (files.length !== 1 || !/^(image|video)\//.test(files[0]!.type))) throw new Error('view once needs one photo or video');
     if (files.length === 0 || files.length > MAX_ATTACHMENTS) throw new Error('invalid attachment count');
     const prepared: PreparedFile[] = [];
     for (const file of files) prepared.push(await prepareFile(file));
@@ -425,7 +426,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       await this.queueUpload({ conversationId, caption, files: prepared, pointers, resumes });
       return;
     }
-    await this.sendMessage(conversationId, { body: caption, attachments: pointers });
+    await this.sendMessage(conversationId, { body: caption, attachments: pointers, viewOnce: options.viewOnce });
   }
 
   /**
@@ -537,7 +538,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * conversation is not referenced.
    */
   async forward(message: ChatMessage, destinationConversationId: string): Promise<void> {
-    if (message.deleted || message.unsupported || message.undecryptable) throw new Error('nothing to forward');
+    if (message.deleted || message.unsupported || message.undecryptable || message.viewOnce) throw new Error('nothing to forward');
     await this.sendMessage(destinationConversationId, { body: message.body, attachments: message.attachments, forwarded: true });
   }
 
@@ -553,7 +554,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -580,6 +581,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ackRequest: content.requestAck && group ? this.newAckRequest(group, recipients, content.requestAck === true ? {} : content.requestAck) : undefined,
       poll: content.poll,
       event: content.event,
+      viewOnce: content.viewOnce || undefined,
     };
     const message: ChatMessage = {
       conversationId,
@@ -601,6 +603,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ackRequest: data.ackRequest,
       poll: content.poll ? initialState(content.poll) : undefined,
       event: content.event ? initialEvent(content.event) : undefined,
+      // The sender keeps no copy of view-once media, only its label.
+      ...(content.viewOnce ? { attachments: undefined, viewOnce: { kind: viewOnceKind(content.attachments![0]!), state: 'sent' as const } } : {}),
     };
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
@@ -740,6 +744,35 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (updated === target.event) throw new Error('responses are closed');
     await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage({ ...target, event: updated })]);
     this.emit('messages', target.conversationId);
+  }
+
+  // --- view-once media (specs §30.4) --------------------------------------------------------
+
+  /**
+   * Opens an unopened view-once photo/video: downloads and decrypts it into memory only (no cache,
+   * gallery or history). Call {@link consumeViewOnce} when the viewer closes.
+   */
+  async openViewOnce(message: ChatMessage): Promise<Blob> {
+    const pointer = message.attachments?.[0];
+    if (message.viewOnce?.state !== 'unopened' || !pointer) throw new Error('already opened');
+    return downloadAttachment(this.api, pointer);
+  }
+
+  /** Marks a view-once message opened: drops its key/pointer here and on this account's other devices. */
+  async consumeViewOnce(message: ChatMessage): Promise<void> {
+    await this.mutex.run(async () => {
+      const ops: StoreOp[] = [];
+      await this.applyViewed(message.conversationId, message.authorId, message.id, ops);
+      if (ops.length) await this.repos.store.commit(ops);
+    });
+    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'sync', sync: { viewed: { conversationId: message.conversationId, authorId: message.authorId, messageId: message.id } } }, false);
+    this.emit('messages', message.conversationId);
+  }
+
+  private async applyViewed(conversationId: string, authorId: string, messageId: string, ops: StoreOp[]): Promise<void> {
+    const current = await this.repos.message(conversationId, authorId, messageId);
+    if (!current?.viewOnce || current.viewOnce.state !== 'unopened') return;
+    ops.push(this.repos.putMessage({ ...current, attachments: undefined, viewOnce: { ...current.viewOnce, state: 'opened', at: Date.now() } }));
   }
 
   /** Adds or removes the current account's reaction. */
@@ -1589,6 +1622,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         }
         if (content.sync.onboarding) await this.applyOnboardingSync(content.sync.onboarding, ops);
         if (content.sync.snooze) this.applySnoozeSync(content.sync.snooze, ops);
+        if (content.sync.viewed) { const v = content.sync.viewed; await this.applyViewed(v.conversationId, v.authorId, v.messageId, ops); }
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
           if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined, mentioned: undefined });
@@ -2055,7 +2089,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       authorId,
       direction,
       body: data.body,
-      attachments: data.attachments,
+      // A sender's own view-once copy (from another of its devices) keeps no pointer.
+      attachments: data.viewOnce && direction === 'out' ? undefined : data.attachments,
       forwarded: data.forwarded === true || undefined,
       quote: data.quote,
       sentAt: data.timestamp,
@@ -2065,6 +2100,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       reactions: {},
       poll: data.poll ? initialState(data.poll) : undefined,
       event: data.event ? initialEvent(data.event) : undefined,
+      ...(data.viewOnce ? { viewOnce: { kind: viewOnceKind(data.attachments![0]!), state: direction === 'out' ? 'sent' as const : 'unopened' as const } } : {}),
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
       ackRequest: data.ackRequest && await this.validAckRequest(conversation.id, authorId, data.ackRequest) ? data.ackRequest : undefined,
@@ -2076,6 +2112,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       : visible ? startExpiry(message, Date.now()) : message;
     ops.push(this.repos.putMessage(timed));
     const expiry = expiryOp(timed); if (expiry) ops.push(expiry);
+    // Unopened view-once media is cleaned up after 14 days (the message is removed locally).
+    else if (timed.viewOnce?.state === 'unopened') ops.push(expiryOp({ ...timed, expiresAt: envelope.serverTimestamp + VIEW_ONCE_TTL_MS })!);
     this.stage(ops, {
       ...conversation,
       lastActivity: Math.max(conversation.lastActivity, message.sort),
@@ -2273,8 +2311,15 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 }
 
 /** Local conversation-list preview of a message. */
+/** Unopened view-once media expires after this long (specs §30.4 expiry cleanup). */
+const VIEW_ONCE_TTL_MS = 14 * 24 * 3600_000;
+
+/** Photo or video label for a view-once attachment. */
+function viewOnceKind(pointer: AttachmentPointer): 'photo' | 'video' { return pointer.contentType.startsWith('video/') ? 'video' : 'photo'; }
+
 function previewOf(data: DataMessage): string {
   if (data.poll) return `📊 ${data.poll.question}`;
+  if (data.viewOnce) return data.attachments?.[0]?.contentType.startsWith('video/') ? '🎥 Video (view once)' : '📷 Photo (view once)';
   if (data.event) return `📅 ${data.event.title}`;
   if (data.body) return data.body;
   const first = data.attachments?.[0];
