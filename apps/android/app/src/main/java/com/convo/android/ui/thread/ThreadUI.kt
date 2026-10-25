@@ -102,8 +102,13 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val own = app.snapshot.optString("accountId"); val kind = conversation.optString("kind")
     LaunchedEffect(id, app.snapshot.optString("connection")) { if (kind == "group") app.call("group", obj("id" to id)) { group = it as? JSONObject } }
     val role = group?.optJSONArray("members")?.objects()?.find { it.optString("accountId") == own }?.optString("role")
-    val readOnly = conversation.optBoolean("left") || group?.optBoolean("needsJoin") == true || (conversation.optBoolean("adminOnly") && role !in listOf("owner", "admin"))
-    val messages = all.filter { (!starredOnly || it.optBoolean("starred")) && (query.isBlank() || it.optString("body").contains(query, true) || it.optJSONArray("attachments")?.objects()?.any { a -> a.optString("fileName").contains(query, true) } == true) }
+    // Group topics (specs §30.4): the selected topic filters messages and receives new ones.
+    var topic by remember(id) { mutableStateOf<String?>(null) }
+    val topics = conversation.optJSONArray("topics")?.objects().orEmpty()
+    val isGroupAdmin = role in listOf("owner", "admin")
+    val topicClosed = topics.find { it.optString("id") == topic }?.optBoolean("closed") == true && !isGroupAdmin
+    val readOnly = conversation.optBoolean("left") || group?.optBoolean("needsJoin") == true || (conversation.optBoolean("adminOnly") && role !in listOf("owner", "admin")) || topicClosed
+    val messages = all.filter { (topics.isEmpty() || it.optString("topic").ifBlank { null } == topic || (it.has("notice") && topic == null)) && (!starredOnly || it.optBoolean("starred")) && (query.isBlank() || it.optString("body").contains(query, true) || it.optJSONArray("attachments")?.objects()?.any { a -> a.optString("fileName").contains(query, true) } == true) }
     val wallpaper = conversation.optString("wallpaper").takeIf { it.isNotBlank() } ?: app.snapshot.optJSONObject("settings")?.optString("wallpaper") ?: "dots"
     if (attachSheet) AttachSheet(app, id, input, allowPoll = kind != "note", onSent = { input = "" }, onPoll = { pollComposer = true }, onEvent = { eventComposer = true }) { attachSheet = false }
     if (pollComposer) PollComposer(app, id) { pollComposer = false }
@@ -111,6 +116,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     ChatWallpaper(wallpaper, Modifier.fillMaxSize().background(LocalConvoColors.current.wallpaper)) {
         Column(Modifier.fillMaxSize()) {
             if (app.snapshot.optString("connection") != "online") Text("Waiting for connection. Messages will send when you reconnect.", Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodySmall)
+            if (kind == "group" && !conversation.optBoolean("adminOnly") && !conversation.optBoolean("left") && (topics.isNotEmpty() || isGroupAdmin)) TopicBar(app, id, topics, topic, isGroupAdmin) { topic = it }
             if (app.threadSearch) OutlinedTextField(query, { query = it }, placeholder = { Text(if (starredOnly) "Search starred messages" else "Search this chat") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) })
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val scope = rememberCoroutineScope()
@@ -184,7 +190,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     Text("You blocked this contact.", Modifier.weight(1f)); TextButton({ app.call("block", obj("id" to id, "blocked" to false), success = "Contact unblocked") }) { Text("Unblock") }
                 }
                 else if (app.selection != null) SelectionBar(app, id, all)
-                else if (readOnly) Text(if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
+                else if (readOnly) Text(if (topicClosed) "This topic is closed. You can still read it." else if (group?.optBoolean("needsJoin") == true) "History restored. Ask an admin to add this device before sending." else if (conversation.optBoolean("left")) "You are no longer a member of this group" else "Only admins can post in this channel", Modifier.padding(20.dp))
                 else Column {
                     quote?.let { QuotePreview(it.optString("excerpt")) { quote = null } }
                     var voice by remember(id) { mutableStateOf(false) }
@@ -234,7 +240,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                                 val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null).toTypedArray())
                                 val done: (Any?) -> Unit = { if (it != null) { app.typingStopped(id); input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } }
                                 if (dueAt != null) app.call("scheduleMessage", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "dueAt" to dueAt, "silent" to silent), success = tr("Message scheduled"), then = done)
-                                else app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack, "silent" to silent), then = done)
+                                else app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack, "silent" to silent, "topic" to topic), then = done)
                             }
                             RoundActionButton(Icons.AutoMirrored.Outlined.Send, "Send message", onLongClick = if (kind == "note") null else ({ sendMenu = true })) { send() }
                             DropdownMenu(sendMenu, { sendMenu = false }) {

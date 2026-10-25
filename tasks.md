@@ -254,7 +254,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Group topics (specs §30.4): owners/admins create, rename, close and reopen topics through
   revisioned E2EE group events (enforced on receipt); messages carry a topic ID; the group view
   filters by topic and posts into the selected one; closed topics are read-only for members. Web:
-  topic bar under the header. `topics.test.ts`, `topics.spec.ts`. Android pending.
+  topic bar under the header. `topics.test.ts`, `topics.spec.ts`. Android: topic row, long-press
+  edit for admins, posting into the selected topic (verified on the emulator against the web).
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

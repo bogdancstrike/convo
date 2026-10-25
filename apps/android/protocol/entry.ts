@@ -153,7 +153,10 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'directory': return client.searchDirectory(String(args.query));
     case 'account': return client.account(String(args.id));
     case 'newChat': { const account = args.id === client.accountId ? { accountId: client.accountId, username: client.device.username, displayName: client.device.displayName } : await client.account(args.id); if (!account) throw new Error('account unavailable'); return client.openConversation(account); }
-    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, ackOptions(args.requestAck), { silent: args.silent === true });
+    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, ackOptions(args.requestAck), { silent: args.silent === true, topic: args.topic ? String(args.topic) : undefined });
+    // Group topics (specs §30.4): owners/admins manage them; the snapshot carries conversation.topics.
+    case 'createTopic': return client.createTopic(String(args.conversationId), String(args.name));
+    case 'updateTopic': return client.updateTopic(String(args.conversationId), String(args.id), { name: args.name === undefined ? undefined : String(args.name), closed: args.closed === undefined ? undefined : Boolean(args.closed) });
     // Scheduled send (specs §30.4): device-owned items, sent by the core's timer while the app runs.
     case 'scheduleMessage': return client.scheduleMessage(String(args.conversationId), String(args.body), Number(args.dueAt), { quote: args.quote ?? undefined, mentions: Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, silent: args.silent === true });
     // Private chat folders (specs §30.4): own-device preference synced to own devices.

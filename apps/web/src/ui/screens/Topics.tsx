@@ -35,8 +35,12 @@ function TopicEditor({ client, conversationId, topic, onSaved, onClose }: { clie
   const { t } = useI18n();
   const [name, setName] = useState(topic?.name ?? '');
   const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // One save at a time: a double click or Enter must not create the topic twice.
   const run = async (task: () => Promise<string | undefined>) => {
-    try { onSaved(await task()); onClose(); } catch { setError(true); }
+    if (busy) return;
+    setBusy(true);
+    try { onSaved(await task()); onClose(); } catch { setError(true); setBusy(false); }
   };
   return (
     <Dialog labelledBy="topic-title" onClose={onClose}>
@@ -48,7 +52,7 @@ function TopicEditor({ client, conversationId, topic, onSaved, onClose }: { clie
         <div className="dialog-actions">
           {topic && <button className="btn btn-ghost" onClick={() => void run(async () => { await client.updateTopic(conversationId, topic.id, { closed: !topic.closed }); return undefined; })} data-testid="topic-toggle-closed">{t(topic.closed ? 'topics.reopen' : 'topics.close')}</button>}
           <button className="btn" onClick={onClose}>{t('thread.cancel')}</button>
-          <button className="btn btn-primary" disabled={!name.trim()} data-testid="topic-save"
+          <button className="btn btn-primary" disabled={busy || !name.trim()} data-testid="topic-save"
             onClick={() => void run(async () => (topic ? (await client.updateTopic(conversationId, topic.id, { name }), undefined) : (await client.createTopic(conversationId, name)).id))}>{t('event.save')}</button>
         </div>
       </div>
