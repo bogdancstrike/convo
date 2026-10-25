@@ -53,6 +53,8 @@ public enum ErrorCode {
     // --- groups --------------------------------------------------------------------------------
     /** MLS message for an old epoch; process pending commits and retry. */
     EPOCH_CONFLICT(HttpStatus.CONFLICT, "Epoch conflict"),
+    /** A revoked device is still in the group's MLS tree; its account or an admin must commit the removal first. */
+    PENDING_REMOVAL(HttpStatus.CONFLICT, "Revoked device awaiting removal"),
     /** Caller is not a member (or the device is not in the group roster). */
     NOT_GROUP_MEMBER(HttpStatus.FORBIDDEN, "Not a group member"),
     /** Caller's group role does not permit the action. */

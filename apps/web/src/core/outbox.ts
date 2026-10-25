@@ -228,6 +228,18 @@ export class Outbox {
     try {
       await this.api.groupMessage(groupId, request);
     } catch (error) {
+      // A revoked device awaits removal: remove it if this device may, then re-encrypt for the new
+      // epoch; otherwise keep the message queued until an owner/admin or its account does.
+      if (error instanceof ApiError && error.code === 'PENDING_REMOVAL') {
+        const devices = Array.isArray(error.problem.devices) ? error.problem.devices.map(String) : [];
+        await this.groups.resolvePendingRemoval(groupId, devices).catch(() => false);
+        item.submissions = item.submissions.filter((s) => s !== submission);
+        item.pendingTargets = [GROUP_TARGET];
+        item.state = 'queued';
+        await this.store.put(RecordNs.outbox, item.id, item);
+        // Either way: pause and re-encrypt on the next flush (new epoch, or still waiting).
+        return false;
+      }
       if (error instanceof ApiError && error.code === 'EPOCH_CONFLICT') {
         item.submissions = item.submissions.filter((s) => s !== submission);
         item.pendingTargets = [GROUP_TARGET];

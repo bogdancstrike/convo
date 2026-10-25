@@ -138,6 +138,25 @@ class GroupRepository {
     }
 
     /** Drops a revoked device from every routing roster. */
+    /** Moves a revoked device from every roster into pending removal (same transaction). */
+    int markPendingRemoval(DeviceAddress device) {
+        jdbc.sql("""
+                INSERT INTO mls_group_pending_removals (group_id, account_id, device_id)
+                SELECT group_id, account_id, device_id FROM mls_group_devices WHERE account_id = :a AND device_id = :d
+                ON CONFLICT DO NOTHING""").param("a", device.accountId()).param("d", device.deviceId()).update();
+        return removeDeviceEverywhere(device);
+    }
+
+    List<DeviceAddress> pendingRemovals(byte[] groupId) {
+        return jdbc.sql("SELECT account_id, device_id FROM mls_group_pending_removals WHERE group_id = :g ORDER BY account_id, device_id").param("g", groupId)
+                .query((rs, n) -> new DeviceAddress(rs.getObject("account_id", UUID.class), rs.getInt("device_id"))).list();
+    }
+
+    void deletePendingRemoval(byte[] groupId, DeviceAddress device) {
+        jdbc.sql("DELETE FROM mls_group_pending_removals WHERE group_id = :g AND account_id = :a AND device_id = :d")
+                .param("g", groupId).param("a", device.accountId()).param("d", device.deviceId()).update();
+    }
+
     int removeDeviceEverywhere(DeviceAddress device) {
         return jdbc.sql("DELETE FROM mls_group_devices WHERE account_id = :a AND device_id = :d")
                 .param("a", device.accountId()).param("d", device.deviceId()).update();

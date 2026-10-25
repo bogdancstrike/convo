@@ -61,3 +61,10 @@ production deployments should configure the key so it is not kept in the databas
 by the account identity key (GRP-01). The server cannot create a valid binding; clients verify it
 before accepting a KeyPackage or a group leaf for that device. Only active devices' bindings are
 served (`GET /v1/accounts/{id}/mls-bindings`).
+
+## V36 — group pending removals
+
+`mls_group_pending_removals` lists revoked devices whose MLS leaves are still in a group (specs
+§4.7). Revocation moves the device here from `mls_group_devices`; application messages are refused
+with `PENDING_REMOVAL` until a commit removes the leaf (by the device's own account or an
+owner/admin), which deletes the row.

@@ -290,6 +290,24 @@ export class GroupManager {
     return true;
   }
 
+  /**
+   * Pending-removal gate (specs §4.7): the server refused a group message because revoked devices are
+   * still leaves. This device commits their removal when it may — devices of its own account, or any
+   * device when it is an owner/admin; ordinary members wait for them (the spec forbids acting on the
+   * server's flag alone). Returns whether a removal was committed.
+   */
+  async resolvePendingRemoval(groupId: string, devices: string[]): Promise<boolean> {
+    const state = await this.requireState(groupId);
+    const role = (await this.record(groupId))?.members.find((m) => m.accountId === this.self.accountId)?.role;
+    const mayRemove = (identity: string) => splitAddress(identity)[0] === this.self.accountId || role === 'owner' || role === 'admin';
+    const own = `${this.self.accountId}.${this.self.deviceId}`;
+    const leaves = members(state).filter((m) => devices.includes(m.identity) && m.identity !== own && mayRemove(m.identity));
+    if (leaves.length === 0) return false;
+    const output = await commit(state, removeProposals(leaves.map((l) => l.leafIndex)));
+    await this.submitCommit(groupId, state, output, { removeDevices: leaves.map((l) => toRef(l.identity)) });
+    return true;
+  }
+
   // --- messages -----------------------------------------------------------------------------
 
   /** Encrypts padded content for the group's current epoch. */

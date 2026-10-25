@@ -269,6 +269,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Pending-removal gate (specs §4.7, GRP-01): device revocation moves the device from every group
+  roster to `mls_group_pending_removals` (V36); the server refuses application messages with
+  `PENDING_REMOVAL` until a commit removes the leaf. The sending client removes it when allowed (own
+  account's device, or owner/admin) and re-encrypts; ordinary members' messages wait queued (the
+  spec forbids acting on the server flag alone). Fixes revoked leaves never being removable ("device
+  not in group"). `pending-removal.spec.ts` (Chromium/Firefox).
 - MLS device bindings (GRP-01): every device signs its long-lived MLS signature key with the account
   identity key (XEdDSA, bound to deployment and device address) and publishes it (V35,
   `PUT /v1/devices/self/mls-binding`, `GET /v1/accounts/{id}/mls-bindings`, active devices only).
@@ -481,7 +487,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Create group, encrypted group name, add/remove members (admin/owner), removed-member state | |
 | ✅ | Linked-device sync: own devices added/removed in joined groups on DEVICE_LIST_CHANGED | |
 | ✅ | Leave, invite links, join requests, bans (see below); promote/demote/transfer UI | GRP-03, EXT-03 |
-| 🟡 | Credential binding to account identity key ✅ (device bindings, V35); reviewed role profile and pending-removal gate remain | GRP-01 |
+| 🟡 | Credential binding to account identity key ✅ (V35), pending-removal gate ✅ (V36); independently reviewed role profile remains | GRP-01 |
 
 ## Delivery & verification
 

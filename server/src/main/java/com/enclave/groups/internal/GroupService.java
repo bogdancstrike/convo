@@ -116,7 +116,8 @@ class GroupService {
         Map<UUID, Role> members = groups.members(groupId);
         List<DeviceAddress> roster = groups.devices(groupId);
         Set<UUID> departed = groups.departures(groupId);
-        authorize(caller, members, roster, cmd, departed);
+        List<DeviceAddress> pendingRemovals = groups.pendingRemovals(groupId);
+        authorize(caller, members, roster, cmd, departed, pendingRemovals);
         Set<UUID> banned = groups.bans(groupId);
         if (cmd.addMembers().stream().anyMatch(banned::contains)) throw new EnclaveException(ErrorCode.FORBIDDEN, "account is banned from this group; unban first");
 
@@ -126,7 +127,7 @@ class GroupService {
         groups.insertEvent(groupId, seq, group.epoch(), cmd.submissionId(), digest, cmd.commit());
         cmd.addMembers().forEach(a -> { groups.upsertMember(groupId, a, Role.MEMBER); groups.deleteJoinRequest(groupId, a); });
         cmd.addDevices().forEach(d -> groups.addDevice(groupId, d));
-        cmd.removeDevices().forEach(d -> groups.removeDevice(groupId, d));
+        cmd.removeDevices().forEach(d -> { groups.removeDevice(groupId, d); groups.deletePendingRemoval(groupId, d); });
         cmd.removeMembers().forEach(a -> { groups.deleteMember(groupId, a); groups.deleteDeparture(groupId, a); });
         if (!cmd.removeMembers().isEmpty()) events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.copyOf(cmd.removeMembers()), true));
         cmd.roleChanges().forEach((a, r) -> groups.upsertMember(groupId, a, r));
@@ -164,6 +165,12 @@ class GroupService {
         if (cmd.epoch() != group.epoch()) {
             throw new EnclaveException(ErrorCode.EPOCH_CONFLICT, "message is not for the current epoch",
                     Map.of("currentEpoch", group.epoch()));
+        }
+        // Pending-removal gate (specs §4.7): while a revoked device is still a leaf, no new application
+        // messages are accepted; its account's other devices or an owner/admin must commit the removal.
+        List<String> pending = groups.pendingRemovals(groupId).stream().map(d -> d.accountId() + "." + d.deviceId()).toList();
+        if (!pending.isEmpty()) {
+            throw new EnclaveException(ErrorCode.PENDING_REMOVAL, "a revoked device must be removed from this group first", Map.of("devices", pending));
         }
         groups.insertSubmission(groupId, caller, cmd.submissionId(), digest, clock.instant().plus(properties.submissionRetention()));
         // Members who left get no further application messages, even before their MLS removal.
@@ -249,10 +256,13 @@ class GroupService {
         return view(group);
     }
 
-    /** Revoked devices stop receiving group ciphertext immediately. */
+    /**
+     * Revoked devices stop receiving group ciphertext immediately and become pending removals: the
+     * group takes no new application messages until a member commits their MLS removal (§4.7).
+     */
     @ApplicationModuleListener
     void on(DeviceRevoked event) {
-        groups.removeDeviceEverywhere(event.address());
+        groups.markPendingRemoval(event.address());
     }
 
     @Transactional
@@ -266,7 +276,8 @@ class GroupService {
      * Server-side ACL mirror (specs §30.2): admins/owners manage other accounts; anyone manages
      * their own devices; only owners change roles; the last owner stays.
      */
-    private void authorize(DeviceAddress caller, Map<UUID, Role> members, List<DeviceAddress> roster, GroupCommands.Commit cmd, Set<UUID> departed) {
+    private void authorize(DeviceAddress caller, Map<UUID, Role> members, List<DeviceAddress> roster, GroupCommands.Commit cmd, Set<UUID> departed,
+            List<DeviceAddress> pendingRemovals) {
         Role callerRole = members.get(caller.accountId());
         // Completing a departure (removing the MLS leaves of someone who left) is allowed for any member.
         boolean touchesOthers = !cmd.addMembers().isEmpty()
@@ -306,7 +317,8 @@ class GroupService {
             }
         }
         for (DeviceAddress d : cmd.removeDevices()) {
-            if (!rosterAfter.remove(d)) {
+            // A revoked device already left the roster; removing its leaf completes the pending removal.
+            if (!rosterAfter.remove(d) && !pendingRemovals.contains(d)) {
                 throw new EnclaveException(ErrorCode.INVALID_REQUEST, "device not in group " + d);
             }
         }
