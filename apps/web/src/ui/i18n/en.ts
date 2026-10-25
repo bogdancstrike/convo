@@ -427,6 +427,7 @@ export const en = {
   'thread.unsupported': 'Update needed to view this item',
   'thread.undecryptable': 'This message couldn’t be decrypted',
   'thread.originalUnavailable': 'Original message unavailable',
+  'thread.jumpToOriginal': 'Go to the original message',
   'thread.typing': '{name} is typing…',
   'thread.retry': 'Retry',
   'thread.noteHint': 'Notes are encrypted and synced only to your own devices.',

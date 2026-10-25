@@ -173,6 +173,20 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 }
                 lastSize = messages.size
             }
+            // Tapping a quote scrolls to the original (centred) and flashes it; the scroll-down button
+            // then brings the reader back. A deleted or expired original shows a short notice.
+            var flashed by remember(id) { mutableStateOf<String?>(null) }
+            LaunchedEffect(flashed) { if (flashed != null) { kotlinx.coroutines.delay(1500); flashed = null } }
+            fun jumpToQuote(target: JSONObject) {
+                val key = "${target.optString("authorId")}/${target.optString("messageId")}"
+                val at = messages.indexOfFirst { "${it.optString("authorId")}/${it.optString("id")}" == key }
+                if (at < 0) { app.notice = tr("Original message unavailable"); return }
+                scope.launch {
+                    val offset = -listState.layoutInfo.viewportSize.height / 3 // a third down the screen, like WhatsApp
+                    if (animate) listState.animateScrollToItem(at + 1, offset) else listState.scrollToItem(at + 1, offset) // +1: encryption notice
+                    flashed = key
+                }
+            }
             // The newest message (item index messages.size, after the encryption notice) is out of view.
             val canScrollDown by remember(messages.size) { derivedStateOf { (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) < messages.size } }
             LaunchedEffect(canScrollDown) { if (!canScrollDown) newBelow = 0 }
@@ -189,7 +203,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     // WhatsApp grouping: a run of messages from one author shares a tail on its first bubble.
                     val first = newDay || previous == null || previous.has("notice") || previous.optString("authorId") != message.optString("authorId")
                     Box(Modifier.padding(top = if (first) 8.dp else 2.dp)) {
-                        MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }, first)
+                        MessageCard(app, message, id, { selected -> quote = obj("authorId" to selected.optString("authorId"), "messageId" to selected.optString("id"), "excerpt" to selected.optString("body").take(256)) }, first,
+                            onQuote = ::jumpToQuote, flashed = flashed == "${message.optString("authorId")}/${message.optString("id")}")
                     }
                 }
             }
@@ -285,7 +300,12 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         }
     }
 }
-@Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit, first: Boolean = true) {
+/**
+ * One message bubble. [onQuote] is called when its quote is tapped (jump to the original);
+ * [flashed] briefly highlights the row after such a jump.
+ */
+@Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit, first: Boolean = true,
+                            onQuote: (JSONObject) -> Unit = {}, flashed: Boolean = false) {
     message.optJSONObject("notice")?.let { TimerNotice(app, message, it.optLong("seconds"), it.optString("kind")); return }
     val outgoing = message.optString("direction") == "out"
     val isSticker = message.has("sticker") && !message.isNull("sticker") && !message.optBoolean("deleted")
@@ -293,7 +313,10 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     var reactionPicker by remember { mutableStateOf(false) }
     if (reactionPicker) EmojiSheet({ reactionPicker = false }) { emoji -> reactionPicker = false; app.call("react", message.targetArgs(conversation).put("emoji", emoji)) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
+    // WhatsApp flash: the row is tinted after a jump from a quote, then fades out.
+    val flash by androidx.compose.animation.animateColorAsState(if (flashed) MaterialTheme.colorScheme.primary.copy(alpha = .18f) else androidx.compose.ui.graphics.Color.Transparent,
+        androidx.compose.animation.core.tween(if (flashed) 150 else 1200), label = "flash")
+    Row(Modifier.fillMaxWidth().background(flash), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
         val key = "${message.optString("authorId")}/${message.optString("id")}"
         val selecting = app.selection != null
         if (selecting) Checkbox(key in app.selection.orEmpty(), { app.toggleSelected(key) }, Modifier.align(Alignment.CenterVertically))
@@ -330,7 +353,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             val media = message.optJSONArray("attachments")?.length()?.let { it > 0 } == true
             Column(Modifier.padding(start = if (media) 4.dp else 9.dp, end = if (media) 4.dp else 9.dp, top = if (media) 4.dp else 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (conversation.startsWith("g:") && !outgoing && first) AccountName(app, message.optString("authorId"))
-                message.optJSONObject("quote")?.let { RawText(it.optString("excerpt"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)).padding(8.dp)) }
+                message.optJSONObject("quote")?.let { QuoteBox(app, it, outgoing) { onQuote(it) } }
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
@@ -428,6 +451,22 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     }
     external?.let { url -> ExternalLinkConfirmation(url, { external = null }, { external = null; app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) }
 }
+/** WhatsApp quote inside a bubble: accent bar, author ("You" for own messages) and excerpt; tap to jump. */
+@Composable fun QuoteBox(app: MainActivity, quote: JSONObject, outgoing: Boolean, open: () -> Unit) {
+    val colors = LocalConvoColors.current
+    val accent = MaterialTheme.colorScheme.primary
+    Row(Modifier.widthIn(min = 120.dp).height(IntrinsicSize.Min).clip(RoundedCornerShape(6.dp))
+        .background(if (outgoing) androidx.compose.ui.graphics.Color.Black.copy(alpha = .06f) else colors.canvas)
+        .clickable(onClickLabel = tr("Go to the original message"), onClick = open)) {
+        Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
+            if (quote.optString("authorId") == app.snapshot.optString("accountId")) Text("You", style = MaterialTheme.typography.labelMedium, color = accent)
+            else AccountName(app, quote.optString("authorId"))
+            RawText(quote.optString("excerpt").ifBlank { tr("Original message unavailable") }, maxLines = 3, style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+        }
+    }
+}
+
 @Composable fun AccountName(app: MainActivity, id: String) {
     var label by remember(id) { mutableStateOf("") }; LaunchedEffect(id) { app.call("account", obj("id" to id)) { label = (it as? JSONObject)?.label() ?: "" } }
     if (label.isNotBlank()) Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)

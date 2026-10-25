@@ -7,6 +7,7 @@ import type { EnclaveClient } from '../../core/client';
 import { timerLabel } from './TimerNotice';
 import { useMentionLabels } from '../mentions';
 import type { ChatMessage, MessageStatus } from '../../core/model';
+import type { Quote } from '../../crypto/content';
 import { AttachmentView } from '../components/AttachmentView';
 import { Avatar } from '../components/Avatar';
 import { Dialog } from '../components/Dialog';
@@ -32,6 +33,8 @@ export interface MessageActions {
   onEdit: (m: ChatMessage) => void;
   onForward: (m: ChatMessage) => void;
   onInfo: (m: ChatMessage) => void;
+  /** Tapping the quote scrolls to the original message (WhatsApp). */
+  onQuote?: (quote: Quote) => void;
 }
 
 /**
@@ -49,7 +52,10 @@ export function MessageBubble({
   quotedAuthor,
   actions,
   selection,
+  flashed = false,
 }: {
+  /** Briefly highlighted after a jump from a quote. */
+  flashed?: boolean;
   /** Batch selection mode: a checkbox replaces the context menu; clicking toggles. */
   selection?: { selected: boolean; toggle: () => void };
   client: EnclaveClient;
@@ -81,7 +87,7 @@ export function MessageBubble({
   return (
     <>
       {showDay && <div className="day-separator">{dayLabel(m.sort, t('chats.today'), t('chats.yesterday'), date)}</div>}
-      <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}${selection?.selected ? ' selected' : ''}`} data-testid="message" data-key={`${m.authorId}/${m.id}`} id={messageAnchor(m.authorId, m.id)}
+      <div className={`message-row ${m.direction}${first ? ' first' : ''}${group && !own ? ' grouped' : ''}${selection?.selected ? ' selected' : ''}${flashed ? ' flashed' : ''}`} data-testid="message" data-key={`${m.authorId}/${m.id}`} id={messageAnchor(m.authorId, m.id)}
         onClickCapture={selection ? (e) => { e.preventDefault(); e.stopPropagation(); if (!system) selection.toggle(); } : undefined}>
         {selection && !system && <input type="checkbox" className="select-box" checked={selection.selected} readOnly aria-label={t('select.message')} data-testid="select-message" />}
         {group && !own && <span className="msg-avatar">{first && <Avatar id={m.authorId} name={author || '?'} size={28} />}</span>}
@@ -138,7 +144,9 @@ export function MessageBubble({
             </div>
           )}
           {m.quote && !system && (
-            <div className="quote">
+            <div className="quote" role="button" tabIndex={0} data-testid="quote" aria-label={t('thread.jumpToOriginal')}
+              onClick={(e) => { e.stopPropagation(); actions.onQuote?.(m.quote!); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); actions.onQuote?.(m.quote!); } }}>
               <strong>{quotedAuthor}</strong>
               <div>{m.quote.excerpt ?? t('thread.originalUnavailable')}</div>
             </div>

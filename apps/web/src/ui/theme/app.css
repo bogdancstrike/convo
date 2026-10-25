@@ -755,6 +755,20 @@ select {
   color: var(--c-text-secondary);
   background: var(--c-hover);
 }
+.quote[role='button'] {
+  cursor: pointer;
+}
+/* Original message after a jump from its quote (WhatsApp flash). */
+.message-row.flashed {
+  animation: quote-flash 2s ease-out;
+}
+@keyframes quote-flash {
+  0%, 40% { background: color-mix(in srgb, var(--c-accent) 22%, transparent); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .message-row.flashed { animation: none; background: color-mix(in srgb, var(--c-accent) 14%, transparent); }
+}
 .quote strong {
   color: var(--c-accent-text);
   display: block;

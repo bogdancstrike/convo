@@ -108,6 +108,7 @@ object Strings {
         "Audio" to "Audio",
         "Back" to "Înapoi", "View profile photo" to "Vezi fotografia de profil", "Profile photo" to "Fotografie de profil",
         "Turn speaker on" to "Pornește difuzorul", "typing…" to "scrie…",
+        "Go to the original message" to "Mergi la mesajul original", "Original message unavailable" to "Mesajul original nu este disponibil",
         "More reactions" to "Mai multe reacții",
         "Convo stays connected in the background so messages and calls arrive. For better battery life, set up ntfy in Settings → Notifications." to "Convo rămâne conectat în fundal ca mesajele și apelurile să ajungă. Pentru o baterie mai bună, configurează ntfy în Setări → Notificări.", "Messages arrive only while Convo is open. Tap to set up background delivery." to "Mesajele sosesc doar cât Convo este deschis. Atinge pentru a configura livrarea în fundal.",
         "Could not load the voice message." to "Mesajul vocal nu a putut fi încărcat.", "This audio format can’t be played on this phone." to "Acest format audio nu poate fi redat pe acest telefon.", "Pause" to "Pauză", "Play voice message" to "Redă mesajul vocal",

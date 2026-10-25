@@ -6,7 +6,7 @@ import { conversationMenu } from './conversationMenu';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionState } from '../../api/socket';
 import type { EnclaveClient } from '../../core/client';
-import { MAX_ATTACHMENTS } from '../../crypto/content';
+import { MAX_ATTACHMENTS, type Quote } from '../../crypto/content';
 import { type ChatMessage, type Conversation } from '../../core/model';
 import { LastSeen } from '../components/LastSeen';
 import { Avatar } from '../components/Avatar';
@@ -178,6 +178,27 @@ export function Thread({
     if (grew > 0 && !stickToBottom.current) setNewBelow((n) => n + grew);
     if (stickToBottom.current) list.scrollTop = list.scrollHeight;
   }, [shown, typing, search, firstUnread, savedAnchor]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * Tapping a quote scrolls to the original and flashes it (WhatsApp); the "jump to latest" arrow
+   * then brings the reader back down. A deleted or expired original shows a short notice.
+   */
+  const [flashed, setFlashed] = useState<string | null>(null);
+  const jumpToQuote = (quote: Quote) => {
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLElement>(`#${messageAnchor(quote.authorId, quote.messageId)}`);
+    if (!list || !row) { setQuoteGone(true); return; }
+    stickToBottom.current = false; setAtBottom(false);
+    // Instant, like WhatsApp: a smooth scroll's first events would still be "at the bottom" and a
+    // re-render (e.g. a receipt) would pull the view back down.
+    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - (list.clientHeight - row.offsetHeight) / 2;
+    setFlashed(`${quote.authorId}/${quote.messageId}`);
+  };
+  const [quoteGone, setQuoteGone] = useState(false);
+  useEffect(() => {
+    if (!flashed && !quoteGone) return;
+    const timer = setTimeout(() => { setFlashed(null); setQuoteGone(false); }, 2000);
+    return () => clearTimeout(timer);
+  }, [flashed, quoteGone]);
   const jumpToLatest = () => {
     const list = listRef.current; if (!list) return;
     setReturnTo(topAnchor());
@@ -221,7 +242,9 @@ export function Thread({
                 onEdit: (target) => setMode({ kind: 'edit', target }),
                 onForward: setForwarding,
                 onInfo: setInfo,
+                onQuote: jumpToQuote,
               }}
+              flashed={flashed === keyOf(m)}
             />
     );
   };
@@ -350,6 +373,7 @@ export function Thread({
           return renderBubble(m, i, newDay);
         })}
       </div>
+      {quoteGone && <p className="anchor-note" role="status" data-testid="quote-gone">{t('thread.originalUnavailable')}</p>}
       {anchorGone && <p className="anchor-note" role="status" data-testid="anchor-gone">{t('thread.anchorGone')}<button className="icon-btn" onClick={() => setAnchorGone(false)} aria-label={t('info.close')}><Icon name="close" size={14} /></button></p>}
       {returnTo && atBottom && !search && (
         <button className="btn return-position" onClick={() => { if (!scrollToAnchor(returnTo)) setAnchorGone(true); setReturnTo(null); }} data-testid="return-position">

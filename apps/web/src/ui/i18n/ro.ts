@@ -429,6 +429,7 @@ export const ro: Record<MessageKey, string> = {
   'thread.unsupported': 'Este necesară o actualizare pentru a vedea acest element',
   'thread.undecryptable': 'Acest mesaj nu a putut fi decriptat',
   'thread.originalUnavailable': 'Mesajul original nu este disponibil',
+  'thread.jumpToOriginal': 'Mergi la mesajul original',
   'thread.typing': '{name} scrie…',
   'thread.retry': 'Reîncearcă',
   'thread.noteHint': 'Notițele sunt criptate și sincronizate doar pe dispozitivele tale.',
