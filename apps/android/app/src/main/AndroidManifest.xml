@@ -25,11 +25,15 @@
                 <category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="convo.doncik.ro" android:pathPrefix="/call/" />
             </intent-filter>
-            <!-- Older links (https://<server>/#/call/<token>) and the local development host; unverified. -->
+            <!-- Older links (https://<server>/#/call/<token>, path "/") and the local development host;
+                 unverified. Only "/" and "/call/…": every other page of the server — notably the
+                 /auth/… passkey setup opened in a browser tab — must stay in the browser (the
+                 verified domain would otherwise hand it to the app, which ignores it). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="convo.doncik.ro" /><data android:scheme="https" android:host="localhost" />
+                <data android:scheme="https" android:host="convo.doncik.ro" /><data android:host="localhost" />
+                <data android:path="/" /><data android:pathPrefix="/call/" />
             </intent-filter>
         </activity>
         <!-- Ongoing call (microphone/camera) so calls survive Home and the lock screen. -->
