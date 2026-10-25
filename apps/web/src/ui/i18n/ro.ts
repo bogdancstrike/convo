@@ -341,6 +341,8 @@ export const ro: Record<MessageKey, string> = {
   'community.operations': 'Actualizări de membri',
   'community.opPending': 'Se elimină {name} din {group} — se actualizează grupul securizat',
   'community.opBlocked': '{name} deține {group}: transferă proprietatea pentru a-l elimina acolo',
+  'community.opRetry': 'Reîncearcă eliminările blocate',
+  'community.opBlockedHelp': 'O persoană eliminată încă deține un grup legat. Roag-o (sau pe proprietarii grupului) să numească alt proprietar, apoi reîncearcă; se reîncearcă și automat când proprietatea se schimbă.',
   'group.searchMembers': 'Caută membri',
   'group.memberFilter': 'Afișează membrii',
   'group.filterAll': 'Toți',

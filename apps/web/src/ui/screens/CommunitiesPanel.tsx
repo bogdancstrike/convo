@@ -215,6 +215,10 @@ function CommunityDetail({ client, community, onBack, onOpenChat }: {
                   <span className="settings-row-text">{t(o.status === 'pending' ? 'community.opPending' : 'community.opBlocked', { name: o.name, group: label })}</span></li>;
               })}
             </ul>
+            {operations.some((o) => o.status === 'blocked') && <>
+              <p className="muted-text">{t('community.opBlockedHelp')}</p>
+              <button className="btn" onClick={() => act(client.retryCommunityOperations(community))} data-testid="community-ops-retry">{t('community.opRetry')}</button>
+            </>}
           </div>
         )}
         {error && <p role="alert" className="failed" data-testid="community-error">{error}</p>}

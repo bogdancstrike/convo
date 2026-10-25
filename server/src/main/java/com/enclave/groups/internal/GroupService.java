@@ -131,6 +131,7 @@ class GroupService {
         cmd.removeMembers().forEach(a -> { groups.deleteMember(groupId, a); groups.deleteDeparture(groupId, a); });
         if (!cmd.removeMembers().isEmpty()) events.publishEvent(new com.enclave.groups.GroupMembersRemoved(groupId, Set.copyOf(cmd.removeMembers()), true));
         cmd.roleChanges().forEach((a, r) -> groups.upsertMember(groupId, a, r));
+        if (!cmd.roleChanges().isEmpty()) events.publishEvent(new com.enclave.groups.GroupRolesChanged(groupId));
 
         // Everyone in the pre-commit roster (including removed devices) learns the new epoch.
         List<DeviceAddress> recipients = roster.stream().filter(d -> !d.equals(caller)).toList();

@@ -339,6 +339,8 @@ export const en = {
   'community.operations': 'Membership updates',
   'community.opPending': 'Removing {name} from {group} — updating secure group',
   'community.opBlocked': '{name} owns {group}: transfer ownership to remove them there',
+  'community.opRetry': 'Retry blocked removals',
+  'community.opBlockedHelp': 'A removed person still owns a linked group. Ask them (or that group’s owners) to make someone else owner, then retry; it also retries automatically when ownership changes.',
   'group.searchMembers': 'Search members',
   'group.memberFilter': 'Show members',
   'group.filterAll': 'All',

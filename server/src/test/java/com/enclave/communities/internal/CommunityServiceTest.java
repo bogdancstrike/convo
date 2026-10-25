@@ -26,7 +26,13 @@ class CommunityServiceTest {
         @Override void propose(UUID c, byte[] g, String v, UUID by, boolean accepted, boolean d) { links.put(Arrays.toString(g), new Link(c, g, v, accepted ? "active" : "proposed", by, 1, accepted && d)); }
         @Override void accept(UUID c, byte[] g, UUID by, boolean d) { var l = links.get(Arrays.toString(g)); links.put(Arrays.toString(g), new Link(c, g, l.visibility(), "active", l.proposedBy(), l.version() + 1, d)); }
         @Override Optional<Community> byRoot(byte[] g) { return communities.values().stream().filter(c -> Arrays.equals(c.rootGroupId(), g)).findFirst(); }
-        @Override void recordOperation(UUID c, byte[] g, UUID a, String s) { ops.put(Arrays.toString(g) + a, s); }
+        final Map<String, UUID> opCommunity = new LinkedHashMap<>();
+        @Override void recordOperation(UUID c, byte[] g, UUID a, String s) { ops.put(Arrays.toString(g) + a, s); opCommunity.put(Arrays.toString(g) + a, c); }
+        @Override List<BlockedOperation> blocked(byte[] g) {
+            String prefix = Arrays.toString(g);
+            return ops.entrySet().stream().filter(e -> e.getKey().startsWith(prefix) && "blocked".equals(e.getValue()))
+                    .map(e -> new BlockedOperation(opCommunity.get(e.getKey()), UUID.fromString(e.getKey().substring(prefix.length())))).toList();
+        }
         @Override List<Operation> operations(UUID c) { return ops.entrySet().stream().map(e -> new Operation(new byte[32], UUID.randomUUID(), e.getValue(), java.time.Instant.EPOCH)).toList(); }
         @Override int completeOperations(byte[] g, java.util.Collection<UUID> accounts) {
             int n = 0; for (UUID a : accounts) if ("pending".equals(ops.get(Arrays.toString(g) + a))) { ops.put(Arrays.toString(g) + a, "completed"); n++; } return n;
@@ -167,5 +173,20 @@ class CommunityServiceTest {
         assertThat(repo.ops).containsEntry(Arrays.toString(chat) + owner, "blocked");
         assertThat(service.operations(admin, c)).extracting(CommunityService.OperationView::status).containsExactlyInAnyOrder("completed", "blocked");
         assertCode(() -> service.operations(subOwner, c), ErrorCode.FORBIDDEN_ROLE); // community admins only
+    }
+
+    @Test void aBlockedRemovalProceedsOnceOwnershipIsTransferred() {
+        UUID c = community();
+        service.link(owner, c, chat, "discoverable", true);
+        groups.put(chat, false, owner, "owner", subOwner, "member");
+        service.onRootRemoval(root, Set.of(owner));
+        assertThat(repo.ops).containsEntry(Arrays.toString(chat) + owner, "blocked");
+        service.retryBlocked(chat);                                     // nothing changed yet: still blocked
+        assertThat(repo.ops).containsEntry(Arrays.toString(chat) + owner, "blocked");
+        groups.put(chat, false, owner, "owner", subOwner, "owner");    // ownership handed to subOwner
+        service.retryBlocked(chat);
+        assertThat(repo.ops).containsEntry(Arrays.toString(chat) + owner, "pending");
+        assertThat(groups.removed).contains(Arrays.toString(chat) + owner);
+        assertCode(() -> service.retryBlocked(member, c), ErrorCode.FORBIDDEN_ROLE); // community admins only
     }
 }

@@ -165,6 +165,35 @@ class CommunityService {
         }
     }
 
+    /**
+     * Re-evaluates removals that were blocked in a group because the removed account was its last
+     * owner (§30.3): after an ownership transfer they become pending (then completed by the MLS
+     * removal); an account that already left counts as completed.
+     */
+    @Transactional
+    void retryBlocked(byte[] groupId) {
+        for (var op : communities.blocked(groupId)) {
+            switch (groups.removeOnBehalf(groupId, op.accountId())) {
+                case REMOVED -> communities.recordOperation(op.communityId(), groupId, op.accountId(), "pending");
+                case NOT_MEMBER -> communities.recordOperation(op.communityId(), groupId, op.accountId(), "completed");
+                case LAST_OWNER -> { }
+            }
+        }
+    }
+
+    /** Community admins: retry every blocked removal of the community's linked groups now. */
+    @Transactional
+    int retryBlocked(UUID caller, UUID communityId) {
+        var community = memberCommunity(caller, communityId);
+        if (!groups.summary(community.rootGroupId()).map((s) -> s.isManager(caller)).orElse(false)) {
+            throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only community admins retry operations");
+        }
+        int before = (int) communities.operations(communityId).stream().filter(o -> "blocked".equals(o.status())).count();
+        communities.links(communityId).forEach(link -> retryBlocked(link.groupId()));
+        int after = (int) communities.operations(communityId).stream().filter(o -> "blocked".equals(o.status())).count();
+        return before - after;
+    }
+
     /** A group's MLS removal commit was accepted: its pending operations are done. */
     @Transactional
     void onGroupRemovalCommitted(byte[] groupId, java.util.Set<UUID> accounts) {

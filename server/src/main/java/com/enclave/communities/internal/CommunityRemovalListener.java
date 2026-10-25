@@ -14,6 +14,12 @@ class CommunityRemovalListener {
     private final CommunityService communities;
     CommunityRemovalListener(CommunityService communities) { this.communities = communities; }
 
+    /** Ownership or roles changed in a group: retry community removals that were blocked there. */
+    @ApplicationModuleListener
+    void on(com.enclave.groups.GroupRolesChanged event) {
+        communities.retryBlocked(event.groupId());
+    }
+
     @ApplicationModuleListener
     void on(GroupMembersRemoved event) {
         communities.onRootRemoval(event.groupId(), event.accounts());

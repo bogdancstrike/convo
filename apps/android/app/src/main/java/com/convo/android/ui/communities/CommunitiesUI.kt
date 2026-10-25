@@ -128,6 +128,10 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                     RawText(tr(if (o.optString("status") == "pending") "Removing {name} from {group} — updating secure group" else "{name} owns {group}: transfer ownership to remove them there")
                         .replace("{name}", o.optString("name")).replace("{group}", group), style = MaterialTheme.typography.bodySmall)
                 }
+                if (open.any { it.optString("status") == "blocked" }) {
+                    Text("A removed person still owns a linked group. Ask them (or that group’s owners) to make someone else owner, then retry; it also retries automatically when ownership changes.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton({ app.call("retryCommunityOperations", obj("id" to communityId)) { refresh++ } }) { Text("Retry blocked removals") }
+                }
             }
         }
         item {

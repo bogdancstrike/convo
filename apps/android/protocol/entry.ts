@@ -287,6 +287,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'unlinkCommunityGroup': return client.unlinkCommunityGroup(await community(args.id), String(args.groupId));
     case 'onboarding': return client.onboarding(await community(args.id));
     case 'communityOperations': return client.communityOperations(await community(args.id));
+    case 'retryCommunityOperations': return client.retryCommunityOperations(await community(args.id));
     case 'saveOnboarding': return client.saveOnboarding(await community(args.id), {
       welcome: String(args.welcome ?? ''), rules: String(args.rules ?? ''), ackRequired: args.ackRequired === true,
       recommended: Array.isArray(args.recommended) ? args.recommended.map(String) : [],

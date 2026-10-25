@@ -85,3 +85,69 @@ test('community removal follows into delegating groups only', async ({ browser, 
     await expect(owner.locator('[data-testid="community-operation"][data-status="pending"]')).toHaveCount(0, { timeout: 30_000 });
   } finally { await closeAll(owner, bob, carol); }
 });
+
+/**
+ * Specs §30.3: removing a subgroup's last owner from the community is blocked (never stranding the
+ * group) and retried automatically once ownership is handed over.
+ */
+test('a blocked removal completes after the removed person hands over ownership', async ({ browser, request }) => {
+  test.setTimeout(300_000);
+  const [ownerU, bobU, carolU] = await Promise.all(['rbowner', 'rbbob', 'rbcarol'].map((p) => createUser(request, p)));
+  const [owner, bob, carol] = await Promise.all([1, 2, 3].map(() => newPage(browser)));
+  try {
+    for (const [page, user] of [[owner, ownerU], [bob, bobU], [carol, carolU]] as const) await enroll(page, user);
+    const name = `Depot ${Date.now() % 10000}`;
+    await owner.getByTestId('nav-communities').click();
+    await owner.getByTestId('new-community').click();
+    await owner.getByTestId('community-name').fill(name);
+    await owner.getByTestId('create-community').click();
+    await expect(owner.getByTestId('community-title')).toHaveText(name, { timeout: 30_000 });
+    await owner.getByTestId('community-invite').click();
+    for (const u of [bobU, carolU]) {
+      await owner.getByTestId('add-member').click();
+      await owner.getByTestId('people-search').fill(u.username);
+      await owner.getByTestId(`pick-${u.username}`).click();
+      await expect(owner.getByTestId(`member-${u.username}`)).toBeVisible({ timeout: 20_000 });
+    }
+    await newGroup(owner, 'Night shift', [bobU, carolU]);
+    await openCommunity(owner, name);
+    await owner.getByTestId('community-add-group').click();
+    await owner.getByTestId('community-pick-group').filter({ hasText: 'Night shift' }).click();
+    await expect(owner.getByTestId('community-group').filter({ hasText: 'Night shift' }).getByTestId('community-delegation')).toBeVisible({ timeout: 20_000 });
+
+    // The community owner hands Night shift to Carol and leaves it: Carol is its only owner.
+    await openChat(owner, 'Night shift');
+    await owner.getByTestId('thread-info').click();
+    owner.once('dialog', (d) => void d.accept());
+    await owner.getByTestId(`member-menu-${carolU.username}`).click();
+    await owner.getByRole('menuitem', { name: 'Make owner' }).click();
+    await expect(owner.getByTestId(`member-${carolU.username}`)).toContainText('Owner', { timeout: 20_000 });
+    await owner.getByTestId('close-info').click();
+    owner.once('dialog', (d) => void d.accept());
+    await owner.getByTestId('thread-menu').click();
+    await owner.getByTestId('menu-leave').click();
+    await expect(owner.getByTestId('composer')).toHaveCount(0, { timeout: 20_000 });
+
+    // Removing Carol from the community is blocked in Night shift.
+    await openCommunity(owner, name);
+    await owner.getByTestId('community-invite').click();
+    owner.once('dialog', (d) => void d.accept());
+    await owner.getByTestId(`member-menu-${carolU.username}`).click();
+    await owner.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await expect(owner.getByTestId(`member-${carolU.username}`)).toHaveCount(0, { timeout: 20_000 });
+    await openCommunity(owner, name);
+    await expect(owner.locator('[data-testid="community-operation"][data-status="blocked"]')).toHaveCount(1, { timeout: 30_000 });
+    await expect(owner.getByTestId('community-ops-retry')).toBeVisible();
+
+    // Carol makes Bob owner: the removal is retried automatically and completes.
+    await openChat(carol, 'Night shift');
+    await carol.getByTestId('thread-info').click();
+    carol.once('dialog', (d) => void d.accept());
+    await carol.getByTestId(`member-menu-${bobU.username}`).click();
+    await carol.getByRole('menuitem', { name: 'Make owner' }).click();
+    await expect(async () => {
+      await openCommunity(owner, name);
+      await expect(owner.locator('[data-testid="community-operation"][data-status="blocked"]')).toHaveCount(0, { timeout: 3_000 });
+    }).toPass({ timeout: 90_000 });
+  } finally { await closeAll(owner, bob, carol); }
+});

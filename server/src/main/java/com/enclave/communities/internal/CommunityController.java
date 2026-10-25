@@ -53,6 +53,14 @@ class CommunityController {
         communities.unlink(me.accountId(), communityId, decode(groupId, "groupId"));
     }
 
+    record Retried(int unblocked) {}
+
+    /** Community admins: retry blocked removals now (e.g. after a subgroup owner handed over ownership). */
+    @PostMapping("/v1/communities/{communityId}/operations/retry")
+    Retried retry(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId) {
+        return new Retried(communities.retryBlocked(me.accountId(), communityId));
+    }
+
     @GetMapping("/v1/communities/{communityId}/operations")
     List<CommunityService.OperationView> operations(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID communityId) {
         return communities.operations(me.accountId(), communityId);

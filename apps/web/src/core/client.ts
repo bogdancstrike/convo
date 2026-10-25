@@ -1681,6 +1681,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const ops = await this.api.communityOperations(community.communityId);
     return Promise.all(ops.map(async (o) => ({ ...o, name: await this.displayName(o.accountId) })));
   }
+  /** Community admins: retries removals blocked because the person owns a linked group (§30.3). */
+  async retryCommunityOperations(community: CommunityView): Promise<number> { return (await this.api.retryCommunityOperations(community.communityId)).unblocked; }
   unlinkCommunityGroup(community: CommunityView, groupId: string): Promise<void> { return this.api.unlinkCommunityGroup(community.communityId, groupId); }
   /** Asks to join a discoverable group (its admins approve; nothing is shared before that). */
   requestCommunityGroup(community: CommunityView, groupId: string): Promise<void> { return this.api.requestCommunityGroup(community.communityId, groupId); }

@@ -269,6 +269,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Community membership-operation retries (specs §30.3, COM-01): a removal blocked because the
+  removed person is a linked group's last owner is retried automatically when that group's roles
+  change (`GroupRolesChanged`), and on demand ("Retry blocked removals", community admins, web +
+  Android, `POST /v1/communities/{id}/operations/retry`); the UI explains the ownership hand-over.
+  `CommunityServiceTest`, `community-removal.spec.ts` (blocked → owner transfer → completed).
 - Aggregate service health (ADM-01): Health → Service metrics shows mailbox backlog (waiting
   envelopes, devices with backlog, oldest age, sessions per pod), groups and groups paused by a
   revoked device, departures awaiting removal, push wake-ups and device enrollments/revocations in
@@ -526,7 +531,6 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 
 | Item | Task |
 |---|---|
-| Communities: membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |

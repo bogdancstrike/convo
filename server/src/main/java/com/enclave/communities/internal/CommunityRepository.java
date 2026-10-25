@@ -81,6 +81,14 @@ class CommunityRepository {
                 .param("c", communityId).param("g", groupId).param("a", account).param("s", status).update();
     }
 
+    /** A removal blocked in a group (the account is its last owner), with its community. */
+    record BlockedOperation(UUID communityId, UUID accountId) {}
+
+    List<BlockedOperation> blocked(byte[] groupId) {
+        return jdbc.sql("SELECT community_id, account_id FROM community_membership_ops WHERE group_id = :g AND status = 'blocked'").param("g", groupId)
+                .query((rs, i) -> new BlockedOperation(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class))).list();
+    }
+
     /** Pending operations become completed once the group's MLS removal commit was accepted. */
     int completeOperations(byte[] groupId, java.util.Collection<UUID> accounts) {
         int n = 0;

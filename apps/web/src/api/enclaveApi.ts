@@ -142,6 +142,10 @@ export class EnclaveApi {
   communityOperations(communityId: string): Promise<{ groupId: string; accountId: string; status: 'pending' | 'completed' | 'blocked'; updatedAt: string }[]> {
     return this.signed('GET', `/v1/communities/${encodeURIComponent(communityId)}/operations`);
   }
+  /** Community admins: retry removals blocked by a subgroup's last owner. */
+  retryCommunityOperations(communityId: string): Promise<{ unblocked: number }> {
+    return this.signed('POST', `/v1/communities/${encodeURIComponent(communityId)}/operations/retry`, {});
+  }
   unlinkCommunityGroup(communityId: string, groupId: string): Promise<void> {
     return this.signed('DELETE', `/v1/communities/${encodeURIComponent(communityId)}/links/${encodeURIComponent(groupId)}`);
   }
