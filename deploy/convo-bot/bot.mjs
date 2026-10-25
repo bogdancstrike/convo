@@ -143,7 +143,12 @@ function archive(m) {
 async function respond(m) {
   const convo = {
     accountId,
-    reply: (text) => call('send', { conversationId: m.conversationId, body: String(text), quote: { messageId: m.id, authorId: m.authorId, excerpt: (m.body ?? '').slice(0, 256) } }),
+    // A mention copy from a group (addressed-only bot): answer the asker, whose app posts it in the group.
+    reply: (text) => m.botRequest
+      ? call('botReply', { peerId: m.authorId, body: String(text), groupId: m.botRequest.groupId, messageId: m.botRequest.messageId })
+      : call('send', { conversationId: m.conversationId, body: String(text), quote: { messageId: m.id, authorId: m.authorId, excerpt: (m.body ?? '').slice(0, 256) } }),
+    /** Set for mention copies from a group: { groupId, groupName, messageId }. */
+    group: m.botRequest ?? null,
     call,
   };
   try { await handler(m, convo); } catch (e) { log(`handler failed for message ${m.id}: ${e.message}`); }

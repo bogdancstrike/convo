@@ -95,6 +95,10 @@ export interface ChatMessage {
   viewOnce?: { kind: 'photo' | 'video'; state: 'unopened' | 'opened' | 'sent'; at?: number };
   /** Abuse report received from (or sent to) a security contact. */
   report?: AbuseReport;
+  /** In a bot's 1:1 chat: this is a mention copy from a group (addressed-only bot, AC-INT-02). */
+  botRequest?: { groupId: string; groupName: string; messageId: string };
+  /** In a group: a bot answer relayed by the member who asked (validated against connected bots). */
+  botRelay?: { botId: string; botName: string };
   /** Group topic this message belongs to (absent = general). */
   topic?: string;
   /** A sticker: bundled (`core/stickers.ts`) or custom (encrypted image attachment, `core/customStickers.ts`). */

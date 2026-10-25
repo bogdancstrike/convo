@@ -23,6 +23,7 @@ import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel
 import { SlowModeSection } from './MemberPolicy';
 import { GuestBadge } from '../components/GuestBadge';
 import { IntegrationBadge } from '../components/IntegrationBadge';
+import { ConnectedBots } from '../components/ConnectedBots';
 
 /**
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
@@ -273,6 +274,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
         <span className="muted-text">{t('group.participants', { count: members.length })}</span>
       </section>
       <GroupAbout client={client} conversation={conversation} description={record?.description} canEdit={canManage} />
+      {!conversation.adminOnly && <ConnectedBots client={client} conversation={conversation} canManage={canManage} />}
       {canManage && <InviteSection client={client} conversation={conversation} />}
       {!conversation.adminOnly && !conversation.left && client.policy.features.callLinks && <CallLinkSection client={client} conversation={conversation} />}
       {canManage && !conversation.adminOnly && <SlowModeSection client={client} conversation={conversation} onError={setError} />}

@@ -240,7 +240,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     // @mentions (groups): suggestions for the trailing `@query`, picked members sent as IDs.
                     var members by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
                     val picked = remember(id) { mutableStateListOf<JSONObject>() }
-                    LaunchedEffect(id) { if (id.startsWith("g:")) app.call("memberLabels", obj("id" to id), quiet = true) { v -> members = (v as? org.json.JSONArray)?.objects().orEmpty() } }
+                    LaunchedEffect(id) { if (id.startsWith("g:")) app.call("memberLabels", obj("id" to id, "withBots" to true), quiet = true) { v -> members = (v as? org.json.JSONArray)?.objects().orEmpty() } }
                     val mentionQuery = Regex("(^|\\s)@([^\\s@]{0,32})$").find(input)?.groupValues?.get(2)
                     val suggestions = if (mentionQuery == null) emptyList() else members.filter { m -> m.optString("label").lowercase().split(" ").any { it.startsWith(mentionQuery.lowercase()) } }.take(5)
                     if (suggestions.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -353,7 +353,9 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             shape = RoundedCornerShape(topStart = if (first && !outgoing) 0.dp else 10.dp, topEnd = if (first && outgoing) 0.dp else 10.dp, bottomStart = 10.dp, bottomEnd = 10.dp)) {
             val media = message.optJSONArray("attachments")?.length()?.let { it > 0 } == true
             Column(Modifier.padding(start = if (media) 4.dp else 9.dp, end = if (media) 4.dp else 9.dp, top = if (media) 4.dp else 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (conversation.startsWith("g:") && !outgoing && first) AccountName(app, message.optString("authorId"))
+                // A bot answer relayed into the group by the member who asked (addressed-only bot).
+                message.optJSONObject("botRelay")?.let { relay -> Text("🤖 ${relay.optString("botName")} · Bot", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
+                if (conversation.startsWith("g:") && !outgoing && first && message.optJSONObject("botRelay") == null) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { QuoteBox(app, it, outgoing) { onQuote(it) } }
                 // Organization policy refused sending: the recipient's keys fail the key-log check.
                 if (outgoing && message.optString("status") == "blocked" && message.optString("error") == "KEY_TRANSPARENCY")

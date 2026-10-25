@@ -127,6 +127,15 @@ export interface DataMessage {
   sticker?: { pack: string; id: string; attachment?: AttachmentPointer };
   /** Group topic this message belongs to (absent = the group's general conversation). */
   topic?: string;
+  /**
+   * Addressed-only bots (AC-INT-02): a member's separately encrypted 1:1 copy of a group message
+   * that mentions a bot connected to the group. The bot is not a group member and holds no group keys.
+   */
+  botRequest?: { groupId: string; groupName: string; messageId: string };
+  /** A bot's answer to a `botRequest`, sent 1:1 to the member who asked. */
+  botReply?: { groupId: string; requestMessageId: string };
+  /** In a group: a bot answer relayed by the member who asked (shown as from the bot). */
+  botRelay?: { botId: string; botName: string };
   /** Group event: create/rename/close a topic (owners/admins; highest revision wins). */
   topicDef?: { id: string; name: string; closed: boolean; revision: number };
   /** Group event: slow mode and members who may not post (owners/admins; highest revision wins). */
@@ -247,6 +256,8 @@ export interface GroupMeta {
    * root's owners/admins; labels are shown only for links the server reports active.
    */
   community?: CommunityMeta;
+  /** Addressed-only bots connected by owners/admins (account IDs, ≤ 5): they receive mentions only. */
+  connectedBots?: string[];
 }
 
 export interface CommunityMeta {

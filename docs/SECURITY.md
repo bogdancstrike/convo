@@ -697,8 +697,15 @@ prunes it to the configured retention; *bot* mode passes direct messages and men
 handler, which must treat message text as untrusted. The `/data` volume holds plaintext and keys
 and must be protected accordingly.
 
-Not yet implemented: an *addressed-only* bot mode (a bot without the group's epoch keys that receives
-only messages explicitly sent to it).
+**Addressed-only bots (AC-INT-02).** Group owners/admins can *connect* a bot account to a group
+instead of adding it (group info → Connected bots; at most 5). The list travels in the group's
+owner/admin-signed E2EE metadata, so every member sees it in the group's banner ("… is connected: it
+receives only messages that mention it"). The bot is **not** an MLS member and never holds the
+group's epoch keys, so it cannot read anything else. When a member mentions it, the member's client
+also sends the bot a separately encrypted 1:1 copy with the group context; the bot answers that
+member privately, and the member's client posts the answer into the group, quoting the request and
+labelled as from the bot. Receivers show the bot label only if that bot is connected to the group,
+and only answers to the member's own requests from the last hour are relayed.
 
 ## 16. Network exposure, ports and firewall
 

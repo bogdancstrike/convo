@@ -33,6 +33,11 @@ platform `integration` (visible in the admin console's Sessions page) and keeps 
 | `BOT_HANDLER` | bot mode: ES module whose default export is `async (message, convo) => {}` (see `examples/help-bot.mjs`) |
 | `INSECURE_TLS=1` | development only (self-signed certificates) |
 
+**Addressed-only bots.** Instead of adding a bot to a group (where, as a member, it reads
+everything), owners can *connect* it (group info → Connected bots). It then receives only messages
+that mention it, as separate 1:1 copies; `message.botRequest` / `convo.group` carry the group, and
+`convo.reply(text)` answers the member, whose app posts the answer in the group as from the bot.
+
 **Archive mode** writes one JSON line per message it can read (author, chat, time, text, attachment
 names; attachment contents are not downloaded). **Bot mode** calls the handler for direct messages
 and group messages that mention the account; `convo.reply(text)` answers in the same chat.

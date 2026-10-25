@@ -200,7 +200,9 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     }
     case 'memberLabels': {
       const record = await client.groupRecord(String(args.id));
-      return Promise.all((record?.members ?? []).filter((m) => m.accountId !== client!.accountId).map(async (m) => ({ accountId: m.accountId, label: await client!.displayName(m.accountId) })));
+      // withBots: the composer may also mention connected addressed-only bots (not members).
+      const ids = [...(record?.members ?? []).map((m) => m.accountId).filter((id) => id !== client!.accountId), ...(args.withBots === true ? record?.connectedBots ?? [] : [])];
+      return Promise.all(ids.map(async (accountId) => ({ accountId, label: await client!.displayName(accountId) })));
     }
     case 'attach': {
       const bytes = fromBase64Url(args.data); const file = new File([bytes], String(args.name), { type: String(args.mime) });
@@ -226,6 +228,10 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     // Key transparency (specs §19.4): the contact's keys checked against the witnessed log.
     case 'keyTransparency': return (await client.keyTransparency(String(args.id), args.force === true)) ?? null;
     case 'integrationParticipants': return client.integrationParticipants(String(args.id));
+    case 'connectedBots': return client.connectedBots(String(args.id));
+    case 'setConnectedBot': return client.setConnectedBot(String(args.id), String(args.botId), args.connected === true);
+    // Integration runtime (bot side): answer a mention copy; the asker relays it into the group.
+    case 'botReply': return client.sendBotReply(String(args.peerId), String(args.body), { groupId: String(args.groupId), messageId: String(args.messageId) });
     case 'stickerCollection': return client.stickerCollection();
     case 'createSticker': return client.addCustomSticker(await makeStickerImage(new Blob([fromBase64Url(String(args.data))], { type: String(args.mime ?? 'image/*') })));
     case 'saveSticker': return client.saveSticker(await target(args));

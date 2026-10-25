@@ -130,7 +130,8 @@ import org.json.JSONObject
     if (participants.isEmpty()) return
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 16.dp, vertical = 8.dp)) {
         participants.forEach { p ->
-            RawText(tr("{name} ({kind}) receives every message in this chat.").replace("{name}", p.optString("name")).replace("{kind}", tr(if (p.optString("kind") == "archive") "Archive" else "Bot")) + " " + p.optString("retention"),
+            RawText(if (p.optBoolean("addressedOnly")) tr("{name} (Bot) is connected: it receives only messages that mention it, not the rest of this group.").replace("{name}", p.optString("name"))
+                else tr("{name} ({kind}) receives every message in this chat.").replace("{name}", p.optString("name")).replace("{kind}", tr(if (p.optString("kind") == "archive") "Archive" else "Bot")) + " " + p.optString("retention"),
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onTertiaryContainer)
         }
     }

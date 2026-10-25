@@ -28,7 +28,7 @@ export function IntegrationBanner({ client, conversation }: { client: EnclaveCli
       <div>
         {participants.map((p) => (
           <p key={p.accountId}>
-            <strong>{t('integration.receives', { name: p.name, kind: t(`integration.${p.kind}`) })}</strong> {p.retention}
+            <strong>{p.addressedOnly ? t('integration.addressedOnly', { name: p.name }) : t('integration.receives', { name: p.name, kind: t(`integration.${p.kind}`) })}</strong> {p.retention}
           </p>
         ))}
       </div>

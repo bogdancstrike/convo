@@ -11,7 +11,8 @@ export function useGroupMembers(client: EnclaveClient, conversationId: string): 
   const [members, setMembers] = useState<MentionCandidate[]>([]);
   useEffect(() => {
     let cancelled = false;
-    const ids = record?.members.map((m) => m.accountId).filter((id) => id !== client.accountId) ?? [];
+    // Connected addressed-only bots can be mentioned too: they get a 1:1 copy of that message only.
+    const ids = [...(record?.members.map((m) => m.accountId).filter((id) => id !== client.accountId) ?? []), ...(record?.connectedBots ?? [])];
     void Promise.all(ids.map(async (accountId) => ({ accountId, label: await client.displayName(accountId) })))
       .then((list) => !cancelled && setMembers(list));
     return () => { cancelled = true; };

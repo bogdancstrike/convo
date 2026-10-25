@@ -141,6 +141,7 @@ import org.json.JSONObject
             }
             if (canManage) item { Column(Modifier.background(colors.panel)) { ActionRow("Add participant", icon = Icons.Outlined.PersonAdd) { adding = true } } }
             if (canManage) item { Column(Modifier.fillMaxWidth().background(colors.panel).padding(horizontal = 20.dp, vertical = 8.dp)) { InviteSection(app, id) } }
+            if (!c.optBoolean("adminOnly")) item { ConnectedBotsSection(app, id, canManage) }
             if (canManage && !c.optBoolean("adminOnly")) item { SlowModeSection(app, id, c.optJSONObject("memberPolicy")?.optInt("slowModeSeconds") ?: 0) }
             val restricted = c.optJSONObject("memberPolicy")?.optJSONArray("restricted")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
             items(shownMembers, key = { it.optString("accountId") }) { member ->
@@ -314,3 +315,32 @@ import org.json.JSONObject
 
 /** Case- and diacritic-insensitive search key (Romanian comma/cedilla forms included). */
 fun fold(value: String): String = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").lowercase(java.util.Locale.forLanguageTag("ro"))
+
+/**
+ * Addressed-only bots (AC-INT-02): listed for everyone; owners/admins connect or disconnect bot
+ * accounts. A connected bot is not a member: it receives only messages that mention it.
+ */
+@Composable fun ConnectedBotsSection(app: MainActivity, id: String, canManage: Boolean) {
+    var bots by remember(id) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var query by remember { mutableStateOf("") }; var results by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var adding by remember { mutableStateOf(false) }
+    fun load() = app.call("connectedBots", obj("id" to id), quiet = true) { v -> bots = (v as? JSONArray)?.objects().orEmpty() }
+    LaunchedEffect(id, app.snapshot) { load() }
+    LaunchedEffect(query) { results = emptyList(); if (query.isNotBlank()) { kotlinx.coroutines.delay(200); app.call("directory", obj("query" to query), quiet = true) { v -> results = (v as? JSONArray)?.objects().orEmpty().filter { it.optJSONObject("integration")?.optString("kind") == "bot" } } } }
+    if (bots.isEmpty() && !canManage) return
+    Column(Modifier.fillMaxWidth().background(LocalConvoColors.current.panel).padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Connected bots", style = MaterialTheme.typography.titleSmall)
+        Text("A connected bot is not a member: it receives only messages that mention it, and its answers appear here marked as from the bot.", style = MaterialTheme.typography.bodySmall, color = LocalConvoColors.current.textSecondary)
+        bots.forEach { b -> Row(verticalAlignment = Alignment.CenterVertically) {
+            RawText("🤖 " + b.optString("name"), Modifier.weight(1f))
+            if (canManage) TextButton({ app.call("setConnectedBot", obj("id" to id, "botId" to b.optString("accountId"), "connected" to false)) { load() } }) { Text("Disconnect") }
+        } }
+        if (canManage) {
+            if (!adding) OutlinedButton({ adding = true }) { Text("Connect a bot") }
+            else {
+                OutlinedTextField(query, { query = it }, label = { Text("Search bot accounts") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                results.forEach { a -> TextButton({ app.call("setConnectedBot", obj("id" to id, "botId" to a.optString("accountId"), "connected" to true)) { adding = false; query = ""; load() } }) { RawText(a.label()) } }
+            }
+        }
+    }
+}

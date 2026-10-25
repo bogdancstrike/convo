@@ -149,6 +149,11 @@ export function ackClosed(request: AckRequest, now = Date.now()): boolean {
   return request.expires !== undefined && now > request.expires;
 }
 
+/** Addressed-only bots per group (AC-INT-02). */
+const MAX_CONNECTED_BOTS = 5;
+/** A bot answer is relayed only for a request this recent. */
+const BOT_REPLY_WINDOW_MS = 3600_000;
+
 export class EnclaveClient extends Emitter<ClientEvents> {
   readonly socket: GatewaySocket;
   private readonly profileCache = new Map<string, UserProfile>();
@@ -873,7 +878,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string; sticker?: { pack: string; id: string; attachment?: AttachmentPointer } },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string; sticker?: { pack: string; id: string; attachment?: AttachmentPointer }; botRelay?: { botId: string; botName: string } },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -910,6 +915,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       report: content.report,
       topic: content.topic,
       sticker: content.sticker,
+      botRelay: content.botRelay,
     };
     const message: ChatMessage = {
       conversationId,
@@ -934,6 +940,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       report: content.report,
       topic: content.topic,
       sticker: content.sticker,
+      botRelay: content.botRelay,
       // The sender keeps no copy of view-once media, only its label.
       ...(content.viewOnce ? { attachments: undefined, viewOnce: { kind: viewOnceKind(content.attachments![0]!), state: 'sent' as const } } : {}),
     };
@@ -947,8 +954,74 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       this.conversationCache.set(conversationId, updated);
     }
     await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, { conversationId, id: data.messageId }, ops);
+    // Addressed-only bots (AC-INT-02) are not members: each one mentioned gets its own 1:1 copy.
+    const bots = group?.connectedBots?.filter((id) => content.mentions?.includes(id)) ?? [];
+    for (const bot of bots) {
+      await this.enqueue(bot, { v: CONTENT_VERSION, kind: 'data', data: { messageId: newMessageId(), timestamp: Date.now(), body: text,
+        profile: this.profileCache.get(this.accountId), botRequest: { groupId: groupId!, groupName: group!.name, messageId: data.messageId } } }, false);
+    }
     this.emit('messages', conversationId);
     this.emitConversations();
+  }
+
+  // --- addressed-only bots (AC-INT-02) ------------------------------------------------------
+
+  /** Bots connected to a group (they receive only messages that mention them). */
+  async connectedBots(conversationId: string): Promise<{ accountId: string; name: string }[]> {
+    const groupId = groupIdOf(conversationId);
+    const record = groupId ? await this.groups.record(groupId) : undefined;
+    return Promise.all((record?.connectedBots ?? []).map(async (accountId) => ({ accountId, name: await this.displayName(accountId) })));
+  }
+
+  /**
+   * Connects or disconnects an addressed-only bot (owners/admins; at most 5). The bot must be an
+   * account an administrator marked as a bot, and it never becomes a group member: it receives a
+   * separately encrypted copy of messages that mention it. Members see it in the group's banner.
+   */
+  async setConnectedBot(conversationId: string, botId: string, connected: boolean): Promise<void> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId) throw new Error('not a group');
+    if (connected && (await this.lookupAccount(botId))?.integration?.kind !== 'bot') throw new Error('only bot accounts can be connected');
+    const record = await this.mutex.run(async () => {
+      const current = await this.groups.record(groupId);
+      const role = current?.members.find((m) => m.accountId === this.accountId)?.role;
+      if (!current || (role !== 'owner' && role !== 'admin')) throw new Error('only owners and admins connect bots');
+      if (connected && current.members.some((m) => m.accountId === botId)) throw new Error('already a member');
+      const bots = (current.connectedBots ?? []).filter((id) => id !== botId);
+      if (connected) bots.push(botId);
+      if (bots.length > MAX_CONNECTED_BOTS) throw new Error('too many bots');
+      const next: GroupRecord = { ...current, metaVersion: current.metaVersion + 1, connectedBots: bots.length ? bots : undefined };
+      await this.repos.store.put('group', groupId, next);
+      return next;
+    });
+    await this.shareGroupMeta(record);
+    this.emit('groups', groupId);
+  }
+
+  /** Bot side: answers a mention copy; the member who asked relays it into the group. */
+  async sendBotReply(peerId: string, body: string, request: { groupId: string; messageId: string }): Promise<void> {
+    const text = body.trim();
+    if (!text || utf8(text).length > MAX_BODY_BYTES) throw new Error('invalid reply');
+    await this.enqueue(peerId, { v: CONTENT_VERSION, kind: 'data', data: { messageId: newMessageId(), timestamp: Date.now(), body: text,
+      botReply: { groupId: request.groupId, requestMessageId: request.messageId } } }, true);
+  }
+
+  /**
+   * Asker side: posts a connected bot's answer into the group, quoting the request and marked as from
+   * the bot. Every device of the asker gets the answer; a message ID derived from bot and request makes
+   * the relays one message. Only answers to this account's own recent requests are relayed.
+   */
+  private async relayBotReply(botId: string, data: DataMessage): Promise<void> {
+    const reply = data.botReply!;
+    const record = await this.groups.record(reply.groupId);
+    if (!record || record.left || !record.connectedBots?.includes(botId) || !data.body) return;
+    const conversationId = groupConversationId(reply.groupId);
+    const request = await this.repos.message(conversationId, this.accountId, reply.requestMessageId);
+    if (!request || Date.now() - request.sentAt > BOT_REPLY_WINDOW_MS) return;
+    const id = toBase64Url((await sha256(utf8(`convo-bot-relay\n${botId}\n${reply.requestMessageId}`))).slice(0, 16));
+    if (await this.repos.message(conversationId, this.accountId, id)) return;
+    await this.sendMessage(conversationId, { body: data.body, quote: { messageId: request.id, authorId: this.accountId, excerpt: request.body?.slice(0, 256) },
+      botRelay: { botId, botName: await this.displayName(botId) } }, id);
   }
 
   // --- shared pins ------------------------------------------------------------------------
@@ -1698,7 +1771,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   private async shareGroupMeta(record: GroupRecord): Promise<void> {
     await this.enqueue(record.groupId, { v: CONTENT_VERSION, kind: 'groupMeta',
       groupMeta: { name: record.name, version: record.metaVersion, ...(record.description ? { description: record.description } : {}),
-        ...(record.community ? { community: record.community } : {}) } }, false, undefined, [], true);
+        ...(record.community ? { community: record.community } : {}), ...(record.connectedBots?.length ? { connectedBots: record.connectedBots } : {}) } }, false, undefined, [], true);
   }
 
   /** Renames a group and/or edits its About text (owners/admins; E2EE metadata, ≤ 8 KiB). */
@@ -2492,7 +2565,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const manager = isManager(current) || (current.members.length === 0 && current.metaVersion === 0);
     if (!manager) return;
     const community = meta.community ?? current.community;
-    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...current, name: meta.name, metaVersion: meta.version, description: meta.description || undefined, ...(community ? { community } : {}) } });
+    const connectedBots = Array.isArray(meta.connectedBots) ? meta.connectedBots.filter((id) => typeof id === 'string').slice(0, MAX_CONNECTED_BOTS) : [];
+    ops.push({ type: 'put', ns: 'group', id: groupId, value: { ...current, name: meta.name, metaVersion: meta.version, description: meta.description || undefined, ...(community ? { community } : {}),
+      connectedBots: connectedBots.length ? connectedBots : undefined } });
     const conversation = this.conversationCache.get(groupConversationId(groupId));
     if (conversation) this.stage(ops, { ...conversation, title: meta.name });
   }
@@ -2624,6 +2699,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp, reactions: {}, notice: { kind: 'left' } }));
       return 'left';
     }
+    // A connected bot's answer to this account: relayed into the group, not kept in the 1:1 chat.
+    if (data.botReply) {
+      if (direction === 'in') setTimeout(() => void this.relayBotReply(authorId, data).catch(() => undefined), 0);
+      return 'ignored';
+    }
     if (data.body === undefined && !data.attachments?.length && !data.sticker) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
     // Member restrictions and slow mode: drop posts the group policy does not allow.
@@ -2657,6 +2737,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       report: data.report,
       topic: data.topic,
       sticker: data.sticker,
+      botRequest: conversation.kind === 'direct' && direction === 'in' ? data.botRequest : undefined,
+      // Shown as from the bot only if that bot is connected to this group.
+      botRelay: data.botRelay && groupIdOf(conversation.id) && (await this.groups.record(groupIdOf(conversation.id)!))?.connectedBots?.includes(data.botRelay.botId) ? data.botRelay : undefined,
       ...(data.viewOnce ? { viewOnce: { kind: viewOnceKind(data.attachments![0]!), state: direction === 'out' ? 'sent' as const : 'unopened' as const } } : {}),
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
@@ -2739,7 +2822,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * banner (FR-EXT-02, AC-INT-01/02). Accounts are re-fetched at least every 10 minutes so a mark an
    * administrator adds later still becomes visible.
    */
-  async integrationParticipants(conversationId: string): Promise<{ accountId: string; name: string; kind: 'archive' | 'bot'; retention: string }[]> {
+  async integrationParticipants(conversationId: string): Promise<{ accountId: string; name: string; kind: 'archive' | 'bot'; retention: string; addressedOnly?: boolean }[]> {
     const conversation = this.conversationCache.get(conversationId);
     if (!conversation || conversation.kind === 'note') return [];
     const ids = conversation.kind === 'direct' ? [conversationId]
@@ -2753,6 +2836,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       }
       const account = await this.lookupAccount(id);
       if (account?.integration) out.push({ accountId: id, name: account.displayName || account.username, ...account.integration });
+    }
+    // Addressed-only bots: not members, they receive only messages that mention them.
+    if (conversation.kind === 'group') {
+      for (const bot of await this.connectedBots(conversationId)) out.push({ accountId: bot.accountId, name: bot.name, kind: 'bot' as const, retention: '', addressedOnly: true });
     }
     return out;
   }

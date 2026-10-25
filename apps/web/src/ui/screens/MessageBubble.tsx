@@ -133,7 +133,10 @@ export function MessageBubble({
               <Icon name="chevronDown" size={18} />
             </button>
           )}
-          {group && !own && first && author && (
+          {m.botRelay && (
+            <div className="author bot-relay" data-testid="bot-relay"><Icon name="bot" size={14} /> {m.botRelay.botName} · {t('integration.bot')}</div>
+          )}
+          {group && !own && first && author && !m.botRelay && (
             <div className="author" style={{ color: `var(--c-name-${nameColorIndex(m.authorId)})` }} data-testid="message-author">
               {author}
             </div>
