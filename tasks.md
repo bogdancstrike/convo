@@ -240,6 +240,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   online"). Web: right-click/long-press on send, schedule dialog, "N scheduled" bar with
   change/send now/cancel. `alerts.test.ts`, `scheduled.spec.ts`. Android: long-press Send menu, system
   date/time pickers, scheduled bar and list (verified on the emulator).
+- Private chat folders (specs §30.4): named folders with explicit chats, type filters (personal,
+  groups, channels) and "unread only"; stored encrypted per device and synced to own devices only
+  (higher mutation wins, sanitized on receipt). Web: folder pills, + to create, right-click to
+  edit/delete. `folders.test.ts`, `folders.spec.ts`.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

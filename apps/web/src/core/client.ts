@@ -46,6 +46,7 @@ import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, t
 import { Outbox, type OutboxItem } from './outbox';
 import { applyBallot, applyClose, initialState, newPoll } from './polls';
 import { applyRsvp, applyUpdate, initialEvent, newEvent } from './events';
+import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
@@ -70,6 +71,8 @@ export class CallKeyUnavailableError extends Error {
  */
 
 export interface ClientEvents extends Record<string, unknown> {
+  /** Private chat folders changed (here or on another own device). */
+  folders: ChatFolder[];
   /** Scheduled messages of a conversation changed (scheduled, edited, cancelled or sent). */
   scheduled: string;
   history: HistoryStatus;
@@ -406,6 +409,31 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    */
   async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck: boolean | AckOptions = false, options: { silent?: boolean } = {}): Promise<void> {
     await this.sendMessage(conversationId, { body, quote, mentions, requestAck, silent: options.silent });
+  }
+
+  // --- private chat folders (specs §30.4) -------------------------------------------------------
+
+  /** This account's chat folders (own-device preference). */
+  async folders(): Promise<ChatFolder[]> {
+    return (await this.repos.store.get<FolderState>(RecordNs.folders, 'state'))?.folders ?? [];
+  }
+
+  /** Replaces the folder list here and on this account's other devices. */
+  async saveFolders(folders: ChatFolder[]): Promise<void> {
+    const clean = sanitizeFolders(folders);
+    const current = await this.repos.store.get<FolderState>(RecordNs.folders, 'state');
+    const state: FolderState = { folders: clean, mutation: (current?.mutation ?? 0) + 1 };
+    await this.repos.store.put(RecordNs.folders, 'state', state);
+    this.emit('folders', clean);
+    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'sync', sync: { folders: state } }, false);
+  }
+
+  private async applyFoldersSync(update: { folders: unknown[]; mutation: number }, ops: StoreOp[]): Promise<(() => void) | undefined> {
+    const current = await this.repos.store.get<FolderState>(RecordNs.folders, 'state');
+    if (current && current.mutation >= update.mutation) return undefined;
+    const state: FolderState = { folders: sanitizeFolders(update.folders), mutation: update.mutation };
+    ops.push({ type: 'put', ns: RecordNs.folders, id: 'state', value: state });
+    return () => this.emit('folders', state.folders);
   }
 
   // --- scheduled send (specs §30.4) -------------------------------------------------------------
@@ -1683,6 +1711,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         if (content.sync.onboarding) await this.applyOnboardingSync(content.sync.onboarding, ops);
         if (content.sync.snooze) this.applySnoozeSync(content.sync.snooze, ops);
         if (content.sync.viewed) { const v = content.sync.viewed; await this.applyViewed(v.conversationId, v.authorId, v.messageId, ops); }
+        if (content.sync.folders) { const notify = await this.applyFoldersSync(content.sync.folders, ops); if (notify) followUps.push(async () => notify()); }
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
           if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined, mentioned: undefined });

@@ -27,6 +27,8 @@ export const RecordNs = {
   rulesAcks: 'rules-acks',
   /** Scheduled messages owned by this device (`ScheduledMessage`); sent only from here. */
   scheduled: 'scheduled',
+  /** Private chat folders (`FolderState`, single record), synced to own devices only. */
+  folders: 'folders',
 } as const;
 
 export class Repositories {

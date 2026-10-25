@@ -11,8 +11,11 @@ import { Icon } from '../components/Icon';
 import { useAccountLabel, useMessageSearch } from '../hooks';
 import { useChatLocks } from '../chatLocks';
 import { useI18n } from '../i18n/i18n';
+import { FolderEditor, useFolders } from './Folders';
+import { folderMatches, type ChatFolder } from '../../core/folders';
 
-type Filter = 'all' | 'unread' | 'groups';
+/** Built-in filters, or `folder:<id>` for a private chat folder. */
+type Filter = 'all' | 'unread' | 'groups' | `folder:${string}`;
 
 /**
  * Chat list (UI.md §5.1): header with new-chat action, "search or start a new chat", filter chips
@@ -44,6 +47,9 @@ export function ChatListPanel({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [showArchived, setShowArchived] = useState(false);
+  const folders = useFolders(client);
+  const [editingFolder, setEditingFolder] = useState<ChatFolder | 'new' | null>(null);
+  const activeFolder = filter.startsWith('folder:') ? folders.find((f) => `folder:${f.id}` === filter) : undefined;
   const locks = useChatLocks();
   const [showLocked, setShowLocked] = useState(false);
   const lockedCount = conversations.filter((c) => locks.locked(c.id)).length;
@@ -61,9 +67,10 @@ export function ChatListPanel({
         (!channels || c.adminOnly) &&
         (!q || fold(c.kind === 'note' ? t('chats.noteToSelf') : c.title).includes(q) || matched.has(c.id)) &&
         (filter !== 'unread' || c.unread > 0) &&
-        (filter !== 'groups' || c.kind === 'group'),
+        (filter !== 'groups' || c.kind === 'group') &&
+        (!activeFolder || folderMatches(activeFolder, c)),
     );
-  }, [conversations, query, filter, showArchived, t, matched, channels, locks, showLocked]);
+  }, [conversations, query, filter, showArchived, t, matched, channels, locks, showLocked, activeFolder]);
 
   return (
     <>
@@ -97,6 +104,13 @@ export function ChatListPanel({
               {t(`chats.filter.${f}`)}
             </button>
           ))}
+          {!channels && folders.map((f) => (
+            <button key={f.id} className="chip" aria-pressed={filter === `folder:${f.id}` && !showLocked} data-testid={`folder-${f.name}`} title={t('folders.editHint')}
+              onClick={() => { setFilter(`folder:${f.id}`); setShowLocked(false); }} onContextMenu={(e) => { e.preventDefault(); setEditingFolder(f); }}>
+              {f.name}
+            </button>
+          ))}
+          {!channels && <button className="chip" onClick={() => setEditingFolder('new')} aria-label={t('folders.create')} title={t('folders.create')} data-testid="folder-add"><Icon name="plus" size={14} /></button>}
           {lockedCount > 0 && (
             <button className="chip" aria-pressed={showLocked} data-testid="filter-locked"
               onClick={() => { if (showLocked) setShowLocked(false); else void locks.verify().then((ok) => ok && setShowLocked(true)); }}>
@@ -105,6 +119,8 @@ export function ChatListPanel({
           )}
         </div>
       )}
+      {editingFolder && <FolderEditor client={client} conversations={conversations.filter((c) => !locks.locked(c.id))} folder={editingFolder === 'new' ? undefined : editingFolder}
+        onClose={() => { if (editingFolder !== 'new' && filter === `folder:${editingFolder.id}`) setFilter('all'); setEditingFolder(null); }} />}
       {locks.error && <p role="alert" className="failed panel-alert">{locks.error}</p>}
       <div className="panel-body">
         {!showArchived && !showLocked && archivedCount > 0 && (

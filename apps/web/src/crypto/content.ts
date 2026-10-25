@@ -192,6 +192,8 @@ export interface SyncMessage {
   onboarding?: { conversationId: string; itemId: string; done: boolean; counter: number };
   /** A view-once message was opened on another own device: consume it here too. */
   viewed?: { conversationId: string; authorId: string; messageId: string };
+  /** Private chat folders (whole list; higher mutation wins; sanitized on receipt). */
+  folders?: { folders: unknown[]; mutation: number };
 }
 
 /**
@@ -322,6 +324,7 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
         if (!isObject(z) || typeof z.conversationId !== 'string' || z.conversationId.length > 80 || !(z.until === null || Number.isSafeInteger(z.until))
           || typeof z.zone !== 'string' || z.zone.length > 64 || !Number.isSafeInteger(z.mutation)) throw new Error('malformed snooze sync');
       }
+      if (parsed.sync.folders !== undefined && (!isObject(parsed.sync.folders) || !Array.isArray(parsed.sync.folders.folders) || !Number.isSafeInteger(parsed.sync.folders.mutation))) throw new Error('malformed folders sync');
       if (parsed.sync.viewed !== undefined) {
         const v = parsed.sync.viewed;
         if (!isObject(v) || typeof v.conversationId !== 'string' || typeof v.authorId !== 'string' || typeof v.messageId !== 'string') throw new Error('malformed viewed sync');
