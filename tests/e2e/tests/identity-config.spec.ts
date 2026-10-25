@@ -39,7 +39,12 @@ test.describe('identity provider configuration', () => {
       { clientId: string; publicClient: boolean; redirectUris: string[]; attributes?: Record<string, string> }[];
     const web = clients.find((c) => c.clientId === 'enclave-web')!;
     expect(web.publicClient).toBe(true);
-    expect(web.redirectUris.sort()).toEqual(['/convo/admin', '/convo/callback', '/convo/passkey-done']);
+    expect(web.redirectUris.sort()).toEqual(['/convo/callback', '/convo/passkey-done']);
+    // The admin console signs in through its own public PKCE client.
+    const admin = clients.find((c) => c.clientId === 'convo-admin')!;
+    expect(admin.publicClient).toBe(true);
+    expect(admin.redirectUris).toEqual(['/convo/admin']);
+    expect(admin.attributes?.['pkce.code.challenge.method']).toBe('S256');
     expect(web.redirectUris.some((u) => u.includes('*'))).toBe(false);
     expect(web.attributes?.['pkce.code.challenge.method']).toBe('S256');
     const android = clients.find((c) => c.clientId === 'convo-android')!;
