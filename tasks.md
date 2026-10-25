@@ -228,6 +228,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   choice), ballots/closes as E2EE data messages converging deterministically (`core/polls.ts`),
   author/admin close enforced on receive; web attach menu + poll card, Android attach sheet + poll
   card. `polls.test.ts`, `polls.spec.ts` (Chromium/Firefox), emulator check both directions.
+- Animated sticker pack "Convo Moves" (AC-MED-04 "approved bundled GIFs"): 8 animated WebP
+  (16 frames, ≤ 128 KiB, `scripts/make-animated-stickers.py`), same SHA-256 manifest checks; shown
+  as their first frame under reduced motion (OS preference or Settings → Animations off) on web
+  (canvas still) and Android (ImageDecoder/AnimatedImageDrawable otherwise).
 - Stickers (FR-EXT-01, AC-MED-04): bundled "Convo Basics" pack (16 static WebP, Noto Color Emoji
   art, OFL 1.1, `scripts/make-stickers.py`); messages carry only `{ pack, id }`; files are shown
   only when size ≤ 128 KiB and SHA-256 match the core manifest (altered files → placeholder); no

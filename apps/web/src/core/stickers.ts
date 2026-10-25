@@ -8,11 +8,14 @@
  * bounded (≤ {@link MAX_STICKER_BYTES}) static WebP images. Unknown packs or stickers (e.g. from a
  * newer app version) render as the placeholder with the sticker's emoji when known.
  *
- * The "Convo Basics" art is rendered from Noto Color Emoji (SIL Open Font License 1.1) by
- * `scripts/make-stickers.py`.
+ * The "Convo Basics" and animated "Convo Moves" art is rendered from Noto Color Emoji (SIL Open Font
+ * License 1.1) by `scripts/make-stickers.py` and `scripts/make-animated-stickers.py`. Animated packs
+ * honour reduced motion: clients show their first frame when the OS asks for reduced motion or the
+ * person turned animations off.
  */
 export interface Sticker { id: string; emoji: string; alt: string; sha256: string }
-export interface StickerPack { id: string; title: string; stickers: Sticker[] }
+/** `animated`: animated WebP (shown as a still image when reduced motion or animations are off). */
+export interface StickerPack { id: string; title: string; animated?: boolean; stickers: Sticker[] }
 
 export const MAX_STICKER_BYTES = 128 * 1024;
 
@@ -39,7 +42,24 @@ export const STICKER_PACKS: StickerPack[] = [
       { id: 'sorry', emoji: '😅', alt: 'Oops', sha256: 'b1d14f6dddc03cbc4077c65e03db2887b7b8eeadc1aaf362833898a9785ebcda' },
     ],
   },
+  {
+    id: 'moves',
+    title: 'Convo Moves',
+    animated: true,
+    stickers: [
+      { id: 'wave', emoji: '👋', alt: 'Waving hand', sha256: '0ed0017ee1ef9f041c22811961c224b672cec9b90b29adcdc138f68ead9b81e6' },
+      { id: 'heart-beat', emoji: '❤️', alt: 'Beating heart', sha256: '81d80d1d614506cc2ca7c17e014fc460400c3082aba43122180bdb2f4cec835a' },
+      { id: 'laugh', emoji: '😂', alt: 'Laughing', sha256: '90e984a7a0db0a558618370d3260a493b32f8a948132a320fafe19dd2359072c' },
+      { id: 'party', emoji: '🎉', alt: 'Party popper', sha256: 'b651246a7fc8369350eab172ef11ae27132b1b10b737607eff12c85691026f8a' },
+      { id: 'thumbs-up', emoji: '👍', alt: 'Thumbs up', sha256: '51851434017b27fdbf632f8598cb9c72839b5ac3e174a3e42ecc8e735522b5df' },
+      { id: 'fire', emoji: '🔥', alt: 'Fire', sha256: '22829d04d71a272b853e24b19985ca0f06330d0ac8ab58a6e6e5c9335117af21' },
+      { id: 'rocket', emoji: '🚀', alt: 'Rocket', sha256: '26298fe06aed5b7e5bcacfb109cd35c233c69ddeae200c7d1e4066c04c8b024f' },
+      { id: 'thinking', emoji: '🤔', alt: 'Thinking', sha256: '8a1ab74505f2d4d6cd156908501e3fd8fb6b2f6a65ac5419466e6ff6e2d0b334' },
+    ],
+  },
 ];
+
+export function isAnimatedPack(pack: string): boolean { return !!STICKER_PACKS.find((p) => p.id === pack)?.animated; }
 
 export function findSticker(pack: string, id: string): Sticker | undefined {
   return STICKER_PACKS.find((p) => p.id === pack)?.stickers.find((s) => s.id === id);

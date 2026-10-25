@@ -46,12 +46,25 @@ object Stickers {
     fun find(pack: String, id: String): JSONObject? =
         packs.find { it.optString("id") == pack }?.optJSONArray("stickers")?.objects()?.find { it.optString("id") == id }
 
+    /** Verified bytes of a bundled sticker, or null when unknown, missing or altered. */
+    fun verifiedBytes(app: MainActivity, pack: String, id: String): ByteArray? {
+        val sticker = find(pack, id) ?: return null
+        val bytes = runCatching { app.assets.open("stickers/$pack/$id.webp").use { it.readBytes() } }.getOrNull() ?: return null
+        val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { b -> "%02x".format(b) }
+        return if (bytes.size > MAX_BYTES || hash != sticker.optString("sha256")) null else bytes
+    }
+
+    fun animated(pack: String) = packs.find { it.optString("id") == pack }?.optBoolean("animated") == true
+
+    /** Reduced motion: system animations off, or Convo's Animations setting off. */
+    fun motionReduced(app: MainActivity): Boolean =
+        android.provider.Settings.Global.getFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f ||
+            app.snapshot.optJSONObject("settings")?.optBoolean("animations", true) == false
+
+    /** First frame (static packs, or animated ones under reduced motion). */
     @Synchronized fun bitmap(app: MainActivity, pack: String, id: String): ImageBitmap? = cache.getOrPut("$pack/$id") {
-        val sticker = find(pack, id) ?: return null // manifest not loaded yet: retry later
-        val bytes = runCatching { app.assets.open("stickers/$pack/$id.webp").use { it.readBytes() } }.getOrNull()
-        val hash = bytes?.let { MessageDigest.getInstance("SHA-256").digest(it).joinToString("") { b -> "%02x".format(b) } }
-        if (bytes == null || bytes.size > MAX_BYTES || hash != sticker.optString("sha256")) null
-        else BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        if (find(pack, id) == null) return null // manifest not loaded yet: retry later
+        verifiedBytes(app, pack, id)?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }
     }
 }
 
@@ -61,7 +74,17 @@ object Stickers {
     val sticker = Stickers.find(pack, id)
     val image = remember(pack, id, Stickers.packs) { Stickers.bitmap(app, pack, id) }
     val alt = sticker?.let { tr("Sticker: {name}").replace("{name}", it.optString("alt")) } ?: tr("Sticker")
-    if (image != null) Image(image, alt, Modifier.size(size))
+    // Animated packs play (ImageDecoder → AnimatedImageDrawable) unless motion is reduced.
+    val animatedBytes = remember(pack, id, Stickers.packs) { if (Stickers.animated(pack) && !Stickers.motionReduced(app)) Stickers.verifiedBytes(app, pack, id) else null }
+    if (animatedBytes != null) androidx.compose.ui.viewinterop.AndroidView(factory = { context ->
+        android.widget.ImageView(context).apply {
+            contentDescription = alt
+            val drawable = android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(java.nio.ByteBuffer.wrap(animatedBytes)))
+            setImageDrawable(drawable)
+            (drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
+        }
+    }, modifier = Modifier.size(size))
+    else if (image != null) Image(image, alt, Modifier.size(size))
     else Box(Modifier.size(size).clip(RoundedCornerShape(16.dp)).background(LocalConvoColors.current.panel).semantics { contentDescription = alt }, contentAlignment = Alignment.Center) {
         RawText(sticker?.optString("emoji") ?: "🏷️", fontSize = 44.sp)
     }

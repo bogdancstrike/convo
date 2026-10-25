@@ -1,18 +1,38 @@
 import { useEffect, useState } from 'react';
-import { findSticker, STICKER_PACKS, stickerPath, verifySticker } from '../../core/stickers';
+import { findSticker, isAnimatedPack, STICKER_PACKS, stickerPath, verifySticker } from '../../core/stickers';
 import { useI18n } from '../i18n/i18n';
 
-/** Verified object URLs per sticker; `null` = missing, unknown or altered (shown as a placeholder). */
+/** Verified object URLs per sticker (and motion mode); `null` = missing, unknown or altered (placeholder). */
 const verified = new Map<string, Promise<string | null>>();
 
+/** Reduced motion: the OS preference or Settings → Animations off (App sets `data-motion`). */
+function motionReduced(): boolean {
+  return document.documentElement.dataset.motion === 'off' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+/** The first frame of an animated image as a still PNG blob. */
+async function stillFrame(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width; canvas.height = bitmap.height;
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('no frame'))), 'image/png'));
+}
+
 function load(pack: string, id: string): Promise<string | null> {
-  const key = `${pack}/${id}`;
+  const still = isAnimatedPack(pack) && motionReduced();
+  const key = `${pack}/${id}${still ? ':still' : ''}`;
   let pending = verified.get(key);
   if (!pending) {
     const sticker = findSticker(pack, id);
     pending = !sticker ? Promise.resolve(null) : fetch(`/${stickerPath(pack, id)}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('missing'))))
-      .then(async (bytes) => (await verifySticker(sticker, bytes) ? URL.createObjectURL(new Blob([bytes], { type: 'image/webp' })) : null))
+      .then(async (bytes) => {
+        if (!(await verifySticker(sticker, bytes))) return null;
+        const blob = new Blob([bytes], { type: 'image/webp' });
+        return URL.createObjectURL(still ? await stillFrame(blob) : blob);
+      })
       .catch(() => null);
     verified.set(key, pending);
   }
@@ -21,7 +41,8 @@ function load(pack: string, id: string): Promise<string | null> {
 
 /**
  * A bundled sticker, shown only after its bytes match the pack manifest (AC-MED-04); otherwise a
- * neutral placeholder with the sticker's emoji. Static images only, so reduced motion needs nothing.
+ * neutral placeholder with the sticker's emoji. Animated stickers show their first frame when
+ * motion is reduced.
  */
 export function StickerImage({ pack, id, size = 160 }: { pack: string; id: string; size?: number }) {
   const { t } = useI18n();
