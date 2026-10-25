@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
  * A browser user calls the Android user in `PK_USER`; the driver script accepts on the emulator.
  * Every 30 s for `MINUTES` (default 5) the browser's WebRTC stats must show audio arriving and
  * leaving, decoded Android audio with non-zero energy (the debug build's test tone), and — with
- * `VIDEO=1` — decoded Android video frames. The Android side logs the same counters (tag
+ * `VIDEO=1` — decoded Android video frames. `SHARE=1` additionally shares the browser's screen. The Android side logs the same counters (tag
  * ConvoCallStats). Passing means both parties joined, heard (and saw) each other, and the call
  * stayed connected for the whole period.
  */
@@ -51,6 +51,8 @@ test('browser calls the Android user; media flows both ways for the whole call',
   console.log('CONNECTED');
   await expect(screen).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
   console.log('ENCRYPTED');
+  // SHARE=1: also present the browser's screen; the Android side should show it full width.
+  if (process.env.SHARE) { await page.getByTestId('call-share-screen').click(); await expect(page.getByTestId('call-sharing')).toBeVisible({ timeout: 20_000 }); console.log('SHARING'); }
   let previous = await media(page); let heard = 0;
   for (let t = 30; t <= MINUTES * 60; t += 30) {
     await page.waitForTimeout(30_000);

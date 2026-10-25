@@ -171,3 +171,27 @@ test('if the other side drops without hanging up, the caller is told the connect
     await expect(screen(caller)).toContainText('couldn’t stay connected');
   } finally { await closeAll(caller); }
 });
+
+test('screen sharing shows the presenter view with decrypted frames and stops cleanly', async ({ browser, request, browserName }) => {
+  test.skip(browserName !== 'chromium', 'headless Firefox has no auto-accepted display capture');
+  const { caller, callee } = await pair(browser, request);
+  try {
+    await caller.getByTestId('start-voice-call').click();
+    await expect(screen(callee)).toHaveAttribute('data-phase', 'incoming', { timeout: 20_000 });
+    await callee.getByTestId('call-accept').click();
+    await expect(screen(caller)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
+    await caller.getByTestId('call-share-screen').click();
+    await expect(caller.getByTestId('call-sharing')).toBeVisible({ timeout: 20_000 });
+    await expect(caller.getByTestId('call-share-screen')).toHaveAttribute('aria-pressed', 'true');
+    // The callee gets the presenter layout and decodes frames encrypted with the call key.
+    const stage = callee.getByTestId('remote-screen');
+    await expect(stage).toContainText('is presenting', { timeout: 20_000 });
+    await expect.poll(() => stage.locator('video').evaluate((v: HTMLVideoElement) => v.videoWidth), { timeout: 20_000 }).toBeGreaterThan(0);
+    await expect(screen(callee)).toHaveAttribute('data-encrypted', 'true');
+    await callee.screenshot({ path: test.info().outputPath('screen-share-callee.png') });
+    await caller.getByTestId('call-share-screen').click();
+    await expect(caller.getByTestId('call-sharing')).toHaveCount(0);
+    await expect(stage).toHaveCount(0, { timeout: 20_000 });
+    await caller.getByTestId('call-end').click();
+  } finally { await closeAll(caller, callee); }
+});

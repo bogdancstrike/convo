@@ -13,3 +13,12 @@ Media runs through the self-hosted LiveKit SFU; see ADR-0006.
 
 Signalling and history live in the shared core (`core/calls.ts`, `EnclaveClient.startCall` etc.)
 so the Android bridge reuses them.
+
+## Screen sharing
+
+During a connected call, browsers with `getDisplayMedia` show a share button. The shared screen,
+window or tab is published as a LiveKit `ScreenShare` track, so frame encryption with the call key
+covers it like camera video. Remote shares take over the stage in voice and video calls
+("{name} is presenting", letterboxed, camera tiles in a strip). Android shows remote shares the
+same way. Sharing from Android (MediaProjection) is a separate step.
+

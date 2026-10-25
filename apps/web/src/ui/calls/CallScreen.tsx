@@ -5,7 +5,7 @@ import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration } from '../useVoiceRecorder';
-import { accountOf, audioTrackOf, videoTrackOf } from './liveKitCall';
+import { accountOf, audioTrackOf, LiveKitCall, screenTrackOf, videoTrackOf } from './liveKitCall';
 import { useCalls } from './CallProvider';
 
 /**
@@ -31,12 +31,25 @@ export function CallScreen({ client }: { client: EnclaveClient }) {
     : call.phase === 'connected' ? formatDuration(now - (call.connectedAt ?? now))
     : t(`calls.reason.${call.reason ?? 'ended'}`);
   const showVideo = call.video && call.phase === 'connected';
+  // Presenter layout: a remote screen share takes the stage in voice and video calls alike.
+  const presenter = call.phase === 'connected' ? media?.presenter : undefined;
+  const [shareError, setShareError] = useState(false);
+  const toggleShare = async () => {
+    if (!media) return;
+    setShareError(false);
+    try { await media.setScreenShare(!media.screenSharing); } catch { setShareError(true); }
+  };
 
   return (
     <div className={`call-screen${showVideo ? ' video' : ''}`} role="dialog" aria-modal="true" aria-label={t('calls.dialog', { name: title })}
       ref={dialog} data-testid="call-screen" data-phase={call.phase} data-reason={call.reason ?? ''} data-encrypted={media?.encrypted ? 'true' : 'false'} data-key-generation={media?.generation ?? 0}
       onKeyDown={(e) => { if (e.key === 'Escape' && call.phase !== 'incoming') hangUp(); }}>
-      {showVideo && remotes.length > 0 ? (
+      {presenter ? (
+        <div className="call-presenting">
+          <ScreenStage client={client} participant={presenter} />
+          {showVideo && <div className="call-strip">{remotes.map((p) => <RemoteTile key={p.identity} client={client} participant={p} />)}</div>}
+        </div>
+      ) : showVideo && remotes.length > 0 ? (
         <div className={`call-grid n${Math.min(remotes.length, 4)}`}>
           {remotes.map((p) => <RemoteTile key={p.identity} client={client} participant={p} />)}
         </div>
@@ -51,6 +64,8 @@ export function CallScreen({ client }: { client: EnclaveClient }) {
       {showVideo && <p className="call-status overlay" data-testid="call-status" aria-live="polite">{status}</p>}
       {media && call.video && media.cameraEnabled && <LocalPreview client={client} />}
       {remotes.map((p) => <RemoteAudio key={p.identity} participant={p} />)}
+      {media?.screenSharing && <p className="call-sharing" data-testid="call-sharing"><Icon name="screenShare" size={16} /> {t('calls.youPresenting')}</p>}
+      {shareError && <p className="call-sharing error" role="alert">{t('calls.shareFailed')}</p>}
       {call.phase === 'connected' && <p className="call-e2ee" data-testid="call-e2ee"><Icon name="lock" size={14} /> {media?.encrypted ? t('calls.e2ee') : t('calls.encrypting')}</p>}
       <div className="call-controls">
         {call.phase === 'incoming' ? (
@@ -64,6 +79,8 @@ export function CallScreen({ client }: { client: EnclaveClient }) {
               aria-label={media?.micEnabled === false ? t('calls.unmute') : t('calls.mute')} data-testid="call-mute"><Icon name={media?.micEnabled === false ? 'micOff' : 'mic'} /></button>
             {call.video && <button className="call-btn" aria-pressed={media ? !media.cameraEnabled : false} disabled={!media} onClick={() => void media?.setCamera(!media.cameraEnabled)}
               aria-label={media?.cameraEnabled ? t('calls.cameraOff') : t('calls.cameraOn')} data-testid="call-camera"><Icon name={media?.cameraEnabled ? 'video' : 'videoOff'} /></button>}
+            {call.phase === 'connected' && LiveKitCall.canShareScreen && <button className="call-btn" aria-pressed={!!media?.screenSharing} disabled={!media} onClick={() => void toggleShare()}
+              aria-label={media?.screenSharing ? t('calls.stopShare') : t('calls.shareScreen')} data-testid="call-share-screen"><Icon name="screenShare" /></button>}
             <button className="call-btn decline" onClick={hangUp} aria-label={t('calls.end')} data-testid="call-end"><Icon name="callEnd" size={28} /></button>
           </>
         ) : null}
@@ -88,6 +105,27 @@ function RemoteTile({ client, participant }: { client: EnclaveClient; participan
       {track ? <video ref={ref} autoPlay playsInline muted data-testid="remote-video" /> : <Avatar id={account} name={name} size={72} />}
       <span className="call-tile-name">{name}</span>
     </div>
+  );
+}
+
+/** A remote participant's shared screen, letterboxed to fit (never cropped). */
+function ScreenStage({ client, participant }: { client: EnclaveClient; participant: Participant }) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLVideoElement>(null);
+  const track = screenTrackOf(participant);
+  useEffect(() => {
+    const el = ref.current;
+    if (!track || !el) return undefined;
+    track.attach(el);
+    return () => { track.detach(el); };
+  }, [track]);
+  const account = accountOf(participant);
+  const name = client.conversations().find((c) => c.id === account)?.title ?? account.slice(0, 8);
+  return (
+    <figure className="call-screen-share" data-testid="remote-screen">
+      <video ref={ref} autoPlay playsInline muted />
+      <figcaption>{t('calls.presenting', { name })}</figcaption>
+    </figure>
   );
 }
 

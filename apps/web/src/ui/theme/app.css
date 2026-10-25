@@ -2244,6 +2244,14 @@ dialog.all-media-dialog { width: min(1200px, 96vw); max-width: 96vw; height: 90d
 .call-tile.speaking { box-shadow: inset 0 0 0 3px var(--c-success); }
 .call-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .call-tile-name { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 6px; background: rgb(0 0 0 / 0.5); font-size: 0.8125rem; }
+/* Screen sharing: the shared screen fills the stage (never cropped); camera tiles become a strip. */
+.call-presenting { align-self: stretch; justify-self: stretch; min-height: 0; display: grid; gap: 8px; grid-template-rows: minmax(0, 1fr) auto; }
+.call-screen-share { position: relative; margin: 0; min-height: 0; border-radius: 12px; overflow: hidden; background: #0b141a; }
+.call-screen-share video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.call-screen-share figcaption { position: absolute; left: var(--space-3); bottom: var(--space-3); padding: 4px 10px; border-radius: 999px; background: rgb(0 0 0 / 0.55); color: #fff; font-size: 0.8125rem; }
+.call-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(120px, 160px); gap: 8px; height: 110px; overflow-x: auto; }
+.call-sharing { display: inline-flex; align-items: center; gap: 6px; margin: var(--space-2) 0 0; padding: 4px 12px; border-radius: 999px; background: rgb(0 168 132 / 0.2); color: #d9fdd3; font-size: 0.8125rem; }
+.call-sharing.error { background: rgb(209 75 75 / 0.25); color: #ffd7d7; }
 .call-local { position: absolute; right: var(--space-4); bottom: 120px; width: min(28vw, 180px); aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; box-shadow: 0 2px 10px rgb(0 0 0 / 0.4); background: #1f2c34; }
 .call-log { list-style: none; margin: 0; padding: 0; }
 .call-log-row { display: flex; align-items: center; padding-right: var(--space-2); }

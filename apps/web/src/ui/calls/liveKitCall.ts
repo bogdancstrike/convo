@@ -85,6 +85,17 @@ export class LiveKitCall {
   setMic(on: boolean) { return this.room.localParticipant.setMicrophoneEnabled(on); }
   setCamera(on: boolean) { return this.room.localParticipant.setCameraEnabled(on); }
 
+  /** Whether this browser can capture a screen, window or tab for sharing. */
+  static get canShareScreen(): boolean { return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia; }
+  get screenSharing(): boolean { return this.room.localParticipant.isScreenShareEnabled; }
+  /**
+   * Starts or stops sharing a screen, window or tab (video only). The track is published like the
+   * camera, so LiveKit's frame encryption covers it with the same call key.
+   */
+  setScreenShare(on: boolean) { return this.room.localParticipant.setScreenShareEnabled(on, { audio: false }); }
+  /** The first remote participant currently presenting, if any. */
+  get presenter(): Participant | undefined { return this.remotes.find((p) => !!screenTrackOf(p)); }
+
   /** Set while we hang up ourselves, so our own disconnect is not reported as a lost connection. */
   private leaving = false;
 
@@ -100,6 +111,11 @@ export function accountOf(participant: Participant): string { return participant
 
 export function videoTrackOf(participant: Participant): RemoteTrack | undefined {
   const publication = participant.getTrackPublication(Track.Source.Camera);
+  return publication && !publication.isMuted ? (publication.track as RemoteTrack | undefined) : undefined;
+}
+
+export function screenTrackOf(participant: Participant): RemoteTrack | undefined {
+  const publication = participant.getTrackPublication(Track.Source.ScreenShare);
   return publication && !publication.isMuted ? (publication.track as RemoteTrack | undefined) : undefined;
 }
 

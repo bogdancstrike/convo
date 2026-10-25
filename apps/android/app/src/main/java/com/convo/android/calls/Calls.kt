@@ -388,7 +388,13 @@ class CallManager(private val app: MainActivity) {
     Surface(Modifier.fillMaxSize(), color = Color(0xFF0B141A), contentColor = Color(0xFFF2F5F7)) {
         Box(Modifier.fillMaxSize()) {
             val videoTiles = if (call.video && call.phase == "connected") remotes.mapNotNull { p -> videoOf(p)?.let { p to it } } else emptyList()
-            if (videoTiles.isNotEmpty()) Column(Modifier.fillMaxSize()) { videoTiles.forEach { (_, track) -> VideoRenderer(manager, track, Modifier.weight(1f).fillMaxWidth()) } }
+            // A shared screen (web presenter) takes the stage in voice and video calls alike.
+            val presenting = if (call.phase == "connected") remotes.firstNotNullOfOrNull { p -> screenOf(p)?.let { p to it } } else null
+            if (presenting != null) Column(Modifier.fillMaxSize().padding(top = 96.dp, bottom = 170.dp)) {
+                VideoRenderer(manager, presenting.second, Modifier.weight(1f).fillMaxWidth(), fit = true)
+                RawText(tr("{name} is presenting").replace("{name}", if (call.conversationId.startsWith("g:")) presenting.first.name ?: "" else title), Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp), color = Color(0xFFC7D0D6), fontSize = 13.sp)
+            }
+            else if (videoTiles.isNotEmpty()) Column(Modifier.fillMaxSize()) { videoTiles.forEach { (_, track) -> VideoRenderer(manager, track, Modifier.weight(1f).fillMaxWidth()) } }
             else Column(Modifier.fillMaxWidth().padding(top = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // WhatsApp: the encryption line sits above the caller.
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 36.dp)) {
@@ -423,13 +429,17 @@ class CallManager(private val app: MainActivity) {
     }
 }
 
+private fun screenOf(participant: Participant): VideoTrack? =
+    participant.trackPublications.values.firstOrNull { it.source == Track.Source.SCREEN_SHARE && !it.muted }?.track as? VideoTrack
+
 private fun videoOf(participant: Participant): VideoTrack? =
     participant.trackPublications.values.firstOrNull { it.source == Track.Source.CAMERA && !it.muted }?.track as? VideoTrack
 
-@Composable private fun VideoRenderer(manager: CallManager, track: VideoTrack, modifier: Modifier) {
+/** Renders a call video track; [fit] letterboxes (shared screens) instead of filling (cameras). */
+@Composable private fun VideoRenderer(manager: CallManager, track: VideoTrack, modifier: Modifier, fit: Boolean = false) {
     val room = manager.room ?: return
     var renderer by remember { mutableStateOf<TextureViewRenderer?>(null) }
-    AndroidView(factory = { context -> TextureViewRenderer(context).also { room.initVideoRenderer(it); renderer = it } }, modifier = modifier)
+    AndroidView(factory = { context -> TextureViewRenderer(context).also { room.initVideoRenderer(it); if (fit) it.setScalingType(livekit.org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FIT); renderer = it } }, modifier = modifier)
     DisposableEffect(track, renderer) {
         val sink = renderer
         sink?.let { track.addRenderer(it) }

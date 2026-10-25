@@ -13,7 +13,7 @@ $ADB shell setprop debug.convo.calltone 1
 $ADB logcat -c
 docker compose --profile e2e build e2e >/dev/null
 docker compose --profile e2e run --rm \
-  -e PK_USER -e MINUTES="${MINUTES:-5}" -e VIDEO="${VIDEO:-}" e2e \
+  -e PK_USER -e MINUTES="${MINUTES:-5}" -e VIDEO="${VIDEO:-}" -e SHARE="${SHARE:-}" e2e \
   npx playwright test -c android/playwright.android.config.ts &
 runner=$!
 # Accept the incoming call as soon as the ring screen shows.
