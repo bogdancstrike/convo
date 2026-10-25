@@ -7,7 +7,7 @@ import { randomBytes, toBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import { RecordNs } from './repositories';
 import type { GroupManager } from './groups';
-import { UntrustedIdentityError, type SessionManager } from './sessions';
+import { KeyTransparencyBlockedError, UntrustedIdentityError, type SessionManager } from './sessions';
 
 /**
  * Durable outbox (specs §26.1 client states, UI.md §5.2).
@@ -162,7 +162,7 @@ export class Outbox {
       return true;
     } catch (error) {
       if (error instanceof NetworkError || isTransient(error)) return false;
-      if (error instanceof UntrustedIdentityError) {
+      if (error instanceof UntrustedIdentityError || error instanceof KeyTransparencyBlockedError) {
         await this.finish(item, 'blocked', error);
         return true;
       }

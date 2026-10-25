@@ -431,6 +431,7 @@ export const en = {
   'kt.self.verifiedBody': 'Other people’s devices encrypt to exactly your identity key and the devices listed in Settings → Devices, confirmed by an independent witness.',
   'kt.self.mismatch': 'The key log shows different keys or devices for your account',
   'kt.self.mismatchBody': 'Someone may have added a device to your account or replaced your key. Check Settings → Devices and tell your security team.',
+  'kt.blocked': 'Not sent: this person’s keys don’t match the key log, and your organization blocks sending until they do. See their contact info.',
   'kt.title': 'Key transparency',
   'kt.verified': 'Keys match the public key log',
   'kt.verifiedBody': 'The keys this device uses for this contact are the ones recorded in the organization’s key log, confirmed by an independent witness.',

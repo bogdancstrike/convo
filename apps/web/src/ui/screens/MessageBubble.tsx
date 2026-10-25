@@ -196,6 +196,7 @@ export function MessageBubble({
               ))}
             </div>
           )}
+          {own && m.status === 'blocked' && m.error === 'KEY_TRANSPARENCY' && <p className="muted-text" role="status" data-testid="kt-blocked">{t('kt.blocked')}</p>}
           {own && (m.status === 'failed' || m.status === 'blocked') && (
             <button className="btn btn-ghost retry" onClick={() => void client.retry(m)}>
               {t('thread.retry')}

@@ -354,6 +354,9 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             Column(Modifier.padding(start = if (media) 4.dp else 9.dp, end = if (media) 4.dp else 9.dp, top = if (media) 4.dp else 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (conversation.startsWith("g:") && !outgoing && first) AccountName(app, message.optString("authorId"))
                 message.optJSONObject("quote")?.let { QuoteBox(app, it, outgoing) { onQuote(it) } }
+                // Organization policy refused sending: the recipient's keys fail the key-log check.
+                if (outgoing && message.optString("status") == "blocked" && message.optString("error") == "KEY_TRANSPARENCY")
+                    Text("Not sent: this person’s keys don’t match the key log, and your organization blocks sending until they do. See their contact info.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
@@ -391,7 +394,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     if (message.has("editedAt") && !message.optBoolean("deleted")) Text("edited ", fontSize = 11.sp, color = meta)
                     RawText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.optLong("sentAt"))), fontSize = 11.sp, color = meta)
                     if (message.optBoolean("starred")) Icon(Icons.Outlined.StarOutline, "Starred", Modifier.size(14.dp).padding(start = 3.dp))
-                    if (outgoing) { val status = message.optString("status"); Icon(if (status in listOf("read", "delivered")) Icons.Outlined.DoneAll else if (status == "sent") Icons.Outlined.Done else if (status == "failed") Icons.Outlined.ErrorOutline else Icons.Outlined.Schedule, when(status) { "read" -> "Seen"; "delivered" -> "Received"; "sent" -> "Sent"; else -> status }, Modifier.size(18.dp).padding(start = 3.dp), tint = if (status == "read") LocalConvoColors.current.tickRead else meta) }
+                    if (outgoing) { val status = message.optString("status"); Icon(if (status in listOf("read", "delivered")) Icons.Outlined.DoneAll else if (status == "sent") Icons.Outlined.Done else if (status == "failed" || status == "blocked") Icons.Outlined.ErrorOutline else Icons.Outlined.Schedule, when(status) { "read" -> "Seen"; "delivered" -> "Received"; "sent" -> "Sent"; "blocked" -> "Action needed"; else -> status }, Modifier.size(18.dp).padding(start = 3.dp), tint = if (status == "read") LocalConvoColors.current.tickRead else meta) }
                     Box {
                         DropdownMenu(menu, { menu = false }) {
                             // Reaction bar first (WhatsApp long-press).
@@ -424,7 +427,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                             DropdownMenuItem(text = { Text("Copy text") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo message", message.optString("body"))) })
                             if (outgoing && message.optLong("editableUntil", 0L) > System.currentTimeMillis()) DropdownMenuItem(text = { Text("Edit") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; edit = true })
                             DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.error) }, onClick = { menu = false; delete = true })
-                            if (message.optString("status") == "failed") DropdownMenuItem(text = { Text("Retry") }, leadingIcon = { Icon(Icons.Outlined.Refresh, null) }, onClick = { menu = false; app.call("retry", message.targetArgs(conversation)) })
+                            if (message.optString("status") in listOf("failed", "blocked")) DropdownMenuItem(text = { Text("Retry") }, leadingIcon = { Icon(Icons.Outlined.Refresh, null) }, onClick = { menu = false; app.call("retry", message.targetArgs(conversation)) })
                         }
                     }
                 }

@@ -40,7 +40,7 @@ class OrgPoliciesTest {
     }
 
     private static OrgPolicy strict() {
-        return new OrgPolicy(new OrgPolicy.Notifications("generic"), new OrgPolicy.Security(true, true, 5), new OrgPolicy.Privacy(false, false), new OrgPolicy.Features(false, true, true, true));
+        return new OrgPolicy(new OrgPolicy.Notifications("generic"), new OrgPolicy.Security(true, true, 5, true), new OrgPolicy.Privacy(false, false), new OrgPolicy.Features(false, true, true, true));
     }
 
     @Test void publishesASignedVersionBoundToTheDeploymentThatVerifiesWithThePublishedKey() throws Exception {
@@ -57,6 +57,16 @@ class OrgPoliciesTest {
         verifier.update(("CONVO-POLICY-V1\nacme\n" + signed.document().replace("generic", "full")).getBytes(StandardCharsets.UTF_8));
         assertThat(verifier.verify(Base64.getDecoder().decode(signed.signature()))).isFalse();
         verify(audit).append("op (ana)", "policy.publish", "policy:v4", "tighten previews");
+    }
+
+    /** Documents published before keyTransparencyBlock existed still read, with the warn-only default. */
+    @Test void olderDocumentsWithoutKeyTransparencyBlockStillParse() {
+        var old = JsonMapper.builder().build().readValue("{\"notifications\":{\"maxPreview\":\"full\"},"
+                + "\"security\":{\"screenshotBlock\":true,\"appLockRequired\":false,\"appLockMaxMinutes\":15},"
+                + "\"privacy\":{\"readReceiptsDefault\":false,\"typingDefault\":false},"
+                + "\"features\":{\"chatExport\":true,\"viewOnce\":true,\"stickers\":true,\"callLinks\":true}}", OrgPolicy.class);
+        org.assertj.core.api.Assertions.assertThat(old.security().screenshotBlock()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(old.security().keyTransparencyBlock()).isFalse();
     }
 
     @Test void aStaleEditIsRefused() throws Exception {

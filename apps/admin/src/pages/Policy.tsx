@@ -61,6 +61,7 @@ export function PolicyPage({ can }: PageProps) {
           {row(['security', 'appLockRequired'], 'Require the app lock', 'People must lock Convo with a passkey (web) or biometrics (Android) and cannot turn it off.')}
           <Form.Item name={['security', 'appLockMaxMinutes']} label="Longest delay before the lock engages (minutes)"><InputNumber min={0} max={60} data-testid="policy-lock-minutes" /></Form.Item>
           {row(['security', 'screenshotBlock'], 'Block screenshots on Android', 'Screenshots and screen recordings of Convo show a black screen.')}
+          {row(['security', 'keyTransparencyBlock'], 'Block sending when keys fail the key-log check', 'Devices refuse to send to a person whose keys or devices differ from the key-transparency log, until it matches again. Off: a warning is shown.')}
         </Card>
         <Card title="Privacy defaults for new devices" size="small" style={{ marginTop: 16 }}>
           {row(['privacy', 'readReceiptsDefault'], 'Read receipts on', 'Applied to devices enrolled in the last day when they first receive a policy; people can change it.')}

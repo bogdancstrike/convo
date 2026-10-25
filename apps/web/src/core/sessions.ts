@@ -21,6 +21,17 @@ import type { StoreOp } from '../storage/encryptedStore';
 const PREKEY_WHISPER = 3;
 
 /** Thrown when a verified peer's identity key changed; sending is blocked (UI.md §4.3). */
+/**
+ * Sending refused by organization policy: the account's keys or devices do not match the
+ * key-transparency log (specs §19.4). Handled like an untrusted identity: the message waits.
+ */
+export class KeyTransparencyBlockedError extends Error {
+  constructor(readonly accountId: string) {
+    super('key transparency check failed');
+    this.name = 'KeyTransparencyBlockedError';
+  }
+}
+
 export class UntrustedIdentityError extends Error {
   constructor(readonly accountId: string) {
     super('untrusted identity');
@@ -40,6 +51,8 @@ export class SessionManager {
     private readonly self: { accountId: string; deviceId: number },
     /** Told about every roster used for encryption (key-transparency checks run after the send). */
     private readonly onRoster?: (accountId: string, roster: RosterDto) => void,
+    /** Policy gate before encrypting to an account; throws {@link KeyTransparencyBlockedError}. */
+    private readonly beforeEncrypt?: (accountId: string) => Promise<void>,
   ) {}
 
   /**
@@ -50,6 +63,7 @@ export class SessionManager {
    * @returns per-device ciphertexts (empty when the account has no other devices) and state ops
    */
   async encryptForAccount(accountId: string, padded: Uint8Array<ArrayBuffer>): Promise<EncryptedFanout> {
+    await this.beforeEncrypt?.(accountId);
     const roster = await this.api.roster(accountId);
     const targets = roster.devices.filter((d) => !(accountId === this.self.accountId && d.deviceId === this.self.deviceId));
     if (targets.length === 0) return { messages: [], ops: [] };

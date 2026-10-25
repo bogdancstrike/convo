@@ -20,8 +20,9 @@ device detectable without manual comparison.
   log-error, shown in contact info on web and Android.
 * **Witnesses** are separate processes with their own keys (`deploy/kt-witness`) that co-sign only
   consistent heads and re-sign hourly with their own timestamp (freshness).
-* **Policy: warn.** Results are shown; sending is not blocked yet. Enforcement for mismatch/log-error
-  under a hardened organization policy is the next step once the checks have run in production.
+* **Policy: warn by default.** The signed organization policy can set `security.keyTransparencyBlock`:
+  devices then refuse to encrypt 1:1/own-device messages to an account whose last result is a
+  mismatch or log error, after re-checking. MLS group messages are not gated.
 
 ## Consequences and limits
 

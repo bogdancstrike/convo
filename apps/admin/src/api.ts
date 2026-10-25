@@ -157,7 +157,7 @@ export function errorText(e: unknown): string {
 /** Organization policy document (mirrors the server's OrgPolicy and the clients' core/policy.ts). */
 export interface OrgPolicy {
   notifications: { maxPreview: 'generic' | 'sender' | 'full' };
-  security: { screenshotBlock: boolean; appLockRequired: boolean; appLockMaxMinutes: number };
+  security: { screenshotBlock: boolean; appLockRequired: boolean; appLockMaxMinutes: number; keyTransparencyBlock: boolean };
   privacy: { readReceiptsDefault: boolean; typingDefault: boolean };
   features: { chatExport: boolean; viewOnce: boolean; stickers: boolean; callLinks: boolean };
 }

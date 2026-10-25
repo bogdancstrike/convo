@@ -9,7 +9,8 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 export type PreviewLevel = 'generic' | 'sender' | 'full';
 export interface OrgPolicy {
   notifications: { maxPreview: PreviewLevel };
-  security: { screenshotBlock: boolean; appLockRequired: boolean; appLockMaxMinutes: number };
+  /** keyTransparencyBlock: refuse to encrypt to accounts whose keys fail the key-log check (absent = warn). */
+  security: { screenshotBlock: boolean; appLockRequired: boolean; appLockMaxMinutes: number; keyTransparencyBlock?: boolean };
   privacy: { readReceiptsDefault: boolean; typingDefault: boolean };
   features: { chatExport: boolean; viewOnce: boolean; stickers: boolean; callLinks: boolean };
 }
@@ -21,7 +22,7 @@ export interface VerifiedPolicy { version: number; keyId: string; publicKey: str
 /** In force until a policy is published (matches the server's defaults). */
 export const DEFAULT_POLICY: OrgPolicy = {
   notifications: { maxPreview: 'full' },
-  security: { screenshotBlock: false, appLockRequired: false, appLockMaxMinutes: 15 },
+  security: { screenshotBlock: false, appLockRequired: false, appLockMaxMinutes: 15, keyTransparencyBlock: false },
   privacy: { readReceiptsDefault: false, typingDefault: false },
   features: { chatExport: true, viewOnce: true, stickers: true, callLinks: true },
 };
@@ -63,6 +64,7 @@ function isPolicy(p: unknown): p is OrgPolicy {
   return !!v && ['generic', 'sender', 'full'].includes(v.notifications?.maxPreview)
     && typeof v.security?.screenshotBlock === 'boolean' && typeof v.security.appLockRequired === 'boolean'
     && Number.isInteger(v.security.appLockMaxMinutes) && v.security.appLockMaxMinutes >= 0 && v.security.appLockMaxMinutes <= 60
+    && (v.security.keyTransparencyBlock === undefined || typeof v.security.keyTransparencyBlock === 'boolean')
     && typeof v.privacy?.readReceiptsDefault === 'boolean' && typeof v.privacy.typingDefault === 'boolean'
     && ['chatExport', 'viewOnce', 'stickers', 'callLinks'].every((k) => typeof (v.features as Record<string, unknown> | undefined)?.[k] === 'boolean');
 }

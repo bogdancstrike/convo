@@ -26,8 +26,14 @@ record OrgPolicy(@Valid @NotNull Notifications notifications, @Valid @NotNull Se
      * @param screenshotBlock Android blocks screenshots and screen recording of Convo
      * @param appLockRequired devices must use the app lock (passkey/biometrics)
      * @param appLockMaxMinutes longest allowed background time before the lock engages
+     * @param keyTransparencyBlock devices refuse to encrypt to an account whose keys or devices do not
+     *     match the key-transparency log (absent in older documents: warn only)
      */
-    record Security(boolean screenshotBlock, boolean appLockRequired, @Min(0) @Max(60) int appLockMaxMinutes) {}
+    record Security(boolean screenshotBlock, boolean appLockRequired, @Min(0) @Max(60) int appLockMaxMinutes, Boolean keyTransparencyBlock) {
+        Security {
+            keyTransparencyBlock = Boolean.TRUE.equals(keyTransparencyBlock); // absent in older documents
+        }
+    }
 
     /** @param readReceiptsDefault @param typingDefault initial values on newly enrolled devices */
     record Privacy(boolean readReceiptsDefault, boolean typingDefault) {}
@@ -37,6 +43,6 @@ record OrgPolicy(@Valid @NotNull Notifications notifications, @Valid @NotNull Se
 
     /** The policy in force before an administrator publishes one. */
     static OrgPolicy defaults() {
-        return new OrgPolicy(new Notifications("full"), new Security(false, false, 15), new Privacy(false, false), new Features(true, true, true, true));
+        return new OrgPolicy(new Notifications("full"), new Security(false, false, 15, false), new Privacy(false, false), new Features(true, true, true, true));
     }
 }

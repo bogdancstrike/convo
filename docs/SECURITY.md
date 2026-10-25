@@ -406,8 +406,12 @@ sequenceDiagram
   or changed log key.
 * **Results** in contact info (web and Android): *verified*, *matches but not witnessed*, *checking*,
   **mismatch** (the log disagrees with the keys in use) or **log error** (the log failed a check).
-* **Policy today: warn.** Results are shown, sending is not blocked. Blocking on mismatch/log error
-  under a hardened organization policy follows once the checks have run in production.
+* **Policy:** warn by default (results shown). An organization can turn on *Block sending when keys
+  fail the key-log check* (admin console → Policy, signed `security.keyTransparencyBlock`): devices
+  then re-check and refuse to encrypt 1:1 and own-device messages to an account whose entry is a
+  mismatch or log error; the message waits with "Action needed" and an explanation. Group messages
+  (encrypted to the MLS group) are not gated. The first message to a newly changed account can go
+  out before its check completes, since checks run after sending.
 * **Limits:** a verifiable log cannot prove that a newer entry does not exist (a server could serve an
   old one); each device also checks its own account (Settings → Devices shows whether the log lists
   exactly your key and devices), and an AKD/CONIKS-style map is the follow-up.
@@ -841,7 +845,7 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 | WebAuthn PRF unlock | §18.4 (2), WEB-01 |
 | MLS role profile review (credentials are bound to the account identity, §6.2) | GRP-01 |
 | Sealed sender | PRIV-01 |
-| Key transparency: verifiable log, witness and client checks implemented (§7.5, warn only); verifiable map, head gossip, enforcement and an independently operated production witness remain | TRUST-01 |
+| Key transparency: verifiable log, witness, client checks and policy blocking implemented (§7.5); verifiable map, head gossip and an independently operated production witness remain | TRUST-01 |
 | Independent security review (SEC-02); fuzzing and plaintext scans (SEC-01) | SEC-01/02 |
 | Admin console reachable publicly (consider Cloudflare Access / LAN only) | §16.3 |
 

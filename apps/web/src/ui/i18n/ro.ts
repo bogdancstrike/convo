@@ -433,6 +433,7 @@ export const ro: Record<MessageKey, string> = {
   'kt.self.verifiedBody': 'Dispozitivele celorlalți criptează exact pentru cheia ta de identitate și dispozitivele din Setări → Dispozitive, confirmat de un martor independent.',
   'kt.self.mismatch': 'Jurnalul de chei arată alte chei sau dispozitive pentru contul tău',
   'kt.self.mismatchBody': 'Cineva poate să fi adăugat un dispozitiv la contul tău sau să-ți fi înlocuit cheia. Verifică Setări → Dispozitive și anunță echipa de securitate.',
+  'kt.blocked': 'Netrimis: cheile acestei persoane nu corespund jurnalului de chei, iar organizația ta blochează trimiterea până când corespund. Vezi informațiile contactului.',
   'kt.title': 'Transparența cheilor',
   'kt.verified': 'Cheile corespund jurnalului public de chei',
   'kt.verifiedBody': 'Cheile folosite de acest dispozitiv pentru acest contact sunt cele înregistrate în jurnalul de chei al organizației, confirmate de un martor independent.',

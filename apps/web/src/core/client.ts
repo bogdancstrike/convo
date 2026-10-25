@@ -59,8 +59,8 @@ import { DEFAULT_POLICY, PolicyRejectedError, verifyPolicy, type OrgPolicy, type
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
 import { RecordNs, type Repositories } from './repositories';
-import { KeyTransparencyMonitor, type KtAccountRecord } from './ktMonitor';
-import { SessionManager, UntrustedIdentityError } from './sessions';
+import { KeyTransparencyMonitor, mustBlock, type KtAccountRecord } from './ktMonitor';
+import { KeyTransparencyBlockedError, SessionManager, UntrustedIdentityError } from './sessions';
 
 /** A message scheduled on this device (specs §30.4): UTC due time, zone for display. */
 export interface ScheduledMessage { id: string; conversationId: string; body: string; dueAt: number; zone: string; createdAt: number; quote?: Quote; mentions?: string[]; silent?: boolean }
@@ -182,7 +182,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       async (accountId) => (accountId === device.accountId ? (await signal.localIdentity())?.identityPublic : (await signal.peerIdentity(accountId))?.identityKey),
       (accountId, record) => this.emit('keyTransparency', { accountId, record }));
     // After a send, once the outbox has committed any new identity key, check it against the log.
-    this.sessions = new SessionManager(api, signal, device, (accountId, roster) => { setTimeout(() => void this.kt.check(accountId, roster), 1000); });
+    this.sessions = new SessionManager(api, signal, device, (accountId, roster) => { setTimeout(() => void this.kt.check(accountId, roster), 1000); },
+      (accountId) => this.keyTransparencyGate(accountId));
     this.groups = new GroupManager(api, repos.store, device, {
       verify: (accountId, deviceId, key) => this.verifyDeviceBinding(accountId, deviceId, key),
       publishOwn: (key) => this.publishOwnBinding(key),
@@ -201,6 +202,15 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    */
   keyTransparency(accountId: string, force = false): Promise<KtAccountRecord | undefined> {
     return this.kt.check(accountId, undefined, force);
+  }
+
+  /**
+   * Organization policy "block on key-transparency failure": refuses to encrypt to an account whose
+   * last check failed, after re-checking (the failure may be over). Covers 1:1 messages and the own
+   * account (own-device sync); group messages are encrypted to the MLS group and are not gated.
+   */
+  private async keyTransparencyGate(accountId: string): Promise<void> {
+    if (await mustBlock(this.kt, accountId, this.policy.security.keyTransparencyBlock === true)) throw new KeyTransparencyBlockedError(accountId);
   }
 
   /** Account ID of this device. */
@@ -2760,7 +2770,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       const c = this.conversationCache.get(item.destination);
       if (c) await this.saveConversations([{ ...c, identityChangedAt: Date.now() }]);
     }
-    await this.updateStatus(item, reason, error instanceof ApiError ? error.code : undefined);
+    await this.updateStatus(item, reason, error instanceof ApiError ? error.code : error instanceof KeyTransparencyBlockedError ? 'KEY_TRANSPARENCY' : undefined);
   }
 
   private async updateStatus(item: OutboxItem, status: MessageStatus, error?: string): Promise<void> {

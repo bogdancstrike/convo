@@ -84,3 +84,14 @@ export class KeyTransparencyMonitor {
     }
   }
 }
+
+/**
+ * Policy gate before encrypting to an account: with blocking on, an account whose last result was a
+ * mismatch or log error is checked again and refused only if it still fails (the problem may be over).
+ */
+export async function mustBlock(monitor: Pick<KeyTransparencyMonitor, 'status' | 'check'>, accountId: string, blocking: boolean): Promise<boolean> {
+  if (!blocking) return false;
+  const bad = (s?: KtStatus) => s === 'mismatch' || s === 'log-error';
+  if (!bad((await monitor.status(accountId))?.status)) return false;
+  return bad((await monitor.check(accountId, undefined, true))?.status);
+}
