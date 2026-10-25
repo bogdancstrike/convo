@@ -42,6 +42,11 @@ broader launch tasks, independent security review or complete Android/web parity
   on ports 443/8443 for `convo.doncik.ro`; real WebAuthn registration and passwordless assertion.
 - [x] Expose passkey enrollment/management after sign-in directly from Convo Settings.
 - [x] Native app lock and hidden conversation locks using system biometric/PIN, gated by confirmed Keycloak passwordless enrollment; never store fingerprints/PINs in Convo.
+- [x] 1.16.0 (2026-10-25): reactions with five quick emoji and "+" for any emoji; tapping a
+  quoted reply jumps to the original (web + Android); Android inline voice-note player, personal
+  stickers (create/save/favourites), passkey setup fix, background delivery on by default without
+  ntfy; admin Sessions lists Convo devices; history sync announced by the server instead of polling;
+  SECURITY.md step-by-step device, multi-device and call flows.
 - [ ] Reviewed native core/Keystore/SQLCipher, lifecycle/background delivery, physical device
   certification and iOS. (Calls are implemented: ADR-0006.)
 
