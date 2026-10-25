@@ -36,4 +36,19 @@ class ChannelPermissionsTest {
             assertThat(service.message(caller, id, command)).isFalse();
         }
     }
+
+    /** Members react, vote and RSVP in announcement channels; receivers check the decrypted content. */
+    @Test void channelAdmitsMemberInteractions() {
+        var groups = mock(GroupRepository.class);
+        var id = new byte[32];
+        var caller = new DeviceAddress(UUID.randomUUID(), 1);
+        when(groups.lock(id, true)).thenReturn(Optional.of(new GroupRepository.GroupRow(id, 1, 1, "active", true)));
+        when(groups.hasDevice(id, caller)).thenReturn(true);
+        when(groups.devices(id)).thenReturn(List.of(caller));
+        when(groups.members(id)).thenReturn(Map.of(caller.accountId(), Role.MEMBER));
+        var service = new GroupService(groups, mock(IdentityApi.class), mock(DeliveryApi.class),
+                new GroupsProperties(1000, 5000, 262144, 1048576, Duration.ofDays(31), Duration.ofDays(7), 200), Clock.systemUTC(), mock(org.springframework.context.ApplicationEventPublisher.class));
+        var vote = new GroupCommands.Message(1, new byte[16], new byte[]{1, 2, 3}, false, true);
+        assertThat(service.message(caller, id, vote)).isFalse();
+    }
 }

@@ -249,6 +249,13 @@ check it with the identity key they trust for that account: KeyPackages whose ke
 not added, and if a group ever contains such a leaf the client refuses to send to it and warns. A
 device that has not published a binding yet (an older app version) is tolerated during rollout.
 
+**Admin-only channels (community announcements).** Ordinary members cannot post. They may react,
+vote in polls and RSVP to events: their client marks such a group message as an `interaction`,
+which the server admits from members (it cannot read the content), and every receiving client
+re-checks the decrypted content and drops anything from a member that is not exactly one reaction,
+ballot or RSVP. A modified client can therefore make the server relay ciphertext, but cannot make
+a post appear.
+
 Known gap: the role profile has not been independently reviewed.
 
 ### 6.3 Attachments

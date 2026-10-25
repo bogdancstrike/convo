@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeAll, createUser, enroll, newPage, openChat, send } from './support';
+import { closeAll, createUser, enroll, message, messageMenu, newPage, openChat, send } from './support';
 
 /** AC-COL-01: polls with stable options, one current ballot per member, visible voters, authorized close. */
 async function createPoll(page: Page, question: string, options: string[], multiple: boolean) {
@@ -98,5 +98,40 @@ test('quiz: answer hidden until answered, one final try, explanation and score',
     await expect(option(bob, q, 'Bucharest')).toHaveAttribute('data-verdict', 'correct');
     await expect(option(bob, q, 'Iasi')).toBeDisabled(); // one try
     await expect(pollCard(owner, q).getByTestId('quiz-result')).toContainText('0 of 1', { timeout: 20_000 });
+  } finally { await closeAll(owner, bob); }
+});
+
+/** Communities (§30): admins post polls in the announcement channel and members vote there. */
+test('community announcements: members vote on an admin poll', async ({ browser, request }) => {
+  test.setTimeout(180_000);
+  const [ownerU, bobU] = await Promise.all(['cpollowner', 'cpollbob'].map((p) => createUser(request, p)));
+  const [owner, bob] = await Promise.all([1, 2].map(() => newPage(browser)));
+  try {
+    await enroll(owner, ownerU); await enroll(bob, bobU);
+    const name = `Poll community ${Date.now() % 10000}`;
+    await owner.getByTestId('nav-communities').click();
+    await owner.getByTestId('new-community').click();
+    await owner.getByTestId('community-name').fill(name);
+    await owner.getByTestId('create-community').click();
+    await expect(owner.getByTestId('community-title')).toHaveText(name, { timeout: 30_000 });
+    await owner.getByTestId('community-invite').click();
+    await owner.getByTestId('add-member').click();
+    await owner.getByTestId('people-search').fill(bobU.username);
+    await owner.getByTestId(`pick-${bobU.username}`).click();
+    await expect(owner.getByTestId(`member-${bobU.username}`)).toBeVisible({ timeout: 20_000 });
+    await send(owner, 'Welcome');
+
+    const q = 'Team lunch day?';
+    await createPoll(owner, q, ['Thursday', 'Friday'], false);
+    await bob.getByTestId('nav-communities').click();
+    await bob.getByTestId('community-row').filter({ hasText: name }).click({ timeout: 30_000 });
+    await expect(bob.getByTestId('community-announcements')).toBeEnabled({ timeout: 30_000 });
+    await bob.getByTestId('community-announcements').click();
+    await expect(pollCard(bob, q)).toBeVisible({ timeout: 20_000 });
+    await option(bob, q, 'Friday').click();
+    await expect(option(owner, q, 'Friday').getByTestId('poll-count')).toHaveText('1', { timeout: 20_000 });
+    // Members react to announcements too (still no posting: the composer stays read-only).
+    await (await messageMenu(bob, 'Welcome')).getByRole('button', { name: 'React 👍' }).click();
+    await expect(message(owner, 'Welcome').getByTestId('reaction')).toHaveText('👍 1', { timeout: 20_000 });
   } finally { await closeAll(owner, bob); }
 });

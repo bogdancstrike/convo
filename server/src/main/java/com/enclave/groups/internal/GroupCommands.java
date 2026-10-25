@@ -45,8 +45,11 @@ final class GroupCommands {
      * @param submissionId 16-byte idempotency key
      * @param message encoded MLSMessage (private message)
      * @param urgent priority hint (call rings) for offline wake-ups
+     * @param interaction the sender declares a reaction, poll ballot or RSVP; members may send these
+     *        in admin-only channels (receivers verify the decrypted content, the server cannot)
      */
-    record Message(long epoch, byte[] submissionId, byte[] message, boolean urgent) {
-        Message(long epoch, byte[] submissionId, byte[] message) { this(epoch, submissionId, message, false); }
+    record Message(long epoch, byte[] submissionId, byte[] message, boolean urgent, boolean interaction) {
+        Message(long epoch, byte[] submissionId, byte[] message) { this(epoch, submissionId, message, false, false); }
+        Message(long epoch, byte[] submissionId, byte[] message, boolean urgent) { this(epoch, submissionId, message, urgent, false); }
     }
 }

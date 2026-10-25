@@ -234,6 +234,8 @@ export interface GroupMessageRequest {
   message: string;
   /** Priority hint (call rings). */
   urgent?: boolean;
+  /** A reaction, poll ballot or RSVP: members may send these in admin-only channels. */
+  interaction?: boolean;
 }
 
 /** `GET /v1/account/credentials`: registered IdP credential types. `unavailable` is never "none". */

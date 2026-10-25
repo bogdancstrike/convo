@@ -8,6 +8,7 @@ import { GatewaySocket, type ConnectionState } from '../api/socket';
 import type { AccountDto, CommunityDto, CommunityLinkDto, CredentialStatusDto, Directive, EnvelopeDto } from '../api/types';
 import {
   CONTENT_VERSION,
+  isMemberInteraction,
   decodeContent,
   MAX_ATTACHMENTS,
   MAX_BODY_BYTES,
@@ -2505,6 +2506,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const isNewChat = !this.conversationCache.has(conversationId);
     const conversation = await this.ensureConversation(conversationId, ops);
     changed.add(conversation.id);
+    // Admin-only channels: from ordinary members accept only reactions, ballots and RSVPs. The server
+    // admits flagged member messages without seeing them, so this check is the real boundary.
+    if (direction === 'in' && conversation.kind === 'group' && conversation.adminOnly && !isMemberInteraction({ v: CONTENT_VERSION, kind: 'data', data })
+      && (await this.groups.record(groupIdOf(conversation.id)!))?.members.find((m) => m.accountId === authorId)?.role === 'member') return 'ignored';
 
     if (data.reaction) {
       const r = data.reaction;

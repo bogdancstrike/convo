@@ -164,7 +164,9 @@ class GroupService {
     @Transactional
     boolean message(DeviceAddress caller, byte[] groupId, GroupCommands.Message cmd) {
         GroupRow group = lockForMember(groupId, caller, true);
-        if (group.adminOnly() && groups.members(groupId).get(caller.accountId()) == Role.MEMBER) {
+        // Members may react, vote and RSVP in announcement channels, but not post. The server cannot
+        // read the content: receivers drop anything else a member sends (WhatsApp-like channels).
+        if (group.adminOnly() && !cmd.interaction() && groups.members(groupId).get(caller.accountId()) == Role.MEMBER) {
             throw new EnclaveException(ErrorCode.FORBIDDEN_ROLE, "only admins can post in this channel");
         }
         if (cmd.submissionId() == null || cmd.submissionId().length != 16) {

@@ -2,7 +2,7 @@ import { ApiError, NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import type { GatewaySocket } from '../api/socket';
 import type { GroupMessageRequest, SendRequestDto, SendResultDto } from '../api/types';
-import { CONTENT_VERSION, encodeContent, type Content } from '../crypto/content';
+import { CONTENT_VERSION, encodeContent, isMemberInteraction, type Content } from '../crypto/content';
 import { randomBytes, toBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import { RecordNs } from './repositories';
@@ -182,7 +182,7 @@ export class Outbox {
         item.submissions.push({
           target,
           accepted: false,
-          group: { groupId: prepared.groupId, epoch: prepared.epoch, message: prepared.message, submissionId: toBase64Url(randomBytes(16)), ...(item.urgent ? { urgent: true } : {}) },
+          group: { groupId: prepared.groupId, epoch: prepared.epoch, message: prepared.message, submissionId: toBase64Url(randomBytes(16)), ...(item.urgent ? { urgent: true } : {}), ...(isMemberInteraction(item.content) ? { interaction: true } : {}) },
         });
         item.state = 'ready';
         await this.store.commit([...prepared.ops, Outbox.op(item)]);

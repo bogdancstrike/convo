@@ -312,6 +312,22 @@ export type Content =
   | { v: number; kind: 'ack'; ack: AckResponse }
   | { v: number; kind: 'rulesAck'; rulesAck: RulesAck };
 
+/** Envelope fields every data message may carry alongside its one meaningful field. */
+const INTERACTION_ENVELOPE = new Set(['messageId', 'timestamp', 'profile', 'recipientAccountIds', 'topic', 'expireTimer']);
+
+/**
+ * Whether content is a member interaction: exactly one reaction, poll ballot or RSVP and nothing
+ * else. Ordinary members may send only these in admin-only channels (community announcements);
+ * the server lets them through by the request's `interaction` flag, and receivers re-check the
+ * decrypted content (the flag alone is never trusted).
+ */
+export function isMemberInteraction(content: Content): boolean {
+  if (content.kind !== 'data') return false;
+  const data = content.data as unknown as Record<string, unknown>;
+  const kinds = ['reaction', 'pollVote', 'rsvp'].filter((k) => data[k] !== undefined);
+  return kinds.length === 1 && Object.keys(data).every((k) => data[k] === undefined || INTERACTION_ENVELOPE.has(k) || k === kinds[0]);
+}
+
 /** Content this client cannot interpret. */
 export interface UnknownContent {
   v: number;
