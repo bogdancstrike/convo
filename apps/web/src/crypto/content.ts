@@ -210,6 +210,8 @@ export interface ReceiptMessage {
   /** Content revision acknowledged for each message ID (same order); absent means 0. */
   revisions?: number[];
   timestamp: number;
+  /** Key-transparency gossip: the sender's newest accepted log head (split-view detection, §19.4). */
+  ktHead?: { size: number; root: string; timestamp: number; signature: string };
 }
 
 /** Own-device synchronization. */

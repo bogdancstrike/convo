@@ -60,6 +60,7 @@ import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics
 import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
 import { RecordNs, type Repositories } from './repositories';
 import { KeyTransparencyMonitor, mustBlock, type KtAccountRecord } from './ktMonitor';
+import type { KtSignedHead } from './keyTransparency';
 import { KeyTransparencyBlockedError, SessionManager, UntrustedIdentityError } from './sessions';
 
 /** A message scheduled on this device (specs §30.4): UTC due time, zone for display. */
@@ -180,7 +181,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.socket = new GatewaySocket(async () => (await api.socketTicket()).ticket);
     this.kt = new KeyTransparencyMonitor(api, repos.store, device.deploymentId,
       async (accountId) => (accountId === device.accountId ? (await signal.localIdentity())?.identityPublic : (await signal.peerIdentity(accountId))?.identityKey),
-      (accountId, record) => this.emit('keyTransparency', { accountId, record }));
+      (accountId, record) => this.emit('keyTransparency', { accountId, record }),
+      // A split view taints every result: re-check our own account so Settings shows the warning.
+      () => { void this.kt.check(device.accountId, undefined, true); });
     // After a send, once the outbox has committed any new identity key, check it against the log.
     this.sessions = new SessionManager(api, signal, device, (accountId, roster) => { setTimeout(() => void this.kt.check(accountId, roster), 1000); },
       (accountId) => this.keyTransparencyGate(accountId));
@@ -474,7 +477,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       const authors = new Set([...seen.values()].map((m) => m.authorId));
       for (const author of authors) {
         const messages = [...seen.values()].filter((m) => m.authorId === author);
-        await this.enqueue(author, receipt('read', messages.map((m) => m.id), conversation.kind === 'group' ? conversationId : undefined, messages.map((m) => m.revision ?? 0)), false);
+        await this.enqueue(author, receipt('read', messages.map((m) => m.id), conversation.kind === 'group' ? conversationId : undefined, messages.map((m) => m.revision ?? 0), await this.kt.gossipHead()), false);
       }
     }
     if (unread.length > 0) {
@@ -2099,6 +2102,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         return followUps;
       }
       case 'receipt': {
+        if (content.receipt.ktHead) followUps.push(async () => { await this.kt.compareGossip(content.receipt.ktHead); });
         const conversationId = content.receipt.conversationId ?? sender;
         if (content.receipt.conversationId && !groupIdOf(conversationId)) return followUps;
         for (const [index, id] of content.receipt.messageIds.entries()) {
@@ -2843,10 +2847,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const id = result === 'edited' ? data.edit!.targetMessageId : data.messageId;
     const revisions = result === 'edited' ? [data.edit!.revision ?? 0] : undefined;
     const group = groupIdOf(conversationId) ? conversationId : undefined;
-    const followUps = [() => this.enqueue(author, receipt('delivery', [id], group, revisions), false)];
+    const followUps = [async () => this.enqueue(author, receipt('delivery', [id], group, revisions, await this.kt.gossipHead()), false)];
     if (result === 'new') followUps.push(async () => this.emitAlert(conversationId, author, data));
     if (this.currentSettings.readReceipts && !this.conversationCache.get(conversationId)?.request && this.activeConversation === conversationId && document.visibilityState === 'visible') {
-      followUps.push(() => this.enqueue(author, receipt('read', [id], group, revisions), false));
+      followUps.push(async () => this.enqueue(author, receipt('read', [id], group, revisions, await this.kt.gossipHead()), false));
     }
     return followUps;
   }
@@ -2887,9 +2891,10 @@ function previewOf(data: DataMessage): string {
   return first.contentType.startsWith('image/') ? '📷 Photo' : `📎 ${first.fileName ?? 'File'}`;
 }
 
-function receipt(type: 'delivery' | 'read', messageIds: string[], conversationId?: string, revisions?: number[]): Content {
+/** A receipt; `ktHead` gossips this device's newest key-log head for split-view detection (§19.4). */
+function receipt(type: 'delivery' | 'read', messageIds: string[], conversationId?: string, revisions?: number[], ktHead?: KtSignedHead): Content {
   return { v: CONTENT_VERSION, kind: 'receipt', receipt: { type, messageIds, conversationId, timestamp: Date.now(),
-    ...(revisions?.some((r) => r > 0) ? { revisions } : {}) } };
+    ...(revisions?.some((r) => r > 0) ? { revisions } : {}), ...(ktHead ? { ktHead } : {}) } };
 }
 
 /** Pending re-read acknowledgements kept per conversation (oldest dropped first). */

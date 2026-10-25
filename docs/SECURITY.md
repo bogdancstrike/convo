@@ -404,6 +404,12 @@ sequenceDiagram
 * **Witnesses** (`deploy/kt-witness`) run on another machine with their own key, co-sign only heads
   that extend the last one they signed, and re-sign hourly. They refuse and alert on a rollback, fork
   or changed log key.
+* **Gossip (split views):** delivery and read receipts carry the sender device's newest accepted head,
+  signed by the log. The receiving device checks the signature with its pinned log key (unsigned
+  heads are ignored, so a contact cannot raise false alarms) and asks the server for a consistency
+  proof between that head and its own. Two signed heads that cannot both be true — same size with
+  different roots, no valid proof, or a newer head the server refuses to prove — are kept as
+  evidence; from then on every check reports a log error.
 * **Results** in contact info (web and Android): *verified*, *matches but not witnessed*, *checking*,
   **mismatch** (the log disagrees with the keys in use) or **log error** (the log failed a check).
 * **Policy:** warn by default (results shown). An organization can turn on *Block sending when keys
@@ -415,7 +421,7 @@ sequenceDiagram
 * **Limits:** a verifiable log cannot prove that a newer entry does not exist (a server could serve an
   old one); each device also checks its own account (Settings → Devices shows whether the log lists
   exactly your key and devices), and an AKD/CONIKS-style map is the follow-up.
-  Heads are not yet gossiped between people. Log and witness keys are pinned on first use.
+  Gossip rides on 1:1 and group receipts only. Log and witness keys are pinned on first use.
 
 ---
 
@@ -845,7 +851,7 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 | WebAuthn PRF unlock | §18.4 (2), WEB-01 |
 | MLS role profile review (credentials are bound to the account identity, §6.2) | GRP-01 |
 | Sealed sender | PRIV-01 |
-| Key transparency: verifiable log, witness, client checks and policy blocking implemented (§7.5); verifiable map, head gossip and an independently operated production witness remain | TRUST-01 |
+| Key transparency: verifiable log, witness, client checks, head gossip and policy blocking implemented (§7.5); verifiable map and an independently operated production witness remain | TRUST-01 |
 | Independent security review (SEC-02); fuzzing and plaintext scans (SEC-01) | SEC-01/02 |
 | Admin console reachable publicly (consider Cloudflare Access / LAN only) | §16.3 |
 

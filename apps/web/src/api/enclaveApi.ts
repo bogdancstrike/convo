@@ -161,6 +161,11 @@ export class EnclaveApi {
   lastSeen(accountId: string): Promise<{ day: string | null; at: string | null }> { return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/last-seen`); }
 
   /** Key transparency: the account's log entry with proofs (core/keyTransparency.ts). */
+  /** Key transparency: consistency proof between two log sizes (split-view checks of gossiped heads). */
+  ktConsistency(from: number, to: number): Promise<{ proof: string[] }> {
+    return this.signed('GET', `/v1/kt/consistency?from=${from}&to=${to}`);
+  }
+
   ktAccount(accountId: string, since: number): Promise<KtAccountProof> {
     return this.signed('GET', `/v1/kt/accounts/${encodeURIComponent(accountId)}?since=${since}`);
   }

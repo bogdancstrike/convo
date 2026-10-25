@@ -94,8 +94,18 @@ export interface KtAccountProof {
   maxWitnessAgeMs: number;
   witnesses: Record<string, string>;
 }
-/** Device-local trust state: pinned keys and the newest head accepted. */
-export interface KtState { logKey?: string; witnesses?: Record<string, string>; last?: { size: number; root: string } }
+/** A tree head as signed by the log: what devices gossip to each other. */
+export interface KtSignedHead { size: number; root: string; timestamp: number; signature: string }
+/** Device-local trust state: pinned keys and the newest head accepted (signed, for gossip). */
+export interface KtState { logKey?: string; witnesses?: Record<string, string>; last?: { size: number; root: string; timestamp?: number; signature?: string } }
+
+/** Whether a gossiped head carries a valid signature by the pinned log key. */
+export function verifySignedHead(head: KtSignedHead, deploymentId: string, logKey: string): boolean {
+  try {
+    return Number.isSafeInteger(head.size) && head.size > 0 && Number.isSafeInteger(head.timestamp)
+      && ed25519.verify(fromBase64Url(head.signature), headBytes(deploymentId, head.size, fromBase64Url(head.root), head.timestamp), fromBase64Url(logKey));
+  } catch { return false; }
+}
 /**
  * - `verified`: the keys match a log entry included in a head that a pinned witness co-signed recently
  * - `unwitnessed`: the keys match the log, but no fresh co-signature from a pinned witness exists
@@ -130,7 +140,7 @@ export function verifyAccount(proof: KtAccountProof, expected: { accountId: stri
       if (!verifyConsistency(state.last.size, h.size, fromBase64Url(state.last.root), root, proof.sinceConsistency.map(fromBase64Url))) return fail('log-error', 'inconsistent');
     }
     const witnesses = state.witnesses && Object.keys(state.witnesses).length ? state.witnesses : proof.witnesses;
-    const next: KtState = { logKey: h.logKey, witnesses, last: { size: h.size, root: h.root } };
+    const next: KtState = { logKey: h.logKey, witnesses, last: { size: h.size, root: h.root, timestamp: h.timestamp, signature: h.signature } };
     // The account's entry must be included and equal what the device is about to use.
     const leaf = proof.leaf;
     if (!leaf || leaf.accountId !== expected.accountId) return { status: 'mismatch', reason: 'no-entry', state: next, size: h.size };

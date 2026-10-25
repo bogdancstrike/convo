@@ -29,7 +29,7 @@ device detectable without manual comparison.
 * A verifiable log cannot prove that no newer entry exists for an account (it is not a prefix tree):
   a malicious server could serve an old entry. Owner monitoring (each device checks its own account and shows the result in Settings →
   Devices) and witnesses narrow this; an AKD/CONIKS-style verifiable map is the follow-up.
-* Gossip of heads between clients over E2EE messages (split-view detection between people) is not
-  implemented yet; each device detects forks against its own history and against witnessed heads.
+* Heads are gossiped in E2EE receipts; a device verifies a gossiped head with the pinned log key and
+  a server consistency proof, and keeps two incompatible signed heads as transferable evidence.
 * Log and witness keys are pinned on first use, not shipped with the app.
 * The log grows by one 32-byte hash per device change; proofs are computed from cached leaf hashes.
