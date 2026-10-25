@@ -118,7 +118,7 @@ import org.json.JSONObject
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("History and recovery", style = MaterialTheme.typography.titleLarge)
         Text("Uploaded encrypted history follows your account on trusted devices. Save a recovery code outside this phone in case every device is lost.")
-        Text("History: ${app.snapshot.optString("history")}", color = MaterialTheme.colorScheme.primary)
+        RawText(tr("History: {status}").replace("{status}", tr(app.snapshot.optString("history"))), color = MaterialTheme.colorScheme.primary)
         OutlinedButton({ app.call("sync") }) { Text("Sync now") }
         Text(if (configured) "Recovery code is set up" else "No recovery code saved yet")
         if (code.isNotBlank()) {

@@ -212,7 +212,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                             Row(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(colors.panel).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                                     if (input.isEmpty()) Text("Type a message", color = colors.textSecondary, fontSize = 16.sp, maxLines = 1)
-                                    BasicTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> input = v.text; selection = v.selection }, maxLines = 6,
+                                    BasicTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> if (v.text != input) app.typing(id, v.text); input = v.text; selection = v.selection }, maxLines = 6,
                                         textStyle = LocalTextStyle.current.copy(color = colors.textPrimary, fontSize = 16.sp), cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
                                 }
                                 IconButton({ app.pickFile({ data, name, mime -> app.call("attach", obj("conversationId" to id, "data" to data, "name" to name, "mime" to mime, "caption" to input)) { if (it != null) input = "" } }) }) { Icon(Icons.Outlined.AttachFile, "Attach file", tint = colors.textSecondary) }
@@ -224,7 +224,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                             val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
                             val day = 24L * 60 * 60 * 1000; val now = System.currentTimeMillis()
                             val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null).toTypedArray())
-                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack)) { if (it != null) { input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } } }
+                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack)) { if (it != null) { app.typingStopped(id); input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } } }
                     }
                 }
             }
@@ -353,7 +353,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     androidx.compose.material3.Text(annotated, fontSize = 16.sp, lineHeight = 21.sp)
     links.forEach { text -> val target = if (text.startsWith("www.")) "https://$text" else text
         val uri = Uri.parse(target)
-        if (uri.scheme in listOf("https", "http") && uri.userInfo == null) TextButton(onClick = { if (app.snapshot.optJSONObject("settings")?.optBoolean("confirmExternalLinks", true) != false) external = target else app.startActivity(Intent(Intent.ACTION_VIEW, uri)) }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Outlined.OpenInNew, null, Modifier.size(16.dp)); Text("Open $text", maxLines = 2) }
+        if (uri.scheme in listOf("https", "http") && uri.userInfo == null) TextButton(onClick = { if (app.snapshot.optJSONObject("settings")?.optBoolean("confirmExternalLinks", true) != false) external = target else app.startActivity(Intent(Intent.ACTION_VIEW, uri)) }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Outlined.OpenInNew, null, Modifier.size(16.dp)); RawText(tr("Open {link}").replace("{link}", text), maxLines = 2) }
     }
     external?.let { url -> ExternalLinkConfirmation(url, { external = null }, { external = null; app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) }
 }
@@ -363,7 +363,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
 }
 @Composable fun MessageInfo(app: MainActivity, message: JSONObject, close: () -> Unit) {
     AlertDialog(onDismissRequest = close, title = { Text("Message info") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(message.optString("body")); Text("Sent ${Date(message.optLong("sentAt"))}")
+        Text(message.optString("body")); RawText(tr("Sent {time}").replace("{time}", "${Date(message.optLong("sentAt"))}"))
         val live = app.snapshot.optJSONArray("messages")?.objects()?.find { it.optString("id") == message.optString("id") && it.optString("authorId") == message.optString("authorId") } ?: message
         val receipts = live.optJSONObject("receipts") ?: JSONObject()
         listOf("Read by" to true, "Delivered to" to false).forEach { (title, read) -> Text(title, style = MaterialTheme.typography.titleMedium); receipts.keys().asSequence().forEach { account -> val r = receipts.getJSONObject(account); if ((read && r.has("readAt")) || (!read && r.has("deliveredAt") && !r.has("readAt"))) { AccountName(app, account); Text(Date(r.optLong(if (read) "readAt" else "deliveredAt")).toString(), style = MaterialTheme.typography.bodySmall) } } }

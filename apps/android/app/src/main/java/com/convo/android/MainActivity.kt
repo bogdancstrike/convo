@@ -154,6 +154,7 @@ class MainActivity : FragmentActivity() {
                 "call" -> calls.onEvent(value)
                 "alert" -> MessageNotifications.show(this, value)
                 "callLog" -> callLogVersion++
+                "typing" -> value.optString("conversationId").takeIf { it.isNotBlank() }?.let { typingUntil[it] = value.optLong("until") }
                 "snapshot" -> { snapshot = value; PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
@@ -250,6 +251,27 @@ class MainActivity : FragmentActivity() {
         prefs.edit().putBoolean("notificationsOffered", true).apply()
         if (snapshot.optJSONObject("settings")?.optBoolean("notifications") == true) return
         requestNotificationPermission { granted -> if (granted) call("settings", obj("patch" to obj("notifications" to true)), quiet = true) }
+    }
+
+    /** Peers typing in direct chats: conversation id → time the indicator lapses (0 = stopped). */
+    val typingUntil = androidx.compose.runtime.mutableStateMapOf<String, Long>()
+    private var typingSentAt = 0L
+
+    /**
+     * Composer changes: like the web composer, at most one "started" every 5 s while text is being
+     * entered. The core sends nothing unless typing indicators are on, the chat is a direct chat
+     * that is not a pending request, and the socket is online.
+     */
+    fun typing(conversationId: String, text: String) {
+        if (text.isEmpty() || System.currentTimeMillis() - typingSentAt < 5000) return
+        typingSentAt = System.currentTimeMillis()
+        call("typing", obj("conversationId" to conversationId, "action" to "started"), quiet = true)
+    }
+
+    /** After sending: clears the peer's indicator right away instead of waiting for it to lapse. */
+    fun typingStopped(conversationId: String) {
+        typingSentAt = 0L
+        call("typing", obj("conversationId" to conversationId, "action" to "stopped"), quiet = true)
     }
 
     private companion object {

@@ -398,7 +398,7 @@ class CallManager(private val app: MainActivity) {
                 PersonAvatar(app, call.conversationId, title, 112, group = call.conversationId.startsWith("g:"))
                 Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 16.dp))
                 Text(status, color = Color(0xFFC7D0D6), modifier = Modifier.padding(top = 6.dp))
-                if (call.phase == "connected" && call.conversationId.startsWith("g:")) Text("${remotes.size + 1} in call", color = Color(0xFFC7D0D6))
+                if (call.phase == "connected" && call.conversationId.startsWith("g:")) RawText(tr("{count} in call").replace("{count}", "${remotes.size + 1}"), color = Color(0xFFC7D0D6))
             }
             if (videoTiles.isNotEmpty()) Text(status, Modifier.align(Alignment.TopCenter).padding(top = 48.dp).background(Color(0x80000000), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp))
             manager.room?.localParticipant?.let { local -> if (call.video && manager.cameraOn) videoOf(local)?.let { VideoRenderer(manager, it, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 160.dp).size(110.dp, 150.dp).clip(RoundedCornerShape(12.dp))) } }

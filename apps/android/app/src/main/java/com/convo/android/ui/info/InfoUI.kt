@@ -125,7 +125,7 @@ import org.json.JSONObject
                         dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
                 }
             }
-            item { Spacer(Modifier.height(8.dp).fillMaxWidth()); Text("${members.size} participants", Modifier.fillMaxWidth().background(colors.panel).padding(start = 20.dp, top = 14.dp, bottom = 6.dp), color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+            item { Spacer(Modifier.height(8.dp).fillMaxWidth()); RawText(tr("{count} participants").replace("{count}", "${members.size}"), Modifier.fillMaxWidth().background(colors.panel).padding(start = 20.dp, top = 14.dp, bottom = 6.dp), color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
             // Member search (specs §30.8): local roster, case/diacritic-insensitive; Admins includes owners.
             item {
                 if (members.size > 1) Column(Modifier.background(colors.panel).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -58,6 +58,7 @@ async function startClient() {
   client.on('call', (event) => emit('call', event));
   client.on('callLog', () => emit('callLog', {}));
   client.on('alert', (alert) => emit('alert', alert));
+  client.on('typing', (event) => emit('typing', event));
   emit('phase', { name: 'loading' }); await client.start(); accessToken = ''; link = null;
   emit('phase', { name: 'ready' }); await snapshot();
   void client.lastSeenHeartbeat().catch(() => undefined);
@@ -139,6 +140,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     // OS is about to freeze. Mail stays in the server mailbox until the next start.
     case 'background': client.socket.stop(); return;
     case 'foreground': client.socket.start(); return;
+    case 'typing': return client.sendTyping(String(args.conversationId), args.action === 'stopped' ? 'stopped' : 'started');
     case 'snapshot': return snapshot();
     case 'open': active = args.id; await client.setActiveConversation(active); await snapshot(); return;
     case 'close': active = null; await client.setActiveConversation(null); await snapshot(); return;

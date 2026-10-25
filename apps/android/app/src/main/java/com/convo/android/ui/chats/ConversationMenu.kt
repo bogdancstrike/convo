@@ -55,6 +55,11 @@ import org.json.JSONObject
     var members by remember(id) { mutableStateOf("") }
     LaunchedEffect(id) { if (id.startsWith("g:")) app.call("memberLabels", obj("id" to id), quiet = true) { v ->
         members = ((v as? JSONArray)?.objects().orEmpty().map { it.optString("label") }.filter { it.isNotBlank() }.sorted() + tr("You")).joinToString(", ") } }
+    // WhatsApp: "typing…" replaces last seen while the other person is typing.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val until = app.typingUntil[id] ?: 0L
+    LaunchedEffect(until) { while (until > System.currentTimeMillis()) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(500) }; now = System.currentTimeMillis() }
+    if (until > now) { RawText(tr("typing…"), maxLines = 1, fontSize = 13.sp, color = LocalConvoColors.current.success); return }
     if (members.isNotBlank()) { RawText(members, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontSize = 13.sp, color = LocalConvoColors.current.textSecondary); return }
     LaunchedEffect(id) { if (id.startsWith("g:")) return@LaunchedEffect; while (true) { app.call("lastSeen", obj("id" to id), quiet = true) { value -> at = (value as? JSONObject)?.optString("at")?.takeUnless { it == "null" } ?: "" }; kotlinx.coroutines.delay(10000) } }
     val seen = try { java.time.Instant.parse(at).atZone(java.time.ZoneId.systemDefault()) } catch (_: Exception) { null }

@@ -114,7 +114,7 @@ fun JSONObject.label() = optString("displayName").takeIf { it.isNotBlank() && it
             PersonAvatar(app, "new-group", name, 80, group = true)
             if (step == 1) OutlinedTextField(name, { name = it.filter { c -> !c.isISOControl() }.take(128) }, label = { Text(if (channel) "Channel name" else "Group name") }, modifier = Modifier.fillMaxWidth()) else Text(name, style = MaterialTheme.typography.headlineSmall)
             Text(if (channel) "Only owners and admins can publish. Subscribers can read announcements." else "Everyone in this group can send messages.")
-            Text("${selected.size + 1} participants · You will be the owner", color = MaterialTheme.colorScheme.primary)
+            RawText(tr("{count} participants · You will be the owner").replace("{count}", "${selected.size + 1}"), color = MaterialTheme.colorScheme.primary)
             LazyColumn { items(selected) { account -> ListItem(headlineContent = { Text(account.label()) }, supportingContent = { Text("@${account.optString("username")}") }, leadingContent = { PersonAvatar(app, account.optString("accountId"), account.label(), 36) }) } }
         }
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

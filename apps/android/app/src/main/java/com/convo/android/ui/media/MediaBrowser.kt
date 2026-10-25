@@ -103,13 +103,13 @@ import org.json.JSONObject
                 }
                 OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("Search captions, filenames and links") }, leadingIcon = { Icon(Icons.Outlined.Search, null) }, modifier = Modifier.fillMaxWidth().padding(12.dp), shape = RoundedCornerShape(12.dp))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${sender.replaceFirstChar { it.uppercase() }} · ${sort.replaceFirstChar { it.uppercase() }} · $total items", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                    RawText("${tr(sender.replaceFirstChar { it.uppercase() })} · ${tr(sort.replaceFirstChar { it.uppercase() })} · " + tr("{count} items").replace("{count}", "$total"), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
                     if (selecting) TextButton({ selected = entries.take(100).map { it.optString("key") }.toSet() }) { Text("Select all") }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     if (loading) CircularProgressIndicator(Modifier.align(Alignment.Center))
                     else if (failed) TextButton({ refresh++; loading = true }, Modifier.align(Alignment.Center)) { Text("Could not load media. Retry") }
-                    else if (entries.isEmpty()) Text("No matching ${tab.lowercase()}", Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else if (entries.isEmpty()) RawText(tr("No matching {kind}").replace("{kind}", tr(tab).lowercase()), Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else LazyVerticalGrid(columns = if (tab == "media") GridCells.Adaptive(150.dp) else GridCells.Fixed(1), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(entries, key = { it.optString("key") }) { entry ->
                             val key = entry.optString("key"); val message = entry.getJSONObject("message"); val chat = entry.getJSONObject("conversation"); val index = entry.optInt("attachmentIndex", -1)
@@ -131,7 +131,7 @@ import org.json.JSONObject
                 if (selecting) {
                     HorizontalDivider()
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${picked.size} selected", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                        RawText(tr("{count} selected").replace("{count}", "${picked.size}"), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
                         IconButton({ if (picked.sumOf { it.optLong("size") } <= 64L * 1024 * 1024) action("download") else app.error = "Choose up to 64 MB per download on this phone." }, enabled = !busy && picked.isNotEmpty()) { Icon(Icons.Outlined.Download, "Download selected") }
                         IconButton({ forward = true }, enabled = !busy && picked.isNotEmpty()) { Icon(Icons.Outlined.Forward, "Forward selected") }
                         IconButton({ action("star") }, enabled = !busy && picked.isNotEmpty()) { Icon(Icons.Outlined.StarOutline, "Star or unstar selected messages") }
