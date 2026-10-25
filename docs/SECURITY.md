@@ -21,6 +21,7 @@ Diagrams (sources in [diagrams/security](diagrams/security)):
 | Sending a 1:1 message (Signal) | [message-flow.svg](diagrams/security/message-flow.svg) |
 | Calls (LiveKit SFU + coturn) | [calls.svg](diagrams/security/calls.svg) |
 | Network exposure and firewall | [network.svg](diagrams/security/network.svg) |
+| First device, linking, multi-device delivery, calls | Mermaid sequence diagrams in §5.1, §7.1, §7.3, §13.2 |
 
 ---
 
@@ -136,13 +137,48 @@ Passkey names must be unique per account (Keycloak refuses duplicates; nothing c
 
 ## 5. Devices
 
-### 5.1 Enrollment
+### 5.1 Enrollment: the first device
 
-A device (browser profile or Android install) generates, locally: a Signal identity key pair
-(shared by the account's devices, see §7), its own Signal registration ID, signed prekey and
-one-time prekeys, MLS KeyPackages, and an **ECDSA P-256 request-signing key** (non-extractable
-WebCrypto key). The first device registers with a signed enrollment transcript bound to the
-server's single-use reservation challenge; device IDs are never reused.
+The first device of an account creates the account's cryptographic identity. Nothing secret ever
+leaves the device.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Person
+    participant D as New device (web or Android)
+    participant K as Keycloak
+    participant S as Convo server
+    U->>D: Open Convo, "Sign in"
+    D->>K: OIDC authorization code + PKCE (browser / Custom Tab)
+    K-->>D: access token (password or passkey sign-in)
+    D->>S: POST /v1/devices/reservations (Bearer token)
+    S-->>D: never-reused device ID + 32-byte challenge (10 min, single use)
+    D->>D: generate keys locally, sign the enrollment transcript,<br/>persist pending enrollment before submitting
+    D->>S: POST /v1/devices/primary {public keys, signed transcript}
+    S->>S: verify token, reservation, transcript signature,<br/>no existing devices (else 409 → linking flow)
+    S-->>D: device registered (device-list version bumped)
+    D->>S: every later request signed with the device key (§5.2)
+```
+
+1. **Sign-in** (Keycloak, OIDC code flow with PKCE): proves who the person is. The web app uses a
+   same-origin redirect; Android uses AppAuth in a Custom Tab, so the password or passkey is only
+   ever typed into the identity provider's page.
+2. **Reservation:** the server provisions the account just in time, locks it, checks the device
+   limit (5), and hands out a fresh device ID and a single-use challenge.
+3. **Local key generation:** the device creates the **account identity key** (Curve25519; the key
+   behind safety numbers), its Signal registration ID, signed prekey and one-time prekeys, MLS
+   KeyPackages plus the **MLS device binding** (§6.2) and an **ECDSA P-256 request-signing key**
+   (non-extractable WebCrypto key). The private keys go into the encrypted local store (§8).
+4. **Registration:** the device signs the enrollment transcript (deployment, account, device ID,
+   challenge, all public keys) with its request-signing key. The server verifies it and stores
+   **public keys only**. A retry with the same key returns the same result, and a different key on
+   a used reservation is rejected, so double taps never create two devices.
+5. The device then asks for a **recovery kit** (§10). Without one, losing this device means losing
+   the account's history.
+
+If the account already has devices, step 4 answers `409` and the device switches to linking (§7.1):
+a Keycloak sign-in alone can never add a device to an existing account.
 
 ### 5.2 Every request is signed
 
@@ -205,8 +241,15 @@ state). Removing a member or a member leaving triggers an MLS removal: they cann
 messages. Invite links are hashed bearer tokens with expiry; join requests need admin approval;
 bans are enforced server-side.
 
-Known gaps (GRP-01): MLS credentials are not yet cryptographically bound to the account identity
-key, and the role profile has not been independently reviewed.
+**Device bindings (GRP-01).** A group member's MLS credential names a device address; on its own that would let a malicious server
+hand out a KeyPackage with its own key under someone's address. Each device therefore publishes a
+binding: an XEdDSA signature by the account identity key (the key behind safety numbers) over
+`CONVO-MLS-BINDING-V1`, the deployment ID, the device address and its MLS signature key. Clients
+check it with the identity key they trust for that account: KeyPackages whose key is not bound are
+not added, and if a group ever contains such a leaf the client refuses to send to it and warns. A
+device that has not published a binding yet (an older app version) is tolerated during rollout.
+
+Known gap: the role profile has not been independently reviewed.
 
 ### 6.3 Attachments
 
@@ -220,18 +263,107 @@ encrypted ≤ 32 px thumbnails travel inside the message. Objects expire with re
 
 ## 7. New devices, linking and multi-device
 
-* **Linking:** a new device signs in (Keycloak) and shows a 12-digit code (and QR). A trusted device
-  compares and approves; the account identity and current state travel over the **X25519 → HKDF →
-  AES-GCM provisioning channel** bound to both devices' transcript. The server relays only
-  ciphertext and requires both the new device's token and the approving device's code.
+### 7.1 Linking a second (third, …) device
+
+A new device needs the account identity key, which only the existing devices hold. It travels over
+a channel set up between the two devices; the server relays ciphertext only.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant N as New device
+    participant S as Convo server
+    participant E as Existing device (already trusted)
+    N->>S: Keycloak sign-in, open provisioning session<br/>(ephemeral X25519 public key, reserved device ID)
+    N->>N: show 12-digit code + QR (derived from the transcript)
+    E->>S: list linking requests (signed device request)
+    E->>E: person compares the code on both screens and approves
+    E->>S: get single-use provisioning code (signed device request)
+    E->>E: X25519(E-ephemeral, N-ephemeral) → HKDF → AES-256-GCM key bound to the transcript
+    E->>S: deliver ciphertext {account identity key, preferences}
+    S->>N: relay ciphertext
+    N->>N: decrypt, generate its own device keys (§5.1 step 3)
+    N->>S: POST /v1/devices/link {public keys, transcript, provisioning code}
+    S->>S: token of the same account + approved session + code match<br/>+ identity key equals the account's
+    S-->>N: registered; other devices and contacts see the new roster
+    N->>S: download and decrypt the history archive (§9)
+```
+
+Security properties:
+
+* **Two factors:** the server requires the new device's Keycloak token **and** a code that only an
+  already-enrolled device of the same account can obtain. A stolen password is not enough.
+* **Transcript-bound comparison:** the code on both screens is derived from the canonical
+  `ENCLAVE-PROVISION-V1` transcript (deployment, account, session, reserved address, the new
+  device's ephemeral key, challenge). A server that swapped the session or key would show different
+  codes.
+* **Single use, short lived:** sessions expire after 10 minutes; the relayed ciphertext is deleted
+  on completion or cancellation.
 * **What transfers:** the account identity secret (so the new device can decrypt the history
-  archive) and current preferences — **not** Signal ratchet state or MLS leaf secrets. Each device
-  has its own sessions; groups add the new device through a normal MLS commit.
-* **Receiving on another device:** every sender encrypts for every device of the recipient account
-  (§6.1), so all linked devices receive new messages independently. Messages a device sends are
-  synced to the account's other devices as encrypted transcripts.
-* **Earlier history** on a new device comes from the encrypted **history archive** (§9), not from
-  the server's mailbox (which only holds undelivered ciphertext).
+  archive) and preferences. Signal ratchet state and MLS leaf secrets are **not** copied: the new
+  device builds its own Signal sessions, and groups add it through an ordinary MLS commit.
+* **Visibility:** the account's other devices are told about the new device (notice in Note to
+  self), and its MLS binding is signed by the account identity key, so contacts' clients accept it
+  without a new safety number.
+
+### 7.2 Losing every device: recovery
+
+Without any trusted device left, the **recovery kit** (§10) replaces step "Existing device": the
+person signs in with Keycloak **and** proves the recovery code. The server returns the identity
+secret wrapped under a key derived from that code; the device unwraps it locally, restores the
+history archive and revokes the lost devices. A Keycloak password reset alone never restores
+anything.
+
+### 7.3 How one message reaches all of a person's devices
+
+Example: **A** (web) writes to **B**, who has Convo open on the web and also has the Android app.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AW as A · web
+    participant AP as A · phone
+    participant S as Convo server
+    participant BW as B · web
+    participant BP as B · phone (closed)
+    participant P as ntfy (push)
+    AW->>S: fetch device rosters of B and of A
+    AW->>AW: encrypt the message separately for<br/>B·web, B·phone and A·phone (Signal, padded)
+    AW->>S: one request: 3 ciphertext envelopes (+ roster version)
+    S->>S: roster version current? else STALE_DEVICES → re-encrypt
+    S-->>BW: WebSocket hint → fetch, decrypt, acknowledge
+    S-->>AP: WebSocket hint, or content-free push wake
+    S->>P: {"t":"wake"} for B·phone (no content, no sender)
+    P-->>BP: wake
+    BP->>S: connect, fetch its envelope, decrypt, acknowledge
+    Note over S: each envelope is deleted when its own device acknowledges
+    AW->>S: history archive entry (AES-GCM under A's archive key)
+    BW->>S: history archive entry (under B's archive key)
+```
+
+* **Per-device encryption:** a sender encrypts every message once for **each** device of the
+  recipient and **each other** device of its own account (own-device sync). The server stores one
+  ciphertext envelope per device and cannot read any of them.
+* **No silent devices:** each submission names the roster version it was encrypted for. If a
+  device was added or removed in between, the server refuses (`DEVICE_MISMATCH`/`STALE_DEVICES`)
+  and the client re-encrypts. Nobody can be quietly added as an extra recipient without the
+  device-list change being visible to the account.
+* **Closed apps:** B's phone gets a content-free wake (§12) or keeps a background connection;
+  either way it fetches the ciphertext itself. Undelivered envelopes wait up to 30 days.
+* **Things that happened on one device** (A reads, deletes, pins, edits a chat on the phone) are
+  synced the same way, as encrypted sync messages to A's other devices.
+* **Devices added later** cannot get old envelopes (they were never encrypted for them). They read
+  the **history archive** (§9) instead: each device uploads its changes as entries encrypted under
+  the account archive key, and the server announces new entries to the account's other devices
+  (`HISTORY_CHANGED`), so a device that missed something (it was offline longer than 30 days, or
+  was linked later) catches up from ciphertext only its own account can decrypt.
+
+### 7.4 Removing a device
+
+See §5.3. In groups, the revoked device leaves the routing roster immediately (it receives nothing
+more), and the group accepts no new application messages until a member has committed the MLS
+removal (**pending-removal gate**), so nothing is ever encrypted to a key the removed device still
+holds.
 
 ---
 
@@ -343,20 +475,107 @@ secret (`deploy/vapid-keys.sh`).
 
 ## 13. Calls
 
-* **Signalling** (ring, accept, decline, cancel, end) travels as E2EE messages over Signal/MLS.
-* The caller generates a **random 256-bit call key** and sends it only inside the encrypted ring.
-* Media flows through the self-hosted **LiveKit** SFU (WebRTC, DTLS-SRTP) with **frame encryption**
-  (insertable streams / frame cryptors) under the call key — the SFU forwards ciphertext frames.
-  Clients that cannot encrypt frames are refused; there is no unencrypted fallback, and the UI shows
-  "End-to-end encrypted" only after LiveKit reports every remote participant's frames as encrypted.
-* The server's `calls` module authorizes rooms and issues **10-minute LiveKit join tokens per
-  device**, re-checking group membership for each join. Removing someone from a group kicks them
-  from open rooms; the remaining participants **rotate the call key** through the MLS group they
-  were removed from.
-* **coturn** relays media for clients behind restrictive NATs (long-term credentials, relay into
-  cluster/Docker networks denied). Relayed media is still frame-encrypted.
-* Limits: one shared key per call (no per-participant forward secrecy within a call); the SFU sees
-  who is in a room and traffic patterns.
+### 13.1 Components and where they run
+
+| Component | Role | Sees |
+|---|---|---|
+| Convo apps | ring, accept and end calls as E2EE messages; encrypt and decrypt every media frame | everything (endpoints) |
+| Convo server (`calls`) | decides who may join which room; issues 10-minute LiveKit tokens per device | that a call exists, its participants' accounts, times; no media, no key |
+| LiveKit SFU (public VPS) | forwards media between participants | encrypted frames, IP addresses, who is in a room, packet sizes and timing |
+| coturn (public VPS) | relays media for networks that block direct UDP | the same encrypted packets |
+| convo-web nginx (`/rtc`) | carries LiveKit signalling from the apps to the VPS over TLS, pinned to the VPS certificate | signalling metadata, not media |
+
+LiveKit and coturn run on a public VPS (`deploy/calls-vps`) because call media is UDP and the
+Cloudflare tunnel that fronts Convo only carries HTTP/WebSocket. Signalling still enters through the
+tunnel; the homelab's own address is never offered to phones. The VPS has no DNS name: convo-web
+and the server reach it by IP over TLS with a self-signed certificate that they **pin** (trust only
+that certificate). The VPS never holds call keys.
+
+### 13.2 A 1:1 call, step by step
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Caller device
+    participant S as Convo server
+    participant B as Callee devices (all of them)
+    participant L as LiveKit (VPS)
+    A->>S: POST /v1/calls {peer, video} (signed request)
+    S-->>A: call ID (random room name)
+    A->>A: new random 256-bit media key
+    A->>B: ring {call ID, media key, video} as an E2EE message (Signal)<br/>+ urgent push wake for closed apps
+    A->>S: POST /v1/calls/{id}/join
+    S-->>A: LiveKit token (sub = account:device, one room, 10 min)
+    A->>L: connect via convo.doncik.ro/rtc → pinned TLS → VPS
+    B->>B: ring, ringtone; caller hears ringback
+    B->>A: accept (E2EE message; A's and B's other devices stop ringing)
+    B->>S: POST /v1/calls/{id}/join (membership re-checked)
+    B->>L: connect
+    A-->>L: frames encrypted with the media key (AES-GCM, in the app)
+    L-->>B: forwards ciphertext frames only
+    A->>B: end (E2EE message); room closed, key discarded
+```
+
+* **Ringing and signalling** (ring, accept, decline, busy, cancel, end) are ordinary end-to-end
+  encrypted messages, so they reach every device of both people (§7.3) and the server cannot read
+  or forge them. A ring older than 45 seconds is shown as missed, never as ringing.
+* **The media key** is a fresh random 256-bit key per call, created by the caller and sent only
+  inside the encrypted ring. The server and the VPS never see it.
+* **Joining** requires a signed device request. The server re-checks the right to join (the peer of
+  a 1:1 call, a current member of a group) and issues a LiveKit token for that one room, valid 10
+  minutes, naming the device.
+* **The "End-to-end encrypted" label** appears only after LiveKit reports every remote participant's
+  frames as encrypted. Clients that cannot encrypt frames are refused; there is no unencrypted
+  fallback.
+
+### 13.3 How media encryption works
+
+WebRTC already encrypts each hop (DTLS-SRTP), but the SFU terminates that encryption. Convo adds
+**frame encryption** on top: before a video or audio frame leaves the app it is encrypted with an
+AES-GCM key derived from the call's media key (LiveKit's insertable streams on the web, frame
+cryptors on Android), and only the other participants can decrypt it. LiveKit and coturn therefore
+forward ciphertext they cannot decode, even if the VPS is compromised. Codec headers stay readable
+so the SFU can route and choose layers.
+
+### 13.4 Group calls and re-keying
+
+* A member starts the call; the media key is shared through the **MLS group** (an encrypted group
+  message), so exactly the current members get it.
+* Each key has a **generation**. When someone leaves or is removed, the participant with the
+  smallest identity still in the room (the re-key leader) sends a new key with the next generation
+  through MLS; if two members re-key at once, both converge on the same key.
+* Removing someone from the group also makes the server **kick their devices from open rooms**
+  (`CallMembershipListener`), and their next join is refused.
+* Group calls are capped at `enclave.calls.max-group-participants` (16 by default).
+
+### 13.5 Call links
+
+A call link (`https://<host>/call/<token>`) lets group members join with one tap. The 32-byte token
+is shown once; the server stores only its SHA-256, the link expires (24 h by default, 7 days at
+most) and only its creator can revoke it. Resolving a link and joining both require **current group
+membership**: a link never admits outsiders, guests or anonymous users, and the media key still
+comes only through the encrypted group.
+
+### 13.6 Network path and TURN
+
+1. Apps open LiveKit signalling at `wss://<host>/rtc` (same origin, through the tunnel).
+2. convo-web proxies it to `https://<VPS IP>:7443`, verifying the pinned certificate.
+3. Media flows **directly** between each app and the VPS: UDP 50000–60000, or TCP 7881 on
+   networks that block UDP.
+4. If neither works, the app relays through **coturn** (3478 UDP/TCP, relay ports
+   49160–49200). LiveKit hands the TURN credentials to joined participants only. coturn refuses
+   to relay into private, loopback or link-local networks, so it cannot be used to reach internal
+   services.
+
+All of these carry the frame-encrypted media; TURN adds no new readers.
+
+### 13.7 Limits
+
+* One shared key per call (per generation): no per-participant forward secrecy within a call.
+* The SFU and VPS see who is in a room, IP addresses and traffic patterns (who speaks when, video
+  on or off), not content.
+* The TURN credential is a deployment-wide long-term credential; it only grants relaying of
+  already-encrypted media to public addresses.
 
 ## 14. Disappearing messages and deletion
 
@@ -572,7 +791,7 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 | No post-quantum keys (PQXDH/Kyber, PQ MLS) | PQ-01 |
 | Android store keys not Keystore-wrapped; locks not cryptographic | §18.4 (1, 3), AND-01 |
 | WebAuthn PRF unlock | §18.4 (2), WEB-01 |
-| MLS credentials not bound to account identity; role profile review | GRP-01 |
+| MLS role profile review (credentials are bound to the account identity, §6.2) | GRP-01 |
 | Sealed sender | PRIV-01 |
 | Key transparency | TRUST-01 |
 | Independent security review (SEC-02); fuzzing and plaintext scans (SEC-01) | SEC-01/02 |
@@ -596,14 +815,3 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 Keeping this document current is part of the definition of done: a change to cryptography,
 storage, identity, network exposure or the admin model updates the matching section and, if it
 changes a guarantee, its test.
-
-
-## MLS device bindings (GRP-01)
-
-A group member's MLS credential names a device address; on its own that would let a malicious server
-hand out a KeyPackage with its own key under someone's address. Each device therefore publishes a
-binding: an XEdDSA signature by the account identity key (the key behind safety numbers) over
-`CONVO-MLS-BINDING-V1`, the deployment ID, the device address and its MLS signature key. Clients
-check it with the identity key they trust for that account: KeyPackages whose key is not bound are
-not added, and if a group ever contains such a leaf the client refuses to send to it and warns. A
-device that has not published a binding yet (an older app version) is tolerated during rollout.
