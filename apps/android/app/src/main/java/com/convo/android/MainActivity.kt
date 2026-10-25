@@ -99,6 +99,15 @@ class MainActivity : FragmentActivity() {
             .setPrompt(tr("Scan the QR code shown on the new device")).setBeepEnabled(false).setOrientationLocked(false))
     }
     private var micCallback: ((Boolean) -> Unit)? = null
+    /** Android's screen-capture consent; a grant starts sharing in the current call. */
+    private val screenCapture = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        if (result.resultCode == RESULT_OK && data != null) calls.startScreenShare(data)
+    }
+    fun requestScreenCapture() {
+        val manager = getSystemService(android.media.projection.MediaProjectionManager::class.java) ?: return
+        screenCapture.launch(manager.createScreenCaptureIntent())
+    }
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> micCallback?.invoke(granted); micCallback = null }
     fun requestMicrophone(callback: (Boolean) -> Unit) { micCallback = callback; micPermission.launch(Manifest.permission.RECORD_AUDIO) }
     private val contactsPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

@@ -20,5 +20,6 @@ During a connected call, browsers with `getDisplayMedia` show a share button. Th
 window or tab is published as a LiveKit `ScreenShare` track, so frame encryption with the call key
 covers it like camera video. Remote shares take over the stage in voice and video calls
 ("{name} is presenting", letterboxed, camera tiles in a strip). Android shows remote shares the
-same way. Sharing from Android (MediaProjection) is a separate step.
+same way, and can share its own screen: Android's capture consent, then LiveKit's media-projection
+foreground service with a visible "You are sharing your screen" notification.
 

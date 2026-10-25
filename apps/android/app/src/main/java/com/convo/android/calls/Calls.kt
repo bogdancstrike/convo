@@ -84,6 +84,8 @@ class CallManager(private val app: MainActivity) {
     var room: Room? = null; private set
     var micOn by mutableStateOf(true); private set
     var cameraOn by mutableStateOf(false); private set
+    /** This device is presenting its screen in the call. */
+    var screenSharing by mutableStateOf(false); private set
     /** Loudspeaker instead of the earpiece (WhatsApp: on by default for video calls only). */
     var speakerOn by mutableStateOf(false); private set
     private val e2ee = mutableMapOf<String, E2EEState>()
@@ -193,6 +195,30 @@ class CallManager(private val app: MainActivity) {
                 ?: devices.firstOrNull { it is com.twilio.audioswitch.AudioDevice.Earpiece }
         if (target != null) handler.selectDevice(target)
         speakerOn = speaker && target != null
+    }
+
+    /** Stops sharing, or asks Android for screen-capture consent ([startScreenShare] follows a grant). */
+    fun toggleScreenShare() {
+        val r = room ?: return
+        if (screenSharing) app.lifecycleScope.launch { r.localParticipant.setScreenShareEnabled(false); screenSharing = false }
+        else app.requestScreenCapture()
+    }
+
+    /**
+     * Publishes the screen after consent. LiveKit runs its media-projection foreground service with
+     * our visible "sharing your screen" notification; the track gets the call's frame encryption.
+     */
+    fun startScreenShare(consent: android.content.Intent) {
+        val r = room ?: return
+        val manager = app.getSystemService(android.app.NotificationManager::class.java)
+        manager?.createNotificationChannel(android.app.NotificationChannel(SCREEN_CHANNEL, tr("Screen sharing"), android.app.NotificationManager.IMPORTANCE_LOW))
+        val notification = androidx.core.app.NotificationCompat.Builder(app, SCREEN_CHANNEL).setSmallIcon(R.drawable.convo_logo)
+            .setContentTitle(tr("You are sharing your screen")).setContentText(tr("Everything on your screen is visible in the call.")).setOngoing(true).build()
+        app.lifecycleScope.launch {
+            try {
+                screenSharing = r.localParticipant.setScreenShareEnabled(true, io.livekit.android.room.track.screencapture.ScreenCaptureParams(consent, SCREEN_NOTIFICATION, notification) { screenSharing = false })
+            } catch (e: Exception) { screenSharing = false; app.error = tr("Screen sharing could not start.") }
+        }
     }
 
     fun toggleCamera() { val r = room ?: return; app.lifecycleScope.launch { cameraOn = !cameraOn; r.localParticipant.setCameraEnabled(cameraOn) } }
@@ -341,7 +367,7 @@ class CallManager(private val app: MainActivity) {
     private fun finish(reason: String) {
         stopRing()
         events?.cancel(); events = null
-        room?.let { it.disconnect(); it.release() }; room = null; e2ee.clear(); speakerOn = false
+        room?.let { it.disconnect(); it.release() }; room = null; e2ee.clear(); speakerOn = false; screenSharing = false
         call = call?.copy(phase = "ended", reason = reason)
         app.lifecycleScope.launch { delay(1800); if (call?.phase == "ended") call = null }
     }
@@ -366,7 +392,10 @@ class CallManager(private val app: MainActivity) {
 
     fun release() { finish("ended"); call = null }
 
-    companion object { const val RING_TIMEOUT_MS = 45_000L; private const val KEY_RING = 16 }
+    companion object {
+        const val RING_TIMEOUT_MS = 45_000L; private const val KEY_RING = 16
+        private const val SCREEN_CHANNEL = "screen-share"; private const val SCREEN_NOTIFICATION = 7102
+    }
 }
 
 @Composable fun CallScreen(app: MainActivity) {
@@ -410,10 +439,11 @@ class CallManager(private val app: MainActivity) {
             manager.room?.localParticipant?.let { local -> if (call.video && manager.cameraOn) videoOf(local)?.let { VideoRenderer(manager, it, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 160.dp).size(110.dp, 150.dp).clip(RoundedCornerShape(12.dp))) } }
             // Control tray (WhatsApp): rounded sheet along the bottom edge.
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF1F2C34), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).padding(top = 20.dp, bottom = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (manager.screenSharing) RawText(tr("You are sharing your screen"), Modifier.padding(bottom = 10.dp).background(Color(0x3300A884), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFFD9FDD3), fontSize = 13.sp)
                 if (videoTiles.isNotEmpty() && call.phase == "connected") Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
                     Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp)); Text(if (manager.encrypted) " End-to-end encrypted" else " Securing call…", style = MaterialTheme.typography.bodySmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(if (call.phase == "incoming") 72.dp else 20.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(if (call.phase == "incoming") 72.dp else 14.dp)) {
                     if (call.phase == "incoming") {
                         CallButton(Icons.Outlined.CallEnd, "Decline", Color(0xFFC62828)) { manager.decline() }
                         CallButton(if (call.video) Icons.Outlined.Videocam else Icons.Outlined.Call, "Accept", Color(0xFF11713F)) { manager.accept() }
@@ -421,6 +451,8 @@ class CallManager(private val app: MainActivity) {
                         CallButton(if (manager.speakerOn) Icons.Outlined.VolumeUp else Icons.Outlined.VolumeDown, if (manager.speakerOn) "Turn speaker off" else "Turn speaker on", if (manager.speakerOn) Color(0xFFE9EDEF) else Color(0x29FFFFFF), enabled = manager.room != null, contentColor = if (manager.speakerOn) Color(0xFF0B141A) else Color.White) { manager.toggleSpeaker() }
                         CallButton(if (manager.micOn) Icons.Outlined.Mic else Icons.Outlined.MicOff, if (manager.micOn) "Mute" else "Unmute", Color(0x29FFFFFF), enabled = manager.room != null) { manager.toggleMic() }
                         if (call.video) CallButton(if (manager.cameraOn) Icons.Outlined.Videocam else Icons.Outlined.VideocamOff, if (manager.cameraOn) "Turn camera off" else "Turn camera on", Color(0x29FFFFFF), enabled = manager.room != null) { manager.toggleCamera() }
+                        if (call.phase == "connected") CallButton(if (manager.screenSharing) Icons.Outlined.StopScreenShare else Icons.Outlined.ScreenShare, if (manager.screenSharing) "Stop sharing" else "Share screen",
+                            if (manager.screenSharing) Color(0xFFE9EDEF) else Color(0x29FFFFFF), enabled = manager.room != null, contentColor = if (manager.screenSharing) Color(0xFF0B141A) else Color.White) { manager.toggleScreenShare() }
                         CallButton(Icons.Outlined.CallEnd, "End call", Color(0xFFC62828)) { manager.hangUp() }
                     }
                 }
@@ -448,7 +480,7 @@ private fun videoOf(participant: Participant): VideoTrack? =
 }
 
 @Composable private fun CallButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, enabled: Boolean = true, contentColor: Color = Color.White, onClick: () -> Unit) {
-    FilledIconButton(onClick, Modifier.size(64.dp), enabled = enabled, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = color, contentColor = contentColor)) {
+    FilledIconButton(onClick, Modifier.size(58.dp), enabled = enabled, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = color, contentColor = contentColor)) {
         Icon(icon, label, Modifier.size(28.dp))
     }
 }
