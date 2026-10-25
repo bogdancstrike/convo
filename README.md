@@ -123,16 +123,16 @@ contents, names and keys remain end-to-end encrypted.
 |---|---|
 | Identity | Keycloak SSO (PKCE), browser-primary enrollment, device proof-of-possession on every request, transcript-bound device linking with comparison codes, device list/unlink |
 | 1:1 chats | Signal sessions, multi-device fan-out, offline mailbox delivery, delivery/read receipts, typing (opt-in), Note to self |
-| Groups and channels | MLS discussion groups and admin-only encrypted channels, owner/admin/member controls, shared owners, recent-contact picker, review-before-create wizard, polls (visible ballots, single/multiple choice, author/admin close), events with RSVP and calendar export |
-| Messages | Safe formatting, replies, reactions, edits, delete for everyone / me, forward, star, in-chat search |
+| Groups and channels | MLS discussion groups and admin-only encrypted channels, owner/admin/member controls, shared owners, recent-contact picker, review-before-create wizard, topics (admin-managed, closeable), slow mode and per-member send restrictions, polls (visible ballots, single/multiple choice, author/admin close) and quizzes, events with RSVP, calendar export and local reminders |
+| Messages | Safe formatting, replies, reactions, edits, delete for everyone / me, forward, star, in-chat search, quiet and scheduled sends, view-once photos/videos, bundled stickers (integrity-checked, no CDN), private chat folders |
 | Media | Encrypted photos (EXIF stripped), files, videos with posters, voice notes, in-app viewer, shared galleries and all-chat search/filter/batch actions |
 | UX | Messenger-style layout, directory search by name/handle/phone, emoji picker, splash with E2EE notice, URL-based navigation (refresh-safe), EN/RO, light/dark with contrast tests |
 | History and recovery | Encrypted account archive, linked-device history restore, saved recovery code plus organization login, last-device logout safeguard |
-| Communities | Announcement feed with linked groups (discoverable or private), ask-to-join, explicit acknowledgements with due/closing times and named reviewers, welcome/rules/checklist onboarding, parent-removal delegation |
-| Calls | 1:1 and group audio/video through a self-hosted LiveKit SFU with frame E2EE (no unencrypted fallback), coturn relay, multi-device ringing, key rotation when someone leaves, ringing via push, screen sharing, members-only call links |
+| Communities | Announcement feed with linked groups (discoverable or private), ask-to-join, explicit acknowledgements with due/closing times, chosen reviewers and withdrawal, welcome/rules/checklist onboarding, parent-removal delegation |
+| Calls | 1:1 and group audio/video through a self-hosted LiveKit SFU with frame E2EE (no unencrypted fallback), coturn relay, multi-device ringing, key rotation when someone leaves, ringing via push, screen sharing, members-only call links that open the Android app directly (verified App Links) |
 | Notifications | Generic previews by default, per-chat All/Mentions/Muted, timed snooze, UnifiedPush (ntfy) wake-ups without content, optional Android background connection |
 | Privacy | Passkeys from Settings, app lock and per-chat locks (passkey on web, biometrics on Android), browser passphrase lock (Argon2id), disappearing messages, blocking, message requests |
-| Administration | Separate admin console: user/device support, live sign-in sessions, configurable security alerts with investigation history, scoped roles, step-up, hash-chained audit with external checkpoints and export |
+| Administration | Separate admin console: user/device support, time-limited guest accounts with automatic expiry, live sign-in sessions, configurable security alerts with investigation history, scoped roles, step-up, hash-chained audit with external checkpoints and export |
 | Platform | Spring Modulith backend (identity, messaging, groups, communities, attachments, calls, push, admin) with verified boundaries, PostgreSQL mailbox, Valkey hints, S3 object storage; Compose for development, Helm charts and CI-built images for Kubernetes |
 
 ## Complete launch feature inventory
