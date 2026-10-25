@@ -16,12 +16,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.Alignment
 
 /** The composer's round send / record button (WhatsApp): filled with the action colour. */
-@Composable fun RoundActionButton(icon: ImageVector, description: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+/** Round accent action (send, record). [onLongClick] adds a long-press (e.g. quiet or scheduled send). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable fun RoundActionButton(icon: ImageVector, description: String, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val colors = LocalConvoColors.current
-    FilledIconButton(onClick, modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.actionFill, contentColor = colors.actionText)) {
+    if (onLongClick == null) FilledIconButton(onClick, modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.actionFill, contentColor = colors.actionText)) {
         Icon(icon, description, Modifier.size(22.dp))
+    }
+    else androidx.compose.foundation.layout.Box(modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.actionFill)
+        .combinedClickable(onClickLabel = description, onLongClickLabel = com.convo.android.i18n.tr("More send options"), onClick = onClick, onLongClick = onLongClick), contentAlignment = Alignment.Center) {
+        Icon(icon, description, Modifier.size(22.dp), tint = colors.actionText)
     }
 }
 

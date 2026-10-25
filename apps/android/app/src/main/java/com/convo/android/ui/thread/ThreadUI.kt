@@ -92,6 +92,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == id } ?: return
     val all = app.snapshot.optJSONArray("messages")?.objects().orEmpty()
     var attachSheet by remember { mutableStateOf(false) }; var pollComposer by remember { mutableStateOf(false) }; var eventComposer by remember { mutableStateOf(false) }
+    var sendMenu by remember { mutableStateOf(false) }
     var query by remember(id) { mutableStateOf("") }; var input by remember(id) { mutableStateOf(conversation.optString("draft")) }; var quote by remember(id) { mutableStateOf<JSONObject?>(null) }
     var group by remember(id) { mutableStateOf<JSONObject?>(null) }
     val currentDraft by rememberUpdatedState(input)
@@ -171,6 +172,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             }
             }
             if (!starredOnly) {
+                if (!readOnly && kind != "note") ScheduledBar(app, id)
                 if (conversation.optBoolean("request") && !conversation.optBoolean("blocked")) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("This person is not in your chats yet. Accept to send read receipts and share your profile, or block them.", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -224,11 +226,24 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                         } else Spacer(Modifier.weight(1f))
                         // One VoiceComposer instance for the whole recording (recomposition must not cancel it).
                         if (voice || input.isBlank()) VoiceComposer(app, id) { voice = it }
-                        else RoundActionButton(Icons.AutoMirrored.Outlined.Send, "Send message") {
-                            val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
-                            val day = 24L * 60 * 60 * 1000; val now = System.currentTimeMillis()
-                            val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null).toTypedArray())
-                            app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack)) { if (it != null) { app.typingStopped(id); input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } } }
+                        else Box {
+                            /** Sends the composer text now, quietly, or schedules it on this phone ([dueAt]). */
+                            fun send(silent: Boolean = false, dueAt: Long? = null) {
+                                val mentions = org.json.JSONArray(picked.filter { input.contains("@${it.optString("label")}") }.map { it.optString("accountId") }.distinct())
+                                val day = 24L * 60 * 60 * 1000; val now = System.currentTimeMillis()
+                                val ack: Any = if (!requestAck) false else obj(*listOfNotNull(if (ackDue > 0) "due" to now + ackDue * day else null, if (ackExpires > 0) "expires" to now + ackExpires * day else null).toTypedArray())
+                                val done: (Any?) -> Unit = { if (it != null) { app.typingStopped(id); input = ""; quote = null; picked.clear(); requestAck = false; ackDue = 0; ackExpires = 0 } }
+                                if (dueAt != null) app.call("scheduleMessage", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "dueAt" to dueAt, "silent" to silent), success = tr("Message scheduled"), then = done)
+                                else app.call("send", obj("conversationId" to id, "body" to input, "quote" to quote, "mentions" to mentions, "requestAck" to ack, "silent" to silent), then = done)
+                            }
+                            RoundActionButton(Icons.AutoMirrored.Outlined.Send, "Send message", onLongClick = if (kind == "note") null else ({ sendMenu = true })) { send() }
+                            DropdownMenu(sendMenu, { sendMenu = false }) {
+                                DropdownMenuItem(text = { Text("Send without sound") }, leadingIcon = { Icon(Icons.Outlined.NotificationsOff, null) }, onClick = { sendMenu = false; send(silent = true) })
+                                DropdownMenuItem(text = { Text("Schedule message") }, leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = {
+                                    sendMenu = false; pickDateTime(app, System.currentTimeMillis() + 3_600_000) { at -> if (at > System.currentTimeMillis()) send(dueAt = at) else app.error = tr("Pick a time in the future") }
+                                })
+                            }
+                        }
                     }
                 }
             }

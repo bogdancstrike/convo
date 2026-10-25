@@ -238,7 +238,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   alert; scheduled messages are encrypted device-owned outbox items (UTC due time, display zone),
   editable/cancellable, sent only by the owning device when it runs ("will send when this device is
   online"). Web: right-click/long-press on send, schedule dialog, "N scheduled" bar with
-  change/send now/cancel. `alerts.test.ts`, `scheduled.spec.ts`.
+  change/send now/cancel. `alerts.test.ts`, `scheduled.spec.ts`. Android: long-press Send menu, system
+  date/time pickers, scheduled bar and list (verified on the emulator).
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

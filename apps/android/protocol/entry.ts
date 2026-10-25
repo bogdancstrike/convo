@@ -53,7 +53,7 @@ async function snapshot() {
 const refresh = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void snapshot().catch(() => undefined), 60); };
 async function startClient() {
   client = await createClient(context); if (!client) { emit('phase', { name: 'welcome' }); return; }
-  for (const event of ['messages', 'conversations', 'settings', 'profiles', 'history', 'groups', 'connection', 'devices'] as const) client.on(event, refresh);
+  for (const event of ['messages', 'conversations', 'settings', 'profiles', 'history', 'groups', 'connection', 'devices', 'scheduled'] as const) client.on(event, refresh);
   client.on('revoked', () => emit('phase', { name: 'revoked' }));
   // Calls: ring/accept/decline/end events and history changes go to the native call UI.
   client.on('call', (event) => emit('call', event));
@@ -153,7 +153,13 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'directory': return client.searchDirectory(String(args.query));
     case 'account': return client.account(String(args.id));
     case 'newChat': { const account = args.id === client.accountId ? { accountId: client.accountId, username: client.device.username, displayName: client.device.displayName } : await client.account(args.id); if (!account) throw new Error('account unavailable'); return client.openConversation(account); }
-    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, ackOptions(args.requestAck));
+    case 'send': return client.sendText(args.conversationId, String(args.body), args.quote, Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, ackOptions(args.requestAck), { silent: args.silent === true });
+    // Scheduled send (specs §30.4): device-owned items, sent by the core's timer while the app runs.
+    case 'scheduleMessage': return client.scheduleMessage(String(args.conversationId), String(args.body), Number(args.dueAt), { quote: args.quote ?? undefined, mentions: Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, silent: args.silent === true });
+    case 'scheduledMessages': return client.scheduledMessages(args.conversationId ? String(args.conversationId) : undefined);
+    case 'editScheduled': return client.editScheduled(String(args.id), { body: args.body === undefined ? undefined : String(args.body), dueAt: args.dueAt === undefined ? undefined : Number(args.dueAt) });
+    case 'cancelScheduled': return client.cancelScheduled(String(args.id));
+    case 'sendScheduledNow': await client.editScheduled(String(args.id), { dueAt: Date.now() + 1000 }); return client.sendDueScheduled(Date.now() + 2000);
     case 'acknowledge': return client.acknowledge(await target(args));
     case 'canRequestAck': {
       const record = await client.groupRecord(String(args.id));

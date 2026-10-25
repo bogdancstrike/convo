@@ -98,6 +98,15 @@ import java.time.format.FormatStyle
     if (editing) EventComposer(app, conversation, editing = message) { editing = false }
 }
 
+/** System date picker, then time picker, in this phone's zone; [set] receives UTC milliseconds. */
+fun pickDateTime(app: MainActivity, initial: Long, set: (Long) -> Unit) {
+    val at = Instant.ofEpochMilli(initial).atZone(ZoneId.systemDefault())
+    android.app.DatePickerDialog(app, { _, y, m, d ->
+        android.app.TimePickerDialog(app, { _, h, min -> set(at.withYear(y).withMonth(m + 1).withDayOfMonth(d).withHour(h).withMinute(min).withSecond(0).withNano(0).toInstant().toEpochMilli()) },
+            at.hour, at.minute, android.text.format.DateFormat.is24HourFormat(app)).show()
+    }, at.year, at.monthValue - 1, at.dayOfMonth).show()
+}
+
 private fun copyEvent(event: JSONObject, into: JSONObject) {
     listOf("title", "start", "end", "zone", "location", "description").forEach { k -> if (event.has(k) && !event.isNull(k)) into.put(k, event.get(k)) }
 }
@@ -116,14 +125,7 @@ private fun copyEvent(event: JSONObject, into: JSONObject) {
     var location by remember { mutableStateOf(current?.optString("location") ?: "") }
     var description by remember { mutableStateOf(current?.optString("description") ?: "") }
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-    /** Date picker, then time picker, in this phone's zone. */
-    fun pick(initial: Long, set: (Long) -> Unit) {
-        val at = Instant.ofEpochMilli(initial).atZone(zone)
-        android.app.DatePickerDialog(app, { _, y, m, d ->
-            android.app.TimePickerDialog(app, { _, h, min -> set(at.withYear(y).withMonth(m + 1).withDayOfMonth(d).withHour(h).withMinute(min).withSecond(0).toInstant().toEpochMilli()) },
-                at.hour, at.minute, android.text.format.DateFormat.is24HourFormat(app)).show()
-        }, at.year, at.monthValue - 1, at.dayOfMonth).show()
-    }
+    fun pick(initial: Long, set: (Long) -> Unit) = pickDateTime(app, initial, set)
     AlertDialog(onDismissRequest = close, title = { Text(if (editing != null) "Edit event" else "Create event") }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(title, { title = it.take(120) }, label = { Text("Event name") }, singleLine = true, modifier = Modifier.fillMaxWidth())

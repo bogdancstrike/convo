@@ -86,7 +86,9 @@ options, single or multiple choice, visible voters, close by author/admin) and e
 time pickers, location, description, Going/Maybe/Can't go, Add to calendar, edit/cancel by the
 creator or an admin). **View once** sends one photo/video the recipient can open once; its viewer
 blocks screenshots (FLAG_SECURE) and nothing is cached, saved or archived. All rules run in the
-shared core, so web and Android always agree.
+shared core, so web and Android always agree. Long-press **Send** for *Send without sound* (no alert
+for recipients) or *Schedule message* (kept encrypted on this phone, sent by it once Convo runs at
+or after that time).
 
 ## Storage and data
 
