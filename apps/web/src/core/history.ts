@@ -149,9 +149,10 @@ export class AccountHistory {
         try {
           await this.api.putHistory(entry.id, entry.ciphertext);
         } catch (error) {
-          // The server refused this entry for good (too large, malformed, ID reused): drop it rather
-          // than retrying forever and blocking every later entry. Network/5xx errors still retry.
-          if (!(error instanceof ApiError) || error.status >= 500 || error.code === 'RATE_LIMITED') throw error;
+          // The server refused this entry for good (malformed 400, ID reused 409, too large 413/422):
+          // drop it rather than blocking every later entry. Anything else (authentication, network,
+          // 5xx, rate limits) says nothing about the entry: keep it and retry.
+          if (!(error instanceof ApiError) || ![400, 409, 413, 422].includes(error.status)) throw error;
           this.skipped++;
         }
         await this.store.delete(PENDING, entry.id);

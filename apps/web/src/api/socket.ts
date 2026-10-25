@@ -214,6 +214,8 @@ function defaultSocketUrl(): string {
   return `${protocol === 'https:' ? 'wss' : 'ws'}://${host}/v1/ws`;
 }
 
+/** The device can never connect again: revoked, or its account was disabled (local data is wiped). */
 function isRevoked(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'DEVICE_REVOKED';
+  const code = typeof error === 'object' && error !== null ? (error as { code?: string }).code : undefined;
+  return code === 'DEVICE_REVOKED' || code === 'ACCOUNT_DISABLED';
 }

@@ -69,8 +69,11 @@ export class HttpClient {
       await this.refilling;
     }
     const next = this.nonces.pop();
-    if (!next) throw new ApiError(401, 'NONCE_INVALID', 'no device nonce available');
-    return next.value;
+    // No nonce was issued (the server returns none for a revoked or unknown device). Send the signed
+    // request anyway with a placeholder: the server checks the signature and device state first, so
+    // a revoked device learns DEVICE_REVOKED (and wipes itself) instead of failing locally forever;
+    // an active device gets NONCE_INVALID and retries with a refill.
+    return next?.value ?? toBase64Url(randomBytes(24));
   }
 
   /** Sends a JSON request authenticated with a bearer token. */
