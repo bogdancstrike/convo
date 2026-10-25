@@ -51,6 +51,7 @@ import { Outbox, type OutboxItem } from './outbox';
 import { applyBallot, applyClose, initialState, newPoll, newQuiz } from './polls';
 import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
+import { findSticker } from './stickers';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
 import { RecordNs, type Repositories } from './repositories';
@@ -742,12 +743,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string; sticker?: { pack: string; id: string } },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
     const text = content.body?.trim() || undefined;
-    if (!text && !content.attachments?.length) throw new Error('empty message');
+    if (!text && !content.attachments?.length && !content.sticker) throw new Error('empty message');
     if (this.isBlocked(conversationId)) throw new ContactBlockedError();
     if (this.conversationCache.get(conversationId)?.request) await this.acceptRequest(conversationId); // replying accepts
     if (text && utf8(text).length > MAX_BODY_BYTES) throw new Error('message too long');
@@ -778,6 +779,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       silent: content.silent || undefined,
       report: content.report,
       topic: content.topic,
+      sticker: content.sticker,
     };
     const message: ChatMessage = {
       conversationId,
@@ -801,6 +803,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       event: content.event ? initialEvent(content.event) : undefined,
       report: content.report,
       topic: content.topic,
+      sticker: content.sticker,
       // The sender keeps no copy of view-once media, only its label.
       ...(content.viewOnce ? { attachments: undefined, viewOnce: { kind: viewOnceKind(content.attachments![0]!), state: 'sent' as const } } : {}),
     };
@@ -881,6 +884,13 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   async sendPoll(conversationId: string, question: string, options: string[], multiple: boolean): Promise<void> {
     const poll = newPoll(question, options, multiple, newMessageId);
     await this.sendMessage(conversationId, { body: poll.question, poll });
+  }
+
+  /** Sends a bundled sticker (only its pack and sticker IDs travel, encrypted). */
+  async sendSticker(conversationId: string, pack: string, id: string, options: { topic?: string } = {}): Promise<void> {
+    if (!findSticker(pack, id)) throw new Error('unknown sticker');
+    if (options.topic) await this.requireOpenTopic(conversationId, options.topic);
+    await this.sendMessage(conversationId, { sticker: { pack, id }, topic: options.topic });
   }
 
   /** Sends a quiz: single choice with a correct answer and an optional explanation. */
@@ -1079,7 +1089,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       for (const id of touched) {
         const c = this.conversationCache.get(id);
         const [latest] = await this.repos.messages(id, 1);
-        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments, poll: latest.poll, event: latest.event }) : '' });
+        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments, poll: latest.poll, event: latest.event, sticker: latest.sticker }) : '' });
       }
       if (previews.length) await this.saveConversations(previews);
       for (const id of touched) this.emit('messages', id);
@@ -2326,7 +2336,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp, reactions: {}, notice: { kind: 'left' } }));
       return 'left';
     }
-    if (data.body === undefined && !data.attachments?.length) return 'ignored';
+    if (data.body === undefined && !data.attachments?.length && !data.sticker) return 'ignored';
     if (await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored'; // semantic dedupe
     // Member restrictions and slow mode: drop posts the group policy does not allow.
     let lastPostAt = conversation.lastPostAt;
@@ -2358,6 +2368,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       event: data.event ? initialEvent(data.event) : undefined,
       report: data.report,
       topic: data.topic,
+      sticker: data.sticker,
       ...(data.viewOnce ? { viewOnce: { kind: viewOnceKind(data.attachments![0]!), state: direction === 'out' ? 'sent' as const : 'unopened' as const } } : {}),
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
@@ -2578,6 +2589,7 @@ function viewOnceKind(pointer: AttachmentPointer): 'photo' | 'video' { return po
 
 function previewOf(data: DataMessage): string {
   if (data.poll) return `${data.poll.correctOptionId ? '❓' : '📊'} ${data.poll.question}`;
+  if (data.sticker) return `${findSticker(data.sticker.pack, data.sticker.id)?.emoji ?? '🏷️'} Sticker`;
   if (data.viewOnce) return data.attachments?.[0]?.contentType.startsWith('video/') ? '🎥 Video (view once)' : '📷 Photo (view once)';
   if (data.event) return `📅 ${data.event.title}`;
   if (data.body) return data.body;

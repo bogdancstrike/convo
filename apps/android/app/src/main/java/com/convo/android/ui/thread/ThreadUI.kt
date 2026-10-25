@@ -92,6 +92,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == id } ?: return
     val all = app.snapshot.optJSONArray("messages")?.objects().orEmpty()
     var attachSheet by remember { mutableStateOf(false) }; var pollComposer by remember { mutableStateOf(false) }; var eventComposer by remember { mutableStateOf(false) }
+    var stickerSheet by remember { mutableStateOf(false) }
     var sendMenu by remember { mutableStateOf(false) }
     var query by remember(id) { mutableStateOf("") }; var input by remember(id) { mutableStateOf(conversation.optString("draft")) }; var quote by remember(id) { mutableStateOf<JSONObject?>(null) }
     var group by remember(id) { mutableStateOf<JSONObject?>(null) }
@@ -115,6 +116,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
     val messages = all.filter { (topics.isEmpty() || it.optString("topic").ifBlank { null } == topic || (it.has("notice") && topic == null)) && (!starredOnly || it.optBoolean("starred")) && (query.isBlank() || it.optString("body").contains(query, true) || it.optJSONArray("attachments")?.objects()?.any { a -> a.optString("fileName").contains(query, true) } == true) }
     val wallpaper = conversation.optString("wallpaper").takeIf { it.isNotBlank() } ?: app.snapshot.optJSONObject("settings")?.optString("wallpaper") ?: "dots"
     if (attachSheet) AttachSheet(app, id, input, allowPoll = kind != "note", onSent = { input = "" }, onPoll = { pollComposer = true }, onEvent = { eventComposer = true }) { attachSheet = false }
+    if (stickerSheet) StickerSheet(app, id, topic) { stickerSheet = false }
     if (pollComposer) PollComposer(app, id) { pollComposer = false }
     if (eventComposer) EventComposer(app, id) { eventComposer = false }
     ChatWallpaper(wallpaper, Modifier.fillMaxSize().background(LocalConvoColors.current.wallpaper)) {
@@ -233,6 +235,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                                     BasicTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> if (v.text != input) app.typing(id, v.text); input = v.text; selection = v.selection }, maxLines = 6,
                                         textStyle = LocalTextStyle.current.copy(color = colors.textPrimary, fontSize = 16.sp), cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
                                 }
+                                IconButton({ stickerSheet = true }) { Icon(Icons.Outlined.EmojiEmotions, "Stickers", tint = colors.textSecondary) }
                                 IconButton({ attachSheet = true }) { Icon(Icons.Outlined.AttachFile, "Attach file", tint = colors.textSecondary) }
                             }
                         } else Spacer(Modifier.weight(1f))
@@ -265,6 +268,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
 @Composable fun MessageCard(app: MainActivity, message: JSONObject, conversation: String, onReply: (JSONObject) -> Unit, first: Boolean = true) {
     message.optJSONObject("notice")?.let { TimerNotice(app, message, it.optLong("seconds"), it.optString("kind")); return }
     val outgoing = message.optString("direction") == "out"
+    val isSticker = message.has("sticker") && !message.isNull("sticker") && !message.optBoolean("deleted")
     var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var edit by remember { mutableStateOf(false) }; var edited by remember { mutableStateOf(message.optString("body")) }
     var delete by remember { mutableStateOf(false) }; var forwarding by remember { mutableStateOf(false) }; var selectedAttachment by remember { mutableIntStateOf(-1) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
@@ -297,8 +301,9 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 }
             }
             .combinedClickable(onClickLabel = null, onLongClickLabel = tr("Message options"), onClick = { if (selecting) app.toggleSelected(key) }, onLongClick = { if (selecting) app.toggleSelected(key) else menu = true }),
-            colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (outgoing) LocalConvoColors.current.bubbleOut else LocalConvoColors.current.bubbleIn),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+            // Stickers sit on the wallpaper without bubble chrome, like WhatsApp.
+            colors = CardDefaults.cardColors(contentColor = LocalConvoColors.current.textPrimary, containerColor = if (isSticker) androidx.compose.ui.graphics.Color.Transparent else if (outgoing) LocalConvoColors.current.bubbleOut else LocalConvoColors.current.bubbleIn),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (isSticker) 0.dp else 0.5.dp),
             shape = RoundedCornerShape(topStart = if (first && !outgoing) 0.dp else 10.dp, topEnd = if (first && outgoing) 0.dp else 10.dp, bottomStart = 10.dp, bottomEnd = 10.dp)) {
             val media = message.optJSONArray("attachments")?.length()?.let { it > 0 } == true
             Column(Modifier.padding(start = if (media) 4.dp else 9.dp, end = if (media) 4.dp else 9.dp, top = if (media) 4.dp else 6.dp, bottom = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -312,7 +317,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     val attachments = if (viewOnce != null) emptyList() else message.optJSONArray("attachments")?.objects().orEmpty()
                     if (viewOnce != null) ViewOnceTile(app, message, conversation, viewOnce)
                     // Text first only without attachments; with media the caption goes underneath (WhatsApp).
-                    if (message.has("report") && !message.isNull("report")) ReportCard(message)
+                    if (message.has("sticker") && !message.isNull("sticker")) message.optJSONObject("sticker")?.let { StickerImage(app, it.optString("pack"), it.optString("id")) }
+                    else if (message.has("report") && !message.isNull("report")) ReportCard(message)
                     else if (message.has("poll") && !message.isNull("poll")) PollCard(app, message, conversation)
                     else if (message.has("event") && !message.isNull("event")) EventCard(app, message, conversation)
                     else if (attachments.isEmpty() && message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))

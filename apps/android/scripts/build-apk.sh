@@ -15,6 +15,8 @@ fi
 apps/android/scripts/check-i18n.py
 apps/web/node_modules/.bin/tsc -p apps/android/protocol/tsconfig.json --noEmit
 apps/web/node_modules/.bin/vite build --config apps/android/protocol/vite.config.mjs
+# Bundled sticker packs (verified against the core's SHA-256 manifest before display).
+rm -rf apps/android/app/src/main/assets/stickers && cp -r apps/web/public/stickers apps/android/app/src/main/assets/stickers
 # Produce a compact distributable rather than retaining dead ZIP entries from incremental packaging.
 "$android_dir/gradlew" -p "$android_dir" clean :app:assembleDebug
 mkdir -p apps/assets

@@ -4,6 +4,7 @@ import { MAX_ATTACHMENT_BYTES, configureAttachmentLimit } from '../../web/src/co
 import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
 import { ApiError } from '../../web/src/api/errors';
+import { STICKER_PACKS } from '../../web/src/core/stickers';
 import { CallKeyUnavailableError, EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError, SendRestrictedError } from '../../web/src/core/client';
 import { createClient, type LocalContext } from '../../web/src/core/bootstrap';
 import { enrollPrimary } from '../../web/src/core/enrollment';
@@ -203,6 +204,9 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     // Polls (FR-EXT-01): the message snapshot carries poll state; voters' names are resolved here.
     case 'sendPoll': return client.sendPoll(String(args.conversationId), String(args.question), Array.isArray(args.options) ? args.options.map(String) : [], Boolean(args.multiple));
     case 'sendQuiz': return client.sendQuiz(String(args.conversationId), String(args.question), Array.isArray(args.options) ? args.options.map(String) : [], Number(args.correctIndex), args.explanation ? String(args.explanation) : undefined);
+    // Bundled stickers: the manifest (with SHA-256 per file) is the core's; files ship in the APK.
+    case 'stickerPacks': return STICKER_PACKS;
+    case 'sendSticker': return client.sendSticker(String(args.conversationId), String(args.pack), String(args.id), { topic: args.topic ? String(args.topic) : undefined });
     case 'votePoll': return client.votePoll(await target(args), Array.isArray(args.optionIds) ? args.optionIds.map(String) : []);
     case 'closePoll': return client.closePoll(await target(args));
     case 'canClosePoll': return client.canClosePoll(await target(args), client.accountId);

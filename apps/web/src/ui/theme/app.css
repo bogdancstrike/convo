@@ -2553,3 +2553,18 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 
 /* Guest accounts (FR-EXT-01). */
 .guest-tag { background: color-mix(in srgb, #e8a33d 22%, transparent); color: inherit; font-size: 0.7rem; vertical-align: middle; }
+
+/* Stickers (bundled packs, AC-MED-04): no bubble chrome, like WhatsApp. */
+.bubble.sticker-bubble { background: transparent !important; box-shadow: none; padding: 2px; }
+.bubble.sticker-bubble::before, .bubble.sticker-bubble::after { display: none; }
+.sticker-image { display: block; width: 160px; height: 160px; object-fit: contain; }
+.sticker-placeholder { display: grid; place-items: center; font-size: 48px; border-radius: 16px; background: var(--c-panel); }
+.picker-modes { display: flex; gap: 4px; padding: 6px 8px 0; }
+.picker-modes button { flex: 1; padding: 6px; border: 0; border-bottom: 2px solid transparent; background: none; color: inherit; font-weight: 600; cursor: pointer; }
+.picker-modes button[aria-selected='true'] { border-bottom-color: var(--c-accent); color: var(--c-accent-text, var(--c-accent)); }
+.sticker-body { overflow-y: auto; padding: 8px; max-height: 320px; }
+.sticker-body h4 { margin: 4px 0 8px; font-size: 0.8125rem; }
+.sticker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; }
+.sticker-grid button { border: 0; background: none; padding: 4px; border-radius: 10px; cursor: pointer; }
+.sticker-grid button:hover, .sticker-grid button:focus-visible { background: var(--c-hover, rgba(0,0,0,.06)); }
+.sticker-grid .sticker-image { width: 72px; height: 72px; }

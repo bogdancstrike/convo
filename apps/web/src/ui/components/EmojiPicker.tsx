@@ -2,15 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { EMOJI_CATEGORIES, loadEmojis, recentEmojis, rememberEmoji, type EmojiCatalogue } from '../emoji/emojiData';
 import { useI18n } from '../i18n/i18n';
 import { Icon } from './Icon';
+import { StickerGrid } from './StickerImage';
 
 /**
  * Searchable emoji picker with category tabs and a Recent section. Keyboard: the search field is
  * focused on open, Escape closes, every emoji is a button.
  */
-export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+export function EmojiPicker({ onPick, onClose, onSticker }: { onPick: (emoji: string) => void; onClose: () => void;
+  /** When given, a Stickers tab sends bundled stickers (composer only, not reactions). */
+  onSticker?: (pack: string, id: string) => void }) {
   const { t } = useI18n();
   const [catalogue, setCatalogue] = useState<EmojiCatalogue | null>(null);
   const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<'emoji' | 'stickers'>('emoji');
   const [recent] = useState(recentEmojis);
   const sections = useRef(new Map<string, HTMLElement>());
   const root = useRef<HTMLDivElement>(null);
@@ -55,6 +59,13 @@ export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => vo
 
   return (
     <div className="emoji-picker" ref={root} role="dialog" aria-label={t('emoji.title')} data-testid="emoji-picker">
+      {onSticker && (
+        <div className="picker-modes" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === 'emoji'} onClick={() => setMode('emoji')} data-testid="picker-emoji">{t('emoji.title')}</button>
+          <button type="button" role="tab" aria-selected={mode === 'stickers'} onClick={() => setMode('stickers')} data-testid="picker-stickers">{t('sticker.title')}</button>
+        </div>
+      )}
+      {mode === 'stickers' && onSticker ? <StickerGrid onPick={(pack, id) => { onSticker(pack, id); onClose(); }} /> : <>
       <div className="emoji-tabs" role="tablist">
         {recent.length > 0 && (
           <button type="button" role="tab" title={t('emoji.recent')} onClick={() => sections.current.get('recent')?.scrollIntoView()}>
@@ -94,6 +105,7 @@ export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => vo
           )
         )}
       </div>
+      </>}
     </div>
   );
 }

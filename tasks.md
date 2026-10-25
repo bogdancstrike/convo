@@ -224,6 +224,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   choice), ballots/closes as E2EE data messages converging deterministically (`core/polls.ts`),
   author/admin close enforced on receive; web attach menu + poll card, Android attach sheet + poll
   card. `polls.test.ts`, `polls.spec.ts` (Chromium/Firefox), emulator check both directions.
+- Stickers (FR-EXT-01, AC-MED-04): bundled "Convo Basics" pack (16 static WebP, Noto Color Emoji
+  art, OFL 1.1, `scripts/make-stickers.py`); messages carry only `{ pack, id }`; files are shown
+  only when size ≤ 128 KiB and SHA-256 match the core manifest (altered files → placeholder); no
+  CDN or upload. Web: Stickers tab in the emoji picker; Android: sticker button in the composer,
+  assets copied into the APK by `build-apk.sh`. `stickers.test.ts`, `stickers.spec.ts` (tampered
+  file refused), emulator check. Org-hosted signed packs and animated stickers are not implemented.
 - Quizzes (FR-EXT-01): polls with a correct option and optional explanation; single choice, the
   first answer per account is final (order-independent), results/answer hidden until answered
   (UI convention: the answer is inside the encrypted poll), author sees results, score shown.

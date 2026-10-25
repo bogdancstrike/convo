@@ -120,6 +120,8 @@ export interface DataMessage {
    * only to the chosen security contact. Never uploaded or stored anywhere else.
    */
   report?: AbuseReport;
+  /** A bundled sticker (pack and sticker IDs only; recipients render their own copy). */
+  sticker?: { pack: string; id: string };
   /** Group topic this message belongs to (absent = the group's general conversation). */
   topic?: string;
   /** Group event: create/rename/close a topic (owners/admins; highest revision wins). */
@@ -482,6 +484,8 @@ function isDataMessage(value: unknown): value is DataMessage {
     || (value.memberPolicy.slowModeSeconds as number) < 0 || (value.memberPolicy.slowModeSeconds as number) > 86_400
     || !Array.isArray(value.memberPolicy.restricted) || value.memberPolicy.restricted.length > 1000 || !value.memberPolicy.restricted.every((a) => typeof a === 'string' && a.length > 0 && a.length <= 64)
     || !Number.isSafeInteger(value.memberPolicy.revision) || (value.memberPolicy.revision as number) < 1)) return false;
+  if (value.sticker !== undefined && (!isObject(value.sticker) || typeof value.sticker.pack !== 'string' || !/^[a-z0-9-]{1,32}$/.test(value.sticker.pack)
+    || typeof value.sticker.id !== 'string' || !/^[a-z0-9-]{1,32}$/.test(value.sticker.id))) return false;
   if (value.topic !== undefined && (typeof value.topic !== 'string' || !ID.test(value.topic))) return false;
   if (value.topicDef !== undefined && (!isObject(value.topicDef) || typeof value.topicDef.id !== 'string' || !ID.test(value.topicDef.id) || typeof value.topicDef.name !== 'string'
     || !value.topicDef.name.trim() || value.topicDef.name.length > 48 || typeof value.topicDef.closed !== 'boolean' || !Number.isSafeInteger(value.topicDef.revision) || (value.topicDef.revision as number) < 1)) return false;

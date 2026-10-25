@@ -20,6 +20,7 @@ import { PollCard } from './Polls';
 import { EventCard } from './Events';
 import { ViewOnceTile } from './ViewOnce';
 import { ReportCard } from './ReportDialog';
+import { StickerImage } from '../components/StickerImage';
 
 /** Quick reactions shown at the top of the message menu. */
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -85,7 +86,7 @@ export function MessageBubble({
         {group && !own && <span className="msg-avatar">{first && <Avatar id={m.authorId} name={author || '?'} size={28} />}</span>}
         <div
           ref={bubbleRef}
-          className={`bubble${system ? ' system' : ''}${first ? ' tail' : ''}`}
+          className={`bubble${system ? ' system' : ''}${first ? ' tail' : ''}${m.sticker && !m.deleted ? ' sticker-bubble' : ''}`}
           tabIndex={0}
           onContextMenu={(e) => {
             if (system) return;
@@ -156,7 +157,7 @@ export function MessageBubble({
                   <span className="name">{f.name}<span className="muted-text"> · {m.status === 'failed' ? t('upload.failed') : t('upload.waiting')}</span></span>
                 </div>
               ))}
-              {m.report ? <ReportCard message={m} /> : m.poll ? <PollCard client={client} message={m} /> : m.event ? <EventCard client={client} message={m} /> : m.body && (
+              {m.sticker && !m.deleted ? <StickerImage pack={m.sticker.pack} id={m.sticker.id} /> : m.report ? <ReportCard message={m} /> : m.poll ? <PollCard client={client} message={m} /> : m.event ? <EventCard client={client} message={m} /> : m.body && (
                 <span data-testid="message-body">
                   <FormattedText text={m.body} highlight={highlight} mentions={mentionLabels} />
                 </span>

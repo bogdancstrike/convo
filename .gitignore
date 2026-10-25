@@ -38,4 +38,5 @@ playwright-report/
 # Android local SDK paths and generated protocol bundle
 local.properties
 apps/android/app/src/main/assets/core.js
+apps/android/app/src/main/assets/stickers/
 apps/android/.kotlin/

@@ -93,6 +93,8 @@ export interface ChatMessage {
   report?: AbuseReport;
   /** Group topic this message belongs to (absent = general). */
   topic?: string;
+  /** A bundled sticker (`core/stickers.ts`). */
+  sticker?: { pack: string; id: string };
 }
 
 export interface Conversation {

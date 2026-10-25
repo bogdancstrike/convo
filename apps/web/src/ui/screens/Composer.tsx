@@ -392,7 +392,8 @@ export function Composer({
               <button className="icon-btn" aria-label={t('composer.emoji')} aria-pressed={emoji} onClick={() => setEmoji((v) => !v)} data-testid="emoji-button">
                 <Icon name="smile" />
               </button>
-              {emoji && <EmojiPicker onPick={insertEmoji} onClose={() => setEmoji(false)} />}
+              {emoji && <EmojiPicker onPick={insertEmoji} onClose={() => setEmoji(false)}
+                onSticker={(pack, id) => void client.sendSticker(conversation.id, pack, id, { topic }).then(onDone).catch((e) => setError(e instanceof SendRestrictedError ? restrictedMessage(e) : t('sticker.failed')))} />}
             </div>
             <label className="visually-hidden" htmlFor="composer">
               {t('thread.placeholder')}

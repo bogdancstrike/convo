@@ -81,6 +81,9 @@ links open the app and join the group's running call (or ring the group when non
 
 ## Polls and events
 
+The smiley button in the composer opens **stickers** (bundled with the app; only the sticker's ID is
+sent, encrypted, and each file is checked against its SHA-256 before it is shown).
+
 The attach sheet (Document, Gallery, Audio, Poll, Event) creates WhatsApp-style polls (1–10
 options, single or multiple choice, visible voters, close by author/admin; *Quiz mode* marks a
 correct answer, gives everyone one try and reveals the answer and explanation after answering) and events (date and
