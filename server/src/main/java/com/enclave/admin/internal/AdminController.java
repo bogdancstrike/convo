@@ -103,6 +103,27 @@ class AdminController {
         return actions.setDisabled(actor(admin), accountId, false, body.reason());
     }
 
+    /** @param kind {@code archive}, {@code bot} or null to clear; @param retention disclosed to chat members */
+    record IntegrationRequest(@jakarta.validation.constraints.Pattern(regexp = "archive|bot") String kind, @Size(max = 200) String retention,
+                              @NotBlank @Size(max = 500) String reason) {}
+
+    /** @param integration the mark, or null for an ordinary account */
+    record IntegrationView(IdentityAdminApi.Integration integration) {}
+
+    @GetMapping("/accounts/{accountId}/integration")
+    IntegrationView integration(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId) {
+        require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
+        return new IntegrationView(identity.integration(accountId).orElse(null));
+    }
+
+    /** Marks or clears a visible archive/bot integration account (audited, recent sign-in). */
+    @PutMapping("/accounts/{accountId}/integration")
+    AuditLog.Entry setIntegration(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @Valid @RequestBody IntegrationRequest body) {
+        requireAudited(admin, AdminPermissions.Permission.INTEGRATIONS_MANAGE, body.kind() == null ? "integration.clear" : "integration.set", accountId.toString());
+        requireRecentSignIn(admin);
+        return actions.setIntegration(actor(admin), accountId, body.kind(), body.retention(), body.reason());
+    }
+
     @PostMapping("/accounts/{accountId}/devices/{deviceId}/revoke")
     AuditLog.Entry revoke(@AuthenticationPrincipal Jwt admin, @PathVariable UUID accountId, @PathVariable int deviceId, @Valid @RequestBody Reason body) {
         requireAudited(admin, AdminPermissions.Permission.DEVICE_REVOKE, "device.revoke", accountId + "." + deviceId);

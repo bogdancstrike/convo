@@ -223,6 +223,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     // SHA-256 (the sticker ID) before use. Images are made square 512 px WebP here, like on the web.
     // Key transparency (specs §19.4): the contact's keys checked against the witnessed log.
     case 'keyTransparency': return (await client.keyTransparency(String(args.id), args.force === true)) ?? null;
+    case 'integrationParticipants': return client.integrationParticipants(String(args.id));
     case 'stickerCollection': return client.stickerCollection();
     case 'createSticker': return client.addCustomSticker(await makeStickerImage(new Blob([fromBase64Url(String(args.data))], { type: String(args.mime ?? 'image/*') })));
     case 'saveSticker': return client.saveSticker(await target(args));

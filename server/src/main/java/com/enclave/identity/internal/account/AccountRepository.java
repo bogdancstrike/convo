@@ -15,7 +15,9 @@ public class AccountRepository {
     private static final String COLUMNS =
             "account_id, username, device_list_version, identity_key, status, display_name, phone,"
             // Unqualified oidc_subject resolves to the outer row (account_guests has no such column).
-            + " (SELECT g.expires_at FROM account_guests g WHERE g.subject = oidc_subject) AS guest_until";
+            + " (SELECT g.expires_at FROM account_guests g WHERE g.subject = oidc_subject) AS guest_until,"
+            + " (SELECT i.kind FROM account_integrations i WHERE i.integration_account = account_id) AS integration,"
+            + " (SELECT i.retention FROM account_integrations i WHERE i.integration_account = account_id) AS integration_retention";
 
     private final JdbcClient jdbc;
 
@@ -122,7 +124,8 @@ public class AccountRepository {
         return new Account(rs.getObject("account_id", UUID.class), rs.getString("username"),
                 rs.getLong("device_list_version"), rs.getBytes("identity_key"), rs.getString("status"),
                 rs.getString("display_name"), rs.getString("phone"),
-                java.util.Optional.ofNullable(rs.getTimestamp("guest_until")).map(java.sql.Timestamp::toInstant).orElse(null));
+                java.util.Optional.ofNullable(rs.getTimestamp("guest_until")).map(java.sql.Timestamp::toInstant).orElse(null),
+                rs.getString("integration") == null ? null : new Account.Integration(rs.getString("integration"), rs.getString("integration_retention")));
     }
 
     /** Updates IdP-sourced directory attributes; no-op when unchanged. */

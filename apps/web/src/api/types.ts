@@ -62,6 +62,8 @@ export interface AccountDto {
   identityKey?: string;
   /** Guest accounts only: when access ends (ISO time). */
   guestUntil?: string;
+  /** Visible integration accounts: an archive (keeps what it receives) or a bot; `retention` is disclosed to everyone. */
+  integration?: { kind: 'archive' | 'bot'; retention: string } | null;
 }
 
 export interface RosterDto {

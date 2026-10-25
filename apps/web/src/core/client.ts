@@ -2731,6 +2731,32 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     };
   }
 
+  /** When each account was last fetched fresh for integration disclosure. */
+  private readonly integrationCheckedAt = new Map<string, number>();
+
+  /**
+   * Integration accounts (archive/bot) taking part in a conversation, for the persistent disclosure
+   * banner (FR-EXT-02, AC-INT-01/02). Accounts are re-fetched at least every 10 minutes so a mark an
+   * administrator adds later still becomes visible.
+   */
+  async integrationParticipants(conversationId: string): Promise<{ accountId: string; name: string; kind: 'archive' | 'bot'; retention: string }[]> {
+    const conversation = this.conversationCache.get(conversationId);
+    if (!conversation || conversation.kind === 'note') return [];
+    const ids = conversation.kind === 'direct' ? [conversationId]
+      : ((await this.groups.record(groupIdOf(conversationId)!))?.members.map((m) => m.accountId) ?? []).filter((id) => id !== this.accountId);
+    const out = [];
+    for (const id of ids) {
+      if (Date.now() - (this.integrationCheckedAt.get(id) ?? 0) > 10 * 60_000) {
+        this.integrationCheckedAt.set(id, Date.now());
+        const fresh = this.api.account(id).catch(() => undefined);
+        if (await fresh) this.accountCache.set(id, fresh);
+      }
+      const account = await this.lookupAccount(id);
+      if (account?.integration) out.push({ accountId: id, name: account.displayName || account.username, ...account.integration });
+    }
+    return out;
+  }
+
   private lookupAccount(accountId: string): Promise<AccountDto | undefined> {
     let lookup = this.accountCache.get(accountId);
     if (!lookup) {

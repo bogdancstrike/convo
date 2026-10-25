@@ -148,8 +148,12 @@ final class IdentityDtos {
     record KeyPackageClaimResponse(List<ClaimedKeyPackageDto> keyPackages, List<DeviceRefDto> unavailable) {}
 
     /** Public account view (directory). */
-    /** @param guestUntil set for guest accounts: when access ends */
-    record AccountDto(UUID accountId, String username, String displayName, String phone, String identityKey, java.time.Instant guestUntil) {}
+    /**
+     * @param guestUntil set for guest accounts: when access ends
+     * @param integration set for archive/bot integration accounts (clients disclose it everywhere)
+     */
+    record AccountDto(UUID accountId, String username, String displayName, String phone, String identityKey, java.time.Instant guestUntil,
+                      com.enclave.identity.internal.account.Account.Integration integration) {}
 
     /** Caller's own account view. */
     record SelfDto(UUID accountId, String username, String displayName, String phone, int deviceId, String identityKey,

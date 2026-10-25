@@ -35,8 +35,12 @@ export function NewGroupPanel({
   const recent = useRecentContacts(client);
   const choices = query.trim() ? results ?? [] : recent;
 
-  const toggle = (a: AccountDto) =>
+  const toggle = (a: AccountDto) => {
+    const adding = !selected.some((x) => x.accountId === a.accountId);
+    // Integrations read everything in the group: say so before choosing one (AC-INT-01/02).
+    if (adding && a.integration && !window.confirm(t('integration.confirmAdd', { name: a.displayName || a.username, kind: t(`integration.${a.integration.kind}`), retention: a.integration.retention }))) return;
     setSelected((s) => (s.some((x) => x.accountId === a.accountId) ? s.filter((x) => x.accountId !== a.accountId) : [...s, a]));
+  };
 
   const create = async () => {
     if (creating.current || !name.trim() || !selected.length) return;

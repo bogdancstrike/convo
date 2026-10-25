@@ -64,6 +64,23 @@ public interface IdentityAdminApi {
      */
     void setDisabled(UUID accountId, boolean disabled);
 
+    /**
+     * A visible integration account (specs FR-EXT-02, AC-INT-01/02).
+     *
+     * @param kind {@code archive} (keeps what it receives) or {@code bot}
+     * @param retention what happens to content it receives; shown to everyone in chats with it
+     */
+    record Integration(String kind, String retention, String setBy, Instant setAt) {}
+
+    /** The account's integration mark, if any. */
+    Optional<Integration> integration(UUID accountId);
+
+    /**
+     * Marks an account as an archive or bot integration, or clears the mark ({@code kind == null}).
+     * Clients disclose the mark everywhere the account appears; it is never applied silently.
+     */
+    void setIntegration(UUID accountId, String kind, String retention, String setBy);
+
     /** Devices enrolled and revoked since {@code since} (aggregate counts for operators). */
     DeviceChanges deviceChanges(java.time.Instant since);
 

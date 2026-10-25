@@ -53,6 +53,19 @@ import org.json.JSONObject
     }
     val choices = (if (query.isBlank()) (app.phoneMatches + recent).distinctBy { it.optString("accountId") } else (results + app.phoneMatches.filter { it.optString("localName").contains(query, true) }).distinctBy { it.optString("accountId") })
         .filter { it.optString("accountId") !in excluded && it.optString("accountId") != app.snapshot.optString("accountId") }
+    // Integrations read everything in a group: confirm before choosing one (AC-INT-01/02).
+    var confirming by remember { mutableStateOf<JSONObject?>(null) }
+    val pick: (JSONObject) -> Unit = { a ->
+        val adding = multi && a.optString("accountId") !in selected && a.optJSONObject("integration") != null
+        if (adding) confirming = a else onPick(a)
+    }
+    confirming?.let { a ->
+        val integration = a.optJSONObject("integration")!!
+        AlertDialog(onDismissRequest = { confirming = null }, title = { Text(if (integration.optString("kind") == "archive") "Add an archive?" else "Add a bot?") },
+            text = { RawText(tr("{name} will receive every message in this group from now on.").replace("{name}", a.label()) + " " + integration.optString("retention")) },
+            confirmButton = { TextButton({ confirming = null; onPick(a) }) { Text("Add") } },
+            dismissButton = { TextButton({ confirming = null }) { Text("Cancel") } })
+    }
     Column(Modifier.fillMaxSize()) {
         SearchField(query, { query = it }, "Search name or phone number", Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         LazyColumn {
@@ -76,7 +89,7 @@ import org.json.JSONObject
                 ListCaption(if (query.isBlank()) "Contacts on Convo" else "Directory results")
             }
             items(choices, key = { it.optString("accountId") }) { account ->
-                Row(Modifier.fillMaxWidth().clickable { onPick(account) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { pick(account) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     PersonAvatar(app, account.optString("accountId"), account.label(), 48)
                     val status = app.snapshot.optJSONObject("profiles")?.optJSONObject(account.optString("accountId"))?.optString("status")?.takeIf { it.isNotBlank() && it != "null" }
                     Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
@@ -86,17 +99,41 @@ import org.json.JSONObject
                         }
                         RawText(status ?: listOf("@${account.optString("username")}", account.optString("phone")).filter { it.isNotBlank() && it != "@" }.joinToString(" · "), fontSize = 14.sp, color = LocalConvoColors.current.textSecondary, maxLines = 1)
                     }
-                    if (multi) Checkbox(account.optString("accountId") in selected, onCheckedChange = { onPick(account) })
+                    if (multi) Checkbox(account.optString("accountId") in selected, onCheckedChange = { pick(account) })
                 }
             }
             if (choices.isEmpty()) item { Text(if (query.isBlank()) "Search the directory or find people from your phone contacts." else "No matching people", Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
-/** "Guest" pill for time-limited guest accounts (directory entries carry `guestUntil`). */
+/**
+ * Account labels: "Guest" for time-limited guest accounts (`guestUntil`) and "Archive"/"Bot" for
+ * visible integration accounts (`integration`, FR-EXT-02), wherever an account appears.
+ */
 @Composable fun GuestTag(account: JSONObject?) {
-    if (account?.optString("guestUntil")?.takeIf { it.isNotBlank() && it != "null" } == null) return
-    Text("Guest", Modifier.padding(start = 6.dp).background(Color(0x38E8A33D), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    if (account?.optString("guestUntil")?.takeIf { it.isNotBlank() && it != "null" } != null)
+        Text("Guest", Modifier.padding(start = 6.dp).background(Color(0x38E8A33D), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    account?.optJSONObject("integration")?.let { integration ->
+        Text(if (integration.optString("kind") == "archive") "Archive" else "Bot",
+            Modifier.padding(start = 6.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = .18f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+            fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * Persistent disclosure above a chat with an archive or bot (FR-EXT-02): who receives every
+ * message and what happens to it. Cannot be dismissed.
+ */
+@Composable fun IntegrationBanner(app: MainActivity, conversationId: String) {
+    var participants by remember(conversationId) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    LaunchedEffect(conversationId, app.snapshot) { app.call("integrationParticipants", obj("id" to conversationId), quiet = true) { v -> participants = (v as? JSONArray)?.objects().orEmpty() } }
+    if (participants.isEmpty()) return
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        participants.forEach { p ->
+            RawText(tr("{name} ({kind}) receives every message in this chat.").replace("{name}", p.optString("name")).replace("{kind}", tr(if (p.optString("kind") == "archive") "Archive" else "Bot")) + " " + p.optString("retention"),
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onTertiaryContainer)
+        }
+    }
 }
 
 fun JSONObject.label() = optString("displayName").takeIf { it.isNotBlank() && it != "null" } ?: optString("username").takeIf { it.isNotBlank() } ?: optString("title")

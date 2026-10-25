@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { IntegrationSection } from './IntegrationSection';
 import { Alert, App, Button, Card, Descriptions, Drawer, Empty, List, Segmented, Space, Spin, Tabs, Tag, Typography } from 'antd';
 import { DeleteOutlined, KeyOutlined, StopOutlined, CheckCircleOutlined, ExpandOutlined, CompressOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { api, errorText, type AccountActivity, type AccountSummary, type DeviceSummary, type Permission } from '../api';
@@ -120,6 +121,7 @@ export function UserDrawer({ accountId: requestedAccountId, subjectId, tab = 'ov
                     const reason = await ask('Enable account', 'The account and its devices work again.');
                     if (reason) await run(api.setDisabled(account.accountId, false, reason), 'Account enabled');
                   }}>Enable account</Button>)}
+              <IntegrationSection accountId={account.accountId} editable={can('INTEGRATIONS_MANAGE')} />
               {can('RECOVERY_RESET') && (
                 <div>
                   <Button icon={<KeyOutlined />} danger data-testid="admin-revoke-recovery" onClick={async () => {

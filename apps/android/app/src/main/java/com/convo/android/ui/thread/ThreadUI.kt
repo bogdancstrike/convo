@@ -143,6 +143,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
             if (app.threadSearch) OutlinedTextField(query, { query = it }, placeholder = { Text(if (starredOnly) "Search starred messages" else "Search this chat") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) })
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val scope = rememberCoroutineScope()
+            com.convo.android.ui.contacts.IntegrationBanner(app, id)
             if (!starredOnly) PinnedBanner(app, conversation, all) { target ->
                 val at = messages.indexOfFirst { it.optString("authorId") == target.optString("authorId") && it.optString("id") == target.optString("id") }
                 if (at >= 0) scope.launch { listState.animateScrollToItem(at + 1) } // +1: encryption header item

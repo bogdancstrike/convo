@@ -49,6 +49,9 @@ broader launch tasks, independent security review or complete Android/web parity
   SECURITY.md step-by-step device, multi-device and call flows.
 - [x] TRUST-01 slice (2026-10-25): key-transparency log, witness and client checks (web + Android
   contact info), shared vectors; members vote/react/RSVP in community announcements.
+- [x] ARCHIVE-01 slice (2026-10-26): visible archive/bot accounts (admin mark, labels, add
+  confirmation, persistent banners on web and Android); KT head gossip; fix for devices revoked
+  while closed (1.17.0).
 - [ ] Reviewed native core/Keystore/SQLCipher, lifecycle/background delivery, physical device
   certification and iOS. (Calls are implemented: ADR-0006.)
 

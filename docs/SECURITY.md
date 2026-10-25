@@ -668,6 +668,29 @@ messenger origin serves no admin code (`/admin` → 404). Its nginx exposes only
 
 ---
 
+### 15.1 Visible archive and bot accounts (FR-EXT-02)
+
+Convo has no hidden reader. An archive or bot is an ordinary, dedicated account that an
+administrator with *Manage integrations* (organization admin, security; reason and recent sign-in
+required, audited as `integration.set` / `integration.clear`) marks as **archive** or **bot**, with a
+retention statement such as "Kept for 7 years for regulatory archiving". From then on, on web and
+Android:
+
+* the account carries an *Archive* or *Bot* label wherever it appears (directory, pickers, member
+  lists, contact info, chat header);
+* adding it to a group asks for confirmation, naming what it will receive and the retention;
+* every chat it is in shows a banner that cannot be dismissed: "*Name* (Archive) receives every
+  message in this chat", followed by the retention statement. Clients re-check accounts at least
+  every 10 minutes, so a mark added later becomes visible too.
+
+It reads exactly what an ordinary member would (it is an MLS member of the groups it joins, or the
+other side of a 1:1 chat), and what it keeps is plaintext under the disclosed policy: a separate
+trust boundary from the ciphertext-only server. Removing it from a group removes its keys for future
+messages; copies it already received cannot be erased by promise. Not yet implemented: an
+*addressed-only* bot mode (a bot without the group's epoch keys that receives only messages
+explicitly sent to it) and a bundled bot/archive runtime; integrations today run as enrolled
+clients.
+
 ## 16. Network exposure, ports and firewall
 
 ### 16.1 Kubernetes (homelab, production)

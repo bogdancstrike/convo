@@ -22,6 +22,8 @@ import { ReportDialog } from './ReportDialog';
 import { TopicBar } from './Topics';
 import { formatInterval } from './MemberPolicy';
 import { GuestBadge } from '../components/GuestBadge';
+import { IntegrationBanner } from '../components/IntegrationBanner';
+import { IntegrationBadge } from '../components/IntegrationBadge';
 
 
 
@@ -276,7 +278,7 @@ export function Thread({
         </button>
         <Avatar id={conversation.id} name={title} size={40} group={group} />
         <button className="who" onClick={onInfo} data-testid="thread-info">
-          <h2 data-testid="thread-title">{title}{directAccount && <> <GuestBadge account={directAccount} /></>}</h2>
+          <h2 data-testid="thread-title">{title}{directAccount && <> <GuestBadge account={directAccount} /> <IntegrationBadge account={directAccount} /></>}</h2>
           {subtitle && <span className={`sub${typing ? ' typing-sub' : ''}`}>{subtitle}</span>}
           {!typing && conversation.kind === 'direct' && <LastSeen client={client} accountId={conversation.id} />}
         </button>
@@ -309,6 +311,7 @@ export function Thread({
         />
       </header>
       {group && !conversation.adminOnly && !conversation.left && <TopicBar client={client} conversation={conversation} selected={topic} onSelect={setTopic} isAdmin={isGroupAdmin} />}
+      <IntegrationBanner client={client} conversation={conversation} />
       <PinnedBanner client={client} conversation={conversation} />
       {search !== null && (
         <div className="thread-search">

@@ -22,6 +22,7 @@ import { useI18n } from '../i18n/i18n';
 import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel';
 import { SlowModeSection } from './MemberPolicy';
 import { GuestBadge } from '../components/GuestBadge';
+import { IntegrationBadge } from '../components/IntegrationBadge';
 
 /**
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
@@ -59,7 +60,7 @@ export function ContactInfo({ client, conversation }: { client: EnclaveClient; c
       <section className="drawer-section drawer-hero">
         <Avatar id={conversation.id} name={title} size={120} />
         <h3>{title}</h3>
-        {account && <span className="muted-text">@{account.username} <GuestBadge account={account} /></span>}
+        {account && <span className="muted-text">@{account.username} <GuestBadge account={account} /> <IntegrationBadge account={account} /></span>}
         {!note && <LastSeen client={client} accountId={conversation.id} />}
       </section>
       {account?.phone && (
@@ -187,6 +188,8 @@ interface MemberView {
   role: GroupRole;
   /** Guest accounts: when access ends. */
   guestUntil?: string;
+  /** Archive/bot integration accounts. */
+  integration?: AccountDto['integration'];
 }
 
 function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient; conversation: Conversation; onContact: (id: string) => void }) {
@@ -212,6 +215,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
           username: a.username,
           avatarName: labelOf(a),
           guestUntil: a.guestUntil,
+          integration: a.integration,
           label: m.accountId === client.accountId ? t('chats.you') : labelOf(a),
         };
       }),
@@ -252,7 +256,9 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
   };
 
   const add = (account: AccountDto) =>
-    void run(async () => {
+    // Integrations read everything from now on: say so before adding one (AC-INT-01/02).
+    (!account.integration || window.confirm(t('integration.confirmAdd', { name: account.displayName || account.username, kind: t(`integration.${account.integration.kind}`), retention: account.integration.retention })))
+    && void run(async () => {
       await client.addGroupMembers(conversation.id, [account.accountId]);
       setAdding(false);
       setQuery('');
@@ -329,6 +335,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
               </button>
               {m.role !== 'member' && <span className="role-tag">{t(`group.role.${m.role}`)}</span>}
               <GuestBadge account={m} />
+              <IntegrationBadge account={m} />
               {m.role === 'member' && restricted.includes(m.accountId) && <span className="role-tag" data-testid={`restricted-${m.username}`}>{t('slow.restrictedTag')}</span>}
               {canManage && m.accountId !== client.accountId && (m.role !== 'owner' || myRole === 'owner') && (
                 <Menu label={t('group.memberOptions')} items={[

@@ -63,6 +63,29 @@ class IdentityAdminService implements IdentityAdminApi {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Integration> integration(UUID accountId) {
+        return jdbc.sql("SELECT kind, retention, set_by, set_at FROM account_integrations WHERE integration_account = :id").param("id", accountId)
+                .query((rs, i) -> new Integration(rs.getString(1), rs.getString(2), rs.getString(3), rs.getTimestamp(4).toInstant())).optional();
+    }
+
+    @Override
+    @Transactional
+    public void setIntegration(UUID accountId, String kind, String retention, String setBy) {
+        if (kind != null && !kind.equals("archive") && !kind.equals("bot")) throw new EnclaveException(ErrorCode.INVALID_REQUEST, "kind must be archive or bot");
+        if (kind != null && (retention == null || retention.isBlank() || retention.length() > 200)) throw new EnclaveException(ErrorCode.INVALID_REQUEST, "describe the retention (1-200 characters)");
+        if (jdbc.sql("SELECT count(*) FROM accounts WHERE account_id = :id").param("id", accountId).query(Long.class).single() == 0) throw new EnclaveException(ErrorCode.NOT_FOUND, "unknown account");
+        if (kind == null) {
+            jdbc.sql("DELETE FROM account_integrations WHERE integration_account = :id").param("id", accountId).update();
+            return;
+        }
+        jdbc.sql("""
+                INSERT INTO account_integrations (integration_account, kind, retention, set_by) VALUES (:id, :k, :r, :b)
+                ON CONFLICT (integration_account) DO UPDATE SET kind = EXCLUDED.kind, retention = EXCLUDED.retention, set_by = EXCLUDED.set_by, set_at = now()""")
+                .param("id", accountId).param("k", kind).param("r", retention.strip()).param("b", setBy).update();
+    }
+
+    @Override
     @Transactional
     public void setDisabled(UUID accountId, boolean disabled) {
         int updated = jdbc.sql("UPDATE accounts SET status = :s WHERE account_id = :id").param("s", disabled ? "disabled" : "active").param("id", accountId).update();

@@ -67,7 +67,7 @@ class AccountController {
     }
 
     private static AccountDto toDto(Account a) {
-        return new AccountDto(a.accountId(), a.username(), a.displayName(), a.phone(), encodeNullable(a.identityKey()), a.guestUntil());
+        return new AccountDto(a.accountId(), a.username(), a.displayName(), a.phone(), encodeNullable(a.identityKey()), a.guestUntil(), a.integration());
     }
 
     private static String encodeNullable(byte[] bytes) {

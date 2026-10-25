@@ -7,6 +7,7 @@ import { Icon } from '../components/Icon';
 import { useConversations } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { GuestBadge } from '../components/GuestBadge';
+import { IntegrationBadge } from '../components/IntegrationBadge';
 
 /**
  * "New chat" side panel: New group and Note to self entries, then organization directory search
@@ -100,7 +101,7 @@ export function PersonRow({ account, onClick, testId, trailing }: { account: Acc
     <button className="row" onClick={onClick} data-testid={testId}>
       <Avatar id={account.accountId} name={labelOf(account)} />
       <span className="row-main">
-        <span className="row-title">{labelOf(account)} <GuestBadge account={account} /></span>
+        <span className="row-title">{labelOf(account)} <GuestBadge account={account} /> <IntegrationBadge account={account} /></span>
         <span className="row-preview">
           @{account.username}
           {account.phone ? ` · ${account.phone}` : ''}

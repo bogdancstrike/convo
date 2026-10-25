@@ -40,7 +40,9 @@ class AdminPermissions {
         /** Read the organization policy clients enforce. */
         POLICY_READ,
         /** Publish a new signed organization policy version (reason and recent sign-in required). */
-        POLICY_MANAGE
+        POLICY_MANAGE,
+        /** Mark accounts as visible archive/bot integrations or clear the mark (reason and recent sign-in required). */
+        INTEGRATIONS_MANAGE
     }
 
     private final Map<String, Set<Permission>> byRole;
@@ -51,9 +53,9 @@ class AdminPermissions {
                 properties.role(), EnumSet.allOf(Permission.class),
                 r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.HEALTH_READ,
                         Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE),
-                r.orgAdmin(), EnumSet.of(Permission.POLICY_READ, Permission.POLICY_MANAGE, Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ, Permission.STATS_READ,
+                r.orgAdmin(), EnumSet.of(Permission.POLICY_READ, Permission.POLICY_MANAGE, Permission.INTEGRATIONS_MANAGE, Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ, Permission.STATS_READ,
                         Permission.USERS_CREATE, Permission.USERS_CREDENTIALS, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE),
-                r.security(), EnumSet.of(Permission.POLICY_READ, Permission.POLICY_MANAGE, Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ,
+                r.security(), EnumSet.of(Permission.POLICY_READ, Permission.POLICY_MANAGE, Permission.INTEGRATIONS_MANAGE, Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ,
                         Permission.HEALTH_READ, Permission.PUSH_REDRIVE, Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE, Permission.ALERTS_READ, Permission.ALERTS_MANAGE, Permission.ALERT_RULES_MANAGE),
                 r.auditor(), EnumSet.of(Permission.POLICY_READ, Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT, Permission.STATS_READ, Permission.ALERTS_READ),
                 r.platform(), EnumSet.of(Permission.HEALTH_READ, Permission.PUSH_REDRIVE),

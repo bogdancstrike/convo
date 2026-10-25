@@ -7,13 +7,15 @@ import { accessToken } from './auth';
  */
 export type Permission =
   | 'ACCOUNTS_READ' | 'DEVICES_READ' | 'DEVICE_REVOKE' | 'ACCOUNT_STATUS' | 'AUDIT_READ' | 'AUDIT_EXPORT' | 'AUDIT_CHECKPOINT'
-  | 'HEALTH_READ' | 'PUSH_REDRIVE' | 'STATS_READ' | 'USERS_CREATE' | 'USERS_CREDENTIALS' | 'RECOVERY_RESET' | 'ROLES_MANAGE' | 'SESSIONS_READ' | 'SESSIONS_REVOKE' | 'ALERTS_READ' | 'ALERTS_MANAGE' | 'ALERT_RULES_MANAGE' | 'POLICY_READ' | 'POLICY_MANAGE';
+  | 'HEALTH_READ' | 'PUSH_REDRIVE' | 'STATS_READ' | 'USERS_CREATE' | 'USERS_CREDENTIALS' | 'RECOVERY_RESET' | 'ROLES_MANAGE' | 'SESSIONS_READ' | 'SESSIONS_REVOKE' | 'ALERTS_READ' | 'ALERTS_MANAGE' | 'ALERT_RULES_MANAGE' | 'POLICY_READ' | 'POLICY_MANAGE' | 'INTEGRATIONS_MANAGE';
 
 export interface Me { actor: string; roles: string[]; permissions: Permission[] }
 export interface AccountSummary {
   accountId: string; username: string; displayName: string | null; status: 'active' | 'disabled'; activeDevices: number;
   createdAt: string; lastSeenDay: string | null;
 }
+/** A visible archive/bot integration account (FR-EXT-02); `retention` is shown to everyone in chats with it. */
+export interface Integration { kind: 'archive' | 'bot'; retention: string; setBy: string; setAt: string }
 export interface DeviceSummary { deviceId: number; platform: string; createdAt: string; lastSeenDay: string | null }
 export interface AuditEntry { seq: number; at: string; actor: string; actorName?: string; action: string; target: string; targetName?: string; reason: string; hash: string }
 export interface AuditFilters { before?: number; q?: string; action?: string; user?: string; from?: string; to?: string }
@@ -109,6 +111,9 @@ export const api = {
   devices: (id: string) => call<DeviceSummary[]>('GET', `/accounts/${id}/devices`),
   setDisabled: (id: string, disabled: boolean, reason: string) => call<AuditEntry>('POST', `/accounts/${id}/${disabled ? 'disable' : 'enable'}`, { reason }),
   revokeDevice: (id: string, deviceId: number, reason: string) => call<AuditEntry>('POST', `/accounts/${id}/devices/${deviceId}/revoke`, { reason }),
+  integration: (id: string) => call<{ integration?: Integration | null }>('GET', `/accounts/${id}/integration`),
+  setIntegration: (id: string, kind: Integration['kind'] | null, retention: string, reason: string) =>
+    call<AuditEntry>('PUT', `/accounts/${id}/integration`, { kind, retention: kind ? retention : null, reason }),
   revokeRecovery: (id: string, reason: string) => call<{ revoked: boolean }>('POST', `/accounts/${id}/recovery/revoke`, { reason }),
   signInOf: (id: string) => call<SignInAccount>('GET', `/accounts/${id}/sign-in`),
   idpUsers: (search: string) => call<SignInAccount[]>('GET', `/idp/users?q=${q(search)}&limit=100`),

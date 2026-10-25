@@ -25,6 +25,14 @@ class AdminActions {
         return audit.append(actor, disabled ? "account.disable" : "account.enable", accountId.toString(), reason);
     }
 
+    /** Marks or clears a visible integration account; the audit entry records kind and retention. */
+    @Transactional
+    AuditLog.Entry setIntegration(String actor, UUID accountId, String kind, String retention, String reason) {
+        identity.setIntegration(accountId, kind, retention, actor);
+        String detail = kind == null ? reason : reason + " [" + kind + "; " + retention.strip() + "]";
+        return audit.append(actor, kind == null ? "integration.clear" : "integration.set", accountId.toString(), detail);
+    }
+
     @Transactional
     AuditLog.Entry revokeDevice(String actor, UUID accountId, int deviceId, String reason) {
         identity.revokeDevice(accountId, deviceId, "admin");
