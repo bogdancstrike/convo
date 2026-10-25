@@ -34,9 +34,11 @@ class TransparencyLog {
     /** Advisory lock key ("KTLOG") that serializes appends across replicas. */
     private static final long APPEND_LOCK = 0x4b544c4f47L;
 
-    record Head(long size, byte[] root, Instant signedAt, byte[] signature) {}
+    /** A signed head; {@code mapRoot}/{@code mapSignature} are null for heads signed before the map existed. */
+    record Head(long size, byte[] root, Instant signedAt, byte[] signature, byte[] mapRoot, byte[] mapSignature) {}
     record Leaf(long index, UUID accountId, byte[] identityKey, long deviceListVersion, byte[] deviceHash) {}
-    record Cosignature(String witnessId, byte[] publicKey, Instant cosignedAt, byte[] signature) {}
+    /** @param version 1 = head only; 2 = head and map root (the witness recomputed the map) */
+    record Cosignature(String witnessId, byte[] publicKey, Instant cosignedAt, byte[] signature, int version) {}
     record Witnessed(Head head, List<Cosignature> cosignatures) {}
 
     private final JdbcClient jdbc;
@@ -95,8 +97,53 @@ class TransparencyLog {
         byte[] root = MerkleTree.root(leaves, Math.toIntExact(size));
         Instant at = clock.instant().truncatedTo(ChronoUnit.MILLIS);
         byte[] signature = Ed25519Keys.sign(key.getPrivate(), KtEncoding.head(deploymentId, size, root, at.toEpochMilli()));
-        jdbc.sql("INSERT INTO kt_heads (size, root, signed_at, signature) VALUES (:s, :r, :t, :g) ON CONFLICT (size) DO NOTHING")
-                .param("s", size).param("r", root).param("t", Timestamp.from(at)).param("g", signature).update();
+        byte[] mapRoot = SparseMerkleMap.root(mapEntries(size, false));
+        byte[] mapSignature = Ed25519Keys.sign(key.getPrivate(), KtEncoding.mapHead(deploymentId, size, mapRoot, at.toEpochMilli()));
+        jdbc.sql("INSERT INTO kt_heads (size, root, signed_at, signature, map_root, map_signature) VALUES (:s, :r, :t, :g, :m, :ms) ON CONFLICT (size) DO NOTHING")
+                .param("s", size).param("r", root).param("t", Timestamp.from(at)).param("g", signature).param("m", mapRoot).param("ms", mapSignature).update();
+    }
+
+    /** Adds the map root to the newest head if it was signed before the map existed (upgrade). */
+    @Transactional
+    void ensureMapRoot() {
+        jdbc.sql("SELECT pg_advisory_xact_lock(:k)").param("k", APPEND_LOCK).query(Object.class).single();
+        latestHead().filter(h -> h.mapRoot() == null).ifPresent(h -> {
+            byte[] mapRoot = SparseMerkleMap.root(mapEntries(h.size(), false));
+            byte[] mapSignature = Ed25519Keys.sign(key.getPrivate(), KtEncoding.mapHead(deploymentId, h.size(), mapRoot, h.signedAt().toEpochMilli()));
+            jdbc.sql("UPDATE kt_heads SET map_root = :m, map_signature = :ms WHERE size = :s").param("m", mapRoot).param("ms", mapSignature).param("s", h.size()).update();
+        });
+    }
+
+    /** Cached sorted map at one size (heads are immutable, so the newest is all that is kept). */
+    private volatile java.util.Map.Entry<Long, List<SparseMerkleMap.Entry>> cachedMap;
+
+    /**
+     * The verifiable map at a log size: each account's newest leaf hash among the first {@code size}
+     * leaves, sorted by map key. {@code cache} only on read paths (committed leaves).
+     */
+    List<SparseMerkleMap.Entry> mapEntries(long size, boolean cache) {
+        var cached = cachedMap;
+        if (cache && cached != null && cached.getKey() == size) return cached.getValue();
+        List<SparseMerkleMap.Entry> entries = new java.util.ArrayList<>(jdbc.sql("""
+                SELECT DISTINCT ON (account_id) account_id, leaf_hash FROM kt_leaves WHERE idx < :n ORDER BY account_id, idx DESC""")
+                .param("n", size).query((rs, i) -> new SparseMerkleMap.Entry(SparseMerkleMap.key(rs.getObject(1, UUID.class)), rs.getBytes(2))).list());
+        entries.sort((a, b) -> SparseMerkleMap.compare(a.key(), b.key()));
+        if (cache) cachedMap = java.util.Map.entry(size, List.copyOf(entries));
+        return entries;
+    }
+
+    /** Full leaves (account IDs and public keys) for witnesses that recompute the map. */
+    List<byte[]> leafBytes(long from, long to) {
+        return jdbc.sql("SELECT account_id, device_list_version, identity_key, device_hash FROM kt_leaves WHERE idx >= :f AND idx < :t ORDER BY idx")
+                .param("f", from).param("t", to)
+                .query((rs, i) -> KtEncoding.leaf(rs.getObject(1, UUID.class), rs.getLong(2), rs.getBytes(3), rs.getBytes(4))).list();
+    }
+
+    /** Whether a request to read leaves is signed by a configured witness within five minutes. */
+    boolean witnessMayRead(String witnessId, long from, long to, long timestamp, byte[] signature) {
+        byte[] publicKey = witnesses.get(witnessId);
+        return publicKey != null && Math.abs(clock.millis() - timestamp) <= 300_000
+                && Ed25519Keys.verify(publicKey, KtEncoding.witnessRead(from, to, timestamp), signature);
     }
 
     long size() { return jdbc.sql("SELECT count(*) FROM kt_leaves").query(Long.class).single(); }
@@ -117,11 +164,11 @@ class TransparencyLog {
     }
 
     Optional<Head> latestHead() {
-        return jdbc.sql("SELECT size, root, signed_at, signature FROM kt_heads ORDER BY size DESC LIMIT 1").query(this::headRow).optional();
+        return jdbc.sql("SELECT size, root, signed_at, signature, map_root, map_signature FROM kt_heads ORDER BY size DESC LIMIT 1").query(this::headRow).optional();
     }
 
     Optional<Head> head(long size) {
-        return jdbc.sql("SELECT size, root, signed_at, signature FROM kt_heads WHERE size = :s").param("s", size).query(this::headRow).optional();
+        return jdbc.sql("SELECT size, root, signed_at, signature, map_root, map_signature FROM kt_heads WHERE size = :s").param("s", size).query(this::headRow).optional();
     }
 
     /** The newest leaf of an account among the first {@code size} leaves. */
@@ -138,9 +185,9 @@ class TransparencyLog {
                 .param("w", witnesses.keySet()).query(Long.class).list();
         if (sizes.isEmpty()) return Optional.empty();
         long size = sizes.getFirst();
-        List<Cosignature> cosignatures = jdbc.sql("SELECT witness_id, cosigned_at, signature FROM kt_cosignatures WHERE size = :s AND witness_id IN (:w) ORDER BY witness_id")
+        List<Cosignature> cosignatures = jdbc.sql("SELECT witness_id, cosigned_at, signature, version FROM kt_cosignatures WHERE size = :s AND witness_id IN (:w) ORDER BY witness_id")
                 .param("s", size).param("w", witnesses.keySet())
-                .query((rs, i) -> new Cosignature(rs.getString(1), witnesses.get(rs.getString(1)), rs.getTimestamp(2).toInstant(), rs.getBytes(3))).list();
+                .query((rs, i) -> new Cosignature(rs.getString(1), witnesses.get(rs.getString(1)), rs.getTimestamp(2).toInstant(), rs.getBytes(3), rs.getInt(4))).list();
         return head(size).map(h -> new Witnessed(h, cosignatures));
     }
 
@@ -153,22 +200,24 @@ class TransparencyLog {
      *     the signature is invalid
      */
     @Transactional
-    boolean cosign(String witnessId, long size, long cosignedAt, byte[] signature) {
+    boolean cosign(String witnessId, long size, long cosignedAt, byte[] signature, int version) {
         byte[] publicKey = witnesses.get(witnessId);
         Optional<Head> head = head(size);
         if (publicKey == null || head.isEmpty() || cosignedAt > clock.millis() + 300_000 || cosignedAt < head.get().signedAt().toEpochMilli()) return false;
-        byte[] signed = KtEncoding.cosigned(KtEncoding.head(deploymentId, size, head.get().root(), head.get().signedAt().toEpochMilli()), cosignedAt);
+        byte[] headBytes = KtEncoding.head(deploymentId, size, head.get().root(), head.get().signedAt().toEpochMilli());
+        if (version == 2 && head.get().mapRoot() == null) return false;
+        byte[] signed = version == 2 ? KtEncoding.cosignedV2(headBytes, head.get().mapRoot(), cosignedAt) : KtEncoding.cosigned(headBytes, cosignedAt);
         if (!Ed25519Keys.verify(publicKey, signed, signature)) return false;
         jdbc.sql("""
-                INSERT INTO kt_cosignatures (size, witness_id, signature, cosigned_at) VALUES (:s, :w, :g, :t)
-                ON CONFLICT (size, witness_id) DO UPDATE SET signature = EXCLUDED.signature, cosigned_at = EXCLUDED.cosigned_at
+                INSERT INTO kt_cosignatures (size, witness_id, signature, cosigned_at, version) VALUES (:s, :w, :g, :t, :v)
+                ON CONFLICT (size, witness_id) DO UPDATE SET signature = EXCLUDED.signature, cosigned_at = EXCLUDED.cosigned_at, version = EXCLUDED.version
                 WHERE kt_cosignatures.cosigned_at < EXCLUDED.cosigned_at""")
-                .param("s", size).param("w", witnessId).param("g", signature).param("t", Timestamp.from(Instant.ofEpochMilli(cosignedAt))).update();
+                .param("s", size).param("w", witnessId).param("g", signature).param("t", Timestamp.from(Instant.ofEpochMilli(cosignedAt))).param("v", version).update();
         return true;
     }
 
     private Head headRow(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        return new Head(rs.getLong(1), rs.getBytes(2), rs.getTimestamp(3).toInstant(), rs.getBytes(4));
+        return new Head(rs.getLong(1), rs.getBytes(2), rs.getTimestamp(3).toInstant(), rs.getBytes(4), rs.getBytes(5), rs.getBytes(6));
     }
 
     private KeyPair loadKey(String configured) {

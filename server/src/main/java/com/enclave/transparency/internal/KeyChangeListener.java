@@ -26,5 +26,5 @@ class KeyChangeListener {
     void on(DeviceRevoked event) { log.record(java.util.List.of(event.address().accountId())); }
 
     @EventListener(ApplicationReadyEvent.class)
-    void backfill() { log.record(identity.accountsWithIdentityKey()); }
+    void backfill() { log.record(identity.accountsWithIdentityKey()); log.ensureMapRoot(); }
 }

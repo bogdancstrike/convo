@@ -65,4 +65,22 @@ class KtVectorsTest {
         message[message.length - 1] ^= 1;
         assertThat(Ed25519Keys.verify(Ed25519Keys.raw(pair.getPublic()), message, signature)).isFalse();
     }
+
+    private static final JsonNode MAP = JsonMapper.builder().build().readTree(Path.of("..", "contracts", "vectors", "kt-map-v1.json").toFile());
+
+    @Test void verifiableMapMatchesVectors() {
+        List<SparseMerkleMap.Entry> entries = new ArrayList<>();
+        for (JsonNode e : MAP.get("entries")) entries.add(new SparseMerkleMap.Entry(b(e.get("key")), b(e.get("value"))));
+        entries.sort((x, y) -> SparseMerkleMap.compare(x.key(), y.key()));
+        assertThat(Base64Url.encode(SparseMerkleMap.emptyRoot())).isEqualTo(MAP.get("emptyRoot").asString());
+        assertThat(Base64Url.encode(SparseMerkleMap.root(entries))).isEqualTo(MAP.get("root").asString());
+        assertThat(Base64Url.encode(SparseMerkleMap.root(entries.subList(0, 2)))).isEqualTo(MAP.get("twoEntryRoot").asString());
+        for (JsonNode p : MAP.get("proofs")) {
+            assertThat(Base64Url.encode(SparseMerkleMap.key(UUID.fromString(p.get("accountId").asString())))).isEqualTo(p.get("key").asString());
+            SparseMerkleMap.Proof proof = SparseMerkleMap.prove(entries, b(p.get("key")));
+            assertThat(Base64Url.encode(proof.bitmap())).isEqualTo(p.get("bitmap").asString());
+            List<String> expected = new ArrayList<>(); p.get("siblings").forEach(x -> expected.add(x.asString()));
+            assertThat(encoded(proof.siblings())).isEqualTo(expected);
+        }
+    }
 }

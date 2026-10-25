@@ -17,6 +17,8 @@ import java.util.UUID;
  * leaf        = "CONVO-KT-LEAF-V1\n" || accountId (16) || u64 deviceListVersion || u16 len || identityKey || device hash (32)
  * head        = "CONVO-KT-HEAD-V1\n" || deploymentId || "\n" || u64 size || root (32) || u64 timestampMillis
  * cosignature = Ed25519 over "CONVO-KT-COSIGN-V1\n" || u64 cosignedAtMillis || head
+ * map head    = "CONVO-KT-MAP-V1\n" || deploymentId || "\n" || u64 size || mapRoot (32) || u64 timestampMillis
+ * cosign v2   = Ed25519 over "CONVO-KT-COSIGN-V2\n" || u64 cosignedAtMillis || head || mapRoot (32)
  * </pre>
  */
 final class KtEncoding {
@@ -40,6 +42,23 @@ final class KtEncoding {
     static byte[] head(String deploymentId, long size, byte[] root, long timestampMillis) {
         byte[] label = ("CONVO-KT-HEAD-V1\n" + deploymentId + "\n").getBytes(StandardCharsets.UTF_8);
         return ByteBuffer.allocate(label.length + 8 + 32 + 8).put(label).putLong(size).put(root).putLong(timestampMillis).array();
+    }
+
+    /** The verifiable map's root for a head, signed by the log key (separately from the head). */
+    static byte[] mapHead(String deploymentId, long size, byte[] mapRoot, long timestampMillis) {
+        byte[] label = ("CONVO-KT-MAP-V1\n" + deploymentId + "\n").getBytes(StandardCharsets.UTF_8);
+        return ByteBuffer.allocate(label.length + 8 + 32 + 8).put(label).putLong(size).put(mapRoot).putLong(timestampMillis).array();
+    }
+
+    /** Version 2 co-signature: the witness also recomputed the map root from the log's leaves. */
+    static byte[] cosignedV2(byte[] head, byte[] mapRoot, long cosignedAtMillis) {
+        byte[] label = "CONVO-KT-COSIGN-V2\n".getBytes(StandardCharsets.UTF_8);
+        return ByteBuffer.allocate(label.length + 8 + head.length + 32).put(label).putLong(cosignedAtMillis).put(head).put(mapRoot).array();
+    }
+
+    /** What a witness signs to read leaves (they reveal account IDs and public keys). */
+    static byte[] witnessRead(long from, long to, long timestampMillis) {
+        return ("CONVO-KT-READ-V1\n" + from + "\n" + to + "\n" + timestampMillis).getBytes(StandardCharsets.UTF_8);
     }
 
     /** The witness's own time is signed too: clients judge freshness by it, not by the head's age. */

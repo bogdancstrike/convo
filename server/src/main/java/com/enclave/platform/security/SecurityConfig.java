@@ -65,7 +65,7 @@ class SecurityConfig {
     /** Routes that need no authentication. */
     // Key-transparency witness routes expose only hashes and signed heads; co-signatures are checked
     // against configured witness keys (transparency module).
-    static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws", "/v1/device-nonces", "/v1/kt/head", "/v1/kt/consistency", "/v1/kt/cosignatures"};
+    static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws", "/v1/device-nonces", "/v1/kt/head", "/v1/kt/consistency", "/v1/kt/cosignatures", "/v1/kt/leaves"};
 
     /**
      * Organization administration ({@code /v1/admin/**}): Keycloak bearer token carrying the admin

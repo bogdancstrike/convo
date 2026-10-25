@@ -26,7 +26,10 @@ device detectable without manual comparison.
 
 ## Consequences and limits
 
-* A verifiable log cannot prove that no newer entry exists for an account (it is not a prefix tree):
+* Added (V40): a verifiable map (sparse Merkle tree, account → newest leaf hash) whose root is signed
+  per head; lookups carry a map proof and witnesses recompute the map before a version-2 co-signature.
+  This closes the "older entry" gap of a plain log. Map keys are not VRF-blinded (unlike CONIKS/AKD).
+* Before the map: a verifiable log alone cannot prove that no newer entry exists for an account:
   a malicious server could serve an old entry. Owner monitoring (each device checks its own account and shows the result in Settings →
   Devices) and witnesses narrow this; an AKD/CONIKS-style verifiable map is the follow-up.
 * Heads are gossiped in E2EE receipts; a device verifies a gossiped head with the pinned log key and

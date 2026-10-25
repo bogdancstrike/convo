@@ -418,9 +418,17 @@ sequenceDiagram
   mismatch or log error; the message waits with "Action needed" and an explanation. Group messages
   (encrypted to the MLS group) are not gated. The first message to a newly changed account can go
   out before its check completes, since checks run after sending.
-* **Limits:** a verifiable log cannot prove that a newer entry does not exist (a server could serve an
-  old one); each device also checks its own account (Settings → Devices shows whether the log lists
-  exactly your key and devices), and an AKD/CONIKS-style map is the follow-up.
+* **Verifiable map (newest entry):** next to the log, each head has a signed root of a 256-level sparse
+  Merkle tree from every account (`SHA-256("CONVO-KT-MAPKEY-V1" || account)`) to the hash of its
+  newest leaf. Lookups include a map proof, so a server cannot serve an older (still included) entry
+  or deny that an account has one. Witnesses download the leaves (with a request signed by their own
+  key, so strangers cannot list the directory), recompute the log root and the map, and co-sign
+  version 2 (head + map root) only if both match. Devices count a head as witnessed only with such a
+  version-2 co-signature, and treat a head without a map after having seen one as a downgrade.
+  Older apps keep verifying the unchanged head signature and see "not yet witnessed".
+* **Limits:** map keys are plain hashes of account IDs (no VRF as in CONIKS/AKD), so a witness learns
+  which accounts exist and when their keys change; each device also checks its own account
+  (Settings → Devices).
   Gossip rides on 1:1 and group receipts only. Log and witness keys are pinned on first use.
 
 ---
@@ -890,7 +898,7 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 | WebAuthn PRF unlock | §18.4 (2), WEB-01 |
 | MLS role profile review (credentials are bound to the account identity, §6.2) | GRP-01 |
 | Sealed sender | PRIV-01 |
-| Key transparency: verifiable log, witness, client checks, head gossip and policy blocking implemented (§7.5); verifiable map and an independently operated production witness remain | TRUST-01 |
+| Key transparency: verifiable log and map, witness, client checks, head gossip and policy blocking implemented (§7.5); VRF-private map keys and an independently operated production witness remain | TRUST-01 |
 | Independent security review (SEC-02); fuzzing and plaintext scans (SEC-01) | SEC-01/02 |
 | Admin console reachable publicly (consider Cloudflare Access / LAN only) | §16.3 |
 

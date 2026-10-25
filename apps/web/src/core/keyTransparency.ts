@@ -80,24 +80,57 @@ export function verifyConsistency(m: number, n: number, rootM: Uint8Array, rootN
   return sn === 0 && equal(fr, rootM) && equal(sr, rootN);
 }
 
+// --- verifiable map (sparse Merkle tree: account → newest leaf hash) ------------------------------
+
+const MAP_DEPTH = 256;
+const EMPTY: Uint8Array[] = [new Uint8Array(32)];
+for (let i = 1; i <= MAP_DEPTH; i++) EMPTY.push(node(EMPTY[i - 1]!, EMPTY[i - 1]!));
+const bitAt = (bytes: Uint8Array, i: number) => (bytes[i >> 3]! >> (7 - (i & 7))) & 1;
+
+export const mapKey = (accountId: string) => sha256(concat(te.encode('CONVO-KT-MAPKEY-V1\n'), uuidBytes(accountId)));
+export function mapHeadBytes(deploymentId: string, size: number, mapRoot: Uint8Array, timestamp: number): Uint8Array {
+  return concat(te.encode(`CONVO-KT-MAP-V1\n${deploymentId}\n`), u64(size), mapRoot, u64(timestamp));
+}
+export const cosignedV2Bytes = (head: Uint8Array, mapRoot: Uint8Array, cosignedAt: number) => concat(te.encode('CONVO-KT-COSIGN-V2\n'), u64(cosignedAt), head, mapRoot);
+
+/**
+ * Root implied by a map proof for `key` holding `value` (null = absent). The proof lists the
+ * non-empty siblings top-down, flagged in a 32-byte bitmap; every other sibling is empty.
+ */
+export function mapRootFromProof(key: Uint8Array, value: Uint8Array | null, bitmap: Uint8Array, siblings: Uint8Array[]): Uint8Array | null {
+  if (key.length !== 32 || bitmap.length !== 32) return null;
+  const flagged: number[] = [];
+  for (let d = 0; d < MAP_DEPTH; d++) if (bitAt(bitmap, d)) flagged.push(d);
+  if (flagged.length !== siblings.length) return null;
+  const sibling = new Map(flagged.map((d, i) => [d, siblings[i]!]));
+  let h = value ? sha256(concat(Uint8Array.of(2), key, value)) : EMPTY[0]!;
+  for (let d = MAP_DEPTH - 1; d >= 0; d--) {
+    const s = sibling.get(d) ?? EMPTY[MAP_DEPTH - d - 1]!;
+    h = bitAt(key, d) ? node(s, h) : node(h, s);
+  }
+  return h;
+}
+
 // --- one account, end to end --------------------------------------------------------------------
 
-export interface KtHead { deploymentId: string; size: number; root: string; timestamp: number; signature: string; logKey: string }
+export interface KtHead { deploymentId: string; size: number; root: string; timestamp: number; signature: string; logKey: string; mapRoot?: string | null; mapSignature?: string | null }
 /** What `GET /v1/kt/accounts/{id}` returns. */
 export interface KtAccountProof {
   head: KtHead;
-  witnessed: { head: KtHead; cosignatures: { witnessId: string; publicKey: string; timestamp: number; signature: string }[] } | null;
+  witnessed: { head: KtHead; cosignatures: { witnessId: string; publicKey: string; timestamp: number; signature: string; version?: number }[] } | null;
   witnessConsistency: string[];
   sinceConsistency: string[];
   leaf: { index: number; accountId: string; identityKey: string; deviceListVersion: number; deviceHash: string } | null;
   inclusion: string[];
   maxWitnessAgeMs: number;
   witnesses: Record<string, string>;
+  /** Verifiable-map proof for this account at `head` (null on servers without the map). */
+  mapProof?: { bitmap: string; siblings: string[] } | null;
 }
 /** A tree head as signed by the log: what devices gossip to each other. */
 export interface KtSignedHead { size: number; root: string; timestamp: number; signature: string }
 /** Device-local trust state: pinned keys and the newest head accepted (signed, for gossip). */
-export interface KtState { logKey?: string; witnesses?: Record<string, string>; last?: { size: number; root: string; timestamp?: number; signature?: string } }
+export interface KtState { logKey?: string; witnesses?: Record<string, string>; last?: { size: number; root: string; timestamp?: number; signature?: string }; mapSeen?: boolean }
 
 /** Whether a gossiped head carries a valid signature by the pinned log key. */
 export function verifySignedHead(head: KtSignedHead, deploymentId: string, logKey: string): boolean {
@@ -139,13 +172,24 @@ export function verifyAccount(proof: KtAccountProof, expected: { accountId: stri
       if (h.size < state.last.size) return fail('log-error', 'rollback');
       if (!verifyConsistency(state.last.size, h.size, fromBase64Url(state.last.root), root, proof.sinceConsistency.map(fromBase64Url))) return fail('log-error', 'inconsistent');
     }
+    // Verifiable map: once seen, a head without one is a downgrade.
+    const hasMap = !!(h.mapRoot && h.mapSignature && proof.mapProof);
+    if (!hasMap && state.mapSeen) return fail('log-error', 'map-missing');
+    if (hasMap && !ed25519.verify(fromBase64Url(h.mapSignature!), mapHeadBytes(h.deploymentId, h.size, fromBase64Url(h.mapRoot!), h.timestamp), logKey)) return fail('log-error', 'bad-map-signature');
     const witnesses = state.witnesses && Object.keys(state.witnesses).length ? state.witnesses : proof.witnesses;
-    const next: KtState = { logKey: h.logKey, witnesses, last: { size: h.size, root: h.root, timestamp: h.timestamp, signature: h.signature } };
+    const next: KtState = { logKey: h.logKey, witnesses, last: { size: h.size, root: h.root, timestamp: h.timestamp, signature: h.signature }, mapSeen: state.mapSeen || hasMap };
     // The account's entry must be included and equal what the device is about to use.
     const leaf = proof.leaf;
-    if (!leaf || leaf.accountId !== expected.accountId) return { status: 'mismatch', reason: 'no-entry', state: next, size: h.size };
-    const ik = fromBase64Url(leaf.identityKey), devices = fromBase64Url(leaf.deviceHash);
-    if (!verifyInclusion(leaf.index, h.size, leafHash(leafBytes(leaf.accountId, leaf.deviceListVersion, ik, devices)), proof.inclusion.map(fromBase64Url), root)) return fail('log-error', 'not-included');
+    const leafDigest = leaf && leaf.accountId === expected.accountId
+      ? leafHash(leafBytes(leaf.accountId, leaf.deviceListVersion, fromBase64Url(leaf.identityKey), fromBase64Url(leaf.deviceHash))) : null;
+    // The map proves this is the account's newest entry (or that it has none) at this head.
+    if (hasMap) {
+      const implied = mapRootFromProof(mapKey(expected.accountId), leafDigest, fromBase64Url(proof.mapProof!.bitmap), proof.mapProof!.siblings.map(fromBase64Url));
+      if (!implied || !equal(implied, fromBase64Url(h.mapRoot!))) return fail('log-error', 'not-newest');
+    }
+    if (!leaf || !leafDigest) return { status: 'mismatch', reason: 'no-entry', state: next, size: h.size };
+    const devices = fromBase64Url(leaf.deviceHash);
+    if (!verifyInclusion(leaf.index, h.size, leafDigest, proof.inclusion.map(fromBase64Url), root)) return fail('log-error', 'not-included');
     if (leaf.identityKey !== expected.identityKey) return { status: 'mismatch', reason: 'identity-key', state: next, size: h.size };
     if (leaf.deviceListVersion !== expected.roster.deviceListVersion) return { status: 'stale', reason: 'device-list-version', state: next, size: h.size };
     if (!equal(devices, deviceHash(expected.roster.devices))) return { status: 'mismatch', reason: 'devices', state: next, size: h.size };
@@ -158,8 +202,11 @@ export function verifyAccount(proof: KtAccountProof, expected: { accountId: stri
     if (!ed25519.verify(fromBase64Url(w.head.signature), signedHead, logKey)) return fail('log-error', 'bad-witnessed-head');
     if (!verifyConsistency(w.head.size, h.size, wRoot, root, proof.witnessConsistency.map(fromBase64Url))) return fail('log-error', 'witness-inconsistent');
     // A pinned witness signed this head recently (by its own clock, not the head's age).
-    const cosigned = w.cosignatures.some((c) => witnesses[c.witnessId] === c.publicKey && now - c.timestamp <= maxAge
-      && ed25519.verify(fromBase64Url(c.signature), cosignedBytes(signedHead, c.timestamp), fromBase64Url(c.publicKey)));
+    // With a map, only version 2 counts: the witness recomputed the map root from the log's leaves.
+    const wMap = w.head.mapRoot ? fromBase64Url(w.head.mapRoot) : null;
+    const cosigned = w.cosignatures.some((c) => witnesses[c.witnessId] === c.publicKey && now - c.timestamp <= maxAge && (
+      (c.version === 2 && wMap && ed25519.verify(fromBase64Url(c.signature), cosignedV2Bytes(signedHead, wMap, c.timestamp), fromBase64Url(c.publicKey)))
+      || (!hasMap && (c.version ?? 1) === 1 && ed25519.verify(fromBase64Url(c.signature), cosignedBytes(signedHead, c.timestamp), fromBase64Url(c.publicKey)))));
     return { status: cosigned ? 'verified' : 'unwitnessed', state: next, size: h.size };
   } catch {
     return fail('log-error', 'malformed');

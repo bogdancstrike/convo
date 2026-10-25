@@ -4,7 +4,10 @@ A witness keeps the Convo server honest about its key log (SECURITY.md §7.5). I
 head only after checking:
 
 1. the head is signed by the log key it pinned on first use (and for the same deployment);
-2. the log only grew since the last head it signed (RFC 9162 consistency proof).
+2. the log only grew since the last head it signed (RFC 9162 consistency proof);
+3. with the verifiable map: every leaf it downloads (request signed with its key) hashes into the
+   signed log root, and the map of each account's newest leaf has the signed map root. It then
+   co-signs version 2. Its state file keeps the leaf hashes and map (about 100 bytes per account).
 
 A rollback, fork or changed log key is **never** signed: the witness logs `ALERT, not signing` and
 exits with status 3. It re-signs the newest head every hour (`KT_RESIGN_SECONDS`) with its own time,

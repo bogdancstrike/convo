@@ -79,3 +79,40 @@ it('ignores co-signatures by witnesses the device did not pin', () => {
   const { proof, expected, now } = fixture();
   expect(verifyAccount(proof, expected, 'd', { witnesses: { other: 'AAAA' } }, now).status).toBe('unwitnessed');
 });
+
+const M = JSON.parse(readFileSync(new URL('../../../../contracts/vectors/kt-map-v1.json', import.meta.url), 'utf8'));
+
+it('verifiable map: keys and proofs match the shared vectors; wrong values do not', async () => {
+  const { mapKey, mapRootFromProof } = await import('./keyTransparency');
+  for (const p of M.proofs) {
+    expect(toBase64Url(mapKey(p.accountId))).toBe(p.key);
+    const implied = mapRootFromProof(b(p.key), p.value ? b(p.value) : null, b(p.bitmap), p.siblings.map(b));
+    expect(toBase64Url(implied!)).toBe(M.root);
+    // An older value, or claiming absence for a present key (or presence for an absent one), fails.
+    const forged = mapRootFromProof(b(p.key), p.value ? null : b(M.entries[0].value), b(p.bitmap), p.siblings.map(b));
+    expect(toBase64Url(forged!)).not.toBe(M.root);
+  }
+});
+
+it('with the map, an older (still included) entry is rejected and the newest one verifies', async () => {
+  const { mapHeadBytes } = await import('./keyTransparency');
+  const logPriv = ed25519.utils.randomSecretKey(), now = Date.now();
+  const root7 = b(V.roots['7']);
+  const head = { deploymentId: 'd', size: 7, root: V.roots['7'], timestamp: now, signature: toBase64Url(ed25519.sign(headBytes('d', 7, root7, now), logPriv)),
+    logKey: toBase64Url(ed25519.getPublicKey(logPriv)), mapRoot: M.root, mapSignature: toBase64Url(ed25519.sign(mapHeadBytes('d', 7, b(M.root), now), logPriv)) };
+  const proofFor = (index: number): KtAccountProof => {
+    const e = V.entries[index];
+    const mp = M.proofs.find((p: { accountId: string }) => p.accountId === e.accountId);
+    return { head, witnessed: null, witnessConsistency: [], sinceConsistency: [], maxWitnessAgeMs: 1, witnesses: {},
+      leaf: { index, accountId: e.accountId, identityKey: e.identityKey, deviceListVersion: e.deviceListVersion, deviceHash: e.deviceHash },
+      inclusion: V.inclusion.find((p: { index: number; size: number }) => p.index === index && p.size === 7).path, mapProof: { bitmap: mp.bitmap, siblings: mp.siblings } };
+  };
+  const expect0 = { accountId: V.entries[0].accountId, identityKey: V.entries[0].identityKey, roster: { deviceListVersion: V.entries[0].deviceListVersion, devices: V.entries[0].devices } };
+  expect(verifyAccount(proofFor(0), expect0, 'd', {}, now)).toMatchObject({ status: 'unwitnessed', state: { mapSeen: true } });
+  const e3 = V.entries[3];
+  expect(verifyAccount(proofFor(3), { accountId: e3.accountId, identityKey: e3.identityKey, roster: { deviceListVersion: e3.deviceListVersion, devices: e3.devices } }, 'd', {}, now))
+    .toMatchObject({ status: 'log-error', reason: 'not-newest' });
+  // A server that drops the map after a device saw one is a downgrade.
+  const { mapRoot: _r, mapSignature: _s, ...plain } = head;
+  expect(verifyAccount({ ...proofFor(0), head: plain, mapProof: null }, expect0, 'd', { mapSeen: true }, now)).toMatchObject({ status: 'log-error', reason: 'map-missing' });
+});
