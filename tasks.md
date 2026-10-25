@@ -243,7 +243,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - Private chat folders (specs §30.4): named folders with explicit chats, type filters (personal,
   groups, channels) and "unread only"; stored encrypted per device and synced to own devices only
   (higher mutation wins, sanitized on receipt). Web: folder pills, + to create, right-click to
-  edit/delete. `folders.test.ts`, `folders.spec.ts`.
+  edit/delete. `folders.test.ts`, `folders.spec.ts`. Android: folder pills, + and long-press editor
+  (verified on the emulator).
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

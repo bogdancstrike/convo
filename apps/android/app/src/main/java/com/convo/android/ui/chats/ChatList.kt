@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 
 /**
  * The chat list (web: ChatListPanel): pill search, All / Unread / Groups filters, an "Archived"
@@ -43,6 +45,11 @@ import org.json.JSONObject
     var query by remember { mutableStateOf("") }; var matches by remember { mutableStateOf(emptyList<String>()) }
     var archived by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(if (unreadOnly) "unread" else "all") }
+    // Private chat folders (specs §30.4): re-read whenever the snapshot changes (sync from own devices).
+    var folders by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var editingFolder by remember { mutableStateOf<JSONObject?>(null) }; var newFolder by remember { mutableStateOf(false) }
+    LaunchedEffect(app.snapshot) { if (!channels) app.call("folders", quiet = true) { v -> folders = (v as? JSONArray)?.objects().orEmpty() } }
+    val activeFolder = folders.find { "folder:${it.optString("id")}" == filter }
     // Locked chats are listed only after authenticating, never in ordinary lists or search.
     var showLocked by remember { mutableStateOf(false) }
     val locked = app.locks.lockedChats
@@ -55,7 +62,12 @@ import org.json.JSONObject
     val conversations = scope.filter { c ->
         (showLocked || c.optBoolean("archived") == archived) &&
             (filter != "unread" || c.optInt("unread") > 0) && (filter != "groups" || c.optString("kind") == "group") &&
+            (activeFolder == null || folderMatches(activeFolder, c)) &&
             (query.isBlank() || c.optString("title").contains(query, true) || c.optString("id") in matches)
+    }
+    if (newFolder || editingFolder != null) FolderEditor(app, all.filter { it.optString("id") !in locked }, folders, editingFolder) {
+        if (editingFolder != null && filter == "folder:${editingFolder!!.optString("id")}") filter = "all"
+        newFolder = false; editingFolder = null
     }
     Column(Modifier.fillMaxSize().background(colors.panel)) {
         if (archived) Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -63,9 +75,11 @@ import org.json.JSONObject
             Text("Archived", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
         SearchField(query, { query = it }, if (channels) "Search channels" else "Search or start a new chat", Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        if (!archived) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!archived) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val options = if (channels) listOf("all" to "All", "unread" to "Unread") else listOf("all" to "All", "unread" to "Unread", "groups" to "Groups")
             options.forEach { (key, label) -> PillChip(label, filter == key && !showLocked) { filter = key; showLocked = false } }
+            if (!channels) folders.forEach { f -> PillChip(f.optString("name"), filter == "folder:${f.optString("id")}" && !showLocked, onLongClick = { editingFolder = f }) { filter = "folder:${f.optString("id")}"; showLocked = false } }
+            if (!channels) PillChip("", false, Icons.Outlined.Add) { newFolder = true }
             if (locked.isNotEmpty()) PillChip("Locked chats", showLocked, Icons.Outlined.Lock) {
                 if (showLocked) showLocked = false else app.locks.authenticate("Show locked chats", "Confirm it’s you") { showLocked = true }
             }
@@ -188,9 +202,10 @@ import org.json.JSONObject
 }
 
 /** Filter chip (web `.chip`): pill, tinted when pressed, no outline. */
-@Composable fun PillChip(label: String, selected: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit) {
+/** WhatsApp filter pill; [onLongClick] (folders) opens its editor. */
+@Composable fun PillChip(label: String, selected: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val colors = LocalConvoColors.current
-    Row(Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) colors.chipActive else colors.chip).combinedClickable(onClick = onClick).padding(horizontal = 14.dp),
+    Row(Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) colors.chipActive else colors.chip).combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (icon != null) Icon(icon, null, Modifier.size(15.dp), tint = if (selected) colors.chipActiveText else colors.chipText)
         Text(label, color = if (selected) colors.chipActiveText else colors.chipText, fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
