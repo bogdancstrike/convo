@@ -328,7 +328,11 @@ class CallManager(private val app: MainActivity) {
                 route(speaker = video)
                 version++; onRoomChanged()
                 if (BuildConfig.DEBUG) { logMediaStats(created); if (debugProperty("debug.convo.calltone") == "1") injectTestTone(created) }
-            } catch (_: Exception) { end(answered = false); finish("failed") }
+            } catch (e: Exception) {
+                // Kept in logcat for diagnosis (type and message only; the token is never logged).
+                android.util.Log.w("Convo", "Call connect failed: ${e.javaClass.simpleName}: ${e.message?.take(200)}")
+                end(answered = false); finish("failed")
+            }
         }
     }
 
