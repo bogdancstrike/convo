@@ -51,6 +51,7 @@ import { Outbox, type OutboxItem } from './outbox';
 import { applyBallot, applyClose, initialState, newPoll } from './polls';
 import { applyRsvp, applyUpdate, initialEvent, newEvent } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
+import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
@@ -411,8 +412,44 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    *
    * @throws Error if the body is empty or exceeds 64 KiB
    */
-  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck: boolean | AckOptions = false, options: { silent?: boolean } = {}): Promise<void> {
-    await this.sendMessage(conversationId, { body, quote, mentions, requestAck, silent: options.silent });
+  async sendText(conversationId: string, body: string, quote?: Quote, mentions?: string[], requestAck: boolean | AckOptions = false, options: { silent?: boolean; topic?: string } = {}): Promise<void> {
+    if (options.topic) await this.requireOpenTopic(conversationId, options.topic);
+    await this.sendMessage(conversationId, { body, quote, mentions, requestAck, silent: options.silent, topic: options.topic });
+  }
+
+  // --- group topics (specs §30.4) ----------------------------------------------------------------
+
+  /** Creates a topic in a group (owners/admins). */
+  async createTopic(conversationId: string, name: string): Promise<Topic> {
+    const topic: Topic = { id: newMessageId(), name: name.trim(), closed: false, revision: 1 };
+    await this.publishTopic(conversationId, topic);
+    return topic;
+  }
+
+  /** Renames, closes or reopens a topic (owners/admins); a new revision of its definition. */
+  async updateTopic(conversationId: string, id: string, patch: { name?: string; closed?: boolean }): Promise<void> {
+    const current = this.conversationCache.get(conversationId)?.topics?.find((t) => t.id === id);
+    if (!current) throw new Error('unknown topic');
+    await this.publishTopic(conversationId, { ...current, ...patch, name: (patch.name ?? current.name).trim(), revision: current.revision + 1 });
+  }
+
+  private async publishTopic(conversationId: string, topic: Topic): Promise<void> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId || !(await this.canChangeTimer(groupId, this.accountId))) throw new Error('only owners and admins manage topics');
+    if (!topic.name || topic.name.length > MAX_TOPIC_NAME) throw new Error('topic name missing or too long');
+    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), topicDef: topic };
+    const conversation = this.conversationCache.get(conversationId)!;
+    const updated = { ...conversation, topics: applyTopic(conversation.topics, topic) };
+    await this.enqueue(conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putConversation(updated)]);
+    this.conversationCache.set(conversationId, updated);
+    this.emitConversations();
+  }
+
+  /** Closed topics are read-only except for owners/admins. */
+  private async requireOpenTopic(conversationId: string, topicId: string): Promise<void> {
+    const topic = this.conversationCache.get(conversationId)?.topics?.find((t) => t.id === topicId);
+    const groupId = groupIdOf(conversationId);
+    if (!canPostInTopic(topic, !!groupId && await this.canChangeTimer(groupId, this.accountId))) throw new Error('topic closed');
   }
 
   // --- abuse reports (AC-SEC-09) -----------------------------------------------------------------
@@ -674,7 +711,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -704,6 +741,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       viewOnce: content.viewOnce || undefined,
       silent: content.silent || undefined,
       report: content.report,
+      topic: content.topic,
     };
     const message: ChatMessage = {
       conversationId,
@@ -726,6 +764,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       poll: content.poll ? initialState(content.poll) : undefined,
       event: content.event ? initialEvent(content.event) : undefined,
       report: content.report,
+      topic: content.topic,
       // The sender keeps no copy of view-once media, only its label.
       ...(content.viewOnce ? { attachments: undefined, viewOnce: { kind: viewOnceKind(content.attachments![0]!), state: 'sent' as const } } : {}),
     };
@@ -2196,6 +2235,15 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       return 'mutation';
     }
     if (data.timerUpdate) return this.applyTimerUpdate(conversation, authorId, direction, data, envelope, ops);
+    if (data.topicDef) {
+      const groupId = groupIdOf(conversation.id);
+      // Only owners/admins define topics; everyone applies the same revision rule.
+      if (!groupId || !(await this.canChangeTimer(groupId, authorId))) return 'ignored';
+      const topics = applyTopic(conversation.topics, data.topicDef);
+      if (topics === conversation.topics) return 'ignored';
+      this.stage(ops, { ...conversation, topics });
+      return 'mutation';
+    }
     if (data.pin) return this.applyPin(conversation, authorId, data, ops);
     if (data.left) {
       if (!groupIdOf(conversation.id) || await this.repos.message(conversation.id, authorId, data.messageId)) return 'ignored';
@@ -2226,6 +2274,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       poll: data.poll ? initialState(data.poll) : undefined,
       event: data.event ? initialEvent(data.event) : undefined,
       report: data.report,
+      topic: data.topic,
       ...(data.viewOnce ? { viewOnce: { kind: viewOnceKind(data.attachments![0]!), state: direction === 'out' ? 'sent' as const : 'unopened' as const } } : {}),
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,

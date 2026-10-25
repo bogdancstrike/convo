@@ -1,3 +1,4 @@
+import type { Topic } from './topics';
 import type { AbuseReport } from '../crypto/content';
 import type { EventState } from './events';
 import type { PollState } from './polls';
@@ -89,6 +90,8 @@ export interface ChatMessage {
   viewOnce?: { kind: 'photo' | 'video'; state: 'unopened' | 'opened' | 'sent'; at?: number };
   /** Abuse report received from (or sent to) a security contact. */
   report?: AbuseReport;
+  /** Group topic this message belongs to (absent = general). */
+  topic?: string;
 }
 
 export interface Conversation {
@@ -104,6 +107,8 @@ export interface Conversation {
   unread: number;
   /** Messages pinned for everyone (newest first, at most MAX_PINNED). */
   pinnedMessages?: { authorId: string; id: string; pinnedAt: number; by: string }[];
+  /** Group topics (specs §30.4), defined by owners/admins. */
+  topics?: Topic[];
   /** Groups: alert for every message or only when this account is mentioned (mute = none). */
   notify?: 'all' | 'mentions';
   /** An unread message mentions this account (cleared when read). */

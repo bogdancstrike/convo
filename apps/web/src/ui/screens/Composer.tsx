@@ -40,7 +40,10 @@ export function Composer({
   authorName,
   onDone,
   openPicker,
+  topic,
 }: {
+  /** Group topic new messages go to (absent = general). */
+  topic?: string;
   client: EnclaveClient;
   conversation: Conversation;
   mode: ComposerMode;
@@ -156,7 +159,7 @@ export function Composer({
         const day = 24 * 60 * 60 * 1000;
         const ack = requestAck && { ...(ackDue ? { due: Date.now() + ackDue * day } : {}), ...(ackExpires ? { expires: Date.now() + ackExpires * day } : {}) };
         if (options.dueAt) await client.scheduleMessage(conversation.id, body, options.dueAt, { quote, mentions: mentionsIn(body, picked), silent: options.silent });
-        else await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), ack, { silent: options.silent });
+        else await client.sendText(conversation.id, body, quote, mentionsIn(body, picked), ack, { silent: options.silent, topic });
         setPicked([]);
         setRequestAck(false);
         setAckDue(0);

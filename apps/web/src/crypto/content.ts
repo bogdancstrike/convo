@@ -120,6 +120,10 @@ export interface DataMessage {
    * only to the chosen security contact. Never uploaded or stored anywhere else.
    */
   report?: AbuseReport;
+  /** Group topic this message belongs to (absent = the group's general conversation). */
+  topic?: string;
+  /** Group event: create/rename/close a topic (owners/admins; highest revision wins). */
+  topicDef?: { id: string; name: string; closed: boolean; revision: number };
   /** Quiet send: recipients get the message and unread count but no alert. */
   silent?: boolean;
   /** The author's current answer to an event. */
@@ -465,6 +469,9 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
   if (value.event !== undefined && !isEventDefinition(value.event)) return false;
   if (value.silent !== undefined && typeof value.silent !== 'boolean') return false;
+  if (value.topic !== undefined && (typeof value.topic !== 'string' || !ID.test(value.topic))) return false;
+  if (value.topicDef !== undefined && (!isObject(value.topicDef) || typeof value.topicDef.id !== 'string' || !ID.test(value.topicDef.id) || typeof value.topicDef.name !== 'string'
+    || !value.topicDef.name.trim() || value.topicDef.name.length > 48 || typeof value.topicDef.closed !== 'boolean' || !Number.isSafeInteger(value.topicDef.revision) || (value.topicDef.revision as number) < 1)) return false;
   if (value.report !== undefined && !isAbuseReport(value.report)) return false;
   if (value.viewOnce !== undefined && (value.viewOnce !== true || !Array.isArray(value.attachments) || value.attachments.length !== 1
     || !isObject(value.attachments[0]) || !/^(image|video)\//.test(String(value.attachments[0].contentType)))) return false;

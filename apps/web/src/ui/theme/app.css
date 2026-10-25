@@ -2535,3 +2535,7 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .report-reason { margin: 4px 0; font-style: italic; }
 .report-evidence { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 0.875rem; }
 .report-text { white-space: pre-wrap; padding: 4px 8px; border-left: 3px solid var(--c-border); }
+
+/* Group topics (specs §30.4). */
+.topic-bar { padding: 6px var(--space-3); border-bottom: 1px solid var(--c-border); background: var(--c-panel); }
+.topic-bar .chip.closed { opacity: 0.7; }

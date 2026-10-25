@@ -19,6 +19,7 @@ import { Composer, type ComposerMode } from './Composer';
 import { ForwardDialog } from './ForwardDialog';
 import { MessageBubble, MessageInfoDialog, messageAnchor } from './MessageBubble';
 import { ReportDialog } from './ReportDialog';
+import { TopicBar } from './Topics';
 
 
 
@@ -72,7 +73,13 @@ export function Thread({
   // Calls: direct chats and groups you are in; not Note to self or broadcast channels.
   const callable = conversation.kind !== 'note' && !conversation.left && !conversation.adminOnly && !conversation.blocked;
   const group = conversation.kind === 'group';
-  const readOnly = record?.needsJoin || conversation.adminOnly && (!record || record.members.find((m) => m.accountId === client.accountId)?.role === 'member');
+  const myRole = record?.members.find((m) => m.accountId === client.accountId)?.role;
+  const readOnly = record?.needsJoin || conversation.adminOnly && (!record || myRole === 'member');
+  // Group topics (specs §30.4): the selected topic filters messages and receives new ones.
+  const [topic, setTopic] = useState<string | null>(null);
+  const isGroupAdmin = myRole === 'owner' || myRole === 'admin';
+  const currentTopic = conversation.topics?.find((x) => x.id === topic);
+  const topicClosed = !!currentTopic?.closed && !isGroupAdmin;
   const addFiles = (added: File[]) => setFiles((current) => [...current, ...added].slice(0, MAX_ATTACHMENTS));
 
   useEffect(() => {
@@ -102,8 +109,9 @@ export function Thread({
 
   const shown = useMemo(() => {
     const q = search ? fold(search) : '';
-    return q ? messages.filter((m) => m.body && fold(m.body).includes(q)) : messages;
-  }, [messages, search]);
+    const inTopic = conversation.topics?.length ? messages.filter((m) => (m.topic ?? null) === topic || (!!m.notice && topic === null)) : messages;
+    return q ? inTopic.filter((m) => m.body && fold(m.body).includes(q)) : inTopic;
+  }, [messages, search, topic, conversation.topics]);
 
   // First-unread navigation (FEAT-03): the unread count when the chat opened (Thread is keyed by
   // chat) marks where the "N unread messages" divider goes; the view starts there, not at the end.
@@ -271,6 +279,7 @@ export function Thread({
           )}
         />
       </header>
+      {group && !conversation.adminOnly && !conversation.left && <TopicBar client={client} conversation={conversation} selected={topic} onSelect={setTopic} isAdmin={isGroupAdmin} />}
       <PinnedBanner client={client} conversation={conversation} />
       {search !== null && (
         <div className="thread-search">
@@ -353,9 +362,11 @@ export function Thread({
         <div className="channel-read-only" role="status" data-testid="blocked-banner"><Icon name="lock" size={16} />{t('block.banner', { name: title })}
           <button className="btn" onClick={() => void client.setBlocked(conversation.id, false)} data-testid="unblock">{t('block.unblock')}</button></div>
       )}
-      {!conversation.left && !readOnly && !conversation.blocked && !selection && (
+      {topicClosed && <div className="channel-read-only" role="status" data-testid="topic-closed"><Icon name="lock" size={16} />{t('topics.closedNotice')}</div>}
+      {!conversation.left && !readOnly && !conversation.blocked && !selection && !topicClosed && (
         <Composer
           key={conversation.id}
+          topic={topic ?? undefined}
           client={client}
           conversation={conversation}
           mode={mode}
