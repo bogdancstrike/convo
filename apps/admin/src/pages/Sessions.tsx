@@ -3,6 +3,7 @@ import { Alert, App, Button, Card, Descriptions, Drawer, Empty, Select, Space, S
 import { ArrowLeftOutlined, CompressOutlined, ExpandOutlined, LogoutOutlined } from '@ant-design/icons';
 import { api, errorText, type LiveSession, type SignInAccount } from '../api';
 import { SessionTable, SESSION_NOTE } from '../components/SessionTable';
+import { ConvoDevicesCard } from '../components/ConvoDevices';
 import { useViewState } from '../components/useViewState';
 import { useReason } from '../components/confirm';
 import { fmtTime } from '../format';
@@ -57,6 +58,7 @@ export function SessionsPage({ can, navigate, param }: PageProps) {
     <Card size="small" className="sessions-scope"><div className="session-person-picker"><div><Typography.Text strong>Select a person</Typography.Text><Typography.Paragraph type="secondary">Search by name or username</Typography.Paragraph></div><Select showSearch allowClear filterOption={false} aria-label="Select a person for sessions" placeholder="Find a person" value={view.user || undefined} onSearch={setQuery} onChange={(value) => { setQuery(''); navigate(`sessions${value ? `?user=${encodeURIComponent(value)}` : ''}`); }} options={options} /></div></Card>
     {error && <Alert type="error" showIcon message={error} />}
     {view.user ? <Card className="table-surface" title={selected ? `${selected.user.username} · online sessions` : 'Online sessions'}><SessionTable key={`${view.user}:${version}`} userId={view.user} can={can} onOpen={open} /></Card> : <Card><Empty description="Choose a person to inspect their live sessions" /></Card>}
+    {view.user && selected?.convoAccountId && can('DEVICES_READ') && <ConvoDevicesCard accountId={selected.convoAccountId} can={can} />}
     {param && <Drawer open width={660} title="Session details" onClose={close} extra={toggle} destroyOnHidden>{content}</Drawer>}
   </div>;
 }

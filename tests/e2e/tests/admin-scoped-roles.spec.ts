@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { adminSignIn, closeAll, createUser, newPage } from './support';
+import { adminSignIn, closeAll, createUser, enroll, newPage } from './support';
 
 /** AC-ADM-01: platform operators see infrastructure only; compliance officers see audit and policy. */
 test('platform and compliance roles get only their pages', async ({ browser, request }) => {
@@ -36,4 +36,24 @@ test('service metrics show aggregate delivery and group health', async ({ browse
     }
     await expect(metrics).toContainText('No people, devices or conversations are identified here');
   } finally { await closeAll(page); }
+});
+
+/** The apps keep no IdP session after enrollment: Sessions lists the person's Convo devices too. */
+test('sessions page lists the person\'s Convo devices next to sign-in sessions', async ({ browser, request }) => {
+  test.setTimeout(120_000);
+  const [helpU, personU] = await Promise.all([createUser(request, 'sesshelp', { realmRoles: ['convo-helpdesk'] }), createUser(request, 'sessperson')]);
+  const [admin, person] = await Promise.all([newPage(browser), newPage(browser)]);
+  try {
+    await enroll(person, personU);
+    await adminSignIn(admin, helpU);
+    await admin.getByTestId('admin-tab-sessions').click();
+    const picker = admin.getByRole('combobox', { name: 'Select a person for sessions' });
+    await picker.fill(personU.username);
+    await expect(admin.locator('.ant-select-item-option').filter({ hasText: personU.username }).first()).toBeVisible({ timeout: 15_000 });
+    await picker.press('Enter');
+    const card = admin.getByTestId('convo-devices');
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toContainText('Web app');
+    await expect(card).toContainText('keep no sign-in session');
+  } finally { await closeAll(admin, person); }
 });
