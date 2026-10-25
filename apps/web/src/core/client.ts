@@ -16,6 +16,7 @@ import {
   type Content,
   type CallMessage,
   type DataMessage,
+  type PollDefinition,
   type Quote,
   type CommunityMeta,
   type GroupMeta,
@@ -41,6 +42,7 @@ import { isSnoozed, localZone } from './snooze';
 import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './disappearing';
 import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, type CallInvite, type CallJoin, type CallKey, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
+import { applyBallot, applyClose, initialState, newPoll } from './polls';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
@@ -548,7 +550,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -573,6 +575,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       // Mentions only make sense in groups and only for current members.
       mentions: group && content.mentions?.length ? [...new Set(content.mentions)].filter((id) => recipients.includes(id)).slice(0, 50) : undefined,
       ackRequest: content.requestAck && group ? this.newAckRequest(group, recipients, content.requestAck === true ? {} : content.requestAck) : undefined,
+      poll: content.poll,
     };
     const message: ChatMessage = {
       conversationId,
@@ -592,6 +595,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       expiresAt: data.expireTimer ? data.timestamp + data.expireTimer * 1000 : undefined,
       mentions: data.mentions,
       ackRequest: data.ackRequest,
+      poll: content.poll ? initialState(content.poll) : undefined,
     };
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
@@ -660,6 +664,41 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (pin.pinned && (!target || target.deleted)) return 'ignored';
     this.stage(ops, { ...conversation, pinnedMessages: withPin(conversation.pinnedMessages, pin.targetAuthorId, pin.targetMessageId, pin.pinned, data.timestamp, authorId) });
     return 'mutation';
+  }
+
+  // --- polls (FR-EXT-01, AC-COL-01) -----------------------------------------------------------
+
+  /** Sends a poll; the question doubles as the message text for previews and search. Not in channels' member replies. */
+  async sendPoll(conversationId: string, question: string, options: string[], multiple: boolean): Promise<void> {
+    const poll = newPoll(question, options, multiple, newMessageId);
+    await this.sendMessage(conversationId, { body: poll.question, poll });
+  }
+
+  /** Replaces this account's ballot (empty = withdraw). Closed polls and unknown options are refused. */
+  async votePoll(target: ChatMessage, optionIds: string[]): Promise<void> {
+    if (!target.poll || target.poll.closed) throw new Error('poll closed');
+    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), pollVote: { targetMessageId: target.id, targetAuthorId: target.authorId, optionIds } };
+    const updated = applyBallot(target.poll, this.accountId, { optionIds }, data.timestamp, data.messageId);
+    if (updated === target.poll) throw new Error('invalid ballot');
+    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage({ ...target, poll: updated })]);
+    this.emit('messages', target.conversationId);
+  }
+
+  /** Closes a poll for everyone: its author, or a group owner/admin. */
+  async closePoll(target: ChatMessage): Promise<void> {
+    if (!target.poll || target.poll.closed) return;
+    if (!(await this.canClosePoll(target, this.accountId))) throw new Error('only the poll author or an admin can close it');
+    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), pollClose: { targetMessageId: target.id, targetAuthorId: target.authorId } };
+    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined,
+      [this.repos.putMessage({ ...target, poll: applyClose(target.poll, this.accountId, data.timestamp) })]);
+    this.emit('messages', target.conversationId);
+  }
+
+  /** Whether an account may close a poll: its author, or an owner/admin of the group. */
+  async canClosePoll(target: ChatMessage, accountId: string): Promise<boolean> {
+    if (target.authorId === accountId) return true;
+    const groupId = groupIdOf(target.conversationId);
+    return !!groupId && await this.canChangeTimer(groupId, accountId);
   }
 
   /** Adds or removes the current account's reaction. */
@@ -736,7 +775,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       for (const id of touched) {
         const c = this.conversationCache.get(id);
         const [latest] = await this.repos.messages(id, 1);
-        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments }) : '' });
+        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments, poll: latest.poll }) : '' });
       }
       if (previews.length) await this.saveConversations(previews);
       for (const id of touched) this.emit('messages', id);
@@ -1892,8 +1931,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     changed: Set<string>,
   ): Promise<'new' | 'edited' | 'mutation' | 'ignored' | 'left'> {
     if (data.profile) this.stageProfile(data.profile, authorId, ops);
-    const targetId = data.reaction?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
-    const targetAuthor = data.reaction?.targetAuthorId ?? authorId;
+    const targetId = data.reaction?.targetMessageId ?? data.pollVote?.targetMessageId ?? data.pollClose?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
+    const targetAuthor = data.reaction?.targetAuthorId ?? data.pollVote?.targetAuthorId ?? data.pollClose?.targetAuthorId ?? authorId;
     if (await this.repos.isLocallyDeleted({ conversationId, authorId: targetAuthor, id: targetId })) return 'ignored';
     const isNewChat = !this.conversationCache.has(conversationId);
     const conversation = await this.ensureConversation(conversationId, ops);
@@ -1904,6 +1943,20 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       const target = await this.repos.message(conversation.id, r.targetAuthorId, r.targetMessageId);
       if (!target || target.deleted) return 'ignored';
       ops.push(this.repos.putMessage(applyReaction(target, authorId, r.emoji, r.remove)));
+      return 'mutation';
+    }
+    if (data.pollVote || data.pollClose) {
+      const ref = (data.pollVote ?? data.pollClose)!;
+      const target = await this.repos.message(conversation.id, ref.targetAuthorId, ref.targetMessageId);
+      if (!target?.poll || target.deleted) return 'ignored';
+      // Ballots and closes use the sender's timestamp, bounded by server time so a skewed clock
+      // cannot slip a ballot in before an earlier close.
+      const at = Math.min(data.timestamp, envelope.serverTimestamp);
+      let poll = target.poll;
+      if (data.pollVote) poll = applyBallot(poll, authorId, data.pollVote, at, data.messageId);
+      else if (await this.canClosePoll(target, authorId)) poll = applyClose(poll, authorId, at);
+      if (poll === target.poll) return 'ignored';
+      ops.push(this.repos.putMessage({ ...target, poll }));
       return 'mutation';
     }
     if (data.edit) {
@@ -1957,6 +2010,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       sort: direction === 'out' ? data.timestamp : envelope.serverTimestamp,
       status: direction === 'out' ? 'sent' : undefined,
       reactions: {},
+      poll: data.poll ? initialState(data.poll) : undefined,
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
       ackRequest: data.ackRequest && await this.validAckRequest(conversation.id, authorId, data.ackRequest) ? data.ackRequest : undefined,
@@ -2166,6 +2220,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
 /** Local conversation-list preview of a message. */
 function previewOf(data: DataMessage): string {
+  if (data.poll) return `📊 ${data.poll.question}`;
   if (data.body) return data.body;
   const first = data.attachments?.[0];
   if (!first) return '';

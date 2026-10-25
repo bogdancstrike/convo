@@ -16,6 +16,7 @@ import { Icon } from '../components/Icon';
 import { useAccountLabel } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { nameColorIndex } from '../theme/tokens';
+import { PollCard } from './Polls';
 
 /** Quick reactions shown at the top of the message menu. */
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -152,7 +153,7 @@ export function MessageBubble({
                   <span className="name">{f.name}<span className="muted-text"> · {m.status === 'failed' ? t('upload.failed') : t('upload.waiting')}</span></span>
                 </div>
               ))}
-              {m.body && (
+              {m.poll ? <PollCard client={client} message={m} /> : m.body && (
                 <span data-testid="message-body">
                   <FormattedText text={m.body} highlight={highlight} mentions={mentionLabels} />
                 </span>

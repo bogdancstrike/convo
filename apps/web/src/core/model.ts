@@ -1,3 +1,4 @@
+import type { PollState } from './polls';
 import { DEFAULT_AUTO_DOWNLOAD, type AutoDownloadSettings } from './mediaPolicy';
 import type { AttachmentPointer, Quote } from '../crypto/content';
 
@@ -75,6 +76,8 @@ export interface ChatMessage {
   acks?: Record<string, { at: number; revision: number; late?: boolean }>;
   /** Audience member: own response (content revision; reviewers still waiting for delivery). */
   myAck?: { revision: number; at: number; pending: string[] };
+  /** Poll message: definition, current ballots and close state (see core/polls.ts). */
+  poll?: PollState;
 }
 
 export interface Conversation {

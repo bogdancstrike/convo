@@ -2449,3 +2449,24 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .feature-intro-uses ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .feature-intro-uses li { display: flex; gap: var(--space-2); align-items: flex-start; }
 .feature-intro-uses li svg { color: var(--c-accent-text); flex: none; margin-top: 3px; }
+
+/* Polls (FR-EXT-01): WhatsApp-like card inside the bubble; bars show relative votes. */
+.poll-card { display: grid; gap: var(--space-2); min-width: min(280px, 70vw); margin: 2px 0 var(--space-1); }
+.poll-question { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.poll-mode { font-size: 0.8125rem; }
+.poll-options { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.poll-option { position: relative; display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: var(--space-2); width: 100%; padding: 6px 2px 10px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.poll-option:disabled { cursor: default; }
+.poll-check { width: 18px; height: 18px; border: 2px solid var(--c-text-secondary); border-radius: 4px; display: grid; place-items: center; color: #fff; }
+.poll-check.round { border-radius: 50%; }
+.poll-option.chosen .poll-check { background: var(--c-accent); border-color: var(--c-accent); }
+.poll-count { font-size: 0.8125rem; color: var(--c-text-secondary); }
+.poll-bar { position: absolute; left: 30px; bottom: 2px; height: 4px; max-width: calc(100% - 30px); border-radius: 2px; background: var(--c-accent); transition: width 160ms ease; }
+.poll-option:not(.chosen) .poll-bar { opacity: 0.45; }
+.poll-voters { padding-left: 30px; font-size: 0.75rem; }
+.poll-actions { display: flex; gap: var(--space-2); border-top: 1px solid var(--c-border); padding-top: var(--space-1); }
+.poll-actions .btn { flex: 1; color: var(--c-accent-text); }
+.poll-card.closed .poll-question { color: var(--c-text-secondary); }
+.poll-dialog input { width: 100%; }
+.poll-options-edit { display: grid; gap: var(--space-2); border: 0; padding: 0; margin: var(--space-3) 0; }
+.poll-options-edit input { padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--radius-md); background: var(--c-panel); color: var(--c-text-primary); }

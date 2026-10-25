@@ -7,6 +7,7 @@ import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaPreview } from '../components/MediaPreview';
 import { Icon } from '../components/Icon';
 import { Menu } from '../components/Popover';
+import { PollComposer } from './Polls';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration, useVoiceRecorder } from '../useVoiceRecorder';
 
@@ -52,6 +53,7 @@ export function Composer({
 }) {
   const { t } = useI18n();
   const [text, setText] = useState(conversation.draft ?? '');
+  const [pollOpen, setPollOpen] = useState(false);
   // @mentions (groups): suggestions for the `@query` at the caret, and the members picked so far.
   const members = useGroupMembers(client, conversation.id);
   const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
@@ -231,6 +233,7 @@ export function Composer({
 
   return (
     <div className="composer-wrap">
+      {pollOpen && <PollComposer client={client} conversationId={conversation.id} onClose={() => setPollOpen(false)} />}
       {PICKERS.map((p) => (
         <input
           key={p.key}
@@ -334,12 +337,12 @@ export function Composer({
               label={t('thread.attach')}
               placement="above-start"
               className="attach-menu"
-              items={PICKERS.map((p) => ({
+              items={[...PICKERS.map((p) => ({
                 label: t(`attach.${p.key}`),
                 icon: p.icon,
                 testId: `attach-${p.key}`,
                 onSelect: () => inputs.current.get(p.key)?.click(),
-              }))}
+              })), ...(conversation.kind !== 'note' ? [{ label: t('attach.poll'), icon: 'poll' as const, testId: 'attach-poll', onSelect: () => setPollOpen(true) }] : [])]}
               trigger={({ open, toggle }) => (
                 <button
                   className="icon-btn"

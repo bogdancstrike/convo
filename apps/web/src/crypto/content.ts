@@ -100,7 +100,23 @@ export interface DataMessage {
   pin?: { targetMessageId: string; targetAuthorId: string; pinned: boolean };
   /** Community announcement asking for an explicit acknowledgement (specs §30.6). */
   ackRequest?: AckRequest;
+  /** This message is a poll (FR-EXT-01, AC-COL-01); `body` carries the question for previews/search. */
+  poll?: PollDefinition;
+  /** The author's current ballot for a poll (replaces their earlier one). */
+  pollVote?: PollVote;
+  /** Closes a poll: its author, or a group owner/admin. */
+  pollClose?: { targetMessageId: string; targetAuthorId: string };
 }
+
+/** Poll limits (AC-COL-01). */
+export const POLL_MAX_OPTIONS = 10;
+export const POLL_MAX_QUESTION = 300;
+export const POLL_MAX_OPTION_TEXT = 100;
+
+/** Immutable poll definition: stable option IDs; single or multiple choice chosen at creation. */
+export interface PollDefinition { question: string; options: { id: string; text: string }[]; multiple: boolean }
+/** A voter's whole current ballot (an empty list withdraws the vote). */
+export interface PollVote { targetMessageId: string; targetAuthorId: string; optionIds: string[] }
 
 /**
  * Acknowledgement request bound to one announcement. Reviewers (≤ 10, owners/admins) receive
@@ -403,11 +419,33 @@ function isDataMessage(value: unknown): value is DataMessage {
     || utf8(value.edit.body).length > MAX_BODY_BYTES || (value.edit.revision !== undefined && !isRevision(value.edit.revision)))) return false;
   if (value.body !== undefined && (typeof value.body !== 'string' || utf8(value.body).length > MAX_BODY_BYTES)) return false;
   if (value.ackRequest !== undefined && !isAckRequest(value.ackRequest)) return false;
+  if (value.poll !== undefined && !isPollDefinition(value.poll)) return false;
+  if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
+  if (value.pollClose !== undefined && (!isObject(value.pollClose) || typeof value.pollClose.targetMessageId !== 'string' || typeof value.pollClose.targetAuthorId !== 'string')) return false;
   if (value.attachments !== undefined) {
     if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS) return false;
     if (!value.attachments.every(isAttachmentPointer)) return false;
   }
   return true;
+}
+
+/** 1–10 options with unique IDs and bounded text; a question within its limit. */
+export function isPollDefinition(value: unknown): value is PollDefinition {
+  if (!isObject(value) || typeof value.question !== 'string' || !value.question.trim() || value.question.length > POLL_MAX_QUESTION || typeof value.multiple !== 'boolean') return false;
+  if (!Array.isArray(value.options) || value.options.length < 1 || value.options.length > POLL_MAX_OPTIONS) return false;
+  const ids = new Set<string>();
+  for (const option of value.options) {
+    if (!isObject(option) || typeof option.id !== 'string' || !ID.test(option.id) || ids.has(option.id)) return false;
+    if (typeof option.text !== 'string' || !option.text.trim() || option.text.length > POLL_MAX_OPTION_TEXT) return false;
+    ids.add(option.id);
+  }
+  return true;
+}
+
+function isPollVote(value: unknown): value is PollVote {
+  return isObject(value) && typeof value.targetMessageId === 'string' && typeof value.targetAuthorId === 'string'
+    && Array.isArray(value.optionIds) && value.optionIds.length <= POLL_MAX_OPTIONS && value.optionIds.every((id) => typeof id === 'string' && ID.test(id))
+    && new Set(value.optionIds).size === value.optionIds.length;
 }
 
 function isAttachmentPointer(value: unknown): value is AttachmentPointer {
