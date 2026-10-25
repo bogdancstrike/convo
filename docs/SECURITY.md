@@ -686,10 +686,19 @@ Android:
 It reads exactly what an ordinary member would (it is an MLS member of the groups it joins, or the
 other side of a 1:1 chat), and what it keeps is plaintext under the disclosed policy: a separate
 trust boundary from the ciphertext-only server. Removing it from a group removes its keys for future
-messages; copies it already received cannot be erased by promise. Not yet implemented: an
-*addressed-only* bot mode (a bot without the group's epoch keys that receives only messages
-explicitly sent to it) and a bundled bot/archive runtime; integrations today run as enrolled
-clients.
+messages; copies it already received cannot be erased by promise.
+
+**Runtime** (`deploy/convo-bot`): runs an integration account with the Android app's encryption core
+in headless Chromium. It signs in with the OAuth device grant through the public `convo-integration`
+Keycloak client (device grant only; no redirects, no password grant, nothing secret on disk besides
+the browser profile with the device keys) and enrolls a device of platform `integration`, listed in
+the admin console. *Archive* mode appends what it receives to a 0600 plaintext JSON-lines file and
+prunes it to the configured retention; *bot* mode passes direct messages and mentions to an operator
+handler, which must treat message text as untrusted. The `/data` volume holds plaintext and keys
+and must be protected accordingly.
+
+Not yet implemented: an *addressed-only* bot mode (a bot without the group's epoch keys that receives
+only messages explicitly sent to it).
 
 ## 16. Network exposure, ports and firewall
 

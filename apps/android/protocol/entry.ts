@@ -23,11 +23,13 @@ import { zipSync } from '../../web/node_modules/fflate/esm/browser';
 import { toIcs } from '../../web/src/core/events';
 
 // Only packaged JavaScript runs here. This bridge never exposes protocol keys to native views.
-declare global { interface Window { NativeConvo: { emit(json: string): void }; ConvoCore: { command(json: string): void } } }
+// ConvoPlatform: 'integration' when the bundle runs in the archive/bot runtime (deploy/convo-bot).
+declare global { interface Window { NativeConvo: { emit(json: string): void }; ConvoCore: { command(json: string): void }; ConvoPlatform?: string } }
+const PLATFORM = window.ConvoPlatform === 'integration' ? 'integration' : 'android';
 class AndroidApi extends EnclaveApi {
-  override registerPrimary(token: string, request: PrimaryRegistrationRequest) { return super.registerPrimary(token, { ...request, platform: 'android' }); }
-  override linkDevice(token: string, request: LinkRegistrationRequest) { return super.linkDevice(token, { ...request, platform: 'android' }); }
-  override recoverDevice(token: string, registration: PrimaryRegistrationRequest, authorizationKey: string) { return super.recoverDevice(token, { ...registration, platform: 'android' }, authorizationKey); }
+  override registerPrimary(token: string, request: PrimaryRegistrationRequest) { return super.registerPrimary(token, { ...request, platform: PLATFORM }); }
+  override linkDevice(token: string, request: LinkRegistrationRequest) { return super.linkDevice(token, { ...request, platform: PLATFORM }); }
+  override recoverDevice(token: string, registration: PrimaryRegistrationRequest, authorizationKey: string) { return super.recoverDevice(token, { ...registration, platform: PLATFORM }, authorizationKey); }
 }
 let context: LocalContext; let client: EnclaveClient | null = null;
 let accessToken = ''; let active: string | null = null; let refreshTimer: ReturnType<typeof setTimeout>;
@@ -354,6 +356,14 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
         }
       }
       return [...found.values()];
+    }
+    // Integration runtime: every message newer than `after` (sort key), oldest first, across all chats.
+    case 'archiveSince': {
+      const after = Number(args.after) || 0;
+      const all = (await Promise.all(client.conversations().map(async (c) => (await client!.messages(c.id, 2000))
+        .filter((m) => m.sort > after && !m.notice).map((m) => ({ ...publicMessage(m), conversationTitle: c.title, conversationKind: c.kind }))))).flat();
+      const page = all.sort((a, b) => a.sort - b.sort).slice(0, 500);
+      return Promise.all(page.map(async (m) => ({ ...m, authorName: await client!.displayName(m.authorId) })));
     }
     case 'logout': await client.signOutAndWipe(); client = null; active = null; context = await openContext(); emit('phase', { name: 'welcome' }); return;
     default: throw new Error('unsupported command');

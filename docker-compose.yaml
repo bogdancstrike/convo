@@ -293,6 +293,9 @@ services:
       CI: "true"
     volumes:
       - ./tests/e2e/test-results:/e2e/test-results
+      # Archive/bot runtime and the core bundle it runs (integration-runtime.spec.ts).
+      - ./deploy/convo-bot:/bot:ro
+      - ./apps/android/app/src/main/assets:/bot-core:ro
     depends_on:
       web: { condition: service_healthy }
 

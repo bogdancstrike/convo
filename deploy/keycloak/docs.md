@@ -4,7 +4,8 @@
 (`--import-realm`). Existing realms require explicit admin updates; never delete the volume
 just to apply configuration, because changing user subjects breaks account identity continuity.
 
-- Realm `enclave`, Convo branding, public S256 PKCE clients `enclave-web` and `convo-android`.
+- Realm `enclave`, Convo branding, public S256 PKCE clients `enclave-web` and `convo-android`, and
+  `convo-integration` (device authorization grant only) for the archive/bot runtime `deploy/convo-bot`.
   Web redirects use only the relative `/auth/convo/callback` route; Android uses the registered
   `com.convo.android:/oauth2redirect` callback. Implicit and direct password grants are disabled.
 - nginx exposes Keycloak on the app's HTTPS origin under `/auth`. Keycloak resolves the public

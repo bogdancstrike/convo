@@ -44,7 +44,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class EnrollmentService {
 
     private static final Logger log = LoggerFactory.getLogger(EnrollmentService.class);
-    private static final Set<String> PLATFORMS = Set.of("android", "web", "desktop", "ios");
+    /** {@code integration}: the archive/bot runtime (deploy/convo-bot). */
+    private static final Set<String> PLATFORMS = Set.of("android", "web", "desktop", "ios", "integration");
     private static final int IDENTITY_KEY_LENGTH = 33;
     private static final byte DJB_KEY_TYPE = 0x05;
 

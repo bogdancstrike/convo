@@ -69,6 +69,23 @@
       "rootUrl": "${authBaseUrl}"
     },
     {
+      "clientId": "convo-integration",
+      "name": "Convo archive/bot runtime",
+      "description": "Device sign-in (RFC 8628) for archive and bot accounts run by deploy/convo-bot; no browser redirects, no password grant.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true"
+      },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "phone", "basic", "email"]
+    },
+    {
       "clientId": "convo-android",
       "name": "Convo Android",
       "enabled": true,

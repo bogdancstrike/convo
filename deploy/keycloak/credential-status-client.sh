@@ -85,6 +85,17 @@ if [[ -z "$admin_client" ]]; then
 else
   k update "clients/$admin_client" -r "$REALM" "${admin_settings[@]}" && echo "Updated convo-admin"
 fi
+# Archive/bot runtime (deploy/convo-bot): public client with only the device authorization grant
+# (RFC 8628): the operator signs in as the integration account in a browser; no secret on disk.
+integration=$(k get clients -r "$REALM" -q clientId=convo-integration --fields id --format csv --noquotes | head -n1)
+integration_settings=(-s enabled=true -s publicClient=true -s standardFlowEnabled=false -s directAccessGrantsEnabled=false
+  -s implicitFlowEnabled=false -s serviceAccountsEnabled=false -s 'redirectUris=[]'
+  -s 'attributes."oauth2.device.authorization.grant.enabled"=true' -s 'description=Convo archive/bot runtime (device sign-in)')
+if [[ -z "$integration" ]]; then
+  k create clients -r "$REALM" -s clientId=convo-integration "${integration_settings[@]}" >/dev/null && echo "Created convo-integration"
+else
+  k update "clients/$integration" -r "$REALM" "${integration_settings[@]}" && echo "Updated convo-integration"
+fi
 # Sign-in account management for the admin API: confidential service account limited to users.
 if [[ -n "${ADMIN_OPS_SECRET:-}" ]]; then
   ops=$(k get clients -r "$REALM" -q clientId=convo-admin-ops --fields id --format csv --noquotes | head -n1)

@@ -34,7 +34,7 @@ export function ConvoDevicesCard({ accountId, can }: { accountId: string; can: (
             try { await api.revokeDevice(accountId, d.deviceId, reason); message.success('Device unlinked'); setVersion((v) => v + 1); } catch (e) { message.error(errorText(e)); }
           }}>Unlink</Button>] : []}>
             <List.Item.Meta avatar={d.platform === 'android' ? <AndroidOutlined /> : <GlobalOutlined />}
-              title={<>{d.platform === 'android' ? 'Android app' : d.platform === 'web' ? 'Web app' : d.platform} <Tag>device {d.deviceId}</Tag></>}
+              title={<>{d.platform === 'android' ? 'Android app' : d.platform === 'web' ? 'Web app' : d.platform === 'integration' ? 'Archive/bot runtime' : d.platform} <Tag>device {d.deviceId}</Tag></>}
               description={`Linked ${fmtTime(d.createdAt)} · last active ${fmtDay(d.lastSeenDay)}`} />
           </List.Item>
         )} />
