@@ -269,6 +269,12 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Aggregate service health (ADM-01): Health → Service metrics shows mailbox backlog (waiting
+  envelopes, devices with backlog, oldest age, sessions per pod), groups and groups paused by a
+  revoked device, departures awaiting removal, push wake-ups and device enrollments/revocations in
+  24 h. Each module exposes counts through its public API (`MessagingHealthApi`,
+  `GroupsApi.health`, `PushApi.health`, `IdentityAdminApi.deviceChanges`); no identifiers.
+  `SystemHealthTest`, `admin-scoped-roles.spec.ts`.
 - Commit catch-up (specs §6, GRP-02): `GET /v1/groups/{gid}/events?fromEpoch=` serves accepted
   commits (≤ 100 per page) to member devices; a client receiving a commit for a later epoch replays
   the missed ones in order (MLS-authenticated as usual) before applying it, including removal.
@@ -523,7 +529,6 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Communities: membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
-| Admin: aggregate health dashboards beyond component probes | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
 
 ## Web UX refresh (ADR-0003) — 2026-10-20

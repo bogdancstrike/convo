@@ -51,8 +51,30 @@ class SystemHealthTest {
         var guard = mock(AdminGuard.class);
         var service = mock(SystemHealth.class);
         doThrow(new IllegalStateException("denied")).when(guard).require(null, AdminPermissions.Permission.HEALTH_READ);
-        assertThatThrownBy(() -> new SystemHealthController(guard, service).system(null)).hasMessage("denied");
-        verifyNoInteractions(service);
+        var messaging = mock(com.enclave.messaging.MessagingHealthApi.class);
+        var push = mock(com.enclave.push.PushApi.class);
+        var groups = mock(com.enclave.groups.GroupsApi.class);
+        var identity = mock(com.enclave.identity.IdentityAdminApi.class);
+        var controller = new SystemHealthController(guard, service, messaging, push, groups, identity, clock);
+        assertThatThrownBy(() -> controller.system(null)).hasMessage("denied");
+        assertThatThrownBy(() -> controller.service(null)).hasMessage("denied");
+        verifyNoInteractions(service, messaging, push, groups, identity);
+    }
+    @Test void serviceMetricsAggregateEveryModuleWithoutIdentifiers() {
+        var guard = mock(AdminGuard.class);
+        var messaging = mock(com.enclave.messaging.MessagingHealthApi.class);
+        var push = mock(com.enclave.push.PushApi.class);
+        var groups = mock(com.enclave.groups.GroupsApi.class);
+        var identity = mock(com.enclave.identity.IdentityAdminApi.class);
+        when(messaging.health()).thenReturn(new com.enclave.messaging.MessagingHealthApi.Health(12, 3, Duration.ofMinutes(5), 7));
+        when(push.health()).thenReturn(new com.enclave.push.PushApi.Health(1, Duration.ofSeconds(30), java.util.Map.of()));
+        when(groups.health()).thenReturn(new com.enclave.groups.GroupsApi.Health(40, 1, 1, 0));
+        when(identity.deviceChanges(clock.instant().minus(Duration.ofHours(24)))).thenReturn(new com.enclave.identity.IdentityAdminApi.DeviceChanges(4, 1));
+        var metrics = new SystemHealthController(guard, mock(SystemHealth.class), messaging, push, groups, identity, clock).service(null).getBody();
+        assertThat(metrics.messaging().waitingEnvelopes()).isEqualTo(12);
+        assertThat(metrics.groups().groupsBlockedByRemoval()).isEqualTo(1);
+        assertThat(metrics.devices24h().enrolled()).isEqualTo(4);
+        assertThat(metrics.measuredAt()).isEqualTo(clock.instant());
     }
     @Test void rejectsUnboundedProbeConfiguration() {
         assertThatThrownBy(() -> properties(Duration.ofMinutes(1))).isInstanceOf(IllegalArgumentException.class);

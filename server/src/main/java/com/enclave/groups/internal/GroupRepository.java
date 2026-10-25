@@ -138,6 +138,16 @@ class GroupRepository {
     }
 
     /** Drops a revoked device from every routing roster. */
+    /** Aggregate counts for operators (see {@link com.enclave.groups.GroupsApi.Health}). */
+    com.enclave.groups.GroupsApi.Health health() {
+        return jdbc.sql("""
+                SELECT (SELECT count(*) FROM mls_groups) AS groups,
+                       (SELECT count(DISTINCT group_id) FROM mls_group_pending_removals) AS blocked,
+                       (SELECT count(*) FROM mls_group_pending_removals) AS removals,
+                       (SELECT count(*) FROM mls_group_departures) AS departures""")
+                .query((rs, n) -> new com.enclave.groups.GroupsApi.Health(rs.getLong("groups"), rs.getLong("blocked"), rs.getLong("removals"), rs.getLong("departures"))).single();
+    }
+
     /** Moves a revoked device from every roster into pending removal (same transaction). */
     int markPendingRemoval(DeviceAddress device) {
         jdbc.sql("""

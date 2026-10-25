@@ -19,3 +19,21 @@ test('platform and compliance roles get only their pages', async ({ browser, req
     await expect(compliance.getByText('Your admin role can view the policy but not change it.')).toBeVisible();
   } finally { await closeAll(platform, compliance); }
 });
+
+/** ADM-01 aggregate health: counts only, readable by the platform operator. */
+test('service metrics show aggregate delivery and group health', async ({ browser, request }) => {
+  test.setTimeout(90_000);
+  const platformU = await createUser(request, 'platmetrics', { realmRoles: ['convo-platform'] });
+  const page = await newPage(browser);
+  try {
+    await adminSignIn(page, platformU);
+    await page.getByTestId('admin-tab-health').click();
+    await page.getByRole('tab', { name: 'Service metrics' }).click();
+    const metrics = page.getByTestId('admin-service-metrics');
+    await expect(metrics).toBeVisible();
+    for (const id of ['metric-waiting', 'metric-groups', 'metric-enrolled', 'metric-blocked-groups', 'metric-push-pending']) {
+      await expect(metrics.getByTestId(id).locator('.ant-statistic-content-value')).toHaveText(/^[\d,]+$/, { timeout: 20_000 });
+    }
+    await expect(metrics).toContainText('No people, devices or conversations are identified here');
+  } finally { await closeAll(page); }
+});

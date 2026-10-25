@@ -64,6 +64,11 @@ public interface IdentityAdminApi {
      */
     void setDisabled(UUID accountId, boolean disabled);
 
+    /** Devices enrolled and revoked since {@code since} (aggregate counts for operators). */
+    DeviceChanges deviceChanges(java.time.Instant since);
+
+    record DeviceChanges(long enrolled, long revoked) {}
+
     /** Marks an IdP subject as a guest until {@code expiresAt} (replacing an earlier expiry). */
     void markGuest(String subject, java.time.Instant expiresAt, String invitedBy);
 

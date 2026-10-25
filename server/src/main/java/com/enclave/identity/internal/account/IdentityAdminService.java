@@ -70,6 +70,13 @@ class IdentityAdminService implements IdentityAdminApi {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public DeviceChanges deviceChanges(java.time.Instant since) {
+        return jdbc.sql("SELECT count(*) FILTER (WHERE created_at >= :s) AS enrolled, count(*) FILTER (WHERE revoked_at >= :s) AS revoked FROM devices")
+                .param("s", java.sql.Timestamp.from(since)).query((rs, n) -> new DeviceChanges(rs.getLong("enrolled"), rs.getLong("revoked"))).single();
+    }
+
+    @Override
     @Transactional
     public void markGuest(String subject, java.time.Instant expiresAt, String invitedBy) {
         jdbc.sql("""

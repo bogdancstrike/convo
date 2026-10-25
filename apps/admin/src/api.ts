@@ -137,6 +137,7 @@ export const api = {
   exportAudit: (reason: string) => call<unknown>('POST', '/audit/export', { reason }),
   health: () => call<Health>('GET', '/health'),
   systemHealth: () => call<SystemHealth>('GET', '/health/system'),
+  serviceMetrics: () => call<ServiceMetrics>('GET', '/health/service'),
   redrive: (reason: string) => call<{ queued: number }>('POST', '/push/redrive', { reason }),
 };
 
@@ -159,4 +160,13 @@ export interface OrgPolicy {
   security: { screenshotBlock: boolean; appLockRequired: boolean; appLockMaxMinutes: number };
   privacy: { readReceiptsDefault: boolean; typingDefault: boolean };
   features: { chatExport: boolean; viewOnce: boolean; stickers: boolean; callLinks: boolean };
+}
+
+/** Aggregate service health (`GET /health/service`): counts and ISO-8601 durations only. */
+export interface ServiceMetrics {
+  messaging: { waitingEnvelopes: number; devicesWithBacklog: number; oldestWaiting: string; connectedSessions: number };
+  push: { pending: number; oldestPending: string; deadLetters: Record<string, number> };
+  groups: { groups: number; groupsBlockedByRemoval: number; pendingDeviceRemovals: number; pendingDepartures: number };
+  devices24h: { enrolled: number; revoked: number };
+  measuredAt: string;
 }

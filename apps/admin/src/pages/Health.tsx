@@ -4,6 +4,7 @@ import { ReloadOutlined, SendOutlined } from '@ant-design/icons';
 import { api, errorText, type Health, type SystemHealth } from '../api';
 import { AdminTable } from '../components/AdminTable';
 import { SystemHealthView } from '../components/SystemHealthView';
+import { ServiceMetricsView } from '../components/ServiceMetrics';
 import { useViewState } from '../components/useViewState';
 import { useReason } from '../components/confirm';
 import { seconds } from '../format';
@@ -42,7 +43,7 @@ export function HealthPage({ can }: PageProps) {
         <div><h1>Health</h1><p>Live checks across the system, from sign-in and storage to calls and delivery. Select a component to inspect its check and response.</p></div>
         <Button icon={<ReloadOutlined />} loading={busy} onClick={load} data-testid="admin-health-refresh">Refresh</Button>
       </div>
-      <Tabs activeKey={view.tab} onChange={(tab) => update({ tab })} items={[{ key: 'system', label: 'System health', children: <SystemHealthView snapshot={system} error={systemError} busy={busy} onRefresh={load} /> }, { key: 'delivery', label: 'Push delivery', children: <div className="health-delivery-panel">
+      <Tabs activeKey={view.tab} onChange={(tab) => update({ tab })} items={[{ key: 'system', label: 'System health', children: <SystemHealthView snapshot={system} error={systemError} busy={busy} onRefresh={load} /> }, { key: 'service', label: 'Service metrics', children: <ServiceMetricsView version={version} /> }, { key: 'delivery', label: 'Push delivery', children: <div className="health-delivery-panel">
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}><Card className="kpi"><Statistic title="Waiting for delivery or retry" value={health?.push.pending ?? '—'} loading={!health && !error} /><span data-testid="admin-push-pending" hidden>{health?.push.pending}</span></Card></Col>

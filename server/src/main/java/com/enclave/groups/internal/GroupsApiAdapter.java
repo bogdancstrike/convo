@@ -46,4 +46,7 @@ class GroupsApiAdapter implements GroupsApi {
     public Optional<Set<UUID>> members(byte[] groupId) {
         return groups.find(groupId).filter((g) -> !"deleted".equals(g.status())).map((g) -> Set.copyOf(groups.members(groupId).keySet()));
     }
+
+    @Override
+    public Health health() { return groups.health(); }
 }

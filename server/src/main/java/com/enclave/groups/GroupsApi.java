@@ -55,4 +55,12 @@ public interface GroupsApi {
     record Counts(long groups, long channels) {}
 
     Counts counts();
+
+    /**
+     * Aggregate group health (counts only): groups, revoked devices still awaiting MLS removal
+     * (groups are blocked meanwhile, specs §4.7), and departed members awaiting leaf removal.
+     */
+    record Health(long groups, long groupsBlockedByRemoval, long pendingDeviceRemovals, long pendingDepartures) {}
+
+    Health health();
 }

@@ -36,6 +36,7 @@ class CommunityServiceTest {
 
     static class FakeGroups implements GroupsApi {
         @Override public Counts counts() { return new Counts(0, 0); }
+        @Override public Health health() { return new Health(0, 0, 0, 0); }
         final Map<String, GroupSummary> groups = new HashMap<>();
         final List<String> joinRequests = new ArrayList<>();
         void put(byte[] id, boolean adminOnly, Object... roles) {
