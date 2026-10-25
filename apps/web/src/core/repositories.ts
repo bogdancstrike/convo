@@ -37,6 +37,10 @@ export const RecordNs = {
   policy: 'policy',
   /** Device-local event reminders (`EventReminder`), keyed by event message. */
   reminders: 'reminders',
+  /** Key transparency: pinned log/witness keys and the newest accepted head (`KtState`, record 'state'). */
+  kt: 'kt',
+  /** Key transparency: last result per account (`KtAccountRecord`). */
+  ktAccounts: 'kt-accounts',
 } as const;
 
 export class Repositories {

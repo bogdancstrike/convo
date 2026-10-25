@@ -33,6 +33,18 @@ class IdentityApiImpl implements IdentityApi {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<KeyState> keyState(UUID accountId) {
+        return accounts.findById(accountId).filter(a -> a.identityKey() != null)
+                .map(a -> new KeyState(a.identityKey(), new DeviceRoster(accountId, a.deviceListVersion(), a.disabled() ? java.util.List.of()
+                        : devices.findActive(accountId).stream().map(d -> new DeviceRoster.Entry(d.deviceId(), d.registrationId())).toList())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<UUID> accountsWithIdentityKey() { return accounts.withIdentityKey(); }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean isActive(DeviceAddress address) {
         return accounts.findById(address.accountId()).filter(a -> !a.disabled()).isPresent()
                 && devices.find(address.accountId(), address.deviceId()).map(Device::active).orElse(false);

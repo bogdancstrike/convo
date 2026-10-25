@@ -4,7 +4,7 @@ import {
   SignalProtocolAddress,
 } from '@privacyresearch/libsignal-protocol-typescript';
 import type { EnclaveApi } from '../api/enclaveApi';
-import type { DeviceMessageDto, EnvelopeDto } from '../api/types';
+import type { DeviceMessageDto, EnvelopeDto, RosterDto } from '../api/types';
 import type { SignalStore } from '../crypto/signalStore';
 import { fromBase64Url, fromBinaryString, toArrayBuffer, toBase64Url } from '../lib/bytes';
 import type { StoreOp } from '../storage/encryptedStore';
@@ -38,6 +38,8 @@ export class SessionManager {
     private readonly api: EnclaveApi,
     private readonly signal: SignalStore,
     private readonly self: { accountId: string; deviceId: number },
+    /** Told about every roster used for encryption (key-transparency checks run after the send). */
+    private readonly onRoster?: (accountId: string, roster: RosterDto) => void,
   ) {}
 
   /**
@@ -79,6 +81,7 @@ export class SessionManager {
       }
       return messages;
     });
+    this.onRoster?.(accountId, roster);
     return { messages: result, ops };
   }
 

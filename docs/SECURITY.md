@@ -372,6 +372,46 @@ more), and the group accepts no new application messages until a member has comm
 removal (**pending-removal gate**), so nothing is ever encrypted to a key the removed device still
 holds.
 
+### 7.5 Key transparency: checking the keys you encrypt to
+
+Safety numbers protect people who compare them. Key transparency protects everyone else: it makes a
+substituted identity key or a hidden extra device detectable automatically (ADR-0007).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D as Your device
+    participant S as Convo server (log)
+    participant W as Witness (other machine)
+    Note over S: device registered/revoked → leaf (account, identity key,<br/>device-list hash) appended in the same transaction → head signed
+    W->>S: GET head; GET consistency proof from the last head it signed
+    W->>W: log key pinned? log only grew? → co-sign head with its own time
+    W->>S: POST co-signature
+    D->>S: GET /v1/kt/accounts/{contact}?since=<last size>
+    S-->>D: head, witnessed head + co-signatures, proofs, contact's newest leaf
+    D->>D: head signed by pinned log key · extends last accepted head<br/>· leaf included · leaf = identity key + roster used<br/>· pinned witness co-signed recently
+```
+
+* **What is logged:** for every account, its identity key and a hash of its active devices
+  (`deviceId`, `registrationId`), appended whenever a device is registered or revoked, in the same
+  database transaction. Every append signs a new tree head (Ed25519 log key).
+* **What a device checks** (`core/keyTransparency.ts`), after sending to an account and whenever a
+  contact's info opens: the head signature with the pinned log key; that the head extends the last
+  head it accepted (a shorter or different history is a **rollback/fork**); that the account's entry
+  is included; that the entry equals the identity key and device roster it encrypts to; and that a
+  pinned witness co-signed, within 7 days by the witness's own clock, a head that the current head
+  extends.
+* **Witnesses** (`deploy/kt-witness`) run on another machine with their own key, co-sign only heads
+  that extend the last one they signed, and re-sign hourly. They refuse and alert on a rollback, fork
+  or changed log key.
+* **Results** in contact info (web and Android): *verified*, *matches but not witnessed*, *checking*,
+  **mismatch** (the log disagrees with the keys in use) or **log error** (the log failed a check).
+* **Policy today: warn.** Results are shown, sending is not blocked. Blocking on mismatch/log error
+  under a hardened organization policy follows once the checks have run in production.
+* **Limits:** a verifiable log cannot prove that a newer entry does not exist (a server could serve an
+  old one); devices also check their own account, and an AKD/CONIKS-style map is the follow-up.
+  Heads are not yet gossiped between people. Log and witness keys are pinned on first use.
+
 ---
 
 ## 8. Storage
@@ -800,7 +840,7 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 | WebAuthn PRF unlock | §18.4 (2), WEB-01 |
 | MLS role profile review (credentials are bound to the account identity, §6.2) | GRP-01 |
 | Sealed sender | PRIV-01 |
-| Key transparency | TRUST-01 |
+| Key transparency: verifiable log, witness and client checks implemented (§7.5, warn only); verifiable map, head gossip, enforcement and an independently operated production witness remain | TRUST-01 |
 | Independent security review (SEC-02); fuzzing and plaintext scans (SEC-01) | SEC-01/02 |
 | Admin console reachable publicly (consider Cloudflare Access / LAN only) | §16.3 |
 

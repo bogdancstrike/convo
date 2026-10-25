@@ -148,6 +148,9 @@ services:
       ENCLAVE_CALLS_ENABLED: "true"
       ENCLAVE_CALLS_LIVEKIT_URL: http://livekit:7880
       ENCLAVE_CALLS_API_SECRET: ${CONVO_LIVEKIT_SECRET:-convo-dev-livekit-secret-change-me-0123}
+      # Key transparency: witnesses whose co-signatures clients trust (id:base64 Ed25519 public key).
+      # The default is the development witness below; production runs its own elsewhere.
+      ENCLAVE_KT_WITNESSES: ${CONVO_KT_WITNESSES:-dev-witness:GXs3pA4moReKu7OM4wqGf+Bp5T2DtPeJWRD53NLVv3A=}
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
@@ -186,6 +189,24 @@ services:
       - "50000-50100:50000-50100/udp"
 
   # Push (MSG-02): self-hosted ntfy as UnifiedPush distributor. Wakes carry no content.
+  # Key-transparency witness (deploy/kt-witness): checks that the key log only grows and co-signs
+  # its heads. Development key only; in production run it on another machine and operator.
+  kt-witness:
+    image: node:22-alpine
+    command: ["node", "/app/witness.mjs"]
+    environment:
+      KT_LOG_URL: http://server:8080
+      KT_WITNESS_ID: dev-witness
+      KT_WITNESS_KEY: ${CONVO_KT_WITNESS_KEY:-qYVfccWmKlPChr+ofwoWQZNPTGB8A/vOcshAj9ErlI8=}
+      KT_POLL_SECONDS: "5"
+      KT_RESIGN_SECONDS: "600"
+    volumes:
+      - ./deploy/kt-witness:/app:ro
+      - kt-witness-data:/data
+    restart: unless-stopped
+    depends_on:
+      server: { condition: service_started }
+
   ntfy:
     image: binwiederhier/ntfy:v2.28.0
     command: ["serve"]
@@ -276,6 +297,7 @@ services:
       web: { condition: service_healthy }
 
 volumes:
+  kt-witness-data:
   ntfy-cache:
   audit-checkpoints:
   keycloak-data:

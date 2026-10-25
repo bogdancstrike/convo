@@ -63,7 +63,9 @@ class SecurityConfig {
             route(HttpMethod.DELETE, "/v1/provisioning/sessions/{provisioningId}"));
 
     /** Routes that need no authentication. */
-    static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws", "/v1/device-nonces"};
+    // Key-transparency witness routes expose only hashes and signed heads; co-signatures are checked
+    // against configured witness keys (transparency module).
+    static final String[] PUBLIC_ROUTES = {"/v1/deployment-info", "/v1/ws", "/v1/device-nonces", "/v1/kt/head", "/v1/kt/consistency", "/v1/kt/cosignatures"};
 
     /**
      * Organization administration ({@code /v1/admin/**}): Keycloak bearer token carrying the admin

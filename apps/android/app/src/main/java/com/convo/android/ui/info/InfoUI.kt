@@ -231,8 +231,36 @@ import org.json.JSONObject
 @Composable fun EncryptionRow(app: MainActivity, id: String) {
     var fingerprint by remember(id) { mutableStateOf<JSONObject?>(null) }; var showIdentity by remember { mutableStateOf(false) }
     ActionRow("Encryption", "Messages and calls are end-to-end encrypted. Tap to verify.", Icons.Outlined.Lock) { app.call("identity", obj("id" to id)) { fingerprint = it as? JSONObject; showIdentity = true } }
+    KeyTransparencyRow(app, id)
     if (showIdentity) AlertDialog(onDismissRequest = { showIdentity = false }, title = { Text("Verify safety number") }, text = { Text(fingerprint?.optString("digits")?.takeIf { it.isNotBlank() } ?: "Exchange a message with this person first.") }, confirmButton = { TextButton({ app.call("verify", obj("id" to id, "verified" to true)); showIdentity = false }) { Text("Numbers match — verify") } }, dismissButton = { TextButton({ showIdentity = false }) { Text("Close") } })
 }
+/**
+ * Key transparency (specs §19.4): whether this contact's keys match the organization's public key
+ * log, re-checked whenever the info screen opens. Mismatches and log errors show as warnings.
+ */
+@Composable fun KeyTransparencyRow(app: MainActivity, id: String) {
+    var status by remember(id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(id) { app.call("keyTransparency", obj("id" to id, "force" to true), quiet = true) { status = (it as? JSONObject)?.optString("status") ?: "unknown" } }
+    val s = status ?: return
+    val (title, body) = when (s) {
+        "verified" -> "Keys match the public key log" to "The keys this device uses for this contact are the ones recorded in the organization’s key log, confirmed by an independent witness."
+        "unwitnessed" -> "Keys match the key log (not yet witnessed)" to "The keys match the key log, but no independent witness has confirmed the log recently."
+        "stale" -> "Checking keys…" to "This contact’s devices just changed. Convo checks again shortly."
+        "mismatch" -> "Keys don’t match the key log" to "The keys used for this contact differ from what the key log says. Compare safety numbers in person before sharing anything sensitive, and tell your security team."
+        "log-error" -> "The key log could not be trusted" to "The key log failed a security check (it changed its history or its signature). Tell your security team."
+        else -> "Not checked yet" to "Convo checks this contact’s keys against the key log after you exchange messages."
+    }
+    val warning = s == "mismatch" || s == "log-error"
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.Top) {
+        Icon(if (warning) Icons.Outlined.ErrorOutline else Icons.Outlined.VerifiedUser, null, tint = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+        Column(Modifier.padding(start = 16.dp)) {
+            Text("Key transparency", fontSize = 13.sp, color = LocalConvoColors.current.textSecondary)
+            Text(title, fontWeight = FontWeight.SemiBold, color = if (warning) MaterialTheme.colorScheme.error else LocalConvoColors.current.textPrimary)
+            Text(body, fontSize = 13.sp, color = LocalConvoColors.current.textSecondary)
+        }
+    }
+}
+
 @Composable fun SharedMedia(app: MainActivity) {
     var tab by remember { mutableStateOf("Media") }; var selected by remember { mutableStateOf<Pair<JSONObject, Int>?>(null) }
     val messages = app.snapshot.optJSONArray("messages")?.objects().orEmpty().filter { !it.optBoolean("deleted") }

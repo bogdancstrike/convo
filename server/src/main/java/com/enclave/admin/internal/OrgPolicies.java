@@ -2,6 +2,7 @@ package com.enclave.admin.internal;
 
 import com.enclave.admin.internal.AdminPermissions.Permission;
 import com.enclave.contracts.DeploymentProperties;
+import com.enclave.contracts.Ed25519Keys;
 import com.enclave.contracts.EnclaveException;
 import com.enclave.contracts.ErrorCode;
 import com.enclave.identity.AuthenticatedDevice;
@@ -12,14 +13,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.security.KeyFactory;
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.security.Signature;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -130,42 +126,13 @@ class OrgPolicies {
 
     private KeyPair loadKey(String configured) {
         try {
-            KeyFactory factory = KeyFactory.getInstance("Ed25519");
             byte[] pkcs8 = !configured.isBlank() ? Base64.getDecoder().decode(configured.strip())
                     : jdbc.sql("SELECT private_key FROM policy_signing_key WHERE id = 1").query(byte[].class).optional().orElse(null);
             if (pkcs8 == null) {
-                KeyPair generated = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
-                pkcs8 = generated.getPrivate().getEncoded();
-                jdbc.sql("INSERT INTO policy_signing_key (id, private_key) VALUES (1, :k) ON CONFLICT (id) DO NOTHING").param("k", pkcs8).update();
+                jdbc.sql("INSERT INTO policy_signing_key (id, private_key) VALUES (1, :k) ON CONFLICT (id) DO NOTHING").param("k", Ed25519Keys.generatePkcs8()).update();
                 pkcs8 = jdbc.sql("SELECT private_key FROM policy_signing_key WHERE id = 1").query(byte[].class).single(); // another replica may have won
             }
-            PrivateKey priv = factory.generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
-            KeyPair pair = new KeyPair(publicOf(pkcs8), priv);
-            // Self-check: the derived public key must verify a signature by the private key.
-            Signature probe = Signature.getInstance("Ed25519");
-            probe.initSign(priv); probe.update(CONTEXT.getBytes(StandardCharsets.UTF_8));
-            byte[] signed = probe.sign();
-            probe.initVerify(pair.getPublic()); probe.update(CONTEXT.getBytes(StandardCharsets.UTF_8));
-            if (!probe.verify(signed)) throw new GeneralSecurityException("policy key pair does not match");
-            return pair;
+            return Ed25519Keys.fromPkcs8(pkcs8);
         } catch (GeneralSecurityException e) { throw new IllegalStateException("invalid enclave.policy.signing-key", e); }
-    }
-
-    /**
-     * The public key of an Ed25519 PKCS#8 key (RFC 8410: the 32-byte seed ends the structure). The JDK
-     * has no direct derivation, so its generator is fed that seed; {@link #loadKey} verifies the result.
-     */
-    private static PublicKey publicOf(byte[] pkcs8) throws GeneralSecurityException {
-        byte[] seed = java.util.Arrays.copyOfRange(pkcs8, pkcs8.length - 32, pkcs8.length);
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
-        generator.initialize(255, new FixedSeed(seed));
-        return generator.generateKeyPair().getPublic();
-    }
-
-    /** SecureRandom that returns a fixed seed, used only to re-derive the public key above. */
-    private static final class FixedSeed extends java.security.SecureRandom {
-        private final byte[] seed;
-        FixedSeed(byte[] seed) { this.seed = seed.clone(); }
-        @Override public void nextBytes(byte[] bytes) { System.arraycopy(seed, 0, bytes, 0, Math.min(seed.length, bytes.length)); }
     }
 }

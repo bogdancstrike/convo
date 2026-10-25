@@ -59,6 +59,7 @@ import { DEFAULT_POLICY, PolicyRejectedError, verifyPolicy, type OrgPolicy, type
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
 import { RecordNs, type Repositories } from './repositories';
+import { KeyTransparencyMonitor, type KtAccountRecord } from './ktMonitor';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
 /** A message scheduled on this device (specs §30.4): UTC due time, zone for display. */
@@ -97,6 +98,8 @@ export interface ClientEvents extends Record<string, unknown> {
   typing: { conversationId: string; until: number };
   /** Own device list changed. */
   devices: undefined;
+  /** A key-transparency result changed for an account (shown in contact info; warnings in chats). */
+  keyTransparency: { accountId: string; record: KtAccountRecord };
   /** This device was revoked; local data has been wiped. */
   revoked: undefined;
   /** Group membership/roles changed (group ID). */
@@ -175,7 +178,11 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     super();
     this.currentSettings = settings;
     this.socket = new GatewaySocket(async () => (await api.socketTicket()).ticket);
-    this.sessions = new SessionManager(api, signal, device);
+    this.kt = new KeyTransparencyMonitor(api, repos.store, device.deploymentId,
+      async (accountId) => (accountId === device.accountId ? (await signal.localIdentity())?.identityPublic : (await signal.peerIdentity(accountId))?.identityKey),
+      (accountId, record) => this.emit('keyTransparency', { accountId, record }));
+    // After a send, once the outbox has committed any new identity key, check it against the log.
+    this.sessions = new SessionManager(api, signal, device, (accountId, roster) => { setTimeout(() => void this.kt.check(accountId, roster), 1000); });
     this.groups = new GroupManager(api, repos.store, device, {
       verify: (accountId, deviceId, key) => this.verifyDeviceBinding(accountId, deviceId, key),
       publishOwn: (key) => this.publishOwnBinding(key),
@@ -184,6 +191,16 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       onAccepted: (item) => this.onOutboxAccepted(item),
       onFailed: (item, reason, error) => this.onOutboxFailed(item, reason, error),
     }, (task) => this.mutex.run(task));
+  }
+
+  private readonly kt: KeyTransparencyMonitor;
+
+  /**
+   * Key transparency for an account (specs §19.4): the stored result, re-checked against the log
+   * when `force` is set or the result is old. Undefined until this device has keys for the account.
+   */
+  keyTransparency(accountId: string, force = false): Promise<KtAccountRecord | undefined> {
+    return this.kt.check(accountId, undefined, force);
   }
 
   /** Account ID of this device. */

@@ -1,3 +1,4 @@
+import type { KtAccountProof } from '../core/keyTransparency';
 import type { SignedPolicy } from '../core/policy';
 import type { CallJoin } from '../core/calls';
 import type { DeviceCredentials, HttpClient } from './http';
@@ -158,6 +159,11 @@ export class EnclaveApi {
   clearPushEndpoint(): Promise<void> { return this.signed('DELETE', '/v1/push/endpoint'); }
   lastSeenHeartbeat(): Promise<void> { return this.signed('POST', '/v1/privacy/last-seen/heartbeat'); }
   lastSeen(accountId: string): Promise<{ day: string | null; at: string | null }> { return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/last-seen`); }
+
+  /** Key transparency: the account's log entry with proofs (core/keyTransparency.ts). */
+  ktAccount(accountId: string, since: number): Promise<KtAccountProof> {
+    return this.signed('GET', `/v1/kt/accounts/${encodeURIComponent(accountId)}?since=${since}`);
+  }
 
   roster(accountId: string): Promise<RosterDto> {
     return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/devices`);

@@ -9,6 +9,7 @@ import { SharedPreview, ConversationActions } from './ConversationDetails';
 import { Menu } from '../components/Popover';
 import { useProfile } from '../components/ProfileContext';
 import { safetyNumber } from '../../crypto/safetyNumber';
+import type { KtAccountRecord } from '../../core/ktMonitor';
 import { useCallback, useEffect, useState } from 'react';
 import type { AccountDto, GroupRole } from '../../api/types';
 import type { EnclaveClient } from '../../core/client';
@@ -69,7 +70,35 @@ export function ContactInfo({ client, conversation }: { client: EnclaveClient; c
       )}
       {profile?.status && <section className="drawer-section"><h4>{t('profile.status')}</h4><p data-testid="contact-status">{profile.status}</p></section>}
       {!note && <SafetyNumber client={client} conversation={conversation} />}
+      {!note && <KeyTransparency client={client} accountId={conversation.id} />}
     </>
+  );
+}
+
+/**
+ * Key transparency (specs §19.4): whether this contact's keys match the public key log. Checked
+ * again whenever the drawer opens; mismatch and log errors are shown as warnings.
+ */
+function KeyTransparency({ client, accountId }: { client: EnclaveClient; accountId: string }) {
+  const { t } = useI18n();
+  const [record, setRecord] = useState<KtAccountRecord | undefined | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void client.keyTransparency(accountId, true).then((r) => { if (!cancelled) setRecord(r); }).catch(() => { if (!cancelled) setRecord(undefined); });
+    const off = client.on('keyTransparency', (e) => { if (e.accountId === accountId) setRecord(e.record); });
+    return () => { cancelled = true; off(); };
+  }, [client, accountId]);
+  if (record === null) return null;
+  const status = record?.status ?? 'unknown';
+  const warning = status === 'mismatch' || status === 'log-error';
+  return (
+    <section className="drawer-section" data-testid="kt-status" data-status={status}>
+      <h4>{t('kt.title')}</h4>
+      <p style={{ margin: 0, fontWeight: 600, color: warning ? 'var(--c-danger-text)' : status === 'verified' ? 'var(--c-accent-text)' : undefined }}>
+        <Icon name={warning ? 'alert' : 'shield'} size={16} /> {t(`kt.${status}`)}
+      </p>
+      <p className="muted-text" style={{ margin: 0 }}>{t(`kt.${status}Body`)}</p>
+    </section>
   );
 }
 

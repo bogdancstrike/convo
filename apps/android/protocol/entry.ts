@@ -221,6 +221,8 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'sendSticker': return client.sendSticker(String(args.conversationId), String(args.pack), String(args.id), { topic: args.topic ? String(args.topic) : undefined });
     // Personal stickers (WhatsApp): the collection syncs across own devices; bytes are verified by
     // SHA-256 (the sticker ID) before use. Images are made square 512 px WebP here, like on the web.
+    // Key transparency (specs §19.4): the contact's keys checked against the witnessed log.
+    case 'keyTransparency': return (await client.keyTransparency(String(args.id), args.force === true)) ?? null;
     case 'stickerCollection': return client.stickerCollection();
     case 'createSticker': return client.addCustomSticker(await makeStickerImage(new Blob([fromBase64Url(String(args.data))], { type: String(args.mime ?? 'image/*') })));
     case 'saveSticker': return client.saveSticker(await target(args));

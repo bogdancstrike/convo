@@ -47,6 +47,8 @@ broader launch tasks, independent security review or complete Android/web parity
   stickers (create/save/favourites), passkey setup fix, background delivery on by default without
   ntfy; admin Sessions lists Convo devices; history sync announced by the server instead of polling;
   SECURITY.md step-by-step device, multi-device and call flows.
+- [x] TRUST-01 slice (2026-10-25): key-transparency log, witness and client checks (web + Android
+  contact info), shared vectors; members vote/react/RSVP in community announcements.
 - [ ] Reviewed native core/Keystore/SQLCipher, lifecycle/background delivery, physical device
   certification and iOS. (Calls are implemented: ADR-0006.)
 

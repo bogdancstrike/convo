@@ -34,6 +34,11 @@ public class AccountRepository {
                 .query(AccountRepository::map).optional();
     }
 
+    /** IDs of accounts whose identity key is set (key-transparency backfill). */
+    public java.util.List<UUID> withIdentityKey() {
+        return jdbc.sql("SELECT account_id FROM accounts WHERE identity_key IS NOT NULL ORDER BY created_at").query(UUID.class).list();
+    }
+
     /**
      * @param accountId account ID
      * @return the account, if present
