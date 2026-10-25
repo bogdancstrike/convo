@@ -157,6 +157,13 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     // Scheduled send (specs §30.4): device-owned items, sent by the core's timer while the app runs.
     case 'scheduleMessage': return client.scheduleMessage(String(args.conversationId), String(args.body), Number(args.dueAt), { quote: args.quote ?? undefined, mentions: Array.isArray(args.mentions) ? args.mentions.map(String) : undefined, silent: args.silent === true });
     // Private chat folders (specs §30.4): own-device preference synced to own devices.
+    // Abuse reports (AC-SEC-09): evidence chosen by key ("authorId/id"), sent E2EE to the contact.
+    case 'reportRecipients': return client.reportRecipients();
+    case 'sendReport': {
+      const keys = new Set(Array.isArray(args.keys) ? args.keys.map(String) : []);
+      const messages = (await client.messages(String(args.conversationId), Number.MAX_SAFE_INTEGER)).filter((m) => keys.has(`${m.authorId}/${m.id}`));
+      return client.sendReport(String(args.recipient), { reportId: String(args.reportId), reason: String(args.reason ?? ''), conversationId: String(args.conversationId), messages, reportedAccountId: args.reported ? String(args.reported) : undefined });
+    }
     case 'folders': return client.folders();
     case 'saveFolders': return client.saveFolders(Array.isArray(args.folders) ? args.folders : []);
     case 'scheduledMessages': return client.scheduledMessages(args.conversationId ? String(args.conversationId) : undefined);

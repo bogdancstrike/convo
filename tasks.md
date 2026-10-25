@@ -249,7 +249,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   exactly who receives them in readable form, and sends them end-to-end encrypted to one security
   contact (`GET /v1/reports/recipients`: active accounts holding the security role); the server
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
-  report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android pending.
+  report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
+  same dialog and card (verified on the emulator).
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

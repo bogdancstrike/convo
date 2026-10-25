@@ -75,13 +75,15 @@ import org.json.JSONObject
 }
 @Composable fun ChatMenu(app: MainActivity) {
     val c = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == app.active } ?: return
-    var open by remember { mutableStateOf(false) }
+    var open by remember { mutableStateOf(false) }; var reporting by remember { mutableStateOf(false) }
     Box { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "Chat options") }; DropdownMenu(open, { open = false }) {
         DropdownMenuItem(text = { Text(when { c.optString("kind") == "direct" -> "Contact info"; c.optBoolean("adminOnly") -> "Channel info"; c.optString("kind") == "group" -> "Group info"; else -> "Conversation info" }) },
             leadingIcon = { Icon(Icons.Outlined.Info, null) }, onClick = { open = false; app.route = "info" })
         DropdownMenuItem(text = { Text("Search") }, leadingIcon = { Icon(Icons.Outlined.Search, null) }, onClick = { open = false; app.threadSearch = true })
+        if (c.optString("kind") != "note") DropdownMenuItem(text = { Text("Report") }, leadingIcon = { Icon(Icons.Outlined.Flag, null) }, onClick = { open = false; reporting = true })
         HorizontalDivider()
         ConversationMenuItems(app, c) { open = false } } }
+    if (reporting) com.convo.android.ui.thread.ReportDialog(app, c) { reporting = false }
 }
 @Composable fun ConversationMenuItems(app: MainActivity, c: JSONObject, close: () -> Unit) {
     var confirm by remember { mutableStateOf("") }

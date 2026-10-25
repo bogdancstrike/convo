@@ -300,7 +300,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     val attachments = if (viewOnce != null) emptyList() else message.optJSONArray("attachments")?.objects().orEmpty()
                     if (viewOnce != null) ViewOnceTile(app, message, conversation, viewOnce)
                     // Text first only without attachments; with media the caption goes underneath (WhatsApp).
-                    if (message.has("poll") && !message.isNull("poll")) PollCard(app, message, conversation)
+                    if (message.has("report") && !message.isNull("report")) ReportCard(message)
+                    else if (message.has("poll") && !message.isNull("poll")) PollCard(app, message, conversation)
                     else if (message.has("event") && !message.isNull("event")) EventCard(app, message, conversation)
                     else if (attachments.isEmpty() && message.optString("body").isNotBlank()) LinkedBody(app, message.optString("body"), message.optJSONArray("mentionLabels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(), metaReserve(message, outgoing))
                     if (message.has("ackRequest")) AckBox(app, message)
