@@ -284,7 +284,22 @@ class MainActivity : FragmentActivity() {
      * permission and, if granted, turn message notifications on (previews stay hidden by default).
      * Declining leaves them off; Settings → Notifications can change it later.
      */
+    /**
+     * Background delivery out of the box: without a UnifiedPush app (ntfy) nothing can wake Convo when
+     * it is closed, so on first run it stays connected in the background (an ongoing low-priority
+     * notification) and says so. The person can turn it off, or install ntfy for better battery life.
+     */
+    private fun ensureBackgroundDelivery() {
+        val prefs = getPreferences(MODE_PRIVATE)
+        if (prefs.getBoolean("backgroundDefaultApplied", false)) return
+        prefs.edit().putBoolean("backgroundDefaultApplied", true).apply()
+        if (stayConnected || PushRegistration.distributorInstalled(this)) return
+        stayConnected = true
+        notice = tr("Convo stays connected in the background so messages and calls arrive. For better battery life, set up ntfy in Settings → Notifications.")
+    }
+
     private fun offerNotifications() {
+        ensureBackgroundDelivery()
         val prefs = getPreferences(MODE_PRIVATE)
         if (prefs.getBoolean("notificationsOffered", false)) return
         prefs.edit().putBoolean("notificationsOffered", true).apply()

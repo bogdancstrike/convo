@@ -3,6 +3,8 @@ package com.convo.android.ui.chats
 
 import com.convo.android.*
 import com.convo.android.bridge.*
+import com.convo.android.push.PushRegistration
+import androidx.compose.foundation.clickable
 import com.convo.android.i18n.*
 import com.convo.android.ui.components.*
 import com.convo.android.ui.theme.*
@@ -70,6 +72,14 @@ import androidx.compose.foundation.rememberScrollState
         newFolder = false; editingFolder = null
     }
     Column(Modifier.fillMaxSize().background(colors.panel)) {
+        // Nothing can wake Convo when it is closed: say so where people look, with the fix one tap away.
+        val pushReady = remember(app.pushVersion) { PushRegistration.endpoint(app) != null && !PushRegistration.rejected(app) }
+        if (!archived && !channels && !app.stayConnected && !pushReady) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer)
+            .clickable { app.route = "notifications" }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.NotificationsOff, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Text("Messages arrive only while Convo is open. Tap to set up background delivery.", Modifier.padding(start = 12.dp).weight(1f),
+                color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 14.sp)
+        }
         if (archived) Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { archived = false }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
             Text("Archived", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
