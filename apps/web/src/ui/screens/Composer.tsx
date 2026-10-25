@@ -8,6 +8,7 @@ import { MediaPreview } from '../components/MediaPreview';
 import { Icon } from '../components/Icon';
 import { Menu } from '../components/Popover';
 import { PollComposer } from './Polls';
+import { EventComposer } from './Events';
 import { useI18n } from '../i18n/i18n';
 import { formatDuration, useVoiceRecorder } from '../useVoiceRecorder';
 
@@ -54,6 +55,7 @@ export function Composer({
   const { t } = useI18n();
   const [text, setText] = useState(conversation.draft ?? '');
   const [pollOpen, setPollOpen] = useState(false);
+  const [eventOpen, setEventOpen] = useState(false);
   // @mentions (groups): suggestions for the `@query` at the caret, and the members picked so far.
   const members = useGroupMembers(client, conversation.id);
   const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
@@ -234,6 +236,7 @@ export function Composer({
   return (
     <div className="composer-wrap">
       {pollOpen && <PollComposer client={client} conversationId={conversation.id} onClose={() => setPollOpen(false)} />}
+      {eventOpen && <EventComposer client={client} conversationId={conversation.id} onClose={() => setEventOpen(false)} />}
       {PICKERS.map((p) => (
         <input
           key={p.key}
@@ -342,7 +345,8 @@ export function Composer({
                 icon: p.icon,
                 testId: `attach-${p.key}`,
                 onSelect: () => inputs.current.get(p.key)?.click(),
-              })), ...(conversation.kind !== 'note' ? [{ label: t('attach.poll'), icon: 'poll' as const, testId: 'attach-poll', onSelect: () => setPollOpen(true) }] : [])]}
+              })), ...(conversation.kind !== 'note' ? [{ label: t('attach.poll'), icon: 'poll' as const, testId: 'attach-poll', onSelect: () => setPollOpen(true) },
+                { label: t('attach.event'), icon: 'clock' as const, testId: 'attach-event', onSelect: () => setEventOpen(true) }] : [])]}
               trigger={({ open, toggle }) => (
                 <button
                   className="icon-btn"

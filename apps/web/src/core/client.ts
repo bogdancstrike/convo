@@ -17,6 +17,8 @@ import {
   type CallMessage,
   type DataMessage,
   type PollDefinition,
+  type EventDefinition,
+  type RsvpResponse,
   type Quote,
   type CommunityMeta,
   type GroupMeta,
@@ -43,6 +45,7 @@ import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './d
 import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, type CallInvite, type CallJoin, type CallKey, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
 import { applyBallot, applyClose, initialState, newPoll } from './polls';
+import { applyRsvp, applyUpdate, initialEvent, newEvent } from './events';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
@@ -550,7 +553,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -576,6 +579,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       mentions: group && content.mentions?.length ? [...new Set(content.mentions)].filter((id) => recipients.includes(id)).slice(0, 50) : undefined,
       ackRequest: content.requestAck && group ? this.newAckRequest(group, recipients, content.requestAck === true ? {} : content.requestAck) : undefined,
       poll: content.poll,
+      event: content.event,
     };
     const message: ChatMessage = {
       conversationId,
@@ -596,6 +600,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       mentions: data.mentions,
       ackRequest: data.ackRequest,
       poll: content.poll ? initialState(content.poll) : undefined,
+      event: content.event ? initialEvent(content.event) : undefined,
     };
     const conversation = this.conversationCache.get(conversationId);
     const ops: StoreOp[] = [this.repos.putMessage(message)];
@@ -695,10 +700,46 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   }
 
   /** Whether an account may close a poll: its author, or an owner/admin of the group. */
-  async canClosePoll(target: ChatMessage, accountId: string): Promise<boolean> {
+  canClosePoll(target: ChatMessage, accountId: string): Promise<boolean> { return this.isAuthorOrAdmin(target, accountId); }
+
+  /** Polls and events are moderated by their author or a group owner/admin. */
+  private async isAuthorOrAdmin(target: ChatMessage, accountId: string): Promise<boolean> {
     if (target.authorId === accountId) return true;
     const groupId = groupIdOf(target.conversationId);
     return !!groupId && await this.canChangeTimer(groupId, accountId);
+  }
+
+  // --- events with RSVP (FR-EXT-01) ------------------------------------------------------------
+
+  /** Sends an event; the title doubles as the message text for previews and search. */
+  async createEvent(conversationId: string, input: Parameters<typeof newEvent>[0]): Promise<void> {
+    const event = newEvent(input);
+    await this.sendMessage(conversationId, { body: event.title, event });
+  }
+
+  /** Whether an account may edit or cancel an event: its creator, or a group owner/admin. */
+  canEditEvent(target: ChatMessage, accountId: string): Promise<boolean> { return this.isAuthorOrAdmin(target, accountId); }
+
+  /** Publishes a new revision of an event (changed details, or a cancellation). */
+  async updateEvent(target: ChatMessage, input: Parameters<typeof newEvent>[0], cancelled = false): Promise<void> {
+    if (!target.event || target.event.cancelled) throw new Error('event unavailable');
+    if (!(await this.canEditEvent(target, this.accountId))) throw new Error('only the creator or an admin can change this event');
+    const event = newEvent(input);
+    const revision = target.event.revision + 1;
+    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), eventUpdate: { targetMessageId: target.id, targetAuthorId: target.authorId, revision, event, ...(cancelled ? { cancelled } : {}) } };
+    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined,
+      [this.repos.putMessage({ ...target, event: applyUpdate(target.event, revision, event, cancelled, data.timestamp) })]);
+    this.emit('messages', target.conversationId);
+  }
+
+  /** Replaces this account's answer (Going / Maybe / Not going). */
+  async rsvp(target: ChatMessage, response: RsvpResponse): Promise<void> {
+    if (!target.event) throw new Error('not an event');
+    const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), rsvp: { targetMessageId: target.id, targetAuthorId: target.authorId, response } };
+    const updated = applyRsvp(target.event, this.accountId, response, data.timestamp, data.messageId);
+    if (updated === target.event) throw new Error('responses are closed');
+    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage({ ...target, event: updated })]);
+    this.emit('messages', target.conversationId);
   }
 
   /** Adds or removes the current account's reaction. */
@@ -775,7 +816,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       for (const id of touched) {
         const c = this.conversationCache.get(id);
         const [latest] = await this.repos.messages(id, 1);
-        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments, poll: latest.poll }) : '' });
+        if (c) previews.push({ ...c, preview: latest ? previewOf({ messageId: latest.id, timestamp: latest.sentAt, body: latest.body, attachments: latest.attachments, poll: latest.poll, event: latest.event }) : '' });
       }
       if (previews.length) await this.saveConversations(previews);
       for (const id of touched) this.emit('messages', id);
@@ -1931,8 +1972,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     changed: Set<string>,
   ): Promise<'new' | 'edited' | 'mutation' | 'ignored' | 'left'> {
     if (data.profile) this.stageProfile(data.profile, authorId, ops);
-    const targetId = data.reaction?.targetMessageId ?? data.pollVote?.targetMessageId ?? data.pollClose?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
-    const targetAuthor = data.reaction?.targetAuthorId ?? data.pollVote?.targetAuthorId ?? data.pollClose?.targetAuthorId ?? authorId;
+    const targetId = data.reaction?.targetMessageId ?? data.pollVote?.targetMessageId ?? data.pollClose?.targetMessageId ?? data.eventUpdate?.targetMessageId ?? data.rsvp?.targetMessageId ?? data.edit?.targetMessageId ?? data.delete?.targetMessageId ?? data.messageId;
+    const targetAuthor = data.reaction?.targetAuthorId ?? data.pollVote?.targetAuthorId ?? data.pollClose?.targetAuthorId ?? data.eventUpdate?.targetAuthorId ?? data.rsvp?.targetAuthorId ?? authorId;
     if (await this.repos.isLocallyDeleted({ conversationId, authorId: targetAuthor, id: targetId })) return 'ignored';
     const isNewChat = !this.conversationCache.has(conversationId);
     const conversation = await this.ensureConversation(conversationId, ops);
@@ -1957,6 +1998,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       else if (await this.canClosePoll(target, authorId)) poll = applyClose(poll, authorId, at);
       if (poll === target.poll) return 'ignored';
       ops.push(this.repos.putMessage({ ...target, poll }));
+      return 'mutation';
+    }
+    if (data.eventUpdate || data.rsvp) {
+      const ref = (data.eventUpdate ?? data.rsvp)!;
+      const target = await this.repos.message(conversation.id, ref.targetAuthorId, ref.targetMessageId);
+      if (!target?.event || target.deleted) return 'ignored';
+      const at = Math.min(data.timestamp, envelope.serverTimestamp);
+      let event = target.event;
+      if (data.rsvp) event = applyRsvp(event, authorId, data.rsvp.response, at, data.messageId);
+      else if (await this.canEditEvent(target, authorId)) event = applyUpdate(event, data.eventUpdate!.revision, data.eventUpdate!.event, data.eventUpdate!.cancelled === true, at);
+      if (event === target.event) return 'ignored';
+      ops.push(this.repos.putMessage({ ...target, event }));
       return 'mutation';
     }
     if (data.edit) {
@@ -2011,6 +2064,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       status: direction === 'out' ? 'sent' : undefined,
       reactions: {},
       poll: data.poll ? initialState(data.poll) : undefined,
+      event: data.event ? initialEvent(data.event) : undefined,
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,
       ackRequest: data.ackRequest && await this.validAckRequest(conversation.id, authorId, data.ackRequest) ? data.ackRequest : undefined,
@@ -2221,6 +2275,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 /** Local conversation-list preview of a message. */
 function previewOf(data: DataMessage): string {
   if (data.poll) return `📊 ${data.poll.question}`;
+  if (data.event) return `📅 ${data.event.title}`;
   if (data.body) return data.body;
   const first = data.attachments?.[0];
   if (!first) return '';

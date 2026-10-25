@@ -106,7 +106,21 @@ export interface DataMessage {
   pollVote?: PollVote;
   /** Closes a poll: its author, or a group owner/admin. */
   pollClose?: { targetMessageId: string; targetAuthorId: string };
+  /** This message is an event (FR-EXT-01); `body` carries the title for previews/search. */
+  event?: EventDefinition;
+  /** A new revision of an event (details or cancellation): its creator, or a group owner/admin. */
+  eventUpdate?: { targetMessageId: string; targetAuthorId: string; revision: number; event: EventDefinition; cancelled?: boolean };
+  /** The author's current answer to an event. */
+  rsvp?: { targetMessageId: string; targetAuthorId: string; response: RsvpResponse };
 }
+
+/** Event limits (specs §30.4). */
+export const EVENT_MAX_TITLE = 120;
+export const EVENT_MAX_DESCRIPTION = 1000;
+export const EVENT_MAX_LOCATION = 300;
+export type RsvpResponse = 'going' | 'maybe' | 'no';
+/** Times are UTC epoch milliseconds; `zone` is the creator's IANA zone used for display. */
+export interface EventDefinition { title: string; description?: string; start: number; end?: number; zone: string; location?: string }
 
 /** Poll limits (AC-COL-01). */
 export const POLL_MAX_OPTIONS = 10;
@@ -421,11 +435,28 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.ackRequest !== undefined && !isAckRequest(value.ackRequest)) return false;
   if (value.poll !== undefined && !isPollDefinition(value.poll)) return false;
   if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
+  if (value.event !== undefined && !isEventDefinition(value.event)) return false;
+  if (value.eventUpdate !== undefined && (!isObject(value.eventUpdate) || typeof value.eventUpdate.targetMessageId !== 'string' || typeof value.eventUpdate.targetAuthorId !== 'string'
+    || !Number.isSafeInteger(value.eventUpdate.revision) || (value.eventUpdate.revision as number) < 1 || !isEventDefinition(value.eventUpdate.event)
+    || (value.eventUpdate.cancelled !== undefined && typeof value.eventUpdate.cancelled !== 'boolean'))) return false;
+  if (value.rsvp !== undefined && (!isObject(value.rsvp) || typeof value.rsvp.targetMessageId !== 'string' || typeof value.rsvp.targetAuthorId !== 'string'
+    || !['going', 'maybe', 'no'].includes(String(value.rsvp.response)))) return false;
   if (value.pollClose !== undefined && (!isObject(value.pollClose) || typeof value.pollClose.targetMessageId !== 'string' || typeof value.pollClose.targetAuthorId !== 'string')) return false;
   if (value.attachments !== undefined) {
     if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS) return false;
     if (!value.attachments.every(isAttachmentPointer)) return false;
   }
+  return true;
+}
+
+/** Bounded title/description/location, sane UTC times (end after start) and a plausible zone name. */
+export function isEventDefinition(value: unknown): value is EventDefinition {
+  if (!isObject(value) || typeof value.title !== 'string' || !value.title.trim() || value.title.length > EVENT_MAX_TITLE) return false;
+  if (!Number.isSafeInteger(value.start) || (value.start as number) <= 0) return false;
+  if (value.end !== undefined && (!Number.isSafeInteger(value.end) || (value.end as number) <= (value.start as number))) return false;
+  if (typeof value.zone !== 'string' || !/^[A-Za-z0-9_+\-/]{1,64}$/.test(value.zone)) return false;
+  if (value.description !== undefined && (typeof value.description !== 'string' || value.description.length > EVENT_MAX_DESCRIPTION)) return false;
+  if (value.location !== undefined && (typeof value.location !== 'string' || value.location.length > EVENT_MAX_LOCATION)) return false;
   return true;
 }
 

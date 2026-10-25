@@ -1,3 +1,4 @@
+import type { EventState } from './events';
 import type { PollState } from './polls';
 import { DEFAULT_AUTO_DOWNLOAD, type AutoDownloadSettings } from './mediaPolicy';
 import type { AttachmentPointer, Quote } from '../crypto/content';
@@ -78,6 +79,8 @@ export interface ChatMessage {
   myAck?: { revision: number; at: number; pending: string[] };
   /** Poll message: definition, current ballots and close state (see core/polls.ts). */
   poll?: PollState;
+  /** Event message: details, revision, cancellation and RSVPs (see core/events.ts). */
+  event?: EventState;
 }
 
 export interface Conversation {
