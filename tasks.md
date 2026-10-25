@@ -224,6 +224,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   choice), ballots/closes as E2EE data messages converging deterministically (`core/polls.ts`),
   author/admin close enforced on receive; web attach menu + poll card, Android attach sheet + poll
   card. `polls.test.ts`, `polls.spec.ts` (Chromium/Firefox), emulator check both directions.
+- Events with RSVP (FR-EXT-01): encrypted events (title, UTC start/end, creator zone, location,
+  description) with revisions for edits/cancellation by creator or admin, Going/Maybe/Can't go,
+  responses closed after cancellation or the end, .ics export; web attach menu + card, Android
+  attach sheet + card with system date/time pickers. `events.test.ts`, `events.spec.ts`, emulator
+  check both directions. Local reminders not yet.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

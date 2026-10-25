@@ -123,7 +123,7 @@ contents, names and keys remain end-to-end encrypted.
 |---|---|
 | Identity | Keycloak SSO (PKCE), browser-primary enrollment, device proof-of-possession on every request, transcript-bound device linking with comparison codes, device list/unlink |
 | 1:1 chats | Signal sessions, multi-device fan-out, offline mailbox delivery, delivery/read receipts, typing (opt-in), Note to self |
-| Groups and channels | MLS discussion groups and admin-only encrypted channels, owner/admin/member controls, shared owners, recent-contact picker, review-before-create wizard, polls (visible ballots, single/multiple choice, author/admin close) |
+| Groups and channels | MLS discussion groups and admin-only encrypted channels, owner/admin/member controls, shared owners, recent-contact picker, review-before-create wizard, polls (visible ballots, single/multiple choice, author/admin close), events with RSVP and calendar export |
 | Messages | Safe formatting, replies, reactions, edits, delete for everyone / me, forward, star, in-chat search |
 | Media | Encrypted photos (EXIF stripped), files, videos with posters, voice notes, in-app viewer, shared galleries and all-chat search/filter/batch actions |
 | UX | Messenger-style layout, directory search by name/handle/phone, emoji picker, splash with E2EE notice, URL-based navigation (refresh-safe), EN/RO, light/dark with contrast tests |

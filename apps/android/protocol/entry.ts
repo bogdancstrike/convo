@@ -18,6 +18,7 @@ import type { PrimaryRegistrationRequest, LinkRegistrationRequest } from '../../
 import { prepareProfilePhoto } from '../../web/src/core/profile';
 import { filterShared, selectedMessages, sharedEntries, downloadName, type SharedFilter } from '../../web/src/core/sharedMedia';
 import { zipSync } from '../../web/node_modules/fflate/esm/browser';
+import { toIcs } from '../../web/src/core/events';
 
 // Only packaged JavaScript runs here. This bridge never exposes protocol keys to native views.
 declare global { interface Window { NativeConvo: { emit(json: string): void }; ConvoCore: { command(json: string): void } } }
@@ -78,6 +79,9 @@ async function startLink() {
   };
   void poll();
 }
+/** Event fields from a bridge call (the core validates them). */
+const eventInput = (args: Record<string, any>) => ({ title: String(args.title ?? ''), start: Number(args.start), end: args.end ? Number(args.end) : undefined,
+  zone: args.zone ? String(args.zone) : undefined, location: args.location ? String(args.location) : undefined, description: args.description ? String(args.description) : undefined });
 async function target(args: Record<string, any>) {
   if (!client) throw new Error('not ready');
   const message = (await client.messages(args.conversationId, Number.MAX_SAFE_INTEGER)).find((m) => m.id === args.id && m.authorId === args.authorId);
@@ -174,6 +178,17 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'votePoll': return client.votePoll(await target(args), Array.isArray(args.optionIds) ? args.optionIds.map(String) : []);
     case 'closePoll': return client.closePoll(await target(args));
     case 'canClosePoll': return client.canClosePoll(await target(args), client.accountId);
+    // Events (FR-EXT-01): times are UTC milliseconds; the snapshot carries event state.
+    case 'createEvent': return client.createEvent(String(args.conversationId), eventInput(args));
+    case 'updateEvent': return client.updateEvent(await target(args), eventInput(args), args.cancelled === true);
+    case 'rsvp': return client.rsvp(await target(args), args.response === 'maybe' ? 'maybe' : args.response === 'no' ? 'no' : 'going');
+    case 'canEditEvent': return client.canEditEvent(await target(args), client.accountId);
+    case 'eventResponders': {
+      const event = (await target(args)).event; if (!event) return {};
+      const named = async (id: string) => id === client!.accountId ? 'You' : client!.displayName(id);
+      return Object.fromEntries(await Promise.all((['going', 'maybe', 'no'] as const).map(async (r) => [r, await Promise.all(Object.entries(event.rsvps).filter(([, x]) => x.response === r).map(([id]) => named(id)))])));
+    }
+    case 'eventIcs': { const m = await target(args); return m.event ? toIcs(m.event, `${m.authorId}.${m.id}`) : ''; }
     case 'pollVoters': {
       const poll = (await target(args)).poll; if (!poll) return {};
       const named = async (id: string) => id === client!.accountId ? 'You' : client!.displayName(id);

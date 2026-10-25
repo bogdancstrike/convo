@@ -79,6 +79,13 @@ Voice and video calls (frame-encrypted through LiveKit), speaker toggle, screen 
 and members-only call links: **Share call link** in group info, and `https://<server>/#/call/<token>`
 links open the app and join the group's running call (or ring the group when none is running).
 
+## Polls and events
+
+The attach sheet (Document, Gallery, Audio, Poll, Event) creates WhatsApp-style polls (1–10
+options, single or multiple choice, visible voters, close by author/admin) and events (date and
+time pickers, location, description, Going/Maybe/Can't go, Add to calendar, edit/cancel by the
+creator or an admin). All rules run in the shared core, so web and Android always agree.
+
 ## Storage and data
 
 Auto-download rules (per network: mobile data, Wi-Fi, roaming × photos, audio, videos, documents)

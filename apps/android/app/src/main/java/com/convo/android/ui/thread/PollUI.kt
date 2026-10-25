@@ -124,9 +124,9 @@ private const val MAX_OPTION = 100
 
 private fun Modifier.verticalScrollable(): Modifier = composed { this.verticalScroll(androidx.compose.foundation.rememberScrollState()) }
 
-/** WhatsApp attach sheet: round coloured shortcuts for documents, gallery, audio and polls. */
+/** WhatsApp attach sheet: round coloured shortcuts for documents, gallery, audio, polls and events. */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun AttachSheet(app: MainActivity, conversation: String, caption: String, allowPoll: Boolean, onSent: () -> Unit, onPoll: () -> Unit, close: () -> Unit) {
+@Composable fun AttachSheet(app: MainActivity, conversation: String, caption: String, allowPoll: Boolean, onSent: () -> Unit, onPoll: () -> Unit, onEvent: () -> Unit, close: () -> Unit) {
     fun pick(mime: String) { close(); app.pickFile({ data, name, type -> app.call("attach", obj("conversationId" to conversation, "data" to data, "name" to name, "mime" to type, "caption" to caption)) { if (it != null) onSent() } }, mime) }
     @Composable fun Shortcut(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
         Column(Modifier.width(76.dp).clickable(onClick = onClick).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -140,6 +140,7 @@ private fun Modifier.verticalScrollable(): Modifier = composed { this.verticalSc
             Shortcut(Icons.Outlined.Image, "Gallery", Color(0xFF007BFC)) { pick("image/*,video/*") }
             Shortcut(Icons.Outlined.Headphones, "Audio", Color(0xFFFA6533)) { pick("audio/*") }
             if (allowPoll) Shortcut(Icons.Outlined.Poll, "Poll", Color(0xFF02A698)) { close(); onPoll() }
+            if (allowPoll) Shortcut(Icons.Outlined.Event, "Event", Color(0xFFD3396D)) { close(); onEvent() }
         }
     }
 }
