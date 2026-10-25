@@ -47,6 +47,11 @@ class PushReceiver : PushService() {
 
     override fun onMessage(message: PushMessage, instance: String) {
         if (PushRegistration.appVisible) return
+        // Process still alive (backgrounded): reconnect and let the core post the real notification
+        // or ring. Only a cold start falls back to the generic, content-free notification below.
+        val live = PushRegistration.activity?.get()
+        if (BuildConfig.DEBUG) android.util.Log.d("ConvoPush", "push message: live=${live != null} ready=${live?.protocolReady}")
+        if (live != null && live.protocolReady) { live.runOnUiThread { live.wakeForPush() }; return }
         // Urgent = the sender marked it (call ring). Calls ring like the in-app ringer does,
         // independent of the message notification setting; still no caller or content.
         if (String(message.content, Charsets.UTF_8).contains("\"urgent\"")) { CallWake.show(this); return }
@@ -70,6 +75,8 @@ object PushRegistration {
     @Volatile var appVisible = false
     /** Set by the running activity so a new endpoint reaches the server immediately. */
     @Volatile var onEndpoint: (() -> Unit)? = null
+    /** The running activity, if any: a wake then reconnects it instead of showing a generic notification. */
+    @Volatile var activity: java.lang.ref.WeakReference<MainActivity>? = null
 
     fun save(context: Context, endpoint: String?) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("endpoint", endpoint).putBoolean("synced", false).apply()

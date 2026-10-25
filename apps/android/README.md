@@ -60,7 +60,7 @@ signs in; when it is not running, a message produces a generic "New message" not
 
 | Phone setup | While Convo is open | Backgrounded / closed |
 |---|---|---|
-| ntfy installed, default server = the organization's | live connection | ~15 s after leaving the screen the app hands over to push; each new message wakes it and shows "New message" |
+| ntfy installed, default server = the organization's | live connection | ~15 s after leaving the screen the app hands over to push. A wake reconnects a still-running app, which decrypts and notifies with your preview level (sender, text) and rings for calls; after Android killed the app, the wake shows a generic "New message" / "Incoming call" |
 | "Stay connected in the background" on | live connection | live connection kept by a foreground service (ongoing notification, more battery) |
 | neither | live connection | **nothing arrives until you open Convo** — messages wait encrypted in the server mailbox and are never lost |
 

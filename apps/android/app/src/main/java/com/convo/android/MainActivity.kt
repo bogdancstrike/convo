@@ -147,12 +147,13 @@ class MainActivity : FragmentActivity() {
         if (!BuildConfig.DEBUG || android.os.Build.HARDWARE != "ranchu") window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         MessageNotifications.createChannel(this)
         auth = AuthorizationService(this, AppAuthConfiguration.Builder().setConnectionBuilder(DevelopmentTls(this)).build())
+        PushRegistration.activity = java.lang.ref.WeakReference(this)
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
                 "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications() }; if (phase == "welcome") io.execute { mediaCache.clear() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
-                "alert" -> MessageNotifications.show(this, value)
+                "alert" -> { if (BuildConfig.DEBUG) android.util.Log.d("ConvoPush", "alert (foreground=$isInForeground)"); MessageNotifications.show(this, value) }
                 "callLog" -> callLogVersion++
                 "typing" -> value.optString("conversationId").takeIf { it.isNotBlank() }?.let { typingUntil[it] = value.optLong("until") }
                 "snapshot" -> { snapshot = value; PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
@@ -286,6 +287,22 @@ class MainActivity : FragmentActivity() {
      * registration the app therefore hands delivery over to push shortly after leaving the screen
      * (never during a call); returning to the app reconnects and drains the mailbox.
      */
+    /** Whether the protocol engine is signed in and running (safe to read from any thread). */
+    val protocolReady: Boolean get() = phase == "ready"
+
+    /**
+     * A push wake while this process is still alive (backgrounded after a handoff): reconnect so the
+     * core decrypts the waiting mail and posts notifications with the user's preview level (sender,
+     * text) and real call rings, then hand delivery back to push. When the protocol engine is not
+     * ready ([protocolReady]) the receiver falls back to the generic notification.
+     */
+    fun wakeForPush() {
+        if (BuildConfig.DEBUG) android.util.Log.d("ConvoPush", "wake: phase=$phase foreground=$isInForeground handedOff=$handedOff")
+        if (phase != "ready" || isInForeground) return
+        if (handedOff) { handedOff = false; call("foreground", quiet = true) }
+        handoffHandler.removeCallbacks(backgroundHandoff)
+        handoffHandler.postDelayed(backgroundHandoff, BACKGROUND_HANDOFF_MS)
+    }
     private val backgroundHandoff = Runnable {
         if (!isInForeground && phase == "ready" && calls.call == null) { call("background", quiet = true); handedOff = true }
     }
@@ -440,7 +457,7 @@ class MainActivity : FragmentActivity() {
             } catch (_: Exception) { runOnUiThread { discovering = false; error = "Could not read contacts. Manual search is still available." } }
         }
     }
-    override fun onDestroy() { ConnectionService.sync(this, false); calls.release(); bridge.destroy(); auth.dispose(); io.shutdown(); super.onDestroy() }
+    override fun onDestroy() { if (PushRegistration.activity?.get() === this) PushRegistration.activity = null; ConnectionService.sync(this, false); calls.release(); bridge.destroy(); auth.dispose(); io.shutdown(); super.onDestroy() }
 }
 fun obj(vararg pairs: Pair<String, Any?>) = JSONObject().apply { pairs.forEach { put(it.first, it.second ?: JSONObject.NULL) } }
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }

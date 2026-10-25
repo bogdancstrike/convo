@@ -67,7 +67,7 @@ object MessageNotifications {
         if (app.isInForeground && app.active == id && app.route == "thread") return
         val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == id }
         val preview = if (app.locks.locked(id) || app.locks.appLock) "generic" else settings.optString("notificationPreview", "generic")
-        val title = if (preview == "generic") "Convo" else conversation?.optString("title") ?: "Convo"
+        val title = if (preview == "generic") "Convo" else alert.optString("title").ifBlank { conversation?.optString("title") ?: "Convo" }
         val body = when {
             preview == "full" && alert.optString("body").isNotBlank() -> alert.optString("body")
             preview == "full" && alert.optBoolean("attachment") -> tr("📎 File")

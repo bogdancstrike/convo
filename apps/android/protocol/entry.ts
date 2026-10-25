@@ -57,7 +57,8 @@ async function startClient() {
   // Calls: ring/accept/decline/end events and history changes go to the native call UI.
   client.on('call', (event) => emit('call', event));
   client.on('callLog', () => emit('callLog', {}));
-  client.on('alert', (alert) => emit('alert', alert));
+  // The title travels with the alert: a brand-new chat is not in the last snapshot yet.
+  client.on('alert', (alert) => emit('alert', { ...alert, title: client?.conversations().find((c) => c.id === alert.conversationId)?.title }));
   client.on('typing', (event) => emit('typing', event));
   emit('phase', { name: 'loading' }); await client.start(); accessToken = ''; link = null;
   emit('phase', { name: 'ready' }); await snapshot();
