@@ -409,7 +409,8 @@ sequenceDiagram
 * **Policy today: warn.** Results are shown, sending is not blocked. Blocking on mismatch/log error
   under a hardened organization policy follows once the checks have run in production.
 * **Limits:** a verifiable log cannot prove that a newer entry does not exist (a server could serve an
-  old one); devices also check their own account, and an AKD/CONIKS-style map is the follow-up.
+  old one); each device also checks its own account (Settings → Devices shows whether the log lists
+  exactly your key and devices), and an AKD/CONIKS-style map is the follow-up.
   Heads are not yet gossiped between people. Log and witness keys are pinned on first use.
 
 ---

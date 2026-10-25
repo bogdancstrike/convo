@@ -25,5 +25,9 @@ test('contact keys are verified against the witnessed key-transparency log', asy
       }).toPass({ timeout: 60_000 });
       await expect(page.getByTestId('kt-status')).toContainText('Keys match the public key log');
     }
+    // Owner monitoring: the log shows exactly Alice's own key and devices.
+    await alice.getByTestId('nav-settings').click();
+    await alice.getByTestId('settings-devices').click();
+    await expect(alice.getByTestId('kt-self')).toHaveAttribute('data-status', 'verified', { timeout: 30_000 });
   } finally { await closeAll(alice, bob); }
 });

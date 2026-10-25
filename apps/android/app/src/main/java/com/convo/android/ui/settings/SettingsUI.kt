@@ -88,7 +88,7 @@ import org.json.JSONObject
             "notifications" -> item { NotificationsEditor(app, settings) }
             "storage" -> item { StorageEditor(app, settings) }
             "privacy" -> item { PrivacyEditor(app, settings) }
-            "devices" -> item { DevicesEditor(app) }
+            "devices" -> item { DevicesEditor(app); com.convo.android.ui.info.KeyTransparencyRow(app, app.snapshot.optString("accountId"), self = true) }
             "security" -> {
                 item { Text("This development client uses the bundled encrypted protocol engine. The app-private encrypted store and device keys remain on this phone. Production native storage certification is in progress.") }
                 item { ActionRow("History and recovery", icon = Icons.Outlined.Shield) { app.route = "recovery" } }

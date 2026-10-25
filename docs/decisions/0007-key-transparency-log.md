@@ -26,8 +26,8 @@ device detectable without manual comparison.
 ## Consequences and limits
 
 * A verifiable log cannot prove that no newer entry exists for an account (it is not a prefix tree):
-  a malicious server could serve an old entry. Owner monitoring (each device checks its own account when it syncs to its other
-  devices; showing that result in Settings is still to do) and witnesses narrow this; an AKD/CONIKS-style verifiable map is the follow-up.
+  a malicious server could serve an old entry. Owner monitoring (each device checks its own account and shows the result in Settings →
+  Devices) and witnesses narrow this; an AKD/CONIKS-style verifiable map is the follow-up.
 * Gossip of heads between clients over E2EE messages (split-view detection between people) is not
   implemented yet; each device detects forks against its own history and against witnessed heads.
 * Log and witness keys are pinned on first use, not shipped with the app.

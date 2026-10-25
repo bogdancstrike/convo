@@ -1,4 +1,5 @@
 import { ProfileSettings, RecoverySettings, LogOutButton } from './ProfileSettings';
+import type { KtAccountRecord } from '../../core/ktMonitor';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { DeviceDto } from '../../api/types';
 import type { EnclaveClient } from '../../core/client';
@@ -79,7 +80,7 @@ export function SettingsPanel({
           {current.page === 'notifications' && <NotificationsPage client={client} settings={settings} update={update} />}
           {current.page === 'storage' && <StoragePage settings={settings} update={update} />}
           {current.page === 'privacy' && <PrivacyPage client={client} settings={settings} update={update} />}
-          {current.page === 'devices' && <DevicesPage client={client} />}
+          {current.page === 'devices' && <><DevicesPage client={client} /><OwnKeyTransparency client={client} /></>}
           {current.page === 'security' && <SecurityPage client={client} onSignedOut={onSignedOut} />}
         </div>
       </>
@@ -501,6 +502,34 @@ function SecurityPage({ client, onSignedOut }: { client: EnclaveClient; onSigned
       </Card>
       <Card><LogOutButton client={client} onSignedOut={onSignedOut} /></Card>
     </>
+  );
+}
+
+/**
+ * Owner monitoring for key transparency (specs §19.4): whether the key log shows exactly this
+ * account's identity key and devices, i.e. what other people's devices encrypt to.
+ */
+function OwnKeyTransparency({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  const [record, setRecord] = useState<KtAccountRecord | undefined | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void client.keyTransparency(client.accountId, true).then((r) => { if (!cancelled) setRecord(r); }).catch(() => { if (!cancelled) setRecord(undefined); });
+    const off = client.on('keyTransparency', (e) => { if (e.accountId === client.accountId) setRecord(e.record); });
+    return () => { cancelled = true; off(); };
+  }, [client]);
+  if (record === null) return null;
+  const status = record?.status ?? 'unknown';
+  const warning = status === 'mismatch' || status === 'log-error';
+  return (
+    <Card title={t('kt.selfTitle')}>
+      <div data-testid="kt-self" data-status={status}>
+        <p style={{ margin: 0, fontWeight: 600, color: warning ? 'var(--c-danger-text)' : status === 'verified' ? 'var(--c-accent-text)' : undefined }}>
+          <Icon name={warning ? 'alert' : 'shield'} size={16} /> {t(status === 'verified' || status === 'mismatch' ? `kt.self.${status}` : `kt.${status}`)}
+        </p>
+        <p className="muted-text" style={{ margin: 0 }}>{t(status === 'verified' || status === 'mismatch' ? `kt.self.${status}Body` : `kt.${status}Body`)}</p>
+      </div>
+    </Card>
   );
 }
 
