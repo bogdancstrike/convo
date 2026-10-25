@@ -165,8 +165,11 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     }
     case 'attach': {
       const bytes = fromBase64Url(args.data); const file = new File([bytes], String(args.name), { type: String(args.mime) });
-      return args.voice ? client.sendVoiceNote(args.conversationId, file, Number(args.duration)) : client.sendAttachments(args.conversationId, [file], String(args.caption ?? ''));
+      return args.voice ? client.sendVoiceNote(args.conversationId, file, Number(args.duration)) : client.sendAttachments(args.conversationId, [file], String(args.caption ?? ''), undefined, { viewOnce: args.viewOnce === true });
     }
+    // View-once media (specs §30.4): returned to the native viewer once, never cached; then consumed.
+    case 'openViewOnce': { const m = await target(args); const blob = await client.openViewOnce(m); return { data: toBase64Url(await blob.arrayBuffer()), mime: m.attachments?.[0]?.contentType }; }
+    case 'consumeViewOnce': return client.consumeViewOnce(await target(args));
     case 'download': {
       const message = await target(args); const pointer = message.attachments?.[Number(args.index)]; if (!pointer) throw new Error('attachment unavailable');
       const blob = await client.downloadAttachment(pointer); return { data: toBase64Url(await blob.arrayBuffer()), name: pointer.fileName, mime: pointer.contentType };

@@ -232,7 +232,8 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 - View-once photo/video (specs §30.4): exactly one photo/video, the sender keeps only the label,
   the recipient opens it once in an in-memory viewer, consumption syncs to own devices, no
   forward/shared-media/history copy, unopened items expire after 14 days. `viewOnce.test.ts`,
-  `view-once.spec.ts` (Chromium/Firefox). Android pending.
+  `view-once.spec.ts` (Chromium/Firefox). Android: attach-sheet shortcut, ① tile, FLAG_SECURE viewer
+  (screenshots come out black), verified on the emulator.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

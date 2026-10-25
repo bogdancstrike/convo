@@ -125,9 +125,9 @@ private const val MAX_OPTION = 100
 private fun Modifier.verticalScrollable(): Modifier = composed { this.verticalScroll(androidx.compose.foundation.rememberScrollState()) }
 
 /** WhatsApp attach sheet: round coloured shortcuts for documents, gallery, audio, polls and events. */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable fun AttachSheet(app: MainActivity, conversation: String, caption: String, allowPoll: Boolean, onSent: () -> Unit, onPoll: () -> Unit, onEvent: () -> Unit, close: () -> Unit) {
-    fun pick(mime: String) { close(); app.pickFile({ data, name, type -> app.call("attach", obj("conversationId" to conversation, "data" to data, "name" to name, "mime" to type, "caption" to caption)) { if (it != null) onSent() } }, mime) }
+    fun pick(mime: String, viewOnce: Boolean = false) { close(); app.pickFile({ data, name, type -> app.call("attach", obj("conversationId" to conversation, "data" to data, "name" to name, "mime" to type, "caption" to caption, "viewOnce" to viewOnce)) { if (it != null) onSent() } }, mime) }
     @Composable fun Shortcut(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
         Column(Modifier.width(76.dp).clickable(onClick = onClick).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(54.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(26.dp), tint = Color.White) }
@@ -135,10 +135,12 @@ private fun Modifier.verticalScrollable(): Modifier = composed { this.verticalSc
         }
     }
     ModalBottomSheet(onDismissRequest = close) {
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 32.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        // Two rows of three, like WhatsApp's attach sheet.
+        FlowRow(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 32.dp), horizontalArrangement = Arrangement.SpaceEvenly, maxItemsInEachRow = 3) {
             Shortcut(Icons.Outlined.Description, "Document", Color(0xFF7F66FF)) { pick("*/*") }
             Shortcut(Icons.Outlined.Image, "Gallery", Color(0xFF007BFC)) { pick("image/*,video/*") }
             Shortcut(Icons.Outlined.Headphones, "Audio", Color(0xFFFA6533)) { pick("audio/*") }
+            if (allowPoll) Shortcut(Icons.Outlined.LooksOne, "View once", Color(0xFF5F66CD)) { pick("image/*,video/*", viewOnce = true) }
             if (allowPoll) Shortcut(Icons.Outlined.Poll, "Poll", Color(0xFF02A698)) { close(); onPoll() }
             if (allowPoll) Shortcut(Icons.Outlined.Event, "Event", Color(0xFFD3396D)) { close(); onEvent() }
         }

@@ -84,7 +84,9 @@ links open the app and join the group's running call (or ring the group when non
 The attach sheet (Document, Gallery, Audio, Poll, Event) creates WhatsApp-style polls (1–10
 options, single or multiple choice, visible voters, close by author/admin) and events (date and
 time pickers, location, description, Going/Maybe/Can't go, Add to calendar, edit/cancel by the
-creator or an admin). All rules run in the shared core, so web and Android always agree.
+creator or an admin). **View once** sends one photo/video the recipient can open once; its viewer
+blocks screenshots (FLAG_SECURE) and nothing is cached, saved or archived. All rules run in the
+shared core, so web and Android always agree.
 
 ## Storage and data
 

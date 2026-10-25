@@ -280,7 +280,10 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                 if (message.optBoolean("deleted")) Text("This message was deleted", style = MaterialTheme.typography.bodySmall)
                 else if (message.optBoolean("undecryptable")) Text("Message could not be decrypted", color = MaterialTheme.colorScheme.error)
                 else {
-                    val attachments = message.optJSONArray("attachments")?.objects().orEmpty()
+                    // View-once media is never rendered as a normal attachment (no tile, cache or gallery).
+                    val viewOnce = message.optJSONObject("viewOnce")
+                    val attachments = if (viewOnce != null) emptyList() else message.optJSONArray("attachments")?.objects().orEmpty()
+                    if (viewOnce != null) ViewOnceTile(app, message, conversation, viewOnce)
                     // Text first only without attachments; with media the caption goes underneath (WhatsApp).
                     if (message.has("poll") && !message.isNull("poll")) PollCard(app, message, conversation)
                     else if (message.has("event") && !message.isNull("event")) EventCard(app, message, conversation)
@@ -321,7 +324,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                                 DropdownMenuItem(text = { Text(if (pinned) "Unpin" else "Pin for everyone") }, leadingIcon = { Icon(Icons.Outlined.PushPin, null) }, onClick = { menu = false; app.call("pin", message.targetArgs(conversation).put("pinned", !pinned)) })
                             }
                             DropdownMenuItem(text = { Text("Reply") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Reply, null) }, onClick = { menu = false; onReply(message) })
-                            DropdownMenuItem(text = { Text("Forward") }, leadingIcon = { Icon(Icons.Outlined.Shortcut, null) }, onClick = { menu = false; forwarding = true })
+                            if (!message.has("viewOnce")) DropdownMenuItem(text = { Text("Forward") }, leadingIcon = { Icon(Icons.Outlined.Shortcut, null) }, onClick = { menu = false; forwarding = true })
                             DropdownMenuItem(text = { Text(if (message.optBoolean("starred")) "Unstar" else "Star") }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }, onClick = { menu = false; app.call("star", message.targetArgs(conversation).put("value", !message.optBoolean("starred"))) })
                             DropdownMenuItem(text = { Text("Copy text") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo message", message.optString("body"))) })
                             if (outgoing && message.optLong("editableUntil", 0L) > System.currentTimeMillis()) DropdownMenuItem(text = { Text("Edit") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; edit = true })

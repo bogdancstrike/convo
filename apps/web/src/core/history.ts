@@ -18,6 +18,9 @@ const PENDING = 'history-pending';
  */
 export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming: ChatMessage): ChatMessage {
   if (!existing) return incoming;
+  // View-once: archives only ever hold the consumed label. A local copy keeps its own state and
+  // pointer; opening on another device arrives as the own-device "viewed" sync, not via history.
+  if (existing.viewOnce) return existing;
   const newer = (a: ChatMessage, b: ChatMessage) => (a.revision ?? 0) !== (b.revision ?? 0) ? (a.revision ?? 0) > (b.revision ?? 0) : (a.editedAt ?? 0) > (b.editedAt ?? 0);
   const content = existing.deleted || (!incoming.deleted && newer(existing, incoming)) ? existing : incoming;
   // Acknowledgement state is not content: keep the newest own response and every reviewer record.

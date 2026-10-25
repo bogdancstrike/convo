@@ -41,6 +41,11 @@ describe('durable encrypted account history', () => {
     const deleted = { ...message, body: undefined, deleted: true };
     expect(mergeArchivedMessage(deleted, message).deleted).toBe(true);
     expect(mergeArchivedMessage(message, deleted).body).toBeUndefined();
+    // View-once: the archive's consumed label never overwrites a local unopened copy.
+    const unopened = { ...message, attachments: [], viewOnce: { kind: 'photo' as const, state: 'unopened' as const } };
+    const archived = { ...message, attachments: undefined, viewOnce: { kind: 'photo' as const, state: 'opened' as const } };
+    expect(mergeArchivedMessage(unopened, archived).viewOnce?.state).toBe('unopened');
+    expect(mergeArchivedMessage(undefined, archived).viewOnce?.state).toBe('opened');
   });
 });
 
