@@ -178,3 +178,13 @@ content rules (file types, link domains) cannot exist server-side. `POST /alerts
 resolves matching open/acknowledged alerts in one statement with per-alert history and one audit
 entry. See [the operator/API specification](../../../../../../../docs/admin-security.md)
 for defaults, roles, endpoints, notification limits, logout semantics and deployment.
+
+`GuestAccounts` (FR-EXT-01 guest invitations) creates time-limited guest sign-in accounts
+(`POST /guests`, users-create permission, temporary password shown once), reads guest status
+(`GET /guests/{id}`) and grants or extends guest access on any sign-in account
+(`POST /guests/{id}/extend`, account-status permission, step-up, re-enables an expired guest). Its
+scheduled `expire()` (every `enclave.admin.guest-expiry-interval`, default 1 minute) disables the
+IdP user, ends its sessions and disables the Convo account; it deletes nothing. Guest expiries live
+in the identity module (`account_guests`, V33) and reach clients as `guestUntil` on directory
+entries, which they show as a "Guest" label. Groups are member-managed E2EE, so expiry cannot remove
+a guest from groups; a disabled account simply receives nothing more.

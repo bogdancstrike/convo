@@ -44,7 +44,7 @@ class DeviceNonceTest {
         when(properties.deviceAuth()).thenReturn(new IdentityProperties.DeviceAuth(Duration.ofMinutes(5), Duration.ofSeconds(30), true, Duration.ofMinutes(2), 8, 64));
         when(devices.find(account, Integer.parseInt(address[1]))).thenReturn(Optional.of(new Device(account, 2, 1,
                 Base64Url.decode(V.get("signingKeySpki").asString(), "spki"), "p256-ecdsa-sha256-v1", null, "web", Instant.EPOCH, null, null)));
-        when(accounts.findById(account)).thenReturn(Optional.of(new Account(account, "u", 1, new byte[0], "active", "U", null)));
+        when(accounts.findById(account)).thenReturn(Optional.of(new Account(account, "u", 1, new byte[0], "active", "U", null, null)));
         when(requestIds.consume(any(), anyInt(), anyString(), any())).thenReturn(true);
     }
 

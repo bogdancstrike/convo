@@ -13,7 +13,9 @@ import org.springframework.stereotype.Repository;
 public class AccountRepository {
 
     private static final String COLUMNS =
-            "account_id, username, device_list_version, identity_key, status, display_name, phone";
+            "account_id, username, device_list_version, identity_key, status, display_name, phone,"
+            // Unqualified oidc_subject resolves to the outer row (account_guests has no such column).
+            + " (SELECT g.expires_at FROM account_guests g WHERE g.subject = oidc_subject) AS guest_until";
 
     private final JdbcClient jdbc;
 
@@ -114,7 +116,8 @@ public class AccountRepository {
     private static Account map(ResultSet rs, int row) throws SQLException {
         return new Account(rs.getObject("account_id", UUID.class), rs.getString("username"),
                 rs.getLong("device_list_version"), rs.getBytes("identity_key"), rs.getString("status"),
-                rs.getString("display_name"), rs.getString("phone"));
+                rs.getString("display_name"), rs.getString("phone"),
+                java.util.Optional.ofNullable(rs.getTimestamp("guest_until")).map(java.sql.Timestamp::toInstant).orElse(null));
     }
 
     /** Updates IdP-sourced directory attributes; no-op when unchanged. */

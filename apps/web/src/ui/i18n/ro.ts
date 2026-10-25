@@ -504,6 +504,8 @@ export const ro: Record<MessageKey, string> = {
   'slow.restrict': 'Restricționează trimiterea',
   'slow.allow': 'Permite trimiterea',
   'slow.restrictedTag': 'Restricționat',
+  'guest.label': 'Invitat',
+  'guest.until': 'Acces de invitat până la {date}',
   'report.title': 'Raportează',
   'report.to': 'Trimite către',
   'report.chooseRecipient': 'Alege un contact de securitate',

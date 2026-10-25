@@ -20,6 +20,7 @@ import { useAccount, useGroupRecord } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { PersonRow, useDirectorySearch, useRecentContacts } from './NewChatPanel';
 import { SlowModeSection } from './MemberPolicy';
+import { GuestBadge } from '../components/GuestBadge';
 
 /**
  * Right-hand info drawer (UI.md §4.3, §5.4a): contact details with safety-number verification, or
@@ -57,7 +58,7 @@ export function ContactInfo({ client, conversation }: { client: EnclaveClient; c
       <section className="drawer-section drawer-hero">
         <Avatar id={conversation.id} name={title} size={120} />
         <h3>{title}</h3>
-        {account && <span className="muted-text">@{account.username}</span>}
+        {account && <span className="muted-text">@{account.username} <GuestBadge account={account} /></span>}
         {!note && <LastSeen client={client} accountId={conversation.id} />}
       </section>
       {account?.phone && (
@@ -155,6 +156,8 @@ interface MemberView {
   avatarName: string;
   username: string;
   role: GroupRole;
+  /** Guest accounts: when access ends. */
+  guestUntil?: string;
 }
 
 function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient; conversation: Conversation; onContact: (id: string) => void }) {
@@ -179,6 +182,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
           role: m.role,
           username: a.username,
           avatarName: labelOf(a),
+          guestUntil: a.guestUntil,
           label: m.accountId === client.accountId ? t('chats.you') : labelOf(a),
         };
       }),
@@ -295,6 +299,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
                 <span className="muted-text">@{m.username}</span>
               </button>
               {m.role !== 'member' && <span className="role-tag">{t(`group.role.${m.role}`)}</span>}
+              <GuestBadge account={m} />
               {m.role === 'member' && restricted.includes(m.accountId) && <span className="role-tag" data-testid={`restricted-${m.username}`}>{t('slow.restrictedTag')}</span>}
               {canManage && m.accountId !== client.accountId && (m.role !== 'owner' || myRole === 'owner') && (
                 <Menu label={t('group.memberOptions')} items={[

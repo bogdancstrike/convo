@@ -60,6 +60,8 @@ export interface AccountDto {
   /** Organization phone number (IdP-managed, ADR-0002). */
   phone?: string;
   identityKey?: string;
+  /** Guest accounts only: when access ends (ISO time). */
+  guestUntil?: string;
 }
 
 export interface RosterDto {

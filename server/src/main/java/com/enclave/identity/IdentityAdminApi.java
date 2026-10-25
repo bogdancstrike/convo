@@ -64,6 +64,20 @@ public interface IdentityAdminApi {
      */
     void setDisabled(UUID accountId, boolean disabled);
 
+    /** Marks an IdP subject as a guest until {@code expiresAt} (replacing an earlier expiry). */
+    void markGuest(String subject, java.time.Instant expiresAt, String invitedBy);
+
+    /** Guest subjects whose expiry has passed and has not been applied yet. */
+    List<String> dueGuests(java.time.Instant now);
+
+    /** Guest status of an IdP subject: expiry and when it was applied; empty for members. */
+    Optional<GuestStatus> guest(String subject);
+
+    record GuestStatus(java.time.Instant expiresAt, java.time.Instant expiredAt) {}
+
+    /** Records that a guest's expiry was applied. */
+    void guestExpired(String subject, java.time.Instant at);
+
     /** Revokes one device (same effects as a user unlinking it). */
     void revokeDevice(UUID accountId, int deviceId, String reason);
 

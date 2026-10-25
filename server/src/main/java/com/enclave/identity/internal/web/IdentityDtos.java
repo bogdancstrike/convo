@@ -148,7 +148,8 @@ final class IdentityDtos {
     record KeyPackageClaimResponse(List<ClaimedKeyPackageDto> keyPackages, List<DeviceRefDto> unavailable) {}
 
     /** Public account view (directory). */
-    record AccountDto(UUID accountId, String username, String displayName, String phone, String identityKey) {}
+    /** @param guestUntil set for guest accounts: when access ends */
+    record AccountDto(UUID accountId, String username, String displayName, String phone, String identityKey, java.time.Instant guestUntil) {}
 
     /** Caller's own account view. */
     record SelfDto(UUID accountId, String username, String displayName, String phone, int deviceId, String identityKey,

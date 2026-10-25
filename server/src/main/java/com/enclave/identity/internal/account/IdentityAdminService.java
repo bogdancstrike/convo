@@ -70,6 +70,36 @@ class IdentityAdminService implements IdentityAdminApi {
     }
 
     @Override
+    @Transactional
+    public void markGuest(String subject, java.time.Instant expiresAt, String invitedBy) {
+        jdbc.sql("""
+                INSERT INTO account_guests (subject, expires_at, invited_by) VALUES (:s, :e, :b)
+                ON CONFLICT (subject) DO UPDATE SET expires_at = EXCLUDED.expires_at, expired_at = NULL""")
+                .param("s", subject).param("e", java.sql.Timestamp.from(expiresAt)).param("b", invitedBy).update();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> dueGuests(java.time.Instant now) {
+        return jdbc.sql("SELECT subject FROM account_guests WHERE expired_at IS NULL AND expires_at <= :now ORDER BY expires_at LIMIT 500")
+                .param("now", java.sql.Timestamp.from(now)).query(String.class).list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<GuestStatus> guest(String subject) {
+        return jdbc.sql("SELECT expires_at, expired_at FROM account_guests WHERE subject = :s").param("s", subject)
+                .query((rs, n) -> new GuestStatus(rs.getTimestamp("expires_at").toInstant(),
+                        Optional.ofNullable(rs.getTimestamp("expired_at")).map(java.sql.Timestamp::toInstant).orElse(null))).optional();
+    }
+
+    @Override
+    @Transactional
+    public void guestExpired(String subject, java.time.Instant at) {
+        jdbc.sql("UPDATE account_guests SET expired_at = :at WHERE subject = :s").param("at", java.sql.Timestamp.from(at)).param("s", subject).update();
+    }
+
+    @Override
     public void revokeDevice(UUID accountId, int deviceId, String reason) {
         devices.revoke(accountId, deviceId, reason);
     }

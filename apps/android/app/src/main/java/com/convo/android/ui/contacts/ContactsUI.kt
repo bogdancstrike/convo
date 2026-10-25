@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -78,7 +80,10 @@ import org.json.JSONObject
                     PersonAvatar(app, account.optString("accountId"), account.label(), 48)
                     val status = app.snapshot.optJSONObject("profiles")?.optJSONObject(account.optString("accountId"))?.optString("status")?.takeIf { it.isNotBlank() && it != "null" }
                     Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                        RawText(account.optString("localName").takeIf { it.isNotBlank() } ?: account.label(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RawText(account.optString("localName").takeIf { it.isNotBlank() } ?: account.label(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            GuestTag(account)
+                        }
                         RawText(status ?: listOf("@${account.optString("username")}", account.optString("phone")).filter { it.isNotBlank() && it != "@" }.joinToString(" · "), fontSize = 14.sp, color = LocalConvoColors.current.textSecondary, maxLines = 1)
                     }
                     if (multi) Checkbox(account.optString("accountId") in selected, onCheckedChange = { onPick(account) })
@@ -88,6 +93,12 @@ import org.json.JSONObject
         }
     }
 }
+/** "Guest" pill for time-limited guest accounts (directory entries carry `guestUntil`). */
+@Composable fun GuestTag(account: JSONObject?) {
+    if (account?.optString("guestUntil")?.takeIf { it.isNotBlank() && it != "null" } == null) return
+    Text("Guest", Modifier.padding(start = 6.dp).background(Color(0x38E8A33D), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+}
+
 fun JSONObject.label() = optString("displayName").takeIf { it.isNotBlank() && it != "null" } ?: optString("username").takeIf { it.isNotBlank() } ?: optString("title")
 
 @Composable fun GroupWizard(app: MainActivity, channel: Boolean) {

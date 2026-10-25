@@ -259,6 +259,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Guest invitations (FR-EXT-01, FR-ADM-01): admins create time-limited guest accounts (1–365
+  days) or set/extend guest access on an existing account; an expiry job disables the IdP user,
+  ends sessions and disables the Convo account; directory entries carry `guestUntil` and web/Android
+  show a "Guest" label (search, contact info, members, web chat header). V33, `GuestAccountsTest`,
+  `guests.spec.ts`, emulator check. Server cannot remove guests from E2EE groups (documented).
 - Slow mode and per-member send restrictions (specs §30.4): owners/admins publish a revisioned
   E2EE member policy (interval, restricted members); the sender's client refuses (text given back,
   wait shown) and receivers drop posts that break it (server receive time, 2 s tolerance), so a

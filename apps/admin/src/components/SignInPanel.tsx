@@ -64,6 +64,7 @@ export function SignInSections({ account, error, refresh, can, onChanged, sectio
         <Descriptions.Item label="Sessions">{u.sessions} active · last activity {fmtAgo(u.lastAccess)}</Descriptions.Item>
         <Descriptions.Item label="Created">{fmtTime(u.createdAt)}</Descriptions.Item>
         <Descriptions.Item label="Convo">{account.convoAccountId ? <Tag color="blue">Signed in at least once</Tag> : <Tag>Not signed in yet</Tag>}</Descriptions.Item>
+        <Descriptions.Item label="Guest access"><GuestAccess id={u.id} version={account} /></Descriptions.Item>
         <Descriptions.Item label="Admin roles"><Space wrap>{u.roles.length ? u.roles.map((r) => <Tag key={r} color="purple">{ROLE_LABELS[r] ?? r}</Tag>) : 'none'}</Space></Descriptions.Item>
       </Descriptions>}
       {sections.includes('actions') && !credentials && <Alert type="info" showIcon message="Your admin role cannot change sign-in credentials." />}
@@ -96,6 +97,12 @@ export function SignInSections({ account, error, refresh, can, onChanged, sectio
                   const reason = await ask('Allow sign-in', `${u.username} can sign in again.`);
                   if (reason) await run(api.setSignInEnabled(u.id, true, reason), 'Sign-in allowed');
                 }}>Allow sign-in</Button>}
+            {can('ACCOUNT_STATUS') && <Dropdown menu={{ items: [7, 30, 90, 180].map((d) => ({ key: String(d), label: `${d} days from now` })), onClick: async ({ key }) => {
+              const reason = await ask(`Guest access for ${key} days`, `${u.username} becomes (or stays) a guest until ${key} days from now; expired guests are re-enabled.`);
+              if (reason) await run(api.extendGuest(u.id, Number(key), reason), 'Guest access set');
+            } }}>
+              <Button data-testid="signin-guest">Guest access…</Button>
+            </Dropdown>}
           </Space>
         </>
       )}
@@ -115,4 +122,19 @@ export function SignInSections({ account, error, refresh, can, onChanged, sectio
       )}
     </div>
   );
+}
+
+/** Guest expiry of a sign-in account, or "Member" (the endpoint answers 404 for members). */
+function GuestAccess({ id, version }: { id: string; version: unknown }) {
+  const [status, setStatus] = useState<{ expiresAt: string; expiredAt: string | null } | null | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    void api.guestStatus(id).then((s) => { if (active) setStatus(s); }).catch(() => { if (active) setStatus(null); });
+    return () => { active = false; };
+  }, [id, version]);
+  if (status === undefined) return <Spin size="small" />;
+  if (status === null) return <span data-testid="guest-status">Member (no expiry)</span>;
+  return status.expiredAt
+    ? <Tag color="red" data-testid="guest-status">Guest · expired {fmtTime(status.expiredAt)}</Tag>
+    : <Tag color="orange" data-testid="guest-status">Guest until {fmtTime(status.expiresAt)}</Tag>;
 }

@@ -502,6 +502,8 @@ export const en = {
   'slow.restrict': 'Restrict from sending',
   'slow.allow': 'Allow sending',
   'slow.restrictedTag': 'Restricted',
+  'guest.label': 'Guest',
+  'guest.until': 'Guest access until {date}',
   'report.title': 'Report',
   'report.to': 'Send to',
   'report.chooseRecipient': 'Choose a security contact',

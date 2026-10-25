@@ -149,7 +149,7 @@ import org.json.JSONObject
                 val name = account?.label() ?: "…"; val role = member.optString("role")
                 Row(Modifier.fillMaxWidth().background(colors.panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     PersonAvatar(app, accountId, name, 44)
-                    Column(Modifier.weight(1f).clickable { app.route = "contact:$accountId" }.padding(horizontal = 14.dp)) { Text(if (accountId == me) "You" else name); Text("@${account?.optString("username") ?: "…"}", style = MaterialTheme.typography.bodySmall); if (role != "member") Text(role.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f).clickable { app.route = "contact:$accountId" }.padding(horizontal = 14.dp)) { Text(if (accountId == me) "You" else name); Row(verticalAlignment = Alignment.CenterVertically) { Text("@${account?.optString("username") ?: "…"}", style = MaterialTheme.typography.bodySmall); GuestTag(account) }; if (role != "member") Text(role.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         else if (accountId in restricted) Text("Restricted", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
                     if (canManage && accountId != me && (role != "owner" || myRole == "owner")) Box {
                         IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "Participant options") }
@@ -206,7 +206,10 @@ import org.json.JSONObject
 @Composable fun HeroContact(app: MainActivity, id: String) {
     var account by remember(id) { mutableStateOf<JSONObject?>(null) }
     LaunchedEffect(id) { app.call("account", obj("id" to id)) { account = it as? JSONObject } }
-    account?.let { RawText(it.optString("phone").takeIf { p -> p.isNotBlank() } ?: "@${it.optString("username")}", Modifier.padding(top = 4.dp), color = LocalConvoColors.current.textSecondary, fontSize = 16.sp) }
+    account?.let { Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        RawText(it.optString("phone").takeIf { p -> p.isNotBlank() } ?: "@${it.optString("username")}", color = LocalConvoColors.current.textSecondary, fontSize = 16.sp)
+        GuestTag(it)
+    } }
 }
 
 /** About (status), handle and phone rows (web contact drawer). */

@@ -115,6 +115,11 @@ export const api = {
   idpUser: (id: string) => call<SignInAccount>('GET', `/idp/users/${id}`),
   createUser: (draft: { username: string; firstName: string; lastName: string; email: string; phone: string; requirePasskey: boolean; reason: string }) =>
     call<{ account: SignInAccount; temporaryPassword: string }>('POST', '/idp/users', draft),
+  /** Guest accounts: time-limited sign-in accounts disabled automatically at expiry. */
+  createGuest: (draft: { username: string; firstName: string; lastName: string; email: string; days: number; reason: string }) =>
+    call<{ account: SignInAccount; temporaryPassword: string; expiresAt: string }>('POST', '/guests', draft),
+  guestStatus: (id: string) => call<{ expiresAt: string; expiredAt: string | null }>('GET', `/guests/${q(id)}`),
+  extendGuest: (id: string, days: number, reason: string) => call<{ expiresAt: string }>('POST', `/guests/${q(id)}/extend`, { days, reason }),
   resetPassword: (id: string, reason: string) => call<{ temporaryPassword: string }>('POST', `/idp/users/${id}/reset-password`, { reason }),
   requireActions: (id: string, actions: string[], reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/required-actions`, { actions, reason }),
   signOutEverywhere: (id: string, reason: string) => call<AuditEntry>('POST', `/idp/users/${id}/sign-out`, { reason }),

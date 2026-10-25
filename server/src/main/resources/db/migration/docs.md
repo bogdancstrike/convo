@@ -40,3 +40,10 @@ not possible: messages are end-to-end encrypted and never visible to the server.
 `call_links` stores SHA-256 hashes of call-link tokens with their group, creator, expiry and
 revocation time (AC-CALL-07). A link never grants access by itself: membership is checked when it
 is resolved and when a LiveKit join token is issued. Rows are kept until operator maintenance.
+
+## V33 — guest accounts
+
+`account_guests` marks time-limited guest sign-in accounts by IdP subject (the Convo account is
+created at first sign-in), with expiry, inviting administrator and when expiry was applied. The
+admin module's expiry job disables the IdP user and the Convo account once `expires_at` passes;
+clients see the expiry as `guestUntil` on directory entries and label the person "Guest".

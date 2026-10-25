@@ -12,7 +12,7 @@ import { LastSeen } from '../components/LastSeen';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { Menu } from '../components/Popover';
-import { useGroupRecord, useMessages, useTyping, useSettings } from '../hooks';
+import { useAccount, useGroupRecord, useMessages, useTyping, useSettings } from '../hooks';
 import { useI18n } from '../i18n/i18n';
 import { fold } from './ChatListPanel';
 import { Composer, type ComposerMode } from './Composer';
@@ -21,6 +21,7 @@ import { MessageBubble, MessageInfoDialog, messageAnchor } from './MessageBubble
 import { ReportDialog } from './ReportDialog';
 import { TopicBar } from './Topics';
 import { formatInterval } from './MemberPolicy';
+import { GuestBadge } from '../components/GuestBadge';
 
 
 
@@ -74,6 +75,7 @@ export function Thread({
   // Calls: direct chats and groups you are in; not Note to self or broadcast channels.
   const callable = conversation.kind !== 'note' && !conversation.left && !conversation.adminOnly && !conversation.blocked;
   const group = conversation.kind === 'group';
+  const directAccount = useAccount(client, conversation.kind === 'direct' ? conversation.id : undefined);
   const myRole = record?.members.find((m) => m.accountId === client.accountId)?.role;
   const readOnly = record?.needsJoin || conversation.adminOnly && (!record || myRole === 'member');
   // Group topics (specs §30.4): the selected topic filters messages and receives new ones.
@@ -251,7 +253,7 @@ export function Thread({
         </button>
         <Avatar id={conversation.id} name={title} size={40} group={group} />
         <button className="who" onClick={onInfo} data-testid="thread-info">
-          <h2 data-testid="thread-title">{title}</h2>
+          <h2 data-testid="thread-title">{title}{directAccount && <> <GuestBadge account={directAccount} /></>}</h2>
           {subtitle && <span className={`sub${typing ? ' typing-sub' : ''}`}>{subtitle}</span>}
           {!typing && conversation.kind === 'direct' && <LastSeen client={client} accountId={conversation.id} />}
         </button>

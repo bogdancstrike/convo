@@ -2550,3 +2550,6 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .poll-option.wrong .poll-check { background: var(--c-danger, #d93025); border-color: var(--c-danger, #d93025); color: #fff; }
 .quiz-result { display: grid; gap: 4px; padding: 6px 2px; font-size: 0.875rem; }
 .quiz-result p { margin: 0; }
+
+/* Guest accounts (FR-EXT-01). */
+.guest-tag { background: color-mix(in srgb, #e8a33d 22%, transparent); color: inherit; font-size: 0.7rem; vertical-align: middle; }
