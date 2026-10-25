@@ -184,6 +184,8 @@ export interface Settings {
   notifications: boolean;
   /** Notification content: nothing identifying (default), sender only, or sender and text. */
   notificationPreview: 'generic' | 'sender' | 'full';
+  /** Minutes before an event I answered Going/Maybe to remind me on this device (0 = off). */
+  eventReminderMinutes: 0 | 5 | 15 | 30 | 60;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -202,6 +204,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appLockAfterMinutes: 1,
   notifications: false,
   notificationPreview: 'generic',
+  eventReminderMinutes: 15,
 };
 
 /** Persistent identity of this enrolled device. */

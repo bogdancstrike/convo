@@ -160,6 +160,10 @@ function NotificationsPage({ client, settings, update }: { client: EnclaveClient
       <Segmented label={t('notify.preview')} value={settings.notificationPreview} testId="notification-preview" onChange={(v) => update({ notificationPreview: v as SettingsModel['notificationPreview'] })}
         options={[{ value: 'generic', label: t('notify.preview.generic') }, { value: 'sender', label: t('notify.preview.sender') }, { value: 'full', label: t('notify.preview.full') }]} />
       <p className="muted-text">{t('notify.previewHelp')}</p>
+      <Segmented label={t('notify.reminders')} value={String(settings.eventReminderMinutes)} testId="event-reminders"
+        onChange={(v) => update({ eventReminderMinutes: Number(v) as SettingsModel['eventReminderMinutes'] })}
+        options={[{ value: '0', label: t('notify.reminders.off') }, ...[5, 15, 30, 60].map((m) => ({ value: String(m), label: t('notify.reminders.minutes', { count: String(m) }) }))]} />
+      <p className="muted-text">{t('notify.remindersHelp')}</p>
       {webPushSupported() && (
         <Switch checked={closedTab === true} disabled={closedTab === null} onChange={(on) => void toggleClosedTab(on)}
           label={t('notify.closed')} description={t('notify.closedHelp')} testId="toggle-web-push" />

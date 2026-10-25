@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_VERSION, decodeContent, encodeContent } from '../crypto/content';
-import { applyRsvp, applyUpdate, closesAt, initialEvent, newEvent, responses, toIcs } from './events';
+import { applyRsvp, applyUpdate, closesAt, initialEvent, newEvent, reminderAt, responses, toIcs } from './events';
 
 const start = Date.UTC(2026, 10, 1, 18, 0);
 const base = () => initialEvent(newEvent({ title: 'Team dinner', start, end: start + 2 * 3600_000, zone: 'Europe/Bucharest', location: 'Old Town' }));
@@ -42,5 +42,21 @@ describe('events with RSVP (FR-EXT-01)', () => {
     expect(ics).toContain(String.raw`SUMMARY:Launch\; party`);
     expect(ics).toContain('LOCATION:Hall\\, 2nd floor');
     expect(ics).toContain('DTSTART:20261101T180000Z');
+  });
+});
+
+describe('local event reminders', () => {
+  const base = { ...initialEvent({ title: 'Hike', start: 10 * 3_600_000, zone: 'UTC' }) };
+  const going = applyRsvp(base, 'me', 'going', 1, 'a');
+  it('fires the lead time before start for Going and Maybe answers only', () => {
+    expect(reminderAt(going, 'me', 15, 0)).toBe(10 * 3_600_000 - 15 * 60_000);
+    expect(reminderAt(applyRsvp(base, 'me', 'maybe', 1, 'a'), 'me', 15, 0)).toBeDefined();
+    expect(reminderAt(applyRsvp(base, 'me', 'no', 1, 'a'), 'me', 15, 0)).toBeUndefined();
+    expect(reminderAt(base, 'me', 15, 0)).toBeUndefined();
+  });
+  it('is off when disabled, cancelled or already started', () => {
+    expect(reminderAt(going, 'me', 0, 0)).toBeUndefined();
+    expect(reminderAt(applyUpdate(going, 1, { title: 'Hike', start: going.start, zone: 'UTC' }, true, 2), 'me', 15, 0)).toBeUndefined();
+    expect(reminderAt(going, 'me', 15, going.start)).toBeUndefined();
   });
 });

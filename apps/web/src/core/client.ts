@@ -49,7 +49,7 @@ import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './d
 import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, type CallInvite, type CallJoin, type CallKey, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
 import { applyBallot, applyClose, initialState, newPoll } from './polls';
-import { applyRsvp, applyUpdate, initialEvent, newEvent } from './events';
+import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { RecordNs, type Repositories } from './repositories';
@@ -106,7 +106,12 @@ export interface ClientEvents extends Record<string, unknown> {
   credentials: boolean;
   /** A new incoming message that should alert (see `emitAlert`). */
   alert: { conversationId: string; authorId: string; messageId: string; mention: boolean; body?: string; attachment: boolean };
+  /** A local event reminder is due (device-local; see `sweepReminders`). */
+  reminder: EventReminder;
 }
+
+/** A pending device-local reminder for an event this account answered Going/Maybe. */
+export interface EventReminder { conversationId: string; authorId: string; messageId: string; title: string; start: number; at: number }
 
 const TYPING_TTL_SECONDS = 10;
 const OUTBOX_RETRY_MS = 15_000;
@@ -213,7 +218,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       });
     });
     this.socket.start();
-    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); void this.sweepSnoozes(); void this.sendDueScheduled(); }, OUTBOX_RETRY_MS);
+    this.retryTimer = setInterval(() => { void this.outbox.flush(); void this.flushPendingUploads(); void this.sweepSnoozes(); void this.sendDueScheduled(); void this.sweepReminders(); }, OUTBOX_RETRY_MS);
     void this.sendDueScheduled();
     void this.sweepSnoozes();
     void this.maintainGroups();
@@ -894,8 +899,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const event = newEvent(input);
     const revision = target.event.revision + 1;
     const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), eventUpdate: { targetMessageId: target.id, targetAuthorId: target.authorId, revision, event, ...(cancelled ? { cancelled } : {}) } };
+    const updated = applyUpdate(target.event, revision, event, cancelled, data.timestamp);
     await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined,
-      [this.repos.putMessage({ ...target, event: applyUpdate(target.event, revision, event, cancelled, data.timestamp) })]);
+      [this.repos.putMessage({ ...target, event: updated }), this.reminderOp(target, updated)]);
     this.emit('messages', target.conversationId);
   }
 
@@ -905,8 +911,31 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), rsvp: { targetMessageId: target.id, targetAuthorId: target.authorId, response } };
     const updated = applyRsvp(target.event, this.accountId, response, data.timestamp, data.messageId);
     if (updated === target.event) throw new Error('responses are closed');
-    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage({ ...target, event: updated })]);
+    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage({ ...target, event: updated }), this.reminderOp(target, updated)]);
     this.emit('messages', target.conversationId);
+  }
+
+  /**
+   * Keeps the device-local reminder of an event in step with its state: scheduled for Going/Maybe
+   * answers (this account's, from any of its devices), removed on No, cancellation or start.
+   */
+  private reminderOp(target: ChatMessage, event: EventState): StoreOp {
+    const id = `${target.conversationId}/${target.authorId}/${target.id}`;
+    const at = reminderAt(event, this.accountId, this.settings.eventReminderMinutes);
+    if (at === undefined) return { type: 'delete', ns: RecordNs.reminders, id };
+    const reminder: EventReminder = { conversationId: target.conversationId, authorId: target.authorId, messageId: target.id, title: event.title, start: event.start, at };
+    return { type: 'put', ns: RecordNs.reminders, id, value: reminder };
+  }
+
+  /** Emits due reminders once each; ones missed while the app was closed fire if the event has not started. */
+  async sweepReminders(now = Date.now()): Promise<void> {
+    const due = (await this.repos.store.list<EventReminder>(RecordNs.reminders)).filter((r) => r.at <= now);
+    if (!due.length) return;
+    await this.repos.store.commit(due.map((r) => ({ type: 'delete' as const, ns: RecordNs.reminders, id: `${r.conversationId}/${r.authorId}/${r.messageId}` })));
+    for (const r of due) {
+      const conversation = this.conversationCache.get(r.conversationId);
+      if (r.start > now && conversation && !conversation.left && !conversation.blocked) this.emit('reminder', r);
+    }
   }
 
   // --- view-once media (specs §30.4) --------------------------------------------------------
@@ -2207,7 +2236,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       if (data.rsvp) event = applyRsvp(event, authorId, data.rsvp.response, at, data.messageId);
       else if (await this.canEditEvent(target, authorId)) event = applyUpdate(event, data.eventUpdate!.revision, data.eventUpdate!.event, data.eventUpdate!.cancelled === true, at);
       if (event === target.event) return 'ignored';
-      ops.push(this.repos.putMessage({ ...target, event }));
+      ops.push(this.repos.putMessage({ ...target, event }), this.reminderOp(target, event));
       return 'mutation';
     }
     if (data.edit) {

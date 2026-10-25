@@ -1,5 +1,7 @@
 package com.convo.android.push
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import com.convo.android.R
 import com.convo.android.BuildConfig
 import com.convo.android.*
@@ -84,6 +86,24 @@ object MessageNotifications {
         // One notification per chat (generic previews share one) so a busy chat does not flood.
         try { NotificationManagerCompat.from(app).notify(if (preview == "generic") 1 else id.hashCode(), notification) } catch (_: SecurityException) { }
     }
+
+    /** Local event reminder (Going/Maybe answers) from the shared core; same permission and preview rules. */
+    fun showReminder(app: MainActivity, reminder: JSONObject) {
+        val settings = app.snapshot.optJSONObject("settings") ?: return
+        if (!settings.optBoolean("notifications") || !permitted(app)) return
+        val id = reminder.optString("conversationId")
+        val generic = app.locks.locked(id) || app.locks.appLock || settings.optString("notificationPreview", "generic") == "generic"
+        val minutes = maxOf(1L, (reminder.optLong("start") - System.currentTimeMillis()) / 60_000)
+        val open = PendingIntent.getActivity(app, reminder.optString("messageId").hashCode(), Intent(app, MainActivity::class.java).putExtra(EXTRA_CONVERSATION, id)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val notification = NotificationCompat.Builder(app, CHANNEL).setSmallIcon(R.drawable.convo_logo)
+            .setContentTitle(if (generic) "Convo" else "📅 " + reminder.optString("title"))
+            .setContentText(if (generic) tr("Upcoming event") else tr("Starts in {count} min").replace("{count}", "$minutes"))
+            .setAutoCancel(true).setContentIntent(open).setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPublicVersion(NotificationCompat.Builder(app, CHANNEL).setSmallIcon(R.drawable.convo_logo).setContentTitle("Convo").setContentText(tr("Upcoming event")).build())
+            .build()
+        try { NotificationManagerCompat.from(app).notify(reminder.optString("messageId").hashCode(), notification) } catch (_: SecurityException) { }
+    }
 }
 
 @Composable fun NotificationsEditor(app: MainActivity, settings: JSONObject) {
@@ -104,6 +124,14 @@ object MessageNotifications {
             }
         }
         Text("Hidden shows only “New message”. Locked chats and app lock always hide content; the lock screen always shows a generic notification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text("Event reminders", style = MaterialTheme.typography.titleSmall)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0, 5, 15, 30, 60).forEach { minutes ->
+                FilterChip(settings.optInt("eventReminderMinutes", 15) == minutes, { app.call("settings", obj("patch" to obj("eventReminderMinutes" to minutes))) },
+                    label = { if (minutes == 0) Text("Off") else RawText(tr("{count} min").replace("{count}", "$minutes")) })
+            }
+        }
+        Text("Reminds you before events you answered Going or Maybe to. Reminders are kept on this phone only and fire while Convo is running.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

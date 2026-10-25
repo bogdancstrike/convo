@@ -59,6 +59,7 @@ async function startClient() {
   client.on('call', (event) => emit('call', event));
   client.on('callLog', () => emit('callLog', {}));
   // The title travels with the alert: a brand-new chat is not in the last snapshot yet.
+  client.on('reminder', (reminder) => emit('reminder', reminder));
   client.on('alert', (alert) => emit('alert', { ...alert, title: client?.conversations().find((c) => c.id === alert.conversationId)?.title }));
   client.on('typing', (event) => emit('typing', event));
   emit('phase', { name: 'loading' }); await client.start(); accessToken = ''; link = null;

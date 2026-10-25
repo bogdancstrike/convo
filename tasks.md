@@ -228,7 +228,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   description) with revisions for edits/cancellation by creator or admin, Going/Maybe/Can't go,
   responses closed after cancellation or the end, .ics export; web attach menu + card, Android
   attach sheet + card with system date/time pickers. `events.test.ts`, `events.spec.ts`, emulator
-  check both directions. Local reminders not yet.
+  check both directions. Local reminders: for Going/Maybe answers (from any own device) a
+  device-local encrypted record fires a notification N minutes before start (Settings →
+  Notifications, Off/5/15/30/60, default 15); removed on No, cancellation or start; fires while
+  Convo runs (missed ones fire at next start if the event has not begun). `reminderAt` unit tests,
+  client test, emulator check.
 - View-once photo/video (specs §30.4): exactly one photo/video, the sender keeps only the label,
   the recipient opens it once in an in-memory viewer, consumption syncs to own devices, no
   forward/shared-media/history copy, unopened items expire after 14 days. `viewOnce.test.ts`,

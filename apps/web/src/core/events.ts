@@ -65,3 +65,18 @@ export function toIcs(state: EventState, uid: string): string {
     ...(state.description ? [`DESCRIPTION:${text(state.description)}`] : []), ...(state.location ? [`LOCATION:${text(state.location)}`] : []),
     ...(state.cancelled ? ['STATUS:CANCELLED'] : []), 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
 }
+
+/** Lead times offered for local event reminders (minutes before start; 0 = off). */
+export const REMINDER_LEADS = [0, 5, 15, 30, 60] as const;
+export type ReminderLead = (typeof REMINDER_LEADS)[number];
+
+/**
+ * When this device should remind `account` of an event, or undefined for no reminder: only for
+ * Going/Maybe answers on events that are not cancelled and have not started. Reminders are
+ * device-local; nothing about them leaves the device.
+ */
+export function reminderAt(state: EventState, account: string, leadMinutes: number, now = Date.now()): number | undefined {
+  const answer = state.rsvps[account]?.response;
+  if (!leadMinutes || state.cancelled || state.start <= now || (answer !== 'going' && answer !== 'maybe')) return undefined;
+  return state.start - leadMinutes * 60_000;
+}

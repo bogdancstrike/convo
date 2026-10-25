@@ -163,6 +163,7 @@ class MainActivity : FragmentActivity() {
                 "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications(); pendingCallLink?.let { pendingCallLink = null; calls.joinLink(it) } }; if (phase == "welcome") io.execute { mediaCache.clear() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
                 "alert" -> { if (BuildConfig.DEBUG) android.util.Log.d("ConvoPush", "alert (foreground=$isInForeground)"); MessageNotifications.show(this, value) }
+                "reminder" -> MessageNotifications.showReminder(this, value)
                 "callLog" -> callLogVersion++
                 "typing" -> value.optString("conversationId").takeIf { it.isNotBlank() }?.let { typingUntil[it] = value.optLong("until") }
                 "snapshot" -> { snapshot = value; PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }

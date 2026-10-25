@@ -31,4 +31,16 @@ export function useMessageNotifications(client: EnclaveClient, activeChat: strin
       notification.onclick = () => { window.focus(); open(alert.conversationId); notification.close(); };
     })();
   }), [client, activeChat, open, locks, t]);
+
+  // Local event reminders (Going/Maybe): same permission and preview rules as messages.
+  useEffect(() => client.on('reminder', (reminder) => {
+    const settings = client.settings;
+    if (!settings.notifications || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const generic = locks.locked(reminder.conversationId) || settings.appLock || settings.notificationPreview === 'generic';
+    const minutes = String(Math.max(1, Math.round((reminder.start - Date.now()) / 60_000)));
+    const notification = new Notification(generic ? 'Convo' : `📅 ${reminder.title}`, {
+      body: generic ? t('notify.reminderGeneric') : t('notify.reminderBody', { count: minutes }),
+      tag: `reminder:${reminder.messageId}`, icon: '/logo.svg' });
+    notification.onclick = () => { window.focus(); open(reminder.conversationId); notification.close(); };
+  }), [client, open, locks, t]);
 }

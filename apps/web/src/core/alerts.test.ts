@@ -54,3 +54,22 @@ it('scheduled messages: schedule, edit, cancel, and send only once when due', as
   expect(sent).toEqual([{ body: 'first (edited)', quote: undefined, mentions: undefined, silent: undefined }]);
   expect(await client.scheduledMessages()).toEqual([]);
 });
+
+it('event reminders: scheduled for Going, removed for No, emitted once when due', async () => {
+  (client as unknown as { enqueue: (...a: unknown[]) => Promise<void> }).enqueue = async (...args) => { await store.commit(args[4] as never); };
+  const now = Date.now();
+  const start = now + 3_600_000;
+  const target = { conversationId: group.id, id: 'ev', authorId: 'peer', direction: 'in', sentAt: now, sort: now, reactions: {}, status: 'delivered',
+    event: { title: 'Hike', start, zone: 'UTC', revision: 0, rsvps: {} } } as unknown as Parameters<EnclaveClient['rsvp']>[0];
+  const fired: string[] = [];
+  client.on('reminder', (r) => fired.push(r.title));
+  await client.rsvp(target, 'no');
+  await client.sweepReminders(start - 1);
+  expect(fired).toEqual([]);
+  await client.rsvp(target, 'going');
+  await client.sweepReminders(start - 20 * 60_000); // before the 15-minute lead
+  expect(fired).toEqual([]);
+  await client.sweepReminders(start - 10 * 60_000);
+  await client.sweepReminders(start - 5 * 60_000);
+  expect(fired).toEqual(['Hike']);
+});

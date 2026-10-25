@@ -29,6 +29,8 @@ export const RecordNs = {
   scheduled: 'scheduled',
   /** Private chat folders (`FolderState`, single record), synced to own devices only. */
   folders: 'folders',
+  /** Device-local event reminders (`EventReminder`), keyed by event message. */
+  reminders: 'reminders',
 } as const;
 
 export class Repositories {
