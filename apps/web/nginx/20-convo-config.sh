@@ -18,7 +18,17 @@ case "$UPSTREAM_LIVEKIT" in
   http://*) LIVEKIT_URL="${UPSTREAM_LIVEKIT%/}"; LIVEKIT_HOST='$http_host' ;;
   *) LIVEKIT_URL="http://$UPSTREAM_LIVEKIT"; LIVEKIT_HOST='$http_host' ;;
 esac
-export UPSTREAM_SERVER UPSTREAM_KEYCLOAK UPSTREAM_LIVEKIT UPSTREAM_S3 LIVEKIT_URL LIVEKIT_HOST
+# A LiveKit reached by IP (no public certificate): UPSTREAM_LIVEKIT_CERT pins its self-signed
+# certificate (PEM; the only one trusted for it) and UPSTREAM_LIVEKIT_TLS_NAME is the DNS name inside
+# that certificate that nginx verifies (nginx cannot verify IP addresses).
+LIVEKIT_CA_FILE=/etc/ssl/certs/ca-certificates.crt
+LIVEKIT_TLS_NAME="${UPSTREAM_LIVEKIT_TLS_NAME:-${LIVEKIT_HOST%%:*}}"
+case "$LIVEKIT_TLS_NAME" in '$'*) LIVEKIT_TLS_NAME='$proxy_host' ;; esac
+if [ -n "${UPSTREAM_LIVEKIT_CERT:-}" ]; then
+  printf '%s\n' "$UPSTREAM_LIVEKIT_CERT" > /etc/nginx/convo/livekit.crt
+  LIVEKIT_CA_FILE=/etc/nginx/convo/livekit.crt
+fi
+export UPSTREAM_SERVER UPSTREAM_KEYCLOAK UPSTREAM_LIVEKIT UPSTREAM_S3 LIVEKIT_URL LIVEKIT_HOST LIVEKIT_CA_FILE LIVEKIT_TLS_NAME
 if [ "${CONVO_TLS:-on}" = "off" ]; then
   cat > /etc/nginx/convo/listen.conf <<CONF
 listen ${CONVO_HTTP_LISTEN:-8080};
@@ -60,5 +70,5 @@ fi
 dns=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
 case "$dns" in *:*) dns="[$dns]" ;; esac
 echo "resolver ${dns:-127.0.0.11} valid=10s ipv6=off;" > /etc/nginx/convo/resolver.conf
-envsubst '${UPSTREAM_SERVER} ${UPSTREAM_KEYCLOAK} ${UPSTREAM_LIVEKIT} ${UPSTREAM_S3} ${LIVEKIT_URL} ${LIVEKIT_HOST}' \
+envsubst '${UPSTREAM_SERVER} ${UPSTREAM_KEYCLOAK} ${UPSTREAM_LIVEKIT} ${UPSTREAM_S3} ${LIVEKIT_URL} ${LIVEKIT_HOST} ${LIVEKIT_CA_FILE} ${LIVEKIT_TLS_NAME}' \
   < /etc/nginx/convo/default.conf.template > /etc/nginx/conf.d/default.conf

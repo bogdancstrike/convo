@@ -21,12 +21,33 @@ class LiveKitRooms {
     private final CallsProperties properties;
     private final LiveKitTokens tokens;
     private final ObjectMapper json;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final HttpClient http;
 
     LiveKitRooms(CallsProperties properties, LiveKitTokens tokens, ObjectMapper json) {
         this.properties = properties;
         this.tokens = tokens;
         this.json = json;
+        var builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER);
+        if (!properties.livekitCertificate().isBlank()) builder.sslContext(pinned(properties.livekitCertificate()));
+        this.http = builder.build();
+    }
+
+    /** TLS that trusts exactly the configured certificate (a self-signed LiveKit reached by IP). */
+    static javax.net.ssl.SSLContext pinned(String pem) {
+        try {
+            var certificate = java.security.cert.CertificateFactory.getInstance("X.509")
+                    .generateCertificate(new java.io.ByteArrayInputStream(pem.strip().getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+            var store = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
+            store.load(null, null);
+            store.setCertificateEntry("livekit", certificate);
+            var trust = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            trust.init(store);
+            var context = javax.net.ssl.SSLContext.getInstance("TLS");
+            context.init(null, trust.getTrustManagers(), null);
+            return context;
+        } catch (Exception e) {
+            throw new IllegalStateException("invalid enclave.calls.livekit-certificate", e);
+        }
     }
 
     boolean enabled() { return properties.usable() && !properties.livekitUrl().isBlank(); }

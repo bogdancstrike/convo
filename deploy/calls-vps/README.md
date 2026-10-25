@@ -1,75 +1,80 @@
-# Convo calls on a public VPS (LiveKit + coturn)
+# Convo calls on a public VPS (IP only)
 
 ## Why
 
-Convo's web, API and signalling traffic reaches the homelab through a Cloudflare tunnel, which only
-carries HTTP/WebSocket over TCP. WebRTC media is UDP and must reach the SFU's address directly. With
-LiveKit inside the homelab, phones are offered the home public address on UDP 50000–50100/TCP 7881;
-nothing forwards those ports (and the home IP should stay private), and `turn.doncik.ro` has no DNS
-record. ICE never connects, so both sides see the call, answer, hear nothing, and LiveKit drops them
-after the connection timeout.
-
-Moving only LiveKit and coturn to a VPS fixes this without exposing the homelab:
+Convo's web, API and call signalling reach the homelab through a Cloudflare tunnel, which only
+carries HTTP/WebSocket. Call audio/video is UDP and must reach the media server's address directly;
+with LiveKit in the homelab, phones are offered the home IP on ports nothing forwards, so calls
+connect, stay silent and drop. This folder moves only LiveKit (media server) and coturn (relay) to a
+public VPS. Signalling still goes through the tunnel, so the homelab IP stays private.
 
 ```
-phone ─HTTPS/WSS─▶ Cloudflare tunnel ─▶ convo-web /rtc ─HTTPS─▶ Caddy :443 ─▶ LiveKit :7880   (signalling, small)
-phone ◀── UDP 50000-60000 · TCP 7881 · TURN 3478 (UDP/TCP, relay 49160-49200) ──▶ VPS          (media, E2EE frames)
+phone ─HTTPS/WSS─▶ convo.doncik.ro (tunnel) ─▶ convo-web /rtc ─HTTPS, pinned cert─▶ VPS:7443 ─▶ LiveKit
+phone ◀──── UDP 50000-60000 · TCP 7881 · TURN 3478 (relay 49160-49200) ────▶ VPS 31.97.192.121
 ```
 
-Media stays end-to-end encrypted (frame E2EE): the VPS forwards ciphertext and never has the keys.
+The VPS needs no domain: phones use its IP for media, and Convo talks to it over TLS with the
+self-signed certificate in `certs/`, which Convo pins (trusts only that certificate). Media is
+end-to-end encrypted (frame E2EE); the VPS forwards ciphertext and never has the keys.
 
-## 1. DNS (Cloudflare, **DNS only / grey cloud**)
+## Files
 
-| Name | Type | Value |
-|---|---|---|
-| `rtc.doncik.ro` | A | `31.97.192.121` |
-| `turn.doncik.ro` | A | `31.97.192.121` |
+| File | Purpose |
+|---|---|
+| `docker-compose-calls.yaml` | LiveKit, coturn and nginx (TLS on port 7443), all on the host network |
+| `nginx.conf` | TLS in front of LiveKit's signalling/API |
+| `.env` | Generated values: VPS IP, LiveKit secret, TURN password (**secret, not committed**) |
+| `certs/rtc.crt`, `certs/rtc.key` | Self-signed certificate for `31.97.192.121` + name `convo-rtc` (**key is secret, not committed**) |
+| `gen-certs.sh` | Recreates the certificate: `./gen-certs.sh <ip>` |
 
-Grey cloud matters for `turn` (UDP cannot pass Cloudflare's proxy) and lets Caddy obtain a
-certificate for `rtc` directly.
-
-## 2. Firewall on the VPS
+## 1. Open ports on the VPS
 
 ```sh
-ufw allow 80/tcp           # Let's Encrypt HTTP challenge
-ufw allow 443/tcp          # signalling + room API (Caddy)
-ufw allow 7881/tcp         # ICE over TCP (networks that block UDP)
-ufw allow 50000:60000/udp  # media
-ufw allow 3478             # TURN, UDP and TCP
-ufw allow 49160:49200/udp  # TURN relay range
+ufw allow 7443/tcp          # signalling + room API (from the homelab, via TLS)
+ufw allow 7881/tcp          # media over TCP (networks that block UDP)
+ufw allow 50000:60000/udp   # media
+ufw allow 3478              # TURN, UDP and TCP
+ufw allow 49160:49200/udp   # TURN relay range
 ```
 
-Also open the same ports in the hosting provider's firewall if it has one.
+Open the same ports in the hosting provider's firewall too, if it has one. Docker must be installed.
 
-## 3. Start
+## 2. Copy and start
 
 ```sh
-scp -r deploy/calls-vps root@31.97.192.121:/opt/convo-calls
-ssh root@31.97.192.121
-cd /opt/convo-calls && cp .env.example .env && vi .env   # see below
-docker compose -f docker-compose-calls.yaml up -d
+scp -r deploy/calls-vps root@31.97.192.121:/opt/convo-calls     # includes .env and certs/
+ssh root@31.97.192.121 'cd /opt/convo-calls && docker compose -f docker-compose-calls.yaml up -d'
 ```
 
-`.env`: `LIVEKIT_API_SECRET` must equal the server's (`kubectl -n apps get secret convo-livekit
--o jsonpath='{.data.api-secret}' | base64 -d`); `TURN_PASSWORD` is any long random string
-(`openssl rand -hex 24`).
-
-## 4. Check
+Check on the VPS:
 
 ```sh
-curl https://rtc.doncik.ro                     # → OK (LiveKit behind Caddy, valid certificate)
+docker compose -f docker-compose-calls.yaml ps                 # livekit, coturn, tls: running
+curl -sk https://127.0.0.1:7443                                 # → OK
 docker compose -f docker-compose-calls.yaml logs livekit | grep nodeIP   # → 31.97.192.121
-# From another machine: TURN allocation with the configured user
-docker run --rm --network host coturn/coturn:4.6.3 turnutils_uclient -u convo -w "$TURN_PASSWORD" -y turn.doncik.ro
 ```
 
-## 5. Point Convo at it (homelab charts, `app-charts/convo`)
+## 3. Point Convo at it (homelab)
 
-- `web/values.yaml`: `UPSTREAM_LIVEKIT: "https://rtc.doncik.ro"` (convo-web proxies `/rtc` to it with
-  TLS verification; needs web ≥ 1.11.0).
-- `server/values.yaml`: `ENCLAVE_CALLS_LIVEKIT_URL: "https://rtc.doncik.ro"` (room API: removing
-  members who left, key rotation).
-- The in-cluster `charts/livekit` and `charts/coturn` apps can then be removed.
+1. Use the VPS's LiveKit secret in the cluster (from `.env`):
 
-Clients need no change: they keep using `https://convo.doncik.ro/rtc` for signalling and receive
-the VPS address and TURN servers from LiveKit.
+   ```sh
+   LIVEKIT_API_SECRET='<LIVEKIT_API_SECRET from .env>' app-charts/convo/utils/create-secrets.sh
+   ```
+
+2. Chart values (`app-charts/convo`), with the contents of `certs/rtc.crt` as the certificate:
+   - `web/values.yaml` env: `UPSTREAM_LIVEKIT: "https://31.97.192.121:7443"`,
+     `UPSTREAM_LIVEKIT_TLS_NAME: "convo-rtc"`, `UPSTREAM_LIVEKIT_CERT: |` (the PEM)
+   - `server/values.yaml` env: `ENCLAVE_CALLS_LIVEKIT_URL: "https://31.97.192.121:7443"`,
+     `ENCLAVE_CALLS_LIVEKIT_CERTIFICATE: |` (the PEM)
+
+3. Restart the Convo server and web pods (Argo CD sync does it). The in-cluster `charts/livekit`
+   and `charts/coturn` can then be removed.
+
+Clients need no change. Check a call between two phones on different networks (e.g. one on Wi-Fi,
+one on mobile data).
+
+## Rotating
+
+- New certificate: `./gen-certs.sh 31.97.192.121`, restart `tls`, then update both PEM values.
+- New LiveKit secret: change `.env`, restart `livekit`, then re-run step 3.1.

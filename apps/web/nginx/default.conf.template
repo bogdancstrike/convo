@@ -42,8 +42,9 @@ server {
         proxy_pass $upstream_livekit;
         proxy_http_version 1.1;
         proxy_ssl_server_name on;
+        proxy_ssl_name ${LIVEKIT_TLS_NAME};
         proxy_ssl_verify on;
-        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_trusted_certificate ${LIVEKIT_CA_FILE};
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host ${LIVEKIT_HOST};

@@ -1,14 +1,14 @@
-# Convo calls on a public VPS: LiveKit SFU (signalling + media), coturn (TURN relay) and Caddy (TLS for
-# the signalling/API endpoint). Media must reach a public address directly (UDP); a Cloudflare tunnel
-# only carries HTTP/WebSocket, so calls cannot work with LiveKit behind it.
+# Convo calls on a public VPS reached by IP only: LiveKit SFU (signalling + media), coturn (TURN
+# relay) and nginx (TLS for the signalling/room API with a pinned self-signed certificate). Media must
+# reach a public address directly (UDP); a Cloudflare tunnel only carries HTTP/WebSocket, so calls
+# cannot work with LiveKit behind it.
 #
-#   phone ──HTTPS/WSS──▶ Cloudflare tunnel ──▶ convo-web /rtc ──HTTPS──▶ Caddy :443 ──▶ LiveKit :7880 (signalling)
-#   phone ◀──────────── UDP 50000-60000 / TCP 7881 / TURN 3478 ──────────▶ this VPS            (media)
+#   phone ─HTTPS/WSS─▶ convo.doncik.ro (tunnel) ─▶ convo-web /rtc ─HTTPS (pinned cert)─▶ VPS:7443 ─▶ LiveKit:7880
+#   phone ◀──── UDP 50000-60000 · TCP 7881 · TURN 3478 (relay 49160-49200) ────▶ VPS (PUBLIC_IP)
 #
-# Usage (see README.md): cp .env.example .env, fill it in, then
+# Usage (see README.md): put this folder with its .env and certs/ on the VPS, then
 #   docker compose -f docker-compose-calls.yaml up -d
-# All services use the host network: media ports are not remapped and the advertised address is the
-# VPS's own public IP.
+# Host networking: media ports are not remapped and the advertised address is the VPS's public IP.
 name: convo-calls
 
 services:
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      # Signalling/API listens on localhost only; Caddy terminates TLS in front of it.
+      # Signalling/API listens on localhost only; nginx terminates TLS in front of it.
       LIVEKIT_CONFIG: |
         port: 7880
         bind_addresses: ["127.0.0.1"]
@@ -29,18 +29,18 @@ services:
           use_external_ip: false
           node_ip: ${PUBLIC_IP:?set PUBLIC_IP in .env}
           turn_servers:
-            - host: ${TURN_DOMAIN:?set TURN_DOMAIN in .env}
+            - host: ${PUBLIC_IP}
               port: 3478
               protocol: udp
               username: convo
               credential: ${TURN_PASSWORD:?set TURN_PASSWORD in .env}
-            - host: ${TURN_DOMAIN}
+            - host: ${PUBLIC_IP}
               port: 3478
               protocol: tcp
               username: convo
               credential: ${TURN_PASSWORD}
         keys:
-          ${LIVEKIT_API_KEY:-convo}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env (same as the server's)}
+          ${LIVEKIT_API_KEY:-convo}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env (same as the Convo server's)}
         room:
           empty_timeout: 60
           departure_timeout: 20
@@ -75,18 +75,10 @@ services:
       - --denied-peer-ip=::1
       - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
 
-  caddy:
-    image: caddy:2.10-alpine
+  tls:
+    image: nginx:1.29-alpine
     restart: unless-stopped
     network_mode: host
-    environment:
-      RTC_DOMAIN: ${RTC_DOMAIN:?set RTC_DOMAIN in .env}
-      ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-
-volumes:
-  caddy-data:
-  caddy-config:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro

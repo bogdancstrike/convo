@@ -24,7 +24,7 @@ class CallLinksTest {
     private final JdbcClient.StatementSpec sql = mock(JdbcClient.StatementSpec.class, RETURNS_SELF);
     private final GroupsApi groups = mock(GroupsApi.class);
     private final CallRepository calls = mock(CallRepository.class);
-    private final CallsProperties properties = new CallsProperties(true, "/rtc", "convo", "x".repeat(32), Duration.ofMinutes(10), Duration.ofHours(12), 16, "", Duration.ofHours(24), Duration.ofDays(7));
+    private final CallsProperties properties = new CallsProperties(true, "/rtc", "convo", "x".repeat(32), Duration.ofMinutes(10), Duration.ofHours(12), 16, "", Duration.ofHours(24), Duration.ofDays(7), "");
     private final CallLinks links = new CallLinks(jdbc, groups, calls, properties, Clock.fixed(now, ZoneOffset.UTC));
 
     CallLinksTest() {

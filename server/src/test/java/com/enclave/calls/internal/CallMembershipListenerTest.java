@@ -18,7 +18,7 @@ class CallMembershipListenerTest {
     private final CallRepository calls = mock(CallRepository.class);
     private final LiveKitRooms rooms = mock(LiveKitRooms.class);
     private final CallMembershipListener listener = new CallMembershipListener(calls, rooms,
-            new CallsProperties(true, "/rtc", "convo", "x".repeat(32), Duration.ofMinutes(10), Duration.ofHours(12), 16, "http://livekit:7880", Duration.ofHours(24), Duration.ofDays(7)), Clock.systemUTC());
+            new CallsProperties(true, "/rtc", "convo", "x".repeat(32), Duration.ofMinutes(10), Duration.ofHours(12), 16, "http://livekit:7880", Duration.ofHours(24), Duration.ofDays(7), ""), Clock.systemUTC());
 
     @Test void onlyTheRemovedAccountsDevicesLeaveOngoingCalls() throws Exception {
         byte[] group = new byte[32];

@@ -23,6 +23,8 @@ import org.springframework.validation.annotation.Validated;
  *     removing a member who left the group); empty disables it
  * @param linkTtl default lifetime of a member call link
  * @param maxLinkTtl longest lifetime a member may request for a call link
+ * @param livekitCertificate PEM certificate to trust (only) for {@code livekitUrl}, e.g. the
+ *     self-signed certificate of a LiveKit on a VPS reached by IP; empty: the system trust store
  */
 @Validated
 @ConfigurationProperties("enclave.calls")
@@ -36,7 +38,8 @@ public record CallsProperties(
         @DefaultValue("16") @Min(2) @Max(100) int maxGroupParticipants,
         @DefaultValue("") String livekitUrl,
         @DefaultValue("24h") @NotNull Duration linkTtl,
-        @DefaultValue("7d") @NotNull Duration maxLinkTtl) {
+        @DefaultValue("7d") @NotNull Duration maxLinkTtl,
+        @DefaultValue("") String livekitCertificate) {
 
     boolean usable() { return enabled && apiSecret.length() >= 32; }
 }

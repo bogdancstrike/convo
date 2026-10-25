@@ -22,7 +22,9 @@ certificate. `/stickers/` serves the bundled sticker packs with real 404s (no SP
 
 ## LiveKit upstream
 
-`UPSTREAM_LIVEKIT` is `host:port` (plain HTTP, Compose/in-cluster) or a full `https://host` URL for a
-LiveKit on another machine, e.g. the public VPS that carries call media
-([deploy/calls-vps](../../../deploy/calls-vps/README.md)). HTTPS upstreams are verified against the
-system CA bundle, get SNI and their own `Host` header. Clients always use `/rtc` on Convo's origin.
+`UPSTREAM_LIVEKIT` is `host:port` (plain HTTP, Compose/in-cluster) or a full `https://host[:port]`
+URL for a LiveKit on another machine, e.g. the public VPS that carries call media
+([deploy/calls-vps](../../../deploy/calls-vps/README.md)). HTTPS upstreams are verified: against the
+system CA bundle, or — for a VPS reached by IP — against the pinned self-signed certificate in
+`UPSTREAM_LIVEKIT_CERT` (PEM), checking the name `UPSTREAM_LIVEKIT_TLS_NAME` inside it (nginx cannot
+verify IP addresses). Clients always use `/rtc` on Convo's origin.
