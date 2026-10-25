@@ -1,3 +1,4 @@
+import type { AbuseReport } from '../crypto/content';
 import type { EventState } from './events';
 import type { PollState } from './polls';
 import { DEFAULT_AUTO_DOWNLOAD, type AutoDownloadSettings } from './mediaPolicy';
@@ -86,6 +87,8 @@ export interface ChatMessage {
    * (or `sent` on the sender's side) has no pointer any more, only the label remains.
    */
   viewOnce?: { kind: 'photo' | 'video'; state: 'unopened' | 'opened' | 'sent'; at?: number };
+  /** Abuse report received from (or sent to) a security contact. */
+  report?: AbuseReport;
 }
 
 export interface Conversation {

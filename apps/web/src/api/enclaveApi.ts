@@ -112,6 +112,8 @@ export class EnclaveApi {
   lastSeenPrivacy(): Promise<{ shareLastSeen: boolean }> { return this.signed('GET', '/v1/privacy/last-seen'); }
   setLastSeenPrivacy(shareLastSeen: boolean): Promise<void> { return this.signed('PUT', '/v1/privacy/last-seen', { shareLastSeen }); }
   /** Authorizes a direct (peer) or group call and returns a LiveKit join token for this device. */
+  /** Accounts allowed to receive abuse reports (organization security contacts). */
+  reportRecipients(): Promise<{ accountId: string; displayName: string }[]> { return this.signed('GET', '/v1/reports/recipients'); }
   createCall(request: { peer?: string; groupId?: string; video: boolean }): Promise<CallJoin> { return this.signed('POST', '/v1/calls', request); }
   joinCall(callId: string): Promise<CallJoin> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/join`); }
   createCallLink(groupId: string, ttlMinutes?: number): Promise<{ token: string; expiresAt: string }> { return this.signed('POST', '/v1/calls/links', { groupId, ttlMinutes }); }

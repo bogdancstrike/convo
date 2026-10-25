@@ -18,6 +18,7 @@ import { fold } from './ChatListPanel';
 import { Composer, type ComposerMode } from './Composer';
 import { ForwardDialog } from './ForwardDialog';
 import { MessageBubble, MessageInfoDialog, messageAnchor } from './MessageBubble';
+import { ReportDialog } from './ReportDialog';
 
 
 
@@ -60,6 +61,7 @@ export function Thread({
   const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
   // Batch selection (FEAT-02): up to MAX_SELECTION messages for copy/forward/star/delete-for-me.
   const [selection, setSelection] = useState<Set<string> | null>(null);
+  const [reporting, setReporting] = useState(false);
   const [batchForward, setBatchForward] = useState<ChatMessage[] | null>(null);
   const keyOf = (m: ChatMessage) => `${m.authorId}/${m.id}`;
   const [info, setInfo] = useState<ChatMessage | null>(null);
@@ -180,7 +182,8 @@ export function Thread({
         : t('thread.noteHint');
 
   const menu = [{ label: t('select.start'), icon: 'check' as const, onSelect: () => setSelection(new Set()), testId: 'menu-select' },
-    ...conversationMenu(client, conversation, t, onInfo, () => setSearch(''), onClose)];
+    ...conversationMenu(client, conversation, t, onInfo, () => setSearch(''), onClose),
+    ...(conversation.kind !== 'note' ? [{ label: t('report.title'), icon: 'alert' as const, onSelect: () => setReporting(true), testId: 'menu-report' }] : [])];
   const chosen = selection ? messages.filter((m) => selection.has(keyOf(m))).sort((a, b) => a.sort - b.sort) : [];
 
   const renderBubble = (m: ChatMessage, i: number, newDay: boolean) => {
@@ -229,6 +232,7 @@ export function Thread({
         addFiles(Array.from(e.dataTransfer.files));
       }}
     >
+      {reporting && <ReportDialog client={client} conversation={conversation} messages={messages} onClose={() => setReporting(false)} />}
       <header className="thread-header">
         <button className="icon-btn back-button" onClick={onBack} aria-label={t('thread.back')}>
           <Icon name="back" />

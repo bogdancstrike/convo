@@ -245,6 +245,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   (higher mutation wins, sanitized on receipt). Web: folder pills, + to create, right-click to
   edit/delete. `folders.test.ts`, `folders.spec.ts`. Android: folder pills, + and long-press editor
   (verified on the emulator).
+- Abuse reports (AC-SEC-09): the reporter explicitly selects messages (none pre-selected), sees
+  exactly who receives them in readable form, and sends them end-to-end encrypted to one security
+  contact (`GET /v1/reports/recipients`: active accounts holding the security role); the server
+  never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
+  report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android pending.
 - Admin live sessions and security alerts (V30, `docs/admin-security.md`): per-person Keycloak
   online sessions with coarse browser/OS observations, end one session (ownership verified) or all,
   reason + recent sign-in required; alerts inbox for repeated failed logins, device enrollment

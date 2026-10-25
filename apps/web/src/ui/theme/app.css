@@ -2523,3 +2523,15 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .folder-chats { max-height: 240px; overflow-y: auto; }
 .folder-types label, .folder-chats label { display: flex; align-items: center; gap: var(--space-2); }
 .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+
+/* Abuse reports (AC-SEC-09). */
+.report-messages { display: grid; gap: 6px; max-height: 280px; overflow-y: auto; border: 0; padding: 0; margin: var(--space-3) 0; }
+.report-item { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2); align-items: start; padding: 6px; border-radius: var(--radius-md); }
+.report-item:hover { background: var(--c-hover); }
+.report-disclosure { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--c-canvas); font-size: 0.8125rem; }
+.btn.danger.btn-primary { background: var(--c-danger-text); border-color: var(--c-danger-text); }
+.report-card { display: grid; gap: 4px; min-width: min(300px, 72vw); }
+.report-head { font-weight: 700; color: var(--c-danger-text); }
+.report-reason { margin: 4px 0; font-style: italic; }
+.report-evidence { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 0.875rem; }
+.report-text { white-space: pre-wrap; padding: 4px 8px; border-left: 3px solid var(--c-border); }

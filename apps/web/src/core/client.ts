@@ -19,6 +19,10 @@ import {
   type PollDefinition,
   type EventDefinition,
   type RsvpResponse,
+  type AbuseReport,
+  type ReportItem,
+  REPORT_MAX_ITEMS,
+  REPORT_MAX_TEXT,
   type Quote,
   type CommunityMeta,
   type GroupMeta,
@@ -411,6 +415,36 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     await this.sendMessage(conversationId, { body, quote, mentions, requestAck, silent: options.silent });
   }
 
+  // --- abuse reports (AC-SEC-09) -----------------------------------------------------------------
+
+  /** Organization security contacts who may receive reports (server directory, no content). */
+  reportRecipients(): Promise<{ accountId: string; displayName: string }[]> { return this.api.reportRecipients(); }
+
+  /**
+   * Sends the explicitly selected evidence to one security contact, end-to-end encrypted to them
+   * only. The message ID derives from the report ID, so retrying the same report never duplicates
+   * it at the recipient. Nothing is uploaded or kept anywhere else.
+   */
+  async sendReport(recipientAccountId: string, input: { reportId: string; reason: string; conversationId: string; messages: ChatMessage[]; reportedAccountId?: string }): Promise<void> {
+    const conversation = this.conversationCache.get(input.conversationId);
+    if (!conversation) throw new Error('conversation unavailable');
+    if (!input.messages.length || input.messages.length > REPORT_MAX_ITEMS) throw new Error(`select 1–${REPORT_MAX_ITEMS} messages`);
+    const items: ReportItem[] = await Promise.all(input.messages.map(async (m) => ({
+      authorId: m.authorId, authorName: m.authorId === this.accountId ? 'Reporter' : await this.displayName(m.authorId), sentAt: m.sentAt,
+      ...(m.body ? { text: m.body.slice(0, REPORT_MAX_TEXT) } : {}), ...(m.attachments?.length ? { files: m.attachments.map((a) => a.fileName ?? a.contentType).slice(0, 20) } : {}),
+    })));
+    const report: AbuseReport = {
+      reportId: input.reportId, reason: input.reason.trim().slice(0, 1000), chat: { id: conversation.id, title: conversation.title, kind: conversation.kind },
+      ...(input.reportedAccountId ? { reported: { accountId: input.reportedAccountId, name: await this.displayName(input.reportedAccountId) } } : {}), items,
+    };
+    if (!this.conversationCache.has(recipientAccountId)) {
+      const account = await this.account(recipientAccountId);
+      if (!account) throw new Error('report recipient unavailable');
+      await this.openConversation(account);
+    }
+    await this.sendMessage(recipientAccountId, { body: `⚠️ Abuse report: ${report.reason || conversation.title}`, report }, input.reportId);
+  }
+
   // --- private chat folders (specs §30.4) -------------------------------------------------------
 
   /** This account's chat folders (own-device preference). */
@@ -640,7 +674,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -669,6 +703,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       event: content.event,
       viewOnce: content.viewOnce || undefined,
       silent: content.silent || undefined,
+      report: content.report,
     };
     const message: ChatMessage = {
       conversationId,
@@ -690,6 +725,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ackRequest: data.ackRequest,
       poll: content.poll ? initialState(content.poll) : undefined,
       event: content.event ? initialEvent(content.event) : undefined,
+      report: content.report,
       // The sender keeps no copy of view-once media, only its label.
       ...(content.viewOnce ? { attachments: undefined, viewOnce: { kind: viewOnceKind(content.attachments![0]!), state: 'sent' as const } } : {}),
     };
@@ -2189,6 +2225,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       reactions: {},
       poll: data.poll ? initialState(data.poll) : undefined,
       event: data.event ? initialEvent(data.event) : undefined,
+      report: data.report,
       ...(data.viewOnce ? { viewOnce: { kind: viewOnceKind(data.attachments![0]!), state: direction === 'out' ? 'sent' as const : 'unopened' as const } } : {}),
       expireTimer: data.expireTimer || undefined,
       mentions: groupIdOf(conversation.id) && data.mentions?.length ? data.mentions : undefined,

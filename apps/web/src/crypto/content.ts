@@ -115,11 +115,23 @@ export interface DataMessage {
    * open once; receiving apps keep no copy, forward, export or history of it. Best effort only.
    */
   viewOnce?: boolean;
+  /**
+   * Abuse report (AC-SEC-09): messages the reporter explicitly selected, sent end-to-end encrypted
+   * only to the chosen security contact. Never uploaded or stored anywhere else.
+   */
+  report?: AbuseReport;
   /** Quiet send: recipients get the message and unread count but no alert. */
   silent?: boolean;
   /** The author's current answer to an event. */
   rsvp?: { targetMessageId: string; targetAuthorId: string; response: RsvpResponse };
 }
+
+/** Abuse report limits. */
+export const REPORT_MAX_ITEMS = 50;
+export const REPORT_MAX_TEXT = 4000;
+/** One piece of evidence: what the reporter saw (author name as shown to them, time, text, file names). */
+export interface ReportItem { authorId: string; authorName: string; sentAt: number; text?: string; files?: string[] }
+export interface AbuseReport { reportId: string; reason: string; chat: { id: string; title: string; kind: string }; reported?: { accountId: string; name: string }; items: ReportItem[] }
 
 /** Event limits (specs §30.4). */
 export const EVENT_MAX_TITLE = 120;
@@ -453,6 +465,7 @@ function isDataMessage(value: unknown): value is DataMessage {
   if (value.pollVote !== undefined && !isPollVote(value.pollVote)) return false;
   if (value.event !== undefined && !isEventDefinition(value.event)) return false;
   if (value.silent !== undefined && typeof value.silent !== 'boolean') return false;
+  if (value.report !== undefined && !isAbuseReport(value.report)) return false;
   if (value.viewOnce !== undefined && (value.viewOnce !== true || !Array.isArray(value.attachments) || value.attachments.length !== 1
     || !isObject(value.attachments[0]) || !/^(image|video)\//.test(String(value.attachments[0].contentType)))) return false;
   if (value.eventUpdate !== undefined && (!isObject(value.eventUpdate) || typeof value.eventUpdate.targetMessageId !== 'string' || typeof value.eventUpdate.targetAuthorId !== 'string'
@@ -466,6 +479,16 @@ function isDataMessage(value: unknown): value is DataMessage {
     if (!value.attachments.every(isAttachmentPointer)) return false;
   }
   return true;
+}
+
+function isAbuseReport(value: unknown): value is AbuseReport {
+  if (!isObject(value) || typeof value.reportId !== 'string' || !ID.test(value.reportId) || typeof value.reason !== 'string' || value.reason.length > 1000) return false;
+  if (!isObject(value.chat) || typeof value.chat.id !== 'string' || typeof value.chat.title !== 'string' || typeof value.chat.kind !== 'string') return false;
+  if (value.reported !== undefined && (!isObject(value.reported) || typeof value.reported.accountId !== 'string' || typeof value.reported.name !== 'string')) return false;
+  if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > REPORT_MAX_ITEMS) return false;
+  return value.items.every((i) => isObject(i) && typeof i.authorId === 'string' && typeof i.authorName === 'string' && Number.isSafeInteger(i.sentAt)
+    && (i.text === undefined || (typeof i.text === 'string' && i.text.length <= REPORT_MAX_TEXT))
+    && (i.files === undefined || (Array.isArray(i.files) && i.files.length <= 20 && i.files.every((f) => typeof f === 'string' && f.length <= 200))));
 }
 
 /** Bounded title/description/location, sane UTC times (end after start) and a plausible zone name. */
