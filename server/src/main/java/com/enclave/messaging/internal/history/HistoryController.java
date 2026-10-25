@@ -20,7 +20,7 @@ class HistoryController {
     @PutMapping("/v1/history/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void append(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable UUID id, @RequestBody Upload body) {
-        history.append(me.accountId(), id, Base64Url.decode(body.ciphertext(), "ciphertext"));
+        history.append(me.address(), id, Base64Url.decode(body.ciphertext(), "ciphertext"));
     }
     @GetMapping("/v1/history")
     ResponseEntity<List<Entry>> page(@AuthenticationPrincipal AuthenticatedDevice me, @RequestParam(defaultValue="0") long after) {

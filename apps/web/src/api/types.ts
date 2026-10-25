@@ -133,7 +133,7 @@ export interface EnvelopeDto {
   content: string;
 }
 
-export type Directive = 'KEYS_LOW' | 'KEYPACKAGES_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED' | 'GROUPS_CHANGED';
+export type Directive = 'KEYS_LOW' | 'KEYPACKAGES_LOW' | 'DEVICE_LIST_CHANGED' | 'POLICY_UPDATED' | 'REVOKED' | 'GROUPS_CHANGED' | 'HISTORY_CHANGED';
 
 export interface ServerFrame {
   requestId: number;

@@ -301,7 +301,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.expiryTimer = setInterval(() => void this.sweepExpired().catch(() => undefined), 30_000);
     this.socket.on('state', (state) => {
       this.emit('connection', state);
-      if (state === 'online') { void this.outbox.flush(); void this.flushPendingUploads(); }
+      if (state === 'online') { void this.outbox.flush(); void this.flushPendingUploads(); this.historySync?.kick(); }
       if (state === 'revoked') void this.handleRevoked();
     });
     this.socket.on('envelope', (envelope) => void this.mutex.run(() => this.processEnvelope(envelope)).then(() => this.outbox.flush()));
@@ -2770,6 +2770,9 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       case 'GROUPS_CHANGED':
         await this.refreshAllGroups();
         break;
+      case 'HISTORY_CHANGED':
+        this.historySync?.kick();
+        break;
       case 'DEVICE_LIST_CHANGED':
         this.emit('devices', undefined);
         await this.checkDeviceChanges().catch(() => undefined);
@@ -2779,6 +2782,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         await this.handleRevoked();
         break;
       case 'POLICY_UPDATED':
+        await this.refreshPolicy();
         break;
     }
   }

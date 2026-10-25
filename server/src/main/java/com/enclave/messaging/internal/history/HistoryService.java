@@ -13,11 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class HistoryService {
     private final JdbcClient jdbc;
-    HistoryService(JdbcClient jdbc) { this.jdbc = jdbc; }
+    private final org.springframework.context.ApplicationEventPublisher events;
+    HistoryService(JdbcClient jdbc, org.springframework.context.ApplicationEventPublisher events) { this.jdbc = jdbc; this.events = events; }
     record Entry(long seq, UUID id, byte[] ciphertext) {}
 
     @Transactional
-    void append(UUID account, UUID id, byte[] ciphertext) {
+    void append(com.enclave.contracts.DeviceAddress device, UUID id, byte[] ciphertext) {
+        UUID account = device.accountId();
         if (ciphertext == null || ciphertext.length < 29 || ciphertext.length > 262144) {
             throw new EnclaveException(ErrorCode.PAYLOAD_TOO_LARGE, "archive entry size out of range");
         }
@@ -36,6 +38,7 @@ class HistoryService {
         jdbc.sql("INSERT INTO account_history(account_id,seq,entry_id,ciphertext) VALUES (:a,:s,:i,:c)")
                 .param("a", account).param("s", seq).param("i", id).param("c", ciphertext).update();
         jdbc.sql("UPDATE account_history_heads SET next_seq=next_seq+1 WHERE account_id=:a").param("a", account).update();
+        events.publishEvent(new HistoryAppended(device)); // other devices pull after commit
     }
 
     @Transactional(readOnly = true)

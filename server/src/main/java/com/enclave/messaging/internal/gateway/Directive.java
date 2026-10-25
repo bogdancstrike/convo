@@ -15,6 +15,8 @@ public enum Directive {
     POLICY_UPDATED,
     /** A group's membership changed without an MLS commit; refresh groups (no group named). */
     GROUPS_CHANGED,
+    /** The account's encrypted history gained entries from another device; pull them. */
+    HISTORY_CHANGED,
     /** The device was revoked; the gateway closes the socket with 4401. */
     REVOKED
 }

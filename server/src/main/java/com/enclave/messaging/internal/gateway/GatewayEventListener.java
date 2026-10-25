@@ -82,6 +82,14 @@ class GatewayEventListener {
     }
 
     /** Ask the device to replenish MLS KeyPackages. */
+    /** Another device archived history: tell the account's other online devices to pull (no polling). */
+    @org.springframework.transaction.event.TransactionalEventListener
+    void on(com.enclave.messaging.internal.history.HistoryAppended event) {
+        identity.activeRoster(event.source().accountId()).ifPresent(roster -> roster.devices().stream()
+                .filter(d -> d.deviceId() != event.source().deviceId())
+                .forEach(d -> hints.signalControl(new DeviceAddress(event.source().accountId(), d.deviceId()), Directive.HISTORY_CHANGED)));
+    }
+
     @ApplicationModuleListener
     void on(KeyPackagesLow event) {
         hints.signalControl(event.address(), Directive.KEYPACKAGES_LOW);

@@ -1,3 +1,4 @@
+import { ApiError, NetworkError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { openVault, sealVault, vaultKey } from '../crypto/accountVault';
 import { fromBase64Url } from '../lib/bytes';
@@ -52,12 +53,21 @@ export function mergeArchivedMessage(existing: ChatMessage | undefined, incoming
 }
 
 /** Durable local journal → account archive → other trusted devices. No live protocol state. */
+/** Pull interval when no HISTORY_CHANGED notice arrived (safety net, not the main path). */
+const SAFETY_SYNC_MS = 120_000;
+/** Largest archive entry the server accepts, with headroom for the envelope. */
+const MAX_ENTRY_BYTES = 250_000;
+/** Debounce between a trigger (local change, directive, reconnect) and the sync. */
+const KICK_DELAY_MS = 400;
+
 export class AccountHistory {
   private key!: CryptoKey;
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<void> | null = null;
   private order = 0;
   private stopped = false;
+  /** Entries skipped because they could never sync (refused by the server or unreadable). */
+  skipped = 0;
   constructor(private readonly api: EnclaveApi, private readonly store: EncryptedStore,
     private readonly accountId: string, private readonly deploymentId: string,
     private readonly restored: () => Promise<void>, private readonly status: (status: HistoryStatus) => void,
@@ -78,10 +88,21 @@ export class AccountHistory {
       await this.store.put('history-meta', 'seeded', true);
     }
     await this.sync();
-    this.timer = setInterval(() => void this.sync(), 3000);
+    // Event-driven: local changes push shortly after they happen, other devices' entries arrive via
+    // the HISTORY_CHANGED directive (see kick); this slow timer only covers missed notices.
+    this.timer = setInterval(() => void this.sync(), SAFETY_SYNC_MS);
   }
 
-  stop(): void { this.stopped = true; clearInterval(this.timer); this.store.setJournal(null); }
+  stop(): void { this.stopped = true; clearInterval(this.timer); clearTimeout(this.kickTimer); this.store.setJournal(null); }
+
+  private kickTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Syncs soon (debounced): after local changes, a HISTORY_CHANGED directive or a reconnect. */
+  kick(): void {
+    if (this.stopped) return;
+    clearTimeout(this.kickTimer);
+    this.kickTimer = setTimeout(() => void this.sync(), KICK_DELAY_MS);
+  }
 
   private async journal(ops: StoreOp[]): Promise<StoreOp[]> {
     const entries: StoreOp[] = [];
@@ -99,9 +120,16 @@ export class AccountHistory {
       }
       if (!record) continue;
       const id = crypto.randomUUID();
-      const ciphertext = await sealVault(this.key, record, this.binding(id));
+      let ciphertext = await sealVault(this.key, record, this.binding(id));
+      // The server stores entries up to 256 KiB: drop inline thumbnails (the media stays downloadable).
+      if (ciphertext.length * 3 / 4 > MAX_ENTRY_BYTES && record.kind === 'message') {
+        const message = record.value as ChatMessage;
+        record = { ...record, value: { ...message, attachments: message.attachments?.map(({ thumbnail: _t, ...a }) => a) } };
+        ciphertext = await sealVault(this.key, record, this.binding(id));
+      }
       entries.push({ type: 'put', ns: PENDING, id, value: { id, ciphertext, order: Date.now() * 1000 + this.order++ % 1000 } satisfies Pending });
     }
+    if (entries.length) this.kick();
     return entries;
   }
 
@@ -118,7 +146,14 @@ export class AccountHistory {
       const pending = (await this.store.list<Pending>(PENDING)).sort((a, b) => a.order - b.order);
       for (const entry of pending) {
         if (this.stopped) return;
-        await this.api.putHistory(entry.id, entry.ciphertext);
+        try {
+          await this.api.putHistory(entry.id, entry.ciphertext);
+        } catch (error) {
+          // The server refused this entry for good (too large, malformed, ID reused): drop it rather
+          // than retrying forever and blocking every later entry. Network/5xx errors still retry.
+          if (!(error instanceof ApiError) || error.status >= 500 || error.code === 'RATE_LIMITED') throw error;
+          this.skipped++;
+        }
         await this.store.delete(PENDING, entry.id);
       }
       const repos = new Repositories(this.store);
@@ -129,6 +164,8 @@ export class AccountHistory {
         if (!page.length) break;
         for (const entry of page) {
           await this.exclusive(async () => {
+          // One unreadable or invalid entry is skipped (cursor advances) instead of blocking the rest.
+          try {
           const record = await openVault<ArchiveRecord>(this.key, entry.ciphertext, this.binding(entry.id));
           if (record.v !== 1) throw new Error('unsupported archive version');
           const ops: StoreOp[] = [];
@@ -157,6 +194,12 @@ export class AccountHistory {
           ops.push({ type: 'put', ns: 'history-meta', id: 'cursor', value: cursor });
           await this.store.commit(ops, false);
           changed = true;
+          } catch (error) {
+            if (error instanceof ApiError || error instanceof NetworkError) throw error;
+            this.skipped++;
+            cursor = entry.seq;
+            await this.store.commit([{ type: 'put', ns: 'history-meta', id: 'cursor', value: cursor }], false);
+          }
           });
         }
       }
