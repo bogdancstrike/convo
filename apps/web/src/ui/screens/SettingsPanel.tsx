@@ -282,6 +282,7 @@ function PrivacyPage({ client, settings, update }: { client: EnclaveClient; sett
         description={t('settings.typing.help')}
         testId="toggle-typing"
       />
+      <p className="muted-text" data-testid="screenshots-note">{t('settings.screenshotsWeb')}</p>
     </Card>
     <StorageLockCard client={client} />
     </>

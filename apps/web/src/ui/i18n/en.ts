@@ -956,6 +956,7 @@ export const en = {
   'settings.readReceipts.help': 'Off by default. Delivery status is always shown.',
   'settings.typing': 'Typing indicators',
   'settings.typing.help': 'Off by default. Show and send “typing…” in direct chats.',
+  'settings.screenshotsWeb': 'Screenshots: a browser cannot block screenshots of a web page. On Android, Convo blocks them unless you allow them in its Privacy settings.',
   'settings.enterToSend': 'Press Enter to send (Shift+Enter for a new line)',
   'settings.devices': 'Devices',
   'settings.thisDevice': 'This browser',

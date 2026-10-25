@@ -138,6 +138,10 @@ import org.json.JSONObject
         HorizontalDivider()
         PrivacySwitch("Share last seen", "Allow signed-in people in your organization to see when you last used Convo. Hidden by default; applies to all your devices.", lastSeen, loaded) { value -> app.call("setPrivacy", obj("enabled" to value)) { lastSeen = value } }
         listOf(Triple("confirmExternalLinks", "Confirm before opening links", "Show the destination before leaving Convo."), Triple("readReceipts", "Send read receipts", "Off by default. Delivery status is always shown."), Triple("typingIndicators", "Typing indicators", "Off by default. Direct chats only.")).forEach { (key, title, hint) -> PrivacySwitch(title, hint, settings.optBoolean(key)) { app.call("settings", obj("patch" to obj(key to it))) } }
+        // Screenshots: blocked by default; an organization policy can keep them blocked.
+        val policyBlocks = app.policy.optJSONObject("security")?.optBoolean("screenshotBlock") == true
+        PrivacySwitch("Allow screenshots", if (policyBlocks) "Managed by your organization: screenshots are blocked." else "Off by default: screenshots and screen recordings of Convo show a black screen. View-once media is always protected.",
+            settings.optBoolean("allowScreenshots") && !policyBlocks, enabled = !policyBlocks) { app.call("settings", obj("patch" to obj("allowScreenshots" to it))) }
     }
 }
 @Composable fun PrivacySwitch(title: String, hint: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {

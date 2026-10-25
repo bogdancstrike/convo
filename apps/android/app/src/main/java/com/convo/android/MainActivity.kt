@@ -153,7 +153,8 @@ class MainActivity : FragmentActivity() {
         // Pin the server for this install (existing installs keep theirs: the IndexedDB origin holds their keys).
         if (!getPreferences(MODE_PRIVATE).contains("server")) getPreferences(MODE_PRIVATE).edit().putString("server", DEFAULT_SERVER).apply()
         cacheDir.listFiles()?.filter { it.name.startsWith("convo-preview-") }?.forEach { it.delete() }
-        if (!BuildConfig.DEBUG || android.os.Build.HARDWARE != "ranchu") window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // Screenshots are blocked until the person allows them in Settings → Privacy (see applyScreenshotSetting).
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         MessageNotifications.createChannel(this)
         auth = AuthorizationService(this, AppAuthConfiguration.Builder().setConnectionBuilder(DevelopmentTls(this)).build())
         PushRegistration.activity = java.lang.ref.WeakReference(this)
@@ -166,7 +167,7 @@ class MainActivity : FragmentActivity() {
                 "reminder" -> MessageNotifications.showReminder(this, value)
                 "callLog" -> callLogVersion++
                 "typing" -> value.optString("conversationId").takeIf { it.isNotBlank() }?.let { typingUntil[it] = value.optLong("until") }
-                "snapshot" -> { snapshot = value; PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
+                "snapshot" -> { snapshot = value; applyScreenshotSetting(); PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
         handleCallLink(intent)
@@ -179,6 +180,15 @@ class MainActivity : FragmentActivity() {
                 if (calls.call != null) CallScreen(this@MainActivity)
             }
         } }
+    }
+    /**
+     * Screenshots and screen recording show a black screen unless the person allowed them (Settings →
+     * Privacy) and no organization policy forbids it. View-once viewers always add their own FLAG_SECURE.
+     */
+    private fun applyScreenshotSetting() {
+        val allowed = snapshot.optJSONObject("settings")?.optBoolean("allowScreenshots") == true &&
+            snapshot.optJSONObject("policy")?.optJSONObject("security")?.optBoolean("screenshotBlock") != true
+        if (allowed) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
     fun call(method: String, args: JSONObject = JSONObject(), success: String? = null, quiet: Boolean = false, then: (Any?) -> Unit = {}) {
         bridge.command(method, args) { result ->

@@ -958,6 +958,7 @@ export const ro: Record<MessageKey, string> = {
   'settings.readReceipts.help': 'Dezactivat implicit. Starea livrării este afișată mereu.',
   'settings.typing': 'Indicatori de scriere',
   'settings.typing.help': 'Dezactivat implicit. Afișează și trimite „scrie…” în conversațiile directe.',
+  'settings.screenshotsWeb': 'Capturi de ecran: un browser nu poate bloca capturile unei pagini web. Pe Android, Convo le blochează dacă nu le permiți în setările de confidențialitate.',
   'settings.enterToSend': 'Enter trimite (Shift+Enter pentru rând nou)',
   'settings.devices': 'Dispozitive',
   'settings.thisDevice': 'Acest browser',

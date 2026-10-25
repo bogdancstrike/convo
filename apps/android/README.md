@@ -79,6 +79,12 @@ Voice and video calls (frame-encrypted through LiveKit), speaker toggle, screen 
 and members-only call links: **Share call link** in group info, and `https://<server>/call/<token>`
 links (older `/#/call/` ones too) open the app and join the group's running call (or ring the group when none is running).
 
+## Screenshots
+
+Convo blocks screenshots and screen recording by default (the screen shows black). **Settings →
+Privacy → Allow screenshots** lifts that for the whole app, unless the organization policy blocks
+screenshots. View-once media is always protected.
+
 ## Polls and events
 
 The smiley button in the composer opens **stickers** (bundled with the app; only the sticker's ID is

@@ -195,6 +195,8 @@ export interface Settings {
   notifications: boolean;
   /** Notification content: nothing identifying (default), sender only, or sender and text. */
   notificationPreview: 'generic' | 'sender' | 'full';
+  /** Android: allow screenshots and screen recording of Convo (off by default; an organization policy can forbid it). */
+  allowScreenshots: boolean;
   /** Minutes before an event I answered Going/Maybe to remind me on this device (0 = off). */
   eventReminderMinutes: 0 | 5 | 15 | 30 | 60;
 }
@@ -216,6 +218,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications: false,
   notificationPreview: 'generic',
   eventReminderMinutes: 15,
+  allowScreenshots: false,
 };
 
 /** Persistent identity of this enrolled device. */

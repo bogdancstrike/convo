@@ -5,8 +5,8 @@ import org.json.JSONObject
 
 /**
  * The organization policy in force (specs §19.1), as verified by the shared core and carried in the
- * snapshot. Android is already stricter on screenshots (FLAG_SECURE on every device) and locks the
- * app on every return, which the policy allows.
+ * snapshot. A policy that blocks screenshots overrides the person's "Allow screenshots" setting;
+ * the app lock engages on every return, which is at least as strict as any policy delay.
  */
 val MainActivity.policy: JSONObject get() = snapshot.optJSONObject("policy") ?: JSONObject()
 
