@@ -246,7 +246,7 @@ Each feature has concrete scenarios, test methods, pass/fail criteria and eviden
 - Small/medium/large certified deployment profiles, connected/restricted/air-gapped operation, signed offline bundles and release inventory.
 - HA failure recovery, durable delivery/wake intent, bounded overload, capacity evidence, and privacy-aware monitoring.
 - Signed, reproducible builds/SBOM/provenance, compatible upgrades/migrations, trust rotation, backups, safe restore, incident runbooks, and independent security review.
-- Cross-deployment federation, larger certified capacity tiers, and visible compliance archive integrations. Native desktop packaging is a separate client target alongside the iOS plan.
+- Larger certified capacity tiers, and visible compliance archive integrations. Native desktop packaging is a separate client target alongside the iOS plan.
 
 The [specification](docs/specs.md), [conversation/feature matrix](docs/specs.md#30-direct-chats-groups-communities-and-launch-features), [selected chat refinements](docs/specs.md#308-everyday-chat-refinements-androidweb-p0), and [delivery tasks](docs/tasks.md) define exact permissions, limits, retention, and acceptance evidence.
 
@@ -305,7 +305,7 @@ The platform will support small installations and a tested HA profile. Capacity,
 
 1. **Prove the design:** Android/browser cryptography, storage, Spring Modulith boundaries, dependency licenses and all extension/security feasibility gates.
 2. **Build the walking slice:** organization login/passwordless/2FA, Android and browser registration/linking, encrypted chat and offline recovery.
-3. **Complete the full inventory:** all messaging, community, collaboration, media, calling, privacy, recovery, federation and optional integration features above.
+3. **Complete the full inventory:** all messaging, community, collaboration, media, calling, privacy, recovery and optional integration features above.
 4. **Qualify the complete product:** cross-client acceptance for every feature, supported browser/device/profile evidence, accessibility, capacity/failure/restore drills, independent security review and signed offline delivery.
 5. **Launch only when all gates pass:** no feature in this inventory is deferred to a later release. iOS and native desktop are separate client targets; feature implementation on Android/web is complete before launch.
 
