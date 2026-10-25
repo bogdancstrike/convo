@@ -123,6 +123,17 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         Column(Modifier.fillMaxSize()) {
             if (app.snapshot.optString("connection") != "online") Text("Waiting for connection. Messages will send when you reconnect.", Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (kind == "group" && !conversation.optBoolean("adminOnly") && !conversation.optBoolean("left") && (topics.isNotEmpty() || isGroupAdmin)) TopicBar(app, id, topics, topic, isGroupAdmin) { topic = it }
+            // Security identity change (new key for this contact): review the safety number before trusting new messages.
+            if (conversation.has("identityChangedAt") && !conversation.isNull("identityChangedAt")) Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    RawText(tr("{name}’s security identity changed. Review it before trusting new messages.").replace("{name}", conversation.optString("title")),
+                        color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton({ app.route = "info" }) { Text("Review") }
+                        TextButton({ app.call("acknowledgeIdentityChange", obj("id" to id)) }) { Text("Dismiss") }
+                    }
+                }
+            }
             if (app.threadSearch) OutlinedTextField(query, { query = it }, placeholder = { Text(if (starredOnly) "Search starred messages" else "Search this chat") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) })
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val scope = rememberCoroutineScope()

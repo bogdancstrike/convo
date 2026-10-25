@@ -183,6 +183,8 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'sendScheduledNow': await client.editScheduled(String(args.id), { dueAt: Date.now() + 1000 }); return client.sendDueScheduled(Date.now() + 2000);
     case 'acknowledge': return client.acknowledge(await target(args));
     case 'withdrawAcknowledgement': return client.withdrawAcknowledgement(await target(args));
+    // A contact's security identity changed: the person reviewed (or dismissed) the warning.
+    case 'acknowledgeIdentityChange': return client.acknowledgeIdentityChange(String(args.id));
     // Owners/admins who may review responses, with display names, for the composer picker.
     case 'ackReviewerCandidates': {
       const ids = (await client.ackReviewerCandidates(String(args.id))).filter((id) => id !== client!.accountId);
@@ -284,6 +286,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'acceptCommunityLink': return client.acceptCommunityLink(await community(args.id), String(args.groupId), args.delegation === true);
     case 'unlinkCommunityGroup': return client.unlinkCommunityGroup(await community(args.id), String(args.groupId));
     case 'onboarding': return client.onboarding(await community(args.id));
+    case 'communityOperations': return client.communityOperations(await community(args.id));
     case 'saveOnboarding': return client.saveOnboarding(await community(args.id), {
       welcome: String(args.welcome ?? ''), rules: String(args.rules ?? ''), ackRequired: args.ackRequired === true,
       recommended: Array.isArray(args.recommended) ? args.recommended.map(String) : [],

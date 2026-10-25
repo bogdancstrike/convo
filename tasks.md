@@ -269,6 +269,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Parity audit (web UI vs Android bridge over the shared core, 2026-10-25): Android gained the
+  security-identity-change banner (Review/Dismiss) and community "Membership updates" for managers.
+  Intentional differences: screenshots (Android only; browsers cannot block them), Web Push
+  (browser) vs UnifiedPush (Android), device locks (passkey on web, biometrics on Android).
 - Screenshot setting (Android): blocked by default (FLAG_SECURE), Settings → Privacy → Allow
   screenshots lifts it unless the organization policy blocks screenshots; view-once stays protected.
   The emulator-only debug exception was removed. Web explains that browsers cannot block screenshots.

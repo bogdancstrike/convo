@@ -104,10 +104,13 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
     var adding by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
+    var operations by remember(communityId) { mutableStateOf<List<JSONObject>>(emptyList()) }
     LaunchedEffect(communityId, app.snapshot, refresh) {
         app.call("communities", quiet = true) { v -> community = (v as? JSONArray)?.objects()?.find { it.optString("communityId") == communityId } }
         app.call("communityGroups", obj("id" to communityId), quiet = true) { v -> groups = (v as? JSONArray)?.objects().orEmpty() }
         app.call("onboarding", obj("id" to communityId), quiet = true) { v -> onboarding = v as? JSONObject }
+        // Managers: membership changes still being applied to linked secure groups (or blocked).
+        app.call("communityOperations", obj("id" to communityId), quiet = true) { v -> operations = (v as? JSONArray)?.objects().orEmpty() }
     }
     val c = community ?: run { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; return }
     val manager = c.optString("role") in listOf("owner", "admin")
@@ -116,6 +119,17 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
     fun act(method: String, groupId: String, delegation: Boolean = false) = app.call(method, obj("id" to communityId, "groupId" to groupId, "delegation" to delegation)) { refresh++ }
     val follow = remember(communityId) { mutableStateMapOf<String, Boolean>() }
     LazyColumn(Modifier.fillMaxSize()) {
+        val open = if (manager) operations.filter { it.optString("status") != "completed" } else emptyList()
+        if (open.isNotEmpty()) item {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Membership updates", style = MaterialTheme.typography.titleSmall)
+                open.forEach { o ->
+                    val group = groups.orEmpty().find { it.optString("groupId") == o.optString("groupId") }?.optString("name")?.takeIf { it.isNotBlank() } ?: tr("Private group")
+                    RawText(tr(if (o.optString("status") == "pending") "Removing {name} from {group} — updating secure group" else "{name} owns {group}: transfer ownership to remove them there")
+                        .replace("{name}", o.optString("name")).replace("{group}", group), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
         item {
             val active = groups.orEmpty().filter { it.optString("status") == "active" }
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
