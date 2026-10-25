@@ -1,0 +1,92 @@
+# Convo calls on a public VPS: LiveKit SFU (signalling + media), coturn (TURN relay) and Caddy (TLS for
+# the signalling/API endpoint). Media must reach a public address directly (UDP); a Cloudflare tunnel
+# only carries HTTP/WebSocket, so calls cannot work with LiveKit behind it.
+#
+#   phone ──HTTPS/WSS──▶ Cloudflare tunnel ──▶ convo-web /rtc ──HTTPS──▶ Caddy :443 ──▶ LiveKit :7880 (signalling)
+#   phone ◀──────────── UDP 50000-60000 / TCP 7881 / TURN 3478 ──────────▶ this VPS            (media)
+#
+# Usage (see README.md): cp .env.example .env, fill it in, then
+#   docker compose -f docker-compose-calls.yaml up -d
+# All services use the host network: media ports are not remapped and the advertised address is the
+# VPS's own public IP.
+name: convo-calls
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      # Signalling/API listens on localhost only; Caddy terminates TLS in front of it.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        bind_addresses: ["127.0.0.1"]
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 60000
+          use_external_ip: false
+          node_ip: ${PUBLIC_IP:?set PUBLIC_IP in .env}
+          turn_servers:
+            - host: ${TURN_DOMAIN:?set TURN_DOMAIN in .env}
+              port: 3478
+              protocol: udp
+              username: convo
+              credential: ${TURN_PASSWORD:?set TURN_PASSWORD in .env}
+            - host: ${TURN_DOMAIN}
+              port: 3478
+              protocol: tcp
+              username: convo
+              credential: ${TURN_PASSWORD}
+        keys:
+          ${LIVEKIT_API_KEY:-convo}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env (same as the server's)}
+        room:
+          empty_timeout: 60
+          departure_timeout: 20
+          max_participants: ${MAX_PARTICIPANTS:-16}
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --listening-port=3478
+      - --external-ip=${PUBLIC_IP}
+      - --realm=convo
+      - --lt-cred-mech
+      - --user=convo:${TURN_PASSWORD}
+      - --fingerprint
+      - --min-port=49160
+      - --max-port=49200
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --log-file=stdout
+      # Never relay into private, loopback or link-local networks (no pivoting through the relay).
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=::1
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      RTC_DOMAIN: ${RTC_DOMAIN:?set RTC_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

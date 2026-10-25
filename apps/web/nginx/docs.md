@@ -19,3 +19,10 @@ TLS terminates on 443 (Compose 8443); port 80 serves an HTTPS-required helper. `
 without a chooser (the APK's intent filter is `autoVerify` for `/call/`). Unset, no file is served
 and links still open through the chooser. Compose defaults to the standard Android debug-keystore
 certificate. `/stickers/` serves the bundled sticker packs with real 404s (no SPA fallback).
+
+## LiveKit upstream
+
+`UPSTREAM_LIVEKIT` is `host:port` (plain HTTP, Compose/in-cluster) or a full `https://host` URL for a
+LiveKit on another machine, e.g. the public VPS that carries call media
+([deploy/calls-vps](../../../deploy/calls-vps/README.md)). HTTPS upstreams are verified against the
+system CA bundle, get SNI and their own `Host` header. Clients always use `/rtc` on Convo's origin.

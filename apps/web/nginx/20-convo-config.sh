@@ -10,7 +10,15 @@
 set -eu
 mkdir -p /etc/nginx/convo
 : "${UPSTREAM_SERVER:=server:8080}" "${UPSTREAM_KEYCLOAK:=keycloak:8080}" "${UPSTREAM_LIVEKIT:=livekit:7880}" "${UPSTREAM_S3:=seaweedfs:8333}"
-export UPSTREAM_SERVER UPSTREAM_KEYCLOAK UPSTREAM_LIVEKIT UPSTREAM_S3
+# LiveKit signalling: `host:port` (plain HTTP, in-cluster/Compose) or a full `https://host` URL for a
+# LiveKit on another machine (e.g. a public VPS that carries the media); TLS upstreams get SNI and
+# their own Host header.
+case "$UPSTREAM_LIVEKIT" in
+  https://*) LIVEKIT_URL="${UPSTREAM_LIVEKIT%/}"; LIVEKIT_HOST="${LIVEKIT_URL#https://}"; LIVEKIT_HOST="${LIVEKIT_HOST%%/*}" ;;
+  http://*) LIVEKIT_URL="${UPSTREAM_LIVEKIT%/}"; LIVEKIT_HOST='$http_host' ;;
+  *) LIVEKIT_URL="http://$UPSTREAM_LIVEKIT"; LIVEKIT_HOST='$http_host' ;;
+esac
+export UPSTREAM_SERVER UPSTREAM_KEYCLOAK UPSTREAM_LIVEKIT UPSTREAM_S3 LIVEKIT_URL LIVEKIT_HOST
 if [ "${CONVO_TLS:-on}" = "off" ]; then
   cat > /etc/nginx/convo/listen.conf <<CONF
 listen ${CONVO_HTTP_LISTEN:-8080};
@@ -52,5 +60,5 @@ fi
 dns=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
 case "$dns" in *:*) dns="[$dns]" ;; esac
 echo "resolver ${dns:-127.0.0.11} valid=10s ipv6=off;" > /etc/nginx/convo/resolver.conf
-envsubst '${UPSTREAM_SERVER} ${UPSTREAM_KEYCLOAK} ${UPSTREAM_LIVEKIT} ${UPSTREAM_S3}' \
+envsubst '${UPSTREAM_SERVER} ${UPSTREAM_KEYCLOAK} ${UPSTREAM_LIVEKIT} ${UPSTREAM_S3} ${LIVEKIT_URL} ${LIVEKIT_HOST}' \
   < /etc/nginx/convo/default.conf.template > /etc/nginx/conf.d/default.conf

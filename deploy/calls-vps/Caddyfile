@@ -1,0 +1,8 @@
+# TLS (Let's Encrypt) for LiveKit signalling and its room API, which the Convo server calls.
+{
+	email {$ACME_EMAIL}
+}
+
+{$RTC_DOMAIN} {
+	reverse_proxy 127.0.0.1:7880
+}
