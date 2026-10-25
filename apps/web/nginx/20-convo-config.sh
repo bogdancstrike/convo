@@ -39,6 +39,15 @@ fi
 if [ "${CONVO_KEYCLOAK_ACCOUNT:-on}" = "off" ]; then
   echo 'location ~ ^/auth/realms/[^/]+/account(/|$) { return 404; }' >> /etc/nginx/convo/keycloak-admin.conf
 fi
+# Android App Links (call links open the app without a chooser): CONVO_ANDROID_CERT_SHA256 lists the
+# signing-certificate SHA-256 fingerprints (comma-separated, AA:BB:… form) of the Convo APKs to trust
+# for CONVO_ANDROID_PACKAGE. Unset: no assetlinks.json is served (links still open via a chooser).
+if [ -n "${CONVO_ANDROID_CERT_SHA256:-}" ]; then
+  mkdir -p /usr/share/nginx/html/.well-known
+  prints=$(printf '%s' "$CONVO_ANDROID_CERT_SHA256" | tr -d ' ' | tr 'a-f' 'A-F' | awk -F, '{ for (i = 1; i <= NF; i++) if ($i != "") printf "%s\"%s\"", (n++ ? "," : ""), $i }')
+  printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"%s","sha256_cert_fingerprints":[%s]}}]\n' \
+    "${CONVO_ANDROID_PACKAGE:-com.convo.android}" "$prints" > /usr/share/nginx/html/.well-known/assetlinks.json
+fi
 # Re-resolve upstream names through the container's own DNS server (Docker or cluster DNS).
 dns=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
 case "$dns" in *:*) dns="[$dns]" ;; esac

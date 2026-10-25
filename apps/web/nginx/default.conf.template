@@ -123,6 +123,20 @@ server {
         try_files $uri =404;
     }
 
+    # Bundled sticker packs: real 404s (no SPA fallback); clients verify each file's SHA-256 anyway.
+    location /stickers/ {
+        add_header Cache-Control "public, max-age=86400" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri =404;
+    }
+
+    # Android App Links: lets https://<host>/call/<token> open Convo directly (rendered at start).
+    location = /.well-known/assetlinks.json {
+        default_type application/json;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files $uri =404;
+    }
+
     # SPA shell with strict security headers (specs §28)
     location / {
         try_files $uri /index.html;

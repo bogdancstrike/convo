@@ -6,7 +6,17 @@ import { useI18n } from '../i18n/i18n';
 import { useCalls } from './CallProvider';
 
 /** Link URL for a call-link token (hash route, like invite links). */
-export const callLinkUrl = (token: string) => `${window.location.origin}/#/call/${token}`;
+/**
+ * Shareable call link. A real path (not the `#/call/` route) so Android App Links can open Convo
+ * directly; {@link normalizeCallLinkPath} turns it into the app route on load.
+ */
+export const callLinkUrl = (token: string) => `${window.location.origin}/call/${token}`;
+
+/** Rewrites `/call/<token>` to the `#/call/<token>` route (older `#/call/` links work unchanged). */
+export function normalizeCallLinkPath(location: Location = window.location, history: History = window.history): void {
+  const token = /^\/call\/([A-Za-z0-9_-]{43})\/?$/.exec(location.pathname)?.[1];
+  if (token) history.replaceState(null, '', `/#/call/${token}`);
+}
 
 /**
  * Group info: any member can create a call link (AC-CALL-07). It only works for current members

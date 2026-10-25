@@ -218,8 +218,9 @@ test('member call link joins the running group call with the current key; non-me
     await owner.getByTestId('thread-info').click();
     await owner.getByTestId('call-link-create').click();
     const url = await owner.getByTestId('call-link').inputValue();
-    expect(url).toMatch(/#\/call\/[A-Za-z0-9_-]{43}$/);
-    const hash = url.slice(url.indexOf('#'));
+    expect(url).toMatch(/\/call\/[A-Za-z0-9_-]{43}$/);
+    expect(url).not.toContain('#'); // a real path, so Android App Links can match it
+    const hash = `#${new URL(url).pathname}`; // the app route the path is rewritten to
     await owner.getByTestId('close-info').click();
 
     // Owner rings, Bob answers, Carol declines (her device still keeps the call's key).
@@ -230,8 +231,8 @@ test('member call link joins the running group call with the current key; non-me
     await carol.getByTestId('call-decline').click();
     await expect(screen(owner)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
 
-    // Carol joins the running call through the link: connected and decrypting.
-    await carol.evaluate((h) => { window.location.hash = h; }, hash);
+    // Carol opens the shared link itself (full page load of /call/<token>): connected and decrypting.
+    await carol.goto(url);
     await expect(screen(carol)).toHaveAttribute('data-phase', 'connected', { timeout: 30_000 });
     await expect(screen(carol)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
     await expect(screen(owner)).toContainText('3 in call', { timeout: 20_000 });
@@ -258,7 +259,7 @@ test('member call link joins the running group call with the current key; non-me
     await owner.getByTestId('call-link-revoke').click();
     await expect(owner.getByTestId('call-link-section')).toContainText('revoked');
     await expect(screen(carol)).toHaveCount(0, { timeout: 10_000 });
-    await carol.evaluate((h) => { window.location.hash = h; }, second.slice(second.indexOf('#')));
+    await carol.evaluate((h) => { window.location.hash = h; }, `#${new URL(second).pathname}`);
     await expect(screen(carol)).toHaveAttribute('data-reason', 'linkUnavailable', { timeout: 20_000 });
   } finally { await closeAll(owner, bob, carol, dave); }
 });

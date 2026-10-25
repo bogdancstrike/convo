@@ -76,8 +76,8 @@ Testing locally with the emulator: `adb reverse tcp:8091 tcp:8091`, set ntfy's d
 
 Voice and video calls (frame-encrypted through LiveKit), speaker toggle, screen sharing both ways
 (Android uses the system capture consent and shows an ongoing "sharing your screen" notification),
-and members-only call links: **Share call link** in group info, and `https://<server>/#/call/<token>`
-links open the app and join the group's running call (or ring the group when none is running).
+and members-only call links: **Share call link** in group info, and `https://<server>/call/<token>`
+links (older `/#/call/` ones too) open the app and join the group's running call (or ring the group when none is running).
 
 ## Polls and events
 

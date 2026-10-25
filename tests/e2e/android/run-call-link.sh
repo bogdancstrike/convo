@@ -17,9 +17,9 @@ tap() { # taps the node whose content-desc is $1
   $ADB shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
 }
 for _ in $(seq 1 90); do grep -q "CALL LINK" "$log" && break; sleep 2; done
-link=$(grep -o "CALL LINK #/call/[A-Za-z0-9_-]*" "$log" | awk '{print $3}')
+link=$(grep -o "CALL LINK /call/[A-Za-z0-9_-]*" "$log" | awk '{print $3}')
 for _ in $(seq 1 30); do tap Decline && break; sleep 2; done
 sleep 3
-$ADB shell am start -a android.intent.action.VIEW -d "https://localhost:8443/$link" -n com.convo.android/.MainActivity >/dev/null
+$ADB shell am start -a android.intent.action.VIEW -d "https://localhost:8443$link" -n com.convo.android/.MainActivity >/dev/null
 wait $runner; status=$?
 grep -E "ANDROID JOINED|passed|failed" "$log"; rm -f "$log"; exit $status

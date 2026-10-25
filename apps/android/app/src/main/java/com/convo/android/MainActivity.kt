@@ -368,7 +368,9 @@ class MainActivity : FragmentActivity() {
     private fun handleCallLink(intent: Intent?) {
         val data = intent?.data ?: return
         if (data.host != Uri.parse(server).host) return
-        val token = Regex("^/call/([A-Za-z0-9_-]{43})$").find(data.fragment ?: "")?.groupValues?.get(1) ?: return
+        // https://<server>/call/<token> (current) or https://<server>/#/call/<token> (older links).
+        val pattern = Regex("^/call/([A-Za-z0-9_-]{43})/?$")
+        val token = (pattern.find(data.path ?: "") ?: pattern.find(data.fragment ?: ""))?.groupValues?.get(1) ?: return
         if (phase == "ready") calls.joinLink(token) else pendingCallLink = token
     }
 
@@ -376,7 +378,7 @@ class MainActivity : FragmentActivity() {
     fun shareCallLink(conversationId: String) {
         call("createCallLink", obj("id" to conversationId)) { value ->
             val token = (value as? JSONObject)?.optString("token")?.takeIf { it.isNotBlank() } ?: return@call
-            val url = "$server/#/call/$token"
+            val url = "$server/call/$token"
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url), tr("Share call link")))
         }
     }

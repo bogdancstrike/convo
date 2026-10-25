@@ -233,6 +233,8 @@ services:
       CONVO_HTTPS_PORT: ${CONVO_HTTPS_PORT:-8443}
       CONVO_HOSTNAME: ${CONVO_HOSTNAME:-convo.doncik.ro}
       CONVO_SERVER_IP: ${CONVO_SERVER_IP:-}
+      # Android App Links for call links; defaults to the standard Android debug-keystore certificate.
+      CONVO_ANDROID_CERT_SHA256: ${CONVO_ANDROID_CERT_SHA256:-85:A2:7E:F1:D8:91:83:7E:C3:42:9C:47:2C:AC:C7:9E:8B:30:03:96:83:64:28:59:09:2C:3A:DF:30:DC:4D:D2}
     volumes:
       - web-tls:/etc/nginx/tls
     depends_on:

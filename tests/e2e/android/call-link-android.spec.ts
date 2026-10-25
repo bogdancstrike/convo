@@ -27,7 +27,7 @@ test('Android joins a running group call from a member call link', async ({ brow
   await page.getByTestId('close-info').click();
   await page.waitForTimeout(5000);
   await page.getByTestId('start-voice-call').click();
-  console.log(`CALL LINK ${url.slice(url.indexOf('#'))}`);
+  console.log(`CALL LINK ${new URL(url).pathname}`);
   const screen = page.getByTestId('call-screen');
   await expect(screen).toHaveAttribute('data-phase', 'connected', { timeout: 120_000 });
   await expect(screen).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });

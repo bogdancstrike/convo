@@ -265,6 +265,11 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Verified Android App Links for call links (CALL-01): links are now `https://<host>/call/<token>`
+  (web rewrites the path to its route; older `/#/call/` links still work); the APK's `autoVerify`
+  filter covers `/call/`; the web container renders `/.well-known/assetlinks.json` from
+  `CONVO_ANDROID_CERT_SHA256`. `callLinkPath.test.ts`, `calls.spec.ts` (full load of the link),
+  `run-call-link.sh` on the emulator.
 - Guest invitations (FR-EXT-01, FR-ADM-01): admins create time-limited guest accounts (1–365
   days) or set/extend guest access on an existing account; an expiry job disables the IdP user,
   ends sessions and disables the Convo account; directory entries carry `guestUntil` and web/Android
@@ -471,7 +476,6 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 |---|---|
 | Communities: ack withdraw/custom reviewers, membership-operation retries/ownership transfer flow, polls/events | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
-| Calls: verified app links (assetlinks.json) so call links open Convo without a chooser; call links + screen sharing done on web and Android | CALL-01 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
