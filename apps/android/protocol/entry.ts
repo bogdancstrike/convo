@@ -43,7 +43,9 @@ async function snapshot() {
   const conversations = await Promise.all(client.conversations().map(async (c) => c.kind === 'group' && c.previewAuthor && !c.previewFromMe
     ? { ...c, previewAuthorName: await client!.displayName(c.previewAuthor) } : c));
   emit('snapshot', { accountId: client.accountId, device: client.device, conversations,
-    limits: { attachmentMaxBytes: MAX_ATTACHMENT_BYTES }, settings: client.settings, history: client.historyStatus, connection: client.socket.state,
+    limits: { attachmentMaxBytes: MAX_ATTACHMENT_BYTES }, settings: client.settings,
+    // Organization policy in force (verified by the core) and why a newer one was rejected, if so.
+    policy: client.policy, policyInfo: client.policyInfo, policyIssue: client.policyIssue, history: client.historyStatus, connection: client.socket.state,
     profiles: Object.fromEntries(client.profiles()), active, messages: active ? await Promise.all((await client.messages(active, 1000)).map(async (m) => ({
       ...publicMessage(m), mentionLabels: m.mentions?.length ? await Promise.all(m.mentions.map((id) => client!.displayName(id))) : undefined,
       // Acknowledgements: reviewer names for members; audience names only for reviewers.
@@ -54,7 +56,7 @@ async function snapshot() {
 const refresh = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void snapshot().catch(() => undefined), 60); };
 async function startClient() {
   client = await createClient(context); if (!client) { emit('phase', { name: 'welcome' }); return; }
-  for (const event of ['messages', 'conversations', 'settings', 'profiles', 'history', 'groups', 'connection', 'devices', 'scheduled', 'folders'] as const) client.on(event, refresh);
+  for (const event of ['messages', 'conversations', 'settings', 'profiles', 'history', 'groups', 'connection', 'devices', 'scheduled', 'folders', 'policy'] as const) client.on(event, refresh);
   client.on('revoked', () => emit('phase', { name: 'revoked' }));
   // Calls: ring/accept/decline/end events and history changes go to the native call UI.
   client.on('call', (event) => emit('call', event));

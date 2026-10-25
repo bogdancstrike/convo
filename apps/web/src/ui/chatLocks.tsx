@@ -56,7 +56,7 @@ export function ChatLockProvider({ client, children }: { client: EnclaveClient; 
     const onVisibility = () => {
       const settings = client.settings;
       if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); if (settings.appLock && settings.appLockAfterMinutes === 0) setAppLocked(true); return; }
-      if (settings.appLock && hiddenAt && Date.now() - hiddenAt >= settings.appLockAfterMinutes * 60_000) setAppLocked(true);
+      if (settings.appLock && hiddenAt && Date.now() - hiddenAt >= Math.min(settings.appLockAfterMinutes, client.policy.security.appLockMaxMinutes) * 60_000) setAppLocked(true);
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);

@@ -76,7 +76,7 @@ import org.json.JSONObject
             ActionRow("Media, links and docs", icon = Icons.Outlined.PermMedia) { app.route = "media" }
             ActionRow("Starred messages", icon = Icons.Outlined.StarOutline) { app.route = "starred" }
             // Members-only link to this group's call (AC-CALL-07); not for channels.
-            if (isGroup && !c.optBoolean("adminOnly") && !c.optBoolean("left")) ActionRow("Share call link", "Only members of this group can join with it", Icons.Outlined.AddIcCall) { app.shareCallLink(id) }
+            if (isGroup && !c.optBoolean("adminOnly") && !c.optBoolean("left") && app.featureAllowed("callLinks")) ActionRow("Share call link", "Only members of this group can join with it", Icons.Outlined.AddIcCall) { app.shareCallLink(id) }
         } }
         item { InfoSection {
             ActionRow(if (c.optBoolean("muted")) "Unmute notifications" else "Mute notifications", icon = if (c.optBoolean("muted")) Icons.Outlined.VolumeOff else Icons.Outlined.NotificationsNone) {
@@ -170,7 +170,7 @@ import org.json.JSONObject
         }
         item { InfoSection {
             var export by remember { mutableStateOf(false) }
-            ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }
+            if (app.featureAllowed("chatExport")) ActionRow("Export chat", icon = Icons.Outlined.Download) { export = true }
             if (export) Confirm("Export readable chat?", "The exported file is not encrypted. Save it somewhere private.", "Export", { export = false }) { export = false; val text = app.snapshot.optJSONArray("messages")?.objects().orEmpty().joinToString("\n") { "[${java.util.Date(it.optLong("sentAt"))}] ${it.optString("authorId")}: ${if (it.optBoolean("deleted")) "[deleted]" else it.optString("body")}" }; app.export("convo-chat.txt", "text/plain", text.toByteArray()) }
             ConversationDangerRows(app, c)
         } }

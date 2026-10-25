@@ -166,7 +166,7 @@ private fun Modifier.verticalScrollable(): Modifier = composed { this.verticalSc
             Shortcut(Icons.Outlined.Description, "Document", Color(0xFF7F66FF)) { pick("*/*") }
             Shortcut(Icons.Outlined.Image, "Gallery", Color(0xFF007BFC)) { pick("image/*,video/*") }
             Shortcut(Icons.Outlined.Headphones, "Audio", Color(0xFFFA6533)) { pick("audio/*") }
-            if (allowPoll) Shortcut(Icons.Outlined.LooksOne, "View once", Color(0xFF5F66CD)) { pick("image/*,video/*", viewOnce = true) }
+            if (allowPoll && app.featureAllowed("viewOnce")) Shortcut(Icons.Outlined.LooksOne, "View once", Color(0xFF5F66CD)) { pick("image/*,video/*", viewOnce = true) }
             if (allowPoll) Shortcut(Icons.Outlined.Poll, "Poll", Color(0xFF02A698)) { close(); onPoll() }
             if (allowPoll) Shortcut(Icons.Outlined.Event, "Event", Color(0xFFD3396D)) { close(); onEvent() }
         }

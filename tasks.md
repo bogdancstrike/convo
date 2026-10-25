@@ -269,6 +269,14 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Signed organization policy (specs §19.1, AC-ADM-02): admin console "Organization policy" page
+  publishes versions (stale edits refused, step-up, audited), each signed with the server's Ed25519
+  policy key (configurable, else generated into V34). Clients verify the signature bound to the
+  deployment, pin the key on first use, refuse rollback, keep the last verified policy on rejection
+  and enforce: notification preview cap, required app lock (cannot be turned off; web delay capped),
+  privacy defaults applied once, feature switches (chat export, view once, stickers, call links).
+  Android already blocks screenshots everywhere (stricter, allowed). `OrgPoliciesTest`,
+  `policy.test.ts`; "Managed by your organization" notes in Settings.
 - Verified Android App Links for call links (CALL-01): links are now `https://<host>/call/<token>`
   (web rewrites the path to its route; older `/#/call/` links still work); the APK's `autoVerify`
   filter covers `/call/`; the web container renders `/.well-known/assetlinks.json` from
@@ -481,7 +489,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Communities: membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
-| Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |
+| Admin: aggregate health, platform/compliance roles | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
 
 ## Web UX refresh (ADR-0003) — 2026-10-20

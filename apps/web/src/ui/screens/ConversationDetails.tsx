@@ -49,7 +49,7 @@ export function ConversationActions({ client, conversation, onClose, onPage }: {
     {(locked || locks.passkey === true) && <div className="settings-row-switch"><Switch checked={locked} onChange={() => void locks.toggle(conversation.id)}
       label={t('lock.title')} description={t('lock.help')} testId="info-lock" /></div>}
     {locks.error && <p role="alert" className="failed">{locks.error}</p>}
-    <button className="settings-row" onClick={() => void exportChat()} data-testid="export-chat"><Icon name="file" /><span className="settings-row-text">{t('info.export')}</span></button>
+    {client.policy.features.chatExport && <button className="settings-row" onClick={() => void exportChat()} data-testid="export-chat"><Icon name="file" /><span className="settings-row-text">{t('info.export')}</span></button>}
     {error && <p role="alert">{t('info.exportFailed')}</p>}
   </section></>;
 }

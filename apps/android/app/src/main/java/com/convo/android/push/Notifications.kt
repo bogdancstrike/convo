@@ -68,7 +68,7 @@ object MessageNotifications {
         val id = alert.optString("conversationId")
         if (app.isInForeground && app.active == id && app.route == "thread") return
         val conversation = app.snapshot.optJSONArray("conversations")?.objects()?.find { it.optString("id") == id }
-        val preview = if (app.locks.locked(id) || app.locks.appLock) "generic" else settings.optString("notificationPreview", "generic")
+        val preview = if (app.locks.locked(id) || app.locks.appLock) "generic" else app.effectivePreview(settings.optString("notificationPreview", "generic"))
         val title = if (preview == "generic") "Convo" else alert.optString("title").ifBlank { conversation?.optString("title") ?: "Convo" }
         val body = when {
             preview == "full" && alert.optString("body").isNotBlank() -> alert.optString("body")
@@ -92,7 +92,7 @@ object MessageNotifications {
         val settings = app.snapshot.optJSONObject("settings") ?: return
         if (!settings.optBoolean("notifications") || !permitted(app)) return
         val id = reminder.optString("conversationId")
-        val generic = app.locks.locked(id) || app.locks.appLock || settings.optString("notificationPreview", "generic") == "generic"
+        val generic = app.locks.locked(id) || app.locks.appLock || app.effectivePreview(settings.optString("notificationPreview", "generic")) == "generic"
         val minutes = maxOf(1L, (reminder.optLong("start") - System.currentTimeMillis()) / 60_000)
         val open = PendingIntent.getActivity(app, reminder.optString("messageId").hashCode(), Intent(app, MainActivity::class.java).putExtra(EXTRA_CONVERSATION, id)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
@@ -119,10 +119,11 @@ object MessageNotifications {
         }
         Text("Preview", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("generic" to "Hidden", "sender" to "Sender", "full" to "Sender and text").forEach { (value, label) ->
-                FilterChip(settings.optString("notificationPreview", "generic") == value, { app.call("settings", obj("patch" to obj("notificationPreview" to value))) }, label = { Text(label) })
+            listOf("generic" to "Hidden", "sender" to "Sender", "full" to "Sender and text").filter { app.previewAllowed(it.first) }.forEach { (value, label) ->
+                FilterChip(app.effectivePreview(settings.optString("notificationPreview", "generic")) == value, { app.call("settings", obj("patch" to obj("notificationPreview" to value))) }, label = { Text(label) })
             }
         }
+        if (!app.previewAllowed("full")) Text("Managed by your organization", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         Text("Hidden shows only “New message”. Locked chats and app lock always hide content; the lock screen always shows a generic notification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         Text("Event reminders", style = MaterialTheme.typography.titleSmall)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

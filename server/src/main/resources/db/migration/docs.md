@@ -47,3 +47,10 @@ is resolved and when a LiveKit join token is issued. Rows are kept until operato
 created at first sign-in), with expiry, inviting administrator and when expiry was applied. The
 admin module's expiry job disables the IdP user and the Convo account once `expires_at` passes;
 clients see the expiry as `guestUntil` on directory entries and label the person "Guest".
+
+## V34 — signed organization policy
+
+`org_policies` keeps every published policy version: the exact signed JSON text, its Ed25519
+signature, the signing key ID, who published it and when (AC-ADM-02). `policy_signing_key` stores a
+generated private key only when the operator did not configure `enclave.policy.signing-key`;
+production deployments should configure the key so it is not kept in the database.

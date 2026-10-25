@@ -239,7 +239,7 @@ function GroupInfo({ client, conversation, onContact }: { client: EnclaveClient;
       </section>
       <GroupAbout client={client} conversation={conversation} description={record?.description} canEdit={canManage} />
       {canManage && <InviteSection client={client} conversation={conversation} />}
-      {!conversation.adminOnly && !conversation.left && <CallLinkSection client={client} conversation={conversation} />}
+      {!conversation.adminOnly && !conversation.left && client.policy.features.callLinks && <CallLinkSection client={client} conversation={conversation} />}
       {canManage && !conversation.adminOnly && <SlowModeSection client={client} conversation={conversation} onError={setError} />}
       <section className="drawer-section" aria-labelledby="members-title">
         <h4 id="members-title">{t('group.participants', { count: members.length })}</h4>

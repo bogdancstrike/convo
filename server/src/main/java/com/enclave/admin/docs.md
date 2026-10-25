@@ -188,3 +188,12 @@ IdP user, ends its sessions and disables the Convo account; it deletes nothing. 
 in the identity module (`account_guests`, V33) and reach clients as `guestUntil` on directory
 entries, which they show as a "Guest" label. Groups are member-managed E2EE, so expiry cannot remove
 a guest from groups; a disabled account simply receives nothing more.
+
+`OrgPolicies` owns the signed organization policy (specs §19.1, AC-ADM-02). `GET/PUT
+/v1/admin/policy` reads and publishes versions (`POLICY_READ`; `POLICY_MANAGE` plus step-up and a
+reason to publish); a publish names the version it edited and is refused with CONFLICT when stale.
+The document text (`OrgPolicy` plus version, deployment ID and issue time) is signed with Ed25519
+over `CONVO-POLICY-V1\n<deploymentId>\n<document>`; the key comes from `enclave.policy.signing-key`
+(base64 PKCS#8) or, when unset, is generated once into `policy_signing_key` (V34). Devices read
+`GET /v1/policy` (204 when none), verify, pin the key on first use, refuse rollback and enforce the
+controls locally. Policies are honest-client governance, not cryptographic guarantees.

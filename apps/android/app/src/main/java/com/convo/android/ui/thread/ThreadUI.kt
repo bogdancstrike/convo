@@ -237,7 +237,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                                     BasicTextField(androidx.compose.ui.text.input.TextFieldValue(input, selection), { v -> if (v.text != input) app.typing(id, v.text); input = v.text; selection = v.selection }, maxLines = 6,
                                         textStyle = LocalTextStyle.current.copy(color = colors.textPrimary, fontSize = 16.sp), cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
                                 }
-                                IconButton({ stickerSheet = true }) { Icon(Icons.Outlined.EmojiEmotions, "Stickers", tint = colors.textSecondary) }
+                                if (app.featureAllowed("stickers")) IconButton({ stickerSheet = true }) { Icon(Icons.Outlined.EmojiEmotions, "Stickers", tint = colors.textSecondary) }
                                 IconButton({ attachSheet = true }) { Icon(Icons.Outlined.AttachFile, "Attach file", tint = colors.textSecondary) }
                             }
                         } else Spacer(Modifier.weight(1f))

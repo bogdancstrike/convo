@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { EnclaveClient } from '../core/client';
 import { useChatLocks } from './chatLocks';
 import { useI18n } from './i18n/i18n';
+import { effectivePreview } from '../core/policy';
 
 /**
  * Browser system notifications for new messages (opt-in per device, Settings → Notifications).
@@ -17,7 +18,7 @@ export function useMessageNotifications(client: EnclaveClient, activeChat: strin
     const settings = client.settings;
     if (!settings.notifications || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     if (document.visibilityState === 'visible' && document.hasFocus() && activeChat === alert.conversationId) return;
-    const preview = locks.locked(alert.conversationId) || settings.appLock ? 'generic' : settings.notificationPreview;
+    const preview = locks.locked(alert.conversationId) || settings.appLock ? 'generic' : effectivePreview(settings.notificationPreview, client.policy);
     void (async () => {
       const conversation = client.conversation(alert.conversationId);
       const sender = await client.displayName(alert.authorId);
@@ -36,7 +37,7 @@ export function useMessageNotifications(client: EnclaveClient, activeChat: strin
   useEffect(() => client.on('reminder', (reminder) => {
     const settings = client.settings;
     if (!settings.notifications || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    const generic = locks.locked(reminder.conversationId) || settings.appLock || settings.notificationPreview === 'generic';
+    const generic = locks.locked(reminder.conversationId) || settings.appLock || effectivePreview(settings.notificationPreview, client.policy) === 'generic';
     const minutes = String(Math.max(1, Math.round((reminder.start - Date.now()) / 60_000)));
     const notification = new Notification(generic ? 'Convo' : `📅 ${reminder.title}`, {
       body: generic ? t('notify.reminderGeneric') : t('notify.reminderBody', { count: minutes }),

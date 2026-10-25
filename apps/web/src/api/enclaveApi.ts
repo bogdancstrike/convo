@@ -1,3 +1,4 @@
+import type { SignedPolicy } from '../core/policy';
 import type { CallJoin } from '../core/calls';
 import type { DeviceCredentials, HttpClient } from './http';
 import type {
@@ -114,6 +115,8 @@ export class EnclaveApi {
   /** Authorizes a direct (peer) or group call and returns a LiveKit join token for this device. */
   /** Accounts allowed to receive abuse reports (organization security contacts). */
   reportRecipients(): Promise<{ accountId: string; displayName: string }[]> { return this.signed('GET', '/v1/reports/recipients'); }
+  /** The current signed organization policy; undefined (204) when none was published. */
+  policy(): Promise<SignedPolicy | undefined> { return this.signed('GET', '/v1/policy'); }
   createCall(request: { peer?: string; groupId?: string; video: boolean }): Promise<CallJoin> { return this.signed('POST', '/v1/calls', request); }
   joinCall(callId: string): Promise<CallJoin> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/join`); }
   createCallLink(groupId: string, ttlMinutes?: number): Promise<{ token: string; expiresAt: string }> { return this.signed('POST', '/v1/calls/links', { groupId, ttlMinutes }); }

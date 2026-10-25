@@ -52,6 +52,7 @@ import { applyBallot, applyClose, initialState, newPoll, newQuiz } from './polls
 import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { findSticker } from './stickers';
+import { DEFAULT_POLICY, PolicyRejectedError, verifyPolicy, type OrgPolicy, type PolicyRejection, type VerifiedPolicy } from './policy';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
 import { RecordNs, type Repositories } from './repositories';
@@ -108,6 +109,8 @@ export interface ClientEvents extends Record<string, unknown> {
   credentials: boolean;
   /** A new incoming message that should alert (see `emitAlert`). */
   alert: { conversationId: string; authorId: string; messageId: string; mention: boolean; body?: string; attachment: boolean };
+  /** The organization policy in force changed, or a new one was rejected (see `policyIssue`). */
+  policy: OrgPolicy;
   /** A local event reminder is due (device-local; see `sweepReminders`). */
   reminder: EventReminder;
 }
@@ -117,6 +120,8 @@ export interface EventReminder { conversationId: string; authorId: string; messa
 
 const TYPING_TTL_SECONDS = 10;
 const OUTBOX_RETRY_MS = 15_000;
+/** How often running devices re-check the organization policy. */
+const POLICY_REFRESH_MS = 15 * 60_000;
 
 /** Optional deadlines for an acknowledgement request (epoch ms). */
 export interface AckOptions {
@@ -178,6 +183,45 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     return this.currentSettings;
   }
 
+  // --- organization policy (specs §19.1, AC-ADM-02) ------------------------------------------------
+
+  private verifiedPolicy?: VerifiedPolicy;
+  private policyRejection?: PolicyRejection;
+  private policyTimer?: ReturnType<typeof setInterval>;
+
+  /** The policy in force: the last verified one, or the permissive defaults before any is published. */
+  get policy(): OrgPolicy { return this.verifiedPolicy?.policy ?? DEFAULT_POLICY; }
+  /** Version and key ID of the policy in force (undefined before one is published). */
+  get policyInfo(): { version: number; keyId: string; issuedAt: string } | undefined {
+    const v = this.verifiedPolicy; return v && { version: v.version, keyId: v.keyId, issuedAt: v.issuedAt };
+  }
+  /** Why the most recent policy fetch was rejected (the previous policy stays in force). */
+  get policyIssue(): PolicyRejection | undefined { return this.policyRejection; }
+
+  /**
+   * Fetches and verifies the current policy. A rejected document (bad signature, changed key,
+   * rollback) is ignored and reported; the last verified policy keeps applying. The first policy a
+   * device receives also sets its privacy defaults once.
+   */
+  async refreshPolicy(): Promise<void> {
+    const signed = await this.api.policy().catch(() => null);
+    if (signed === null) return; // offline: keep what we have
+    if (!signed) { this.policyRejection = undefined; return; }
+    try {
+      const verified = verifyPolicy(signed, this.device.deploymentId, this.verifiedPolicy);
+      this.policyRejection = undefined;
+      if (this.verifiedPolicy && verified.version === this.verifiedPolicy.version) return;
+      const first = !this.verifiedPolicy;
+      this.verifiedPolicy = verified;
+      await this.repos.store.put(RecordNs.policy, 'current', verified);
+      if (first) await this.updateSettings({ readReceipts: verified.policy.privacy.readReceiptsDefault, typingIndicators: verified.policy.privacy.typingDefault });
+    } catch (error) {
+      if (!(error instanceof PolicyRejectedError)) throw error;
+      this.policyRejection = error.reason;
+    }
+    this.emit('policy', this.policy);
+  }
+
   /** Whether the initial mailbox drain completed. */
   get synced(): boolean {
     return this.hasSynced;
@@ -200,6 +244,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
     for (const c of await this.repos.conversations()) this.conversationCache.set(c.id, c);
     this.emitConversations();
+    this.verifiedPolicy = await this.repos.store.get<VerifiedPolicy>(RecordNs.policy, 'current');
+    if (this.verifiedPolicy) this.emit('policy', this.policy);
+    void this.refreshPolicy();
+    this.policyTimer = setInterval(() => void this.refreshPolicy(), POLICY_REFRESH_MS);
     await this.repos.store.pruneProcessed();
     // Disappearing messages: sweep now and then periodically while the client runs.
     void this.sweepExpired().catch(() => undefined);
@@ -269,6 +317,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.historySync?.stop();
     this.socket.stop();
     if (this.retryTimer) clearInterval(this.retryTimer);
+    if (this.policyTimer) clearInterval(this.policyTimer);
     this.retryTimer = null;
   }
 

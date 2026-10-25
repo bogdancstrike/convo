@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntApp, Avatar, Badge, Button, Card, ConfigProvider, Dropdown, Layout, Menu, Result, Space, Spin, Switch, Tooltip, Typography } from 'antd';
-import { ApartmentOutlined, AuditOutlined, BellOutlined, DesktopOutlined, DashboardOutlined, EllipsisOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, AuditOutlined, BellOutlined, DesktopOutlined, DashboardOutlined, EllipsisOutlined, HeartOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, TeamOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { AdminError, api, type Me, type Permission } from './api';
 import { session, signIn, signOut } from './auth';
 import { themeConfig } from './theme';
@@ -12,6 +12,7 @@ import { AuditPage } from './pages/Audit';
 import { HealthPage } from './pages/Health';
 import { SessionsPage } from './pages/Sessions';
 import { AlertsPage } from './pages/Alerts';
+import { PolicyPage } from './pages/Policy';
 import { SecurityAlertContext, useSecurityAlertInbox } from './components/SecurityAlertContext';
 import { RolesPage } from './pages/Roles';
 
@@ -22,6 +23,7 @@ const PAGES = [
   { key: 'roles', label: 'Roles & permissions', icon: <ApartmentOutlined />, needs: 'ACCOUNTS_READ' as Permission },
   { key: 'sessions', label: 'Live sessions', icon: <DesktopOutlined />, needs: 'SESSIONS_READ' as Permission },
   { key: 'alerts', label: 'Security alerts', icon: <BellOutlined />, needs: 'ALERTS_READ' as Permission },
+  { key: 'policy', label: 'Organization policy', icon: <SafetyCertificateOutlined />, needs: 'POLICY_READ' as Permission },
   { key: 'audit', label: 'Audit log', icon: <AuditOutlined />, needs: 'AUDIT_READ' as Permission },
   { key: 'health', label: 'Health', icon: <HeartOutlined />, needs: 'HEALTH_READ' as Permission },
 ] as const;
@@ -109,6 +111,7 @@ function Console({ dark, setDark }: { dark: boolean; setDark: (d: boolean) => vo
           {page === 'roles' && <RolesPage {...props} />}
           {page === 'sessions' && <SessionsPage {...props} />}
           {page === 'alerts' && <AlertsPage {...props} />}
+          {page === 'policy' && <PolicyPage {...props} />}
           {page === 'audit' && <AuditPage {...props} />}
           {page === 'health' && <HealthPage {...props} />}
         </Layout.Content>

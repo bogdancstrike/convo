@@ -135,6 +135,13 @@ export function useMessageSearch(client: EnclaveClient, query: string): ChatMess
   return results;
 }
 
+/** The organization policy in force (specs §19.1), updated when a new verified version arrives. */
+export function usePolicy(client: EnclaveClient) {
+  const [policy, setPolicy] = useState(client.policy);
+  useEffect(() => client.on('policy', setPolicy), [client]);
+  return policy;
+}
+
 export function useSettings(client: EnclaveClient) {
   const [settings, setSettings] = useState(client.settings);
   useEffect(() => client.on('settings', setSettings), [client]);

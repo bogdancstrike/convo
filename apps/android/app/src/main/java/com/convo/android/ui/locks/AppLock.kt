@@ -158,7 +158,9 @@ class LockManager(private val activity: FragmentActivity) {
             locks.appLock -> "Convo asks for your fingerprint or screen lock each time you open it."
             locks.passkey == true -> "Require your fingerprint or screen lock to open Convo."
             else -> "Set up a passkey first, then come back here."
-        }, locks.appLock, enabled = locks.appLock || locks.passkey == true) { locks.changeAppLock(it) }
+        }, locks.appLock, enabled = (locks.appLock && !app.appLockRequired) || (!locks.appLock && locks.passkey == true)) { locks.changeAppLock(it) }
+        if (app.appLockRequired) Text(if (locks.appLock) "Your organization requires the app lock." else "Your organization requires the app lock: turn on passwordless sign-in above, then turn it on.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         Text(if (locks.lockedChats.isEmpty()) "Lock individual chats from a chat’s menu." else "${locks.lockedChats.size} locked chat(s). Locked chats are hidden from the chat list, search, media and gallery saving.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

@@ -292,7 +292,7 @@ export function Composer({
           error={oversized ? t('attachment.tooLarge', { name: oversized.name, limit: String(MAX_ATTACHMENT_BYTES / 1048576) }) : error}
           onCaption={setCaption}
           viewOnce={viewOnce}
-          onViewOnce={conversation.kind === 'note' ? undefined : setViewOnce}
+          onViewOnce={conversation.kind === 'note' || !client.policy.features.viewOnce ? undefined : setViewOnce}
           onRemove={onRemoveFile}
           onAddMore={() => inputs.current.get('document')?.click()}
           onCancel={() => {
@@ -398,7 +398,7 @@ export function Composer({
                 <Icon name="smile" />
               </button>
               {emoji && <EmojiPicker onPick={insertEmoji} onClose={() => setEmoji(false)}
-                onSticker={(pack, id) => void client.sendSticker(conversation.id, pack, id, { topic }).then(onDone).catch((e) => setError(e instanceof SendRestrictedError ? restrictedMessage(e) : t('sticker.failed')))} />}
+                onSticker={!client.policy.features.stickers ? undefined : (pack, id) => void client.sendSticker(conversation.id, pack, id, { topic }).then(onDone).catch((e) => setError(e instanceof SendRestrictedError ? restrictedMessage(e) : t('sticker.failed')))} />}
             </div>
             <label className="visually-hidden" htmlFor="composer">
               {t('thread.placeholder')}

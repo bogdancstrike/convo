@@ -16,6 +16,8 @@ import { useI18n } from '../i18n/i18n';
 import { disableWebPush, enableWebPush, webPushEnabled, webPushSupported } from '../webPush';
 import { MIN_PASSPHRASE, WrongPassphraseError } from '../../storage/encryptedStore';
 import type { MessageKey } from '../i18n/en';
+import { effectivePreview, previewAllowed } from '../../core/policy';
+import { usePolicy } from '../hooks';
 
 const LINK_POLL_MS = 3000;
 
@@ -147,6 +149,7 @@ function NotificationsPage({ client, settings, update }: { client: EnclaveClient
       else { await disableWebPush(client); setClosedTab(false); }
     } catch { setPushError(true); setClosedTab(await webPushEnabled()); }
   };
+  const policy = usePolicy(client);
   const supported = typeof Notification !== 'undefined';
   const [permission, setPermission] = useState(supported ? Notification.permission : 'denied');
   const toggle = async (on: boolean) => {
@@ -157,8 +160,9 @@ function NotificationsPage({ client, settings, update }: { client: EnclaveClient
     <Card title={t('settings.notifications')}>
       <Switch checked={settings.notifications && permission === 'granted'} disabled={!supported} onChange={(on) => void toggle(on)}
         label={t('notify.setting')} description={permission === 'denied' ? t('notify.blocked') : t('notify.settingHelp')} testId="toggle-notifications" />
-      <Segmented label={t('notify.preview')} value={settings.notificationPreview} testId="notification-preview" onChange={(v) => update({ notificationPreview: v as SettingsModel['notificationPreview'] })}
-        options={[{ value: 'generic', label: t('notify.preview.generic') }, { value: 'sender', label: t('notify.preview.sender') }, { value: 'full', label: t('notify.preview.full') }]} />
+      <Segmented label={t('notify.preview')} value={effectivePreview(settings.notificationPreview, policy)} testId="notification-preview" onChange={(v) => update({ notificationPreview: v as SettingsModel['notificationPreview'] })}
+        options={(['generic', 'sender', 'full'] as const).filter((v) => previewAllowed(v, policy)).map((value) => ({ value, label: t(`notify.preview.${value}`) }))} />
+      {policy.notifications.maxPreview !== 'full' && <p className="managed-note" data-testid="managed-preview"><Icon name="lock" size={14} />{t('policy.managed')}</p>}
       <p className="muted-text">{t('notify.previewHelp')}</p>
       <Segmented label={t('notify.reminders')} value={String(settings.eventReminderMinutes)} testId="event-reminders"
         onChange={(v) => update({ eventReminderMinutes: Number(v) as SettingsModel['eventReminderMinutes'] })}
@@ -406,7 +410,23 @@ function PasskeyCard({ client }: { client: EnclaveClient }) {
         </>
       )}
       <AppLockSettings client={client} />
+      <PolicyInfo client={client} />
     </Card>
+  );
+}
+
+/** Which organization policy this device enforces, and whether a newer one was rejected. */
+function PolicyInfo({ client }: { client: EnclaveClient }) {
+  const { t } = useI18n();
+  usePolicy(client); // re-render when the policy changes
+  const info = client.policyInfo;
+  return (
+    <div className="policy-info" data-testid="policy-info">
+      <h4>{t('policy.title')}</h4>
+      <p className="muted-text" data-testid="policy-version">{info ? t('policy.version', { version: info.version, key: info.keyId }) : t('policy.none')}</p>
+      {client.policyIssue && <p role="alert" className="failed" data-testid="policy-rejected">{t('policy.rejected', { reason: client.policyIssue })}</p>}
+      <p className="muted-text">{t('policy.governance')}</p>
+    </div>
   );
 }
 
@@ -414,16 +434,21 @@ function PasskeyCard({ client }: { client: EnclaveClient }) {
 function AppLockSettings({ client }: { client: EnclaveClient }) {
   const { t } = useI18n();
   const locks = useChatLocks();
+  const policy = usePolicy(client);
   const [settings, setSettings] = useState(client.settings);
   useEffect(() => client.on('settings', setSettings), [client]);
+  // Organization policy: a required lock cannot be turned off; the delay is capped.
+  const required = policy.security.appLockRequired;
+  const delays = ([0, 1, 5, 15] as const).filter((m) => m <= policy.security.appLockMaxMinutes);
   return (
     <>
-      <Switch checked={settings.appLock} disabled={!settings.appLock && locks.passkey !== true} onChange={(on) => void locks.setAppLock(on)}
+      <Switch checked={settings.appLock} disabled={(settings.appLock && required) || (!settings.appLock && locks.passkey !== true)} onChange={(on) => void locks.setAppLock(on)}
         label={t('appLock.setting')} description={settings.appLock || locks.passkey === true ? t('appLock.settingHelp') : t('appLock.needsPasskey')} testId="toggle-app-lock" />
+      {required && <p className="managed-note" data-testid="managed-app-lock"><Icon name="lock" size={14} />{t(settings.appLock ? 'policy.appLockRequired' : 'policy.appLockSetUp')}</p>}
       {settings.appLock && (
-        <Segmented label={t('appLock.after')} value={String(settings.appLockAfterMinutes)} testId="app-lock-after"
+        <Segmented label={t('appLock.after')} value={String(Math.min(settings.appLockAfterMinutes, delays[delays.length - 1] ?? 0))} testId="app-lock-after"
           onChange={(v) => void client.updateSettings({ appLockAfterMinutes: Number(v) as 0 | 1 | 5 | 15 })}
-          options={[{ value: '0', label: t('appLock.immediately') }, { value: '1', label: t('appLock.minutes', { count: 1 }) }, { value: '5', label: t('appLock.minutes', { count: 5 }) }, { value: '15', label: t('appLock.minutes', { count: 15 }) }]} />
+          options={delays.map((m) => ({ value: String(m), label: m === 0 ? t('appLock.immediately') : t('appLock.minutes', { count: m }) }))} />
       )}
       {locks.error && <p role="alert" className="failed">{locks.error}</p>}
     </>

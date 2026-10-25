@@ -2574,3 +2574,8 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .ack-reviewers { display: grid; gap: 4px; border: 0; padding: 4px 0 0; margin: 0; }
 .ack-reviewers legend { font-weight: 600; padding: 0; }
 .ack-reviewer { padding-left: 20px; }
+
+/* Organization policy (specs §19.1). */
+.managed-note { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 0.8125rem; color: var(--c-text-secondary, inherit); }
+.policy-info { margin-top: var(--space-3, 12px); }
+.policy-info h4 { margin: 0 0 4px; }

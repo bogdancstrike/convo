@@ -7,7 +7,7 @@ import { accessToken } from './auth';
  */
 export type Permission =
   | 'ACCOUNTS_READ' | 'DEVICES_READ' | 'DEVICE_REVOKE' | 'ACCOUNT_STATUS' | 'AUDIT_READ' | 'AUDIT_EXPORT' | 'AUDIT_CHECKPOINT'
-  | 'HEALTH_READ' | 'PUSH_REDRIVE' | 'STATS_READ' | 'USERS_CREATE' | 'USERS_CREDENTIALS' | 'RECOVERY_RESET' | 'ROLES_MANAGE' | 'SESSIONS_READ' | 'SESSIONS_REVOKE' | 'ALERTS_READ' | 'ALERTS_MANAGE' | 'ALERT_RULES_MANAGE';
+  | 'HEALTH_READ' | 'PUSH_REDRIVE' | 'STATS_READ' | 'USERS_CREATE' | 'USERS_CREDENTIALS' | 'RECOVERY_RESET' | 'ROLES_MANAGE' | 'SESSIONS_READ' | 'SESSIONS_REVOKE' | 'ALERTS_READ' | 'ALERTS_MANAGE' | 'ALERT_RULES_MANAGE' | 'POLICY_READ' | 'POLICY_MANAGE';
 
 export interface Me { actor: string; roles: string[]; permissions: Permission[] }
 export interface AccountSummary {
@@ -115,6 +115,9 @@ export const api = {
   idpUser: (id: string) => call<SignInAccount>('GET', `/idp/users/${id}`),
   createUser: (draft: { username: string; firstName: string; lastName: string; email: string; phone: string; requirePasskey: boolean; reason: string }) =>
     call<{ account: SignInAccount; temporaryPassword: string }>('POST', '/idp/users', draft),
+  /** Organization policy enforced by Convo apps (specs §19.1): current version and signed publish. */
+  policy: () => call<{ version: number; policy: OrgPolicy; signed: { keyId: string; publishedAt: string; publishedBy: string } | null }>('GET', '/policy'),
+  publishPolicy: (expectedVersion: number, policy: OrgPolicy, reason: string) => call<{ version: number; keyId: string }>('PUT', '/policy', { expectedVersion, policy, reason }),
   /** Guest accounts: time-limited sign-in accounts disabled automatically at expiry. */
   createGuest: (draft: { username: string; firstName: string; lastName: string; email: string; days: number; reason: string }) =>
     call<{ account: SignInAccount; temporaryPassword: string; expiresAt: string }>('POST', '/guests', draft),
@@ -148,4 +151,12 @@ export function errorText(e: unknown): string {
     if (e.detail) return e.detail;
   }
   return 'The request failed. Check your connection and try again.';
+}
+
+/** Organization policy document (mirrors the server's OrgPolicy and the clients' core/policy.ts). */
+export interface OrgPolicy {
+  notifications: { maxPreview: 'generic' | 'sender' | 'full' };
+  security: { screenshotBlock: boolean; appLockRequired: boolean; appLockMaxMinutes: number };
+  privacy: { readReceiptsDefault: boolean; typingDefault: boolean };
+  features: { chatExport: boolean; viewOnce: boolean; stickers: boolean; callLinks: boolean };
 }
