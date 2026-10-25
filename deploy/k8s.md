@@ -49,3 +49,38 @@ The same suite runs from the e2e image: `docker run --rm --network host -e BASE_
 SMOKE_USERNAME=… -e SMOKE_PASSWORD=… -w /e2e enclave/e2e:dev npx playwright test -c
 smoke/playwright.smoke.config.ts`. See [docs/SECURITY.md](../docs/SECURITY.md) for what each
 check proves.
+
+## Backups and restore
+
+What holds Convo state, how the homelab protects it, and how to get it back. Message content is
+end-to-end encrypted everywhere below: backups hold ciphertext and metadata, never readable chats.
+
+| State | Where | Protection | Notes |
+|---|---|---|---|
+| Convo + Keycloak databases | Postgres cluster (PGO) | pgBackRest: weekly full, daily incremental, continuous WAL, last 4 full kept (`charts/postgres-cluster`) | Accounts, devices, mailboxes, groups, encrypted account archives, audit chain, policy (+ generated signing key) |
+| Kubernetes secrets (`apps/convo-secrets` …) | Cluster | Velero weekly backup of namespaces (`charts/velero`) | LiveKit, TURN, S3, VAPID, admin client secrets |
+| Encrypted attachments | MinIO bucket | **Not backed up** (Velero excludes the `minio` namespace, it is the backup target) | Losing it makes old attachments undownloadable; messages remain. Mirror the bucket off-site (`mc mirror`) if attachments matter |
+| Audit checkpoints | `audit-checkpoints` volume | Velero file-system backup | Independent anchor for the hash-chained audit log |
+| Calls VPS | `deploy/calls-vps/.env`, `certs/` (local, git-ignored) | Keep a private copy | Regenerable: new certificate → update both pinned PEMs in the charts; new secret → `create-secrets.sh` |
+
+**Restore the database to a point in time** (e.g. before a bad migration): add to the
+`PostgresCluster` spec
+
+```yaml
+backups:
+  pgbackrest:
+    restore:
+      enabled: true
+      repoName: repo1
+      options: ["--type=time", "--target=\"2026-10-25 14:00:00+02\""]
+```
+
+then trigger it with `kubectl -n <pg-namespace> annotate postgrescluster postgres --overwrite
+postgres-operator.crunchydata.com/pgbackrest-restore="$(date)"`, wait for the cluster to come back,
+remove the `restore` block and restart `convo-server`. Clients reconnect on their own; messages
+accepted after the target time are lost on the server (devices that already received them keep
+them).
+
+**Drill (quarterly):** restore the latest backup into a scratch PGO cluster, point a throwaway
+`convo-server` at it, and check `/actuator/health`, an admin sign-in and the audit verify
+(`GET /v1/admin/audit/verify`).

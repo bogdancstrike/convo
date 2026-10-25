@@ -548,7 +548,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Directory search by name/handle/phone (ADR-0002), pgAdmin | |
 | ✅ | Global search across decrypted message text and attachment names | UX E2E |
 | ✅ | LAN HTTPS, dynamic Keycloak hostname and request-origin file links | hostname/IP E2E |
-| 🟡 | Firefox e2e: intermittent enroll wait timeout (KeyPackage upload response) | investigate |
+| ✅ | Firefox e2e: intermittent enroll wait timeout — not reproduced in the 210-test full run or 12× repeated enroll-heavy runs (2026-10-25) | closed |
 
 ## Convo LAN and account continuity — 2026-10-20
 
