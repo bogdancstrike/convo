@@ -400,13 +400,25 @@ export class GroupManager {
 
   private async processApplication(envelope: EnvelopeDto): Promise<GroupProcessResult | null> {
     const groupId = envelope.groupId!;
-    const state = await this.state(groupId);
+    let state = await this.state(groupId);
     if (!state) throw new Error('application message for an unknown group');
+    // A message from a later epoch: apply the commits before it first (specs §6 ordering).
+    const extra: StoreOp[] = [];
+    if ((envelope.epoch ?? 0) > epochOf(state)) {
+      await this.resolvePendingCommit(groupId);
+      state = (await this.state(groupId))!;
+      if ((envelope.epoch ?? 0) > epochOf(state)) {
+        const caught = await this.catchUp(groupId, state);
+        if (caught.removed) throw new Error('removed from the group before this message');
+        state = caught.state;
+        extra.push(this.stateOp(groupId, state));
+      }
+    }
     const result = await decrypt(state, envelope.content);
     const [accountId, deviceId] = splitAddress(result.sender);
     // The authenticated MLS sender must match the server-reported source device.
     if (accountId !== envelope.sourceAccount || deviceId !== envelope.sourceDevice) throw new Error('sender mismatch');
-    return { groupId, ops: [this.stateOp(groupId, result.state)], application: { plaintext: result.plaintext, accountId, deviceId } };
+    return { groupId, ops: [...extra, this.stateOp(groupId, result.state)], application: { plaintext: result.plaintext, accountId, deviceId } };
   }
 
   // --- internals ----------------------------------------------------------------------------

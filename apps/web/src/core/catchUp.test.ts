@@ -2,8 +2,8 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import type { EnclaveApi } from '../api/enclaveApi';
 import type { EnvelopeDto } from '../api/types';
-import { commit, createGroupWith, decodeKeyPackageMessage, epochOf, generateKeyPackages, generateSigner, join, serializeState } from '../crypto/mls';
-import { randomBytes, toBase64Url } from '../lib/bytes';
+import { commit, createGroupWith, decodeKeyPackageMessage, encrypt, epochOf, generateKeyPackages, generateSigner, join, serializeState } from '../crypto/mls';
+import { fromUtf8, randomBytes, toBase64Url, utf8 } from '../lib/bytes';
 import { EncryptedStore } from '../storage/encryptedStore';
 import { GroupManager, GroupNs } from './groups';
 
@@ -33,4 +33,21 @@ it('replays a missed commit from the event log, then applies the new one', async
   await store.commit(result!.ops);
   const state = await (groups as unknown as { state: (g: string) => Promise<Parameters<typeof epochOf>[0]> }).state(groupId);
   expect(epochOf(state)).toBe(epochOf(second.state));
+});
+
+it('decrypts an application message from a later epoch after replaying the commits before it', async () => {
+  const alice = await generateSigner(); const bob = await generateSigner();
+  const aliceKp = (await generateKeyPackages(alice, 'alice', 1, 1))[0]!;
+  const bobKp = (await generateKeyPackages(bob, 'bob', 1, 1))[0]!;
+  const created = await createGroupWith(alice, aliceKp, randomBytes(32), [decodeKeyPackageMessage(bobKp.message)]);
+  const groupId = toBase64Url(created.state.groupContext.groupId);
+  await store.put(GroupNs.state, groupId, serializeState(await join(created.welcome!, bob, bobKp)));
+  await store.put(GroupNs.group, groupId, { groupId, name: 'g', metaVersion: 1, members: [], left: false });
+  const first = await commit(created.state, []); const second = await commit(first.state, []);
+  const events = [{ seq: 1, epoch: epochOf(created.state), commit: first.commit! }, { seq: 2, epoch: epochOf(first.state), commit: second.commit! }];
+  const sent = await encrypt(second.state, utf8('after two missed commits'));
+  const api = { groupEvents: async (_g: string, from: number) => events.filter((e) => e.epoch >= from) } as unknown as EnclaveApi;
+  const groups = new GroupManager(api, store, { accountId: 'bob', deviceId: 1 });
+  const result = await groups.process({ type: 'MLS_PRIVATE', groupId, epoch: epochOf(second.state), content: sent.message, sourceAccount: 'alice', sourceDevice: 1 } as unknown as EnvelopeDto);
+  expect(fromUtf8(result!.application!.plaintext)).toBe('after two missed commits');
 });
