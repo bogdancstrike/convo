@@ -1,6 +1,7 @@
 import { SnoozeDialog } from './SnoozeDialog';
 import { CommunitiesPanel } from './CommunitiesPanel';
 import { JoinLinkHandler } from '../joinLinks';
+import { CallLinkHandler } from '../calls/CallLinks';
 import { useMessageNotifications } from '../notifications';
 import { syncWebPush } from '../webPush';
 import { LockedChatGate, useChatLocks } from '../chatLocks';
@@ -220,6 +221,6 @@ export function MainLayout({ client, onSignedOut }: { client: EnclaveClient; onS
         return <InfoDrawer client={client} conversation={active} onClose={() => navigate({ info: false, page: null })}
           onShared={() => navigate({ page: 'media' })} onPage={onPage} onContact={(id) => navigate({ page: `contact:${id}` })} onOpenChat={openChat} />;
       })()}
-    </div>{allMedia && <AllMedia client={client} onClose={() => setAllMedia(false)} />}<JoinLinkHandler client={client} /></MediaViewerProvider></LinkPreferences></ProfilesProvider>
+    </div>{allMedia && <AllMedia client={client} onClose={() => setAllMedia(false)} />}<JoinLinkHandler client={client} /><CallLinkHandler /></MediaViewerProvider></LinkPreferences></ProfilesProvider>
   );
 }

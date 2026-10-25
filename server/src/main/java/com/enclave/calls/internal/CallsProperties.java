@@ -21,6 +21,8 @@ import org.springframework.validation.annotation.Validated;
  * @param maxGroupParticipants upper bound for group calls
  * @param livekitUrl LiveKit HTTP API as reachable from the server (room administration, e.g.
  *     removing a member who left the group); empty disables it
+ * @param linkTtl default lifetime of a member call link
+ * @param maxLinkTtl longest lifetime a member may request for a call link
  */
 @Validated
 @ConfigurationProperties("enclave.calls")
@@ -32,7 +34,9 @@ public record CallsProperties(
         @DefaultValue("10m") @NotNull Duration tokenTtl,
         @DefaultValue("12h") @NotNull Duration maxCallAge,
         @DefaultValue("16") @Min(2) @Max(100) int maxGroupParticipants,
-        @DefaultValue("") String livekitUrl) {
+        @DefaultValue("") String livekitUrl,
+        @DefaultValue("24h") @NotNull Duration linkTtl,
+        @DefaultValue("7d") @NotNull Duration maxLinkTtl) {
 
     boolean usable() { return enabled && apiSecret.length() >= 32; }
 }

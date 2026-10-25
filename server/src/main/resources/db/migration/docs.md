@@ -34,3 +34,9 @@ actor/action/time index for per-administrator burst windows. Off-hours detection
 default because business hours are organization specific. Content rules (attachments, links) are
 not possible: messages are end-to-end encrypted and never visible to the server.
 
+
+## V32 — member call links
+
+`call_links` stores SHA-256 hashes of call-link tokens with their group, creator, expiry and
+revocation time (AC-CALL-07). A link never grants access by itself: membership is checked when it
+is resolved and when a LiveKit join token is issued. Rows are kept until operator maintenance.

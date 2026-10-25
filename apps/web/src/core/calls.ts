@@ -50,7 +50,16 @@ export interface CallLogEntry {
   answeredAt?: number;
   endedAt?: number;
   status: CallStatus;
+  /**
+   * Group calls: the newest media key seen for this call (ring, then rekeys), kept on this device
+   * so a member can join an ongoing call later, e.g. from a call link. Never sent anywhere.
+   */
+  mediaKey?: string;
+  keyGeneration?: number;
 }
+
+/** A member call link resolved by the server (only for current group members). */
+export interface ResolvedCallLink { groupId: string; callId: string | null; video: boolean | null; expiresAt: string }
 
 /** Events the UI reacts to. */
 export type CallEvent =

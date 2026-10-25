@@ -44,6 +44,11 @@ import { Outbox, type OutboxItem } from './outbox';
 import { RecordNs, type Repositories } from './repositories';
 import { SessionManager, UntrustedIdentityError } from './sessions';
 
+/** A call is running, but this device never received its media key (it cannot decrypt it). */
+export class CallKeyUnavailableError extends Error {
+  constructor() { super('call key unavailable'); this.name = 'CallKeyUnavailableError'; }
+}
+
 /**
  * The browser protocol client (CORE-02 facade for the web UI).
  *
@@ -755,7 +760,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     const groupId = groupIdOf(conversationId);
     const join = await this.api.createCall(groupId ? { groupId, video } : { peer: conversationId, video });
     const key = newMediaKey();
-    await this.logCall({ callId: join.callId, conversationId, direction: 'out', peer: conversationId, video, startedAt: Date.now(), status: 'ringing' });
+    await this.logCall({ callId: join.callId, conversationId, direction: 'out', peer: conversationId, video, startedAt: Date.now(), status: 'ringing',
+      ...(groupId ? { mediaKey: key, keyGeneration: 0 } : {}) });
     await this.sendCall(conversationId, { callId: join.callId, action: 'ring', video, key, to: groupId ? undefined : conversationId, timestamp: Date.now() });
     return { join, key };
   }
@@ -812,6 +818,38 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (entry?.status === 'ringing') await this.updateCallLog(invite.callId, { status: 'missed', endedAt: Date.now() });
   }
 
+  /**
+   * Creates a member call link for a group (AC-CALL-07). The token only points at the group's
+   * call: the server admits current members only, and the media key still comes from the group's
+   * encrypted ring/rekey messages.
+   */
+  async createCallLink(conversationId: string): Promise<{ token: string; expiresAt: string }> {
+    const groupId = groupIdOf(conversationId);
+    if (!groupId) throw new Error('call links are for groups');
+    return this.api.createCallLink(groupId);
+  }
+
+  revokeCallLink(token: string): Promise<void> { return this.api.revokeCallLink(token); }
+
+  /**
+   * Opens a call link: joins the group's ongoing call with the key this device received for it.
+   * With no call running it returns `{ start: true }` so the caller rings the group as usual.
+   * Throws `CallKeyUnavailableError` when a call is running but this device never received its
+   * key (e.g. linked after the call started).
+   */
+  async joinViaLink(token: string): Promise<{ start: true; conversationId: string } | { start: false; conversationId: string; callId: string; join: CallJoin; key: string; generation: number; video: boolean }> {
+    const link = await this.api.resolveCallLink(token);
+    const conversationId = groupConversationId(link.groupId);
+    if (!this.conversationCache.has(conversationId)) throw new Error('group not on this device');
+    if (!link.callId) return { start: true, conversationId };
+    const entry = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, link.callId);
+    if (!entry?.mediaKey) throw new CallKeyUnavailableError();
+    const join = await this.api.joinCall(link.callId);
+    this.invites.delete(link.callId);
+    await this.updateCallLog(link.callId, { status: 'answered', answeredAt: Date.now() });
+    return { start: false, conversationId, callId: link.callId, join, key: entry.mediaKey, generation: entry.keyGeneration ?? 0, video: !!link.video };
+  }
+
   /** Fresh join token for an ongoing call (reconnect after network loss). */
   rejoinCall(callId: string): Promise<CallJoin> { return this.api.joinCall(callId); }
 
@@ -855,18 +893,23 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       // A not-yet-answered ring joins with the newest key.
       const invite = this.invites.get(call.callId);
       if (invite && supersedes({ key: invite.key, generation: invite.generation ?? 0 }, next)) { invite.key = next.key; invite.generation = next.generation; }
+      // Keep the newest key with the call so this member can still join later (call links).
+      const logged = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, call.callId);
+      if (logged && (!logged.mediaKey || supersedes({ key: logged.mediaKey, generation: logged.keyGeneration ?? 0 }, next))) await this.logCall({ ...logged, mediaKey: next.key, keyGeneration: next.generation }, ops);
       return [async () => this.emit('call', { type: 'rekey', callId: call.callId, conversationId, ...next, fromSelf })];
     }
     const existing = await this.repos.store.get<CallLogEntry>(RecordNs.callLog, call.callId);
     if (call.action === 'ring') {
       if (existing) return [];
       if (fromSelf) {
-        await this.logCall({ callId: call.callId, conversationId, direction: 'out', peer: conversationId, video: !!call.video, startedAt: envelope.serverTimestamp, status: 'ringing' }, ops);
+        await this.logCall({ callId: call.callId, conversationId, direction: 'out', peer: conversationId, video: !!call.video, startedAt: envelope.serverTimestamp, status: 'ringing',
+          ...(groupConversation ? { mediaKey: call.key, keyGeneration: 0 } : {}) }, ops);
         return [async () => this.emit('callLog', undefined)];
       }
       // Ring age uses server time so a late delivery after being offline becomes a missed call.
       const stale = Date.now() - envelope.serverTimestamp > RING_TIMEOUT_MS;
-      await this.logCall({ callId: call.callId, conversationId, direction: 'in', peer: author, video: !!call.video, startedAt: envelope.serverTimestamp, status: stale ? 'missed' : 'ringing' }, ops);
+      await this.logCall({ callId: call.callId, conversationId, direction: 'in', peer: author, video: !!call.video, startedAt: envelope.serverTimestamp, status: stale ? 'missed' : 'ringing',
+        ...(groupConversation ? { mediaKey: call.key, keyGeneration: 0 } : {}) }, ops);
       if (stale) return [async () => this.emit('callLog', undefined)];
       const invite: CallInvite = { callId: call.callId, conversationId, from: author, video: !!call.video, key: call.key!, at: envelope.serverTimestamp, group: !!groupConversation };
       return [async () => { this.invites.set(invite.callId, invite); this.emit('callLog', undefined); this.emit('call', { type: 'incoming', invite }); }];

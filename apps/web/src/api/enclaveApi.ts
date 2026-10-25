@@ -114,6 +114,9 @@ export class EnclaveApi {
   /** Authorizes a direct (peer) or group call and returns a LiveKit join token for this device. */
   createCall(request: { peer?: string; groupId?: string; video: boolean }): Promise<CallJoin> { return this.signed('POST', '/v1/calls', request); }
   joinCall(callId: string): Promise<CallJoin> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/join`); }
+  createCallLink(groupId: string, ttlMinutes?: number): Promise<{ token: string; expiresAt: string }> { return this.signed('POST', '/v1/calls/links', { groupId, ttlMinutes }); }
+  resolveCallLink(token: string): Promise<{ groupId: string; callId: string | null; video: boolean | null; expiresAt: string }> { return this.signed('POST', `/v1/calls/links/${encodeURIComponent(token)}/resolve`); }
+  revokeCallLink(token: string): Promise<void> { return this.signed('DELETE', `/v1/calls/links/${encodeURIComponent(token)}`); }
   endCall(callId: string): Promise<void> { return this.signed('POST', `/v1/calls/${encodeURIComponent(callId)}/end`); }
   /** Own sign-in credential types at the IdP (passkey/OTP) for lock gating; `unavailable` on IdP errors. */
   accountCredentials(refresh = false): Promise<CredentialStatusDto> { return this.signed('GET', `/v1/account/credentials${refresh ? '?refresh=true' : ''}`); }

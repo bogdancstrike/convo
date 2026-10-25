@@ -13,9 +13,29 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 class CallController {
     record CreateCall(UUID peer, String groupId, boolean video) {}
+    /** {@code ttlMinutes} is optional; the server default and maximum apply. */
+    record CreateLink(String groupId, Integer ttlMinutes) {}
 
     private final CallService service;
-    CallController(CallService service) { this.service = service; }
+    private final CallLinks links;
+    CallController(CallService service, CallLinks links) { this.service = service; this.links = links; }
+
+    /** A member creates a link to the group's call; the token is returned once. */
+    @PostMapping("/v1/calls/links")
+    ResponseEntity<CallLinks.Created> createLink(@AuthenticationPrincipal AuthenticatedDevice me, @RequestBody CreateLink body) {
+        var ttl = body.ttlMinutes() == null ? null : java.time.Duration.ofMinutes(body.ttlMinutes());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(links.create(me, Base64Url.decode(body.groupId(), "groupId"), ttl));
+    }
+
+    /** Members only: which group the link belongs to and its joinable call, if any. */
+    @PostMapping("/v1/calls/links/{token}/resolve")
+    ResponseEntity<CallLinks.Resolved> resolveLink(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String token) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(links.resolve(me, token));
+    }
+
+    @DeleteMapping("/v1/calls/links/{token}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void revokeLink(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String token) { links.revoke(me, token); }
 
     @PostMapping("/v1/calls")
     ResponseEntity<CallService.Join> create(@AuthenticationPrincipal AuthenticatedDevice me, @RequestBody CreateCall body) {

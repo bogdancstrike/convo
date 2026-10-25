@@ -1,6 +1,6 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { rekeyLeader, RING_TIMEOUT_MS, type CallInvite } from '../../core/calls';
-import type { EnclaveClient } from '../../core/client';
+import { CallKeyUnavailableError, type EnclaveClient } from '../../core/client';
 import { CallEncryptionUnsupportedError } from './errors';
 import type { LiveKitCall } from './liveKitCall';
 
@@ -9,7 +9,7 @@ const CallScreen = lazy(() => import('./CallScreen').then((m) => ({ default: m.C
 import { Ringer } from './ringer';
 
 export type CallPhase = 'incoming' | 'outgoing' | 'connecting' | 'connected' | 'ended';
-export type CallEndReason = 'declined' | 'busy' | 'noAnswer' | 'ended' | 'failed' | 'unsupported' | 'answeredElsewhere' | 'removed' | 'lost';
+export type CallEndReason = 'declined' | 'busy' | 'noAnswer' | 'ended' | 'failed' | 'unsupported' | 'answeredElsewhere' | 'removed' | 'lost' | 'keyUnavailable' | 'linkUnavailable';
 
 export interface ActiveCall {
   callId?: string;
@@ -27,6 +27,8 @@ interface CallControls {
   media: LiveKitCall | null;
   start: (conversationId: string, video: boolean) => void;
   accept: () => void;
+  /** Opens a member call link: join the group's running call, or ring the group when idle. */
+  joinLink: (token: string) => void;
   decline: () => void;
   hangUp: () => void;
   /** Re-render tick for media state changes (tracks, mute, speakers). */
@@ -123,6 +125,22 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
     })();
   }, [client, connect, finish, patch, update]);
 
+  const joinLink = useCallback((token: string) => {
+    // A call that just ended may still show its outcome for a moment; it does not block a new one.
+    if (current.current && current.current.phase !== 'ended') return;
+    update({ conversationId: '', video: false, direction: 'out', phase: 'connecting' });
+    void (async () => {
+      try {
+        const result = await client.joinViaLink(token);
+        if (result.start) { update(null); start(result.conversationId, false); return; }
+        patch({ conversationId: result.conversationId, callId: result.callId, video: result.video });
+        await connect(result.join, result.key, result.video, result.generation);
+      } catch (e) {
+        void finish(e instanceof CallKeyUnavailableError ? 'keyUnavailable' : e instanceof CallEncryptionUnsupportedError ? 'unsupported' : 'linkUnavailable');
+      }
+    })();
+  }, [client, connect, finish, patch, start, update]);
+
   const accept = useCallback(() => {
     const active = current.current;
     if (!active?.invite || active.phase !== 'incoming') return;
@@ -173,7 +191,7 @@ export function CallProvider({ client, children }: { client: EnclaveClient; chil
   useEffect(() => () => { ringer.current.stop(); void media.current?.leave(); }, []);
 
   return (
-    <Calls.Provider value={{ call, media: media.current, start, accept, decline, hangUp, version }}>
+    <Calls.Provider value={{ call, media: media.current, start, joinLink, accept, decline, hangUp, version }}>
       {children}
       {call && <Suspense fallback={null}><CallScreen client={client} /></Suspense>}
     </Calls.Provider>

@@ -129,7 +129,7 @@ contents, names and keys remain end-to-end encrypted.
 | UX | Messenger-style layout, directory search by name/handle/phone, emoji picker, splash with E2EE notice, URL-based navigation (refresh-safe), EN/RO, light/dark with contrast tests |
 | History and recovery | Encrypted account archive, linked-device history restore, saved recovery code plus organization login, last-device logout safeguard |
 | Communities | Announcement feed with linked groups (discoverable or private), ask-to-join, explicit acknowledgements with due/closing times and named reviewers, welcome/rules/checklist onboarding, parent-removal delegation |
-| Calls | 1:1 and group audio/video through a self-hosted LiveKit SFU with frame E2EE (no unencrypted fallback), coturn relay, multi-device ringing, key rotation when someone leaves, ringing via push |
+| Calls | 1:1 and group audio/video through a self-hosted LiveKit SFU with frame E2EE (no unencrypted fallback), coturn relay, multi-device ringing, key rotation when someone leaves, ringing via push, screen sharing, members-only call links |
 | Notifications | Generic previews by default, per-chat All/Mentions/Muted, timed snooze, UnifiedPush (ntfy) wake-ups without content, optional Android background connection |
 | Privacy | Passkeys from Settings, app lock and per-chat locks (passkey on web, biometrics on Android), browser passphrase lock (Argon2id), disappearing messages, blocking, message requests |
 | Administration | Separate admin console: user/device support, live sign-in sessions, configurable security alerts with investigation history, scoped roles, step-up, hash-chained audit with external checkpoints and export |

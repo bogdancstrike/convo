@@ -195,3 +195,70 @@ test('screen sharing shows the presenter view with decrypted frames and stops cl
     await caller.getByTestId('call-end').click();
   } finally { await closeAll(caller, callee); }
 });
+
+/** AC-CALL-07: a member call link joins the group's running call; non-members and revoked links get nothing. */
+test('member call link joins the running group call with the current key; non-members and revoked links are refused', async ({ browser, request }) => {
+  test.setTimeout(200_000);
+  const [ownerU, bobU, carolU, daveU] = await Promise.all(['lowner', 'lbob', 'lcarol', 'ldave'].map((p) => createUser(request, p)));
+  const [owner, bob, carol, dave] = await Promise.all([1, 2, 3, 4].map(() => newPage(browser)));
+  try {
+    for (const [page, user] of [[owner, ownerU], [bob, bobU], [carol, carolU], [dave, daveU]] as const) await enroll(page, user);
+    const groupName = `Link group ${Date.now() % 10000}`;
+    await owner.getByTestId('new-chat').click();
+    await owner.getByTestId('new-group').click();
+    for (const u of [bobU, carolU]) { await owner.getByTestId('people-search').fill(u.username); await owner.getByTestId(`pick-${u.username}`).click(); }
+    await owner.getByTestId('group-next').click();
+    await owner.getByTestId('group-name').fill(groupName);
+    await owner.getByTestId('review-group').click();
+    await owner.getByTestId('create-group').click();
+    await send(owner, 'link call soon');
+    await openChat(bob, groupName); await openChat(carol, groupName);
+
+    // A member creates the link from group info; only its token appears, once.
+    await owner.getByTestId('thread-info').click();
+    await owner.getByTestId('call-link-create').click();
+    const url = await owner.getByTestId('call-link').inputValue();
+    expect(url).toMatch(/#\/call\/[A-Za-z0-9_-]{43}$/);
+    const hash = url.slice(url.indexOf('#'));
+    await owner.getByTestId('close-info').click();
+
+    // Owner rings, Bob answers, Carol declines (her device still keeps the call's key).
+    await owner.getByTestId('start-voice-call').click();
+    await expect(screen(bob)).toHaveAttribute('data-phase', 'incoming', { timeout: 20_000 });
+    await bob.getByTestId('call-accept').click();
+    await expect(screen(carol)).toHaveAttribute('data-phase', 'incoming', { timeout: 20_000 });
+    await carol.getByTestId('call-decline').click();
+    await expect(screen(owner)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
+
+    // Carol joins the running call through the link: connected and decrypting.
+    await carol.evaluate((h) => { window.location.hash = h; }, hash);
+    await expect(screen(carol)).toHaveAttribute('data-phase', 'connected', { timeout: 30_000 });
+    await expect(screen(carol)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
+    await expect(screen(owner)).toContainText('3 in call', { timeout: 20_000 });
+
+    // She leaves: the key rotates; rejoining by link uses the rotated key she received.
+    await carol.getByTestId('call-end').click();
+    for (const page of [owner, bob]) await expect(screen(page)).toHaveAttribute('data-key-generation', '1', { timeout: 20_000 });
+    await expect(screen(carol)).toHaveCount(0, { timeout: 10_000 });
+    await carol.evaluate((h) => { window.location.hash = h; }, hash);
+    await expect(screen(carol)).toHaveAttribute('data-key-generation', '1', { timeout: 30_000 });
+    await expect(screen(carol)).toHaveAttribute('data-encrypted', 'true', { timeout: 30_000 });
+    await carol.getByTestId('call-end').click();
+
+    // Dave is not a member: the link reveals nothing and joins nothing.
+    await dave.evaluate((h) => { window.location.hash = h; }, hash);
+    await expect(screen(dave)).toHaveAttribute('data-reason', 'linkUnavailable', { timeout: 20_000 });
+
+    // Revoked by its creator: members can no longer use it either.
+    await owner.getByTestId('call-end').click();
+    await bob.getByTestId('call-end').click();
+    await owner.getByTestId('thread-info').click();
+    await owner.getByTestId('call-link-create').click();
+    const second = await owner.getByTestId('call-link').inputValue();
+    await owner.getByTestId('call-link-revoke').click();
+    await expect(owner.getByTestId('call-link-section')).toContainText('revoked');
+    await expect(screen(carol)).toHaveCount(0, { timeout: 10_000 });
+    await carol.evaluate((h) => { window.location.hash = h; }, second.slice(second.indexOf('#')));
+    await expect(screen(carol)).toHaveAttribute('data-reason', 'linkUnavailable', { timeout: 20_000 });
+  } finally { await closeAll(owner, bob, carol, dave); }
+});
