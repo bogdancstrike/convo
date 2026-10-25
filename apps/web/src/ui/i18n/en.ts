@@ -932,6 +932,7 @@ export const en = {
   'conn.connecting': 'Connecting…',
   'conn.offline': 'Waiting for connection. Messages will send when you’re back online.',
   'identity.changed': '{name}’s security identity changed. Review it before trusting new messages.',
+  'group.untrustedDevices': 'This group contains {count} device(s) that their owners never vouched for. Sending is paused to protect your messages; ask an admin to remove them or contact your security team.',
   'identity.changedVerified': '{name}’s security identity changed. Verify with {name} before sending.',
   'identity.review': 'Review identity',
   'identity.dismiss': 'Dismiss',

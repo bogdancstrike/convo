@@ -934,6 +934,7 @@ export const ro: Record<MessageKey, string> = {
   'conn.connecting': 'Se conectează…',
   'conn.offline': 'Se așteaptă conexiunea. Mesajele vor fi trimise când revii online.',
   'identity.changed': 'Identitatea de securitate a lui {name} s-a schimbat. Verific-o înainte de a avea încredere în mesajele noi.',
+  'group.untrustedDevices': 'Acest grup conține {count} dispozitiv(e) pe care proprietarii lor nu le-au confirmat. Trimiterea este oprită pentru a-ți proteja mesajele; cere unui administrator să le elimine sau contactează echipa de securitate.',
   'identity.changedVerified': 'Identitatea de securitate a lui {name} s-a schimbat. Verifică împreună cu {name} înainte de a trimite.',
   'identity.review': 'Verifică identitatea',
   'identity.dismiss': 'Închide',

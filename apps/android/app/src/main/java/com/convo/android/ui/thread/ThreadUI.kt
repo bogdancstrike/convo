@@ -123,6 +123,12 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
         Column(Modifier.fillMaxSize()) {
             if (app.snapshot.optString("connection") != "online") Text("Waiting for connection. Messages will send when you reconnect.", Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (kind == "group" && !conversation.optBoolean("adminOnly") && !conversation.optBoolean("left") && (topics.isNotEmpty() || isGroupAdmin)) TopicBar(app, id, topics, topic, isGroupAdmin) { topic = it }
+            // GRP-01: a device in this group is not vouched for by its account; sending is paused.
+            val untrusted = group?.optJSONArray("untrustedDevices")?.length() ?: 0
+            if (untrusted > 0) Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                RawText(tr("This group contains {count} device(s) that their owners never vouched for. Sending is paused to protect your messages; ask an admin to remove them or contact your security team.").replace("{count}", "$untrusted"),
+                    Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 14.sp)
+            }
             // Security identity change (new key for this contact): review the safety number before trusting new messages.
             if (conversation.has("identityChangedAt") && !conversation.isNull("identityChangedAt")) Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {

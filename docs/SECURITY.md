@@ -596,3 +596,14 @@ unlocked device in the hands of an examiner who has the user's biometric or cred
 Keeping this document current is part of the definition of done: a change to cryptography,
 storage, identity, network exposure or the admin model updates the matching section and, if it
 changes a guarantee, its test.
+
+
+## MLS device bindings (GRP-01)
+
+A group member's MLS credential names a device address; on its own that would let a malicious server
+hand out a KeyPackage with its own key under someone's address. Each device therefore publishes a
+binding: an XEdDSA signature by the account identity key (the key behind safety numbers) over
+`CONVO-MLS-BINDING-V1`, the deployment ID, the device address and its MLS signature key. Clients
+check it with the identity key they trust for that account: KeyPackages whose key is not bound are
+not added, and if a group ever contains such a leaf the client refuses to send to it and warns. A
+device that has not published a binding yet (an older app version) is tolerated during rollout.

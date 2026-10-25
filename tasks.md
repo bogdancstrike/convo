@@ -269,6 +269,14 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- MLS device bindings (GRP-01): every device signs its long-lived MLS signature key with the account
+  identity key (XEdDSA, bound to deployment and device address) and publishes it (V35,
+  `PUT /v1/devices/self/mls-binding`, `GET /v1/accounts/{id}/mls-bindings`, active devices only).
+  Clients verify against the identity key they trust: claimed KeyPackages with a non-matching
+  binding are dropped; after every Welcome/commit all leaves are audited and groups with an invalid
+  leaf refuse to send and show a warning (web + Android). Devices without a binding yet (older app)
+  are tolerated. `mlsBinding.test.ts`, `mlsBindingGroup.test.ts` (forged KeyPackage under a real
+  address is rejected), group e2e suites with bindings in place, Android publishes on start.
 - Platform operator (`convo-platform`: health, push redrive; no people data) and compliance officer
   (`convo-compliance`: audit read/export, policy read, statistics) admin roles; organization admins
   now also publish the policy (specs §19 "organization admin (membership/policy)"). Keycloak setup
@@ -473,7 +481,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | ✅ | Create group, encrypted group name, add/remove members (admin/owner), removed-member state | |
 | ✅ | Linked-device sync: own devices added/removed in joined groups on DEVICE_LIST_CHANGED | |
 | ✅ | Leave, invite links, join requests, bans (see below); promote/demote/transfer UI | GRP-03, EXT-03 |
-| ⬜ | Credential binding to account identity key, reviewed role profile, pending-removal gate | GRP-01 |
+| 🟡 | Credential binding to account identity key ✅ (device bindings, V35); reviewed role profile and pending-removal gate remain | GRP-01 |
 
 ## Delivery & verification
 

@@ -35,7 +35,7 @@ import {
 import type { SignalStore } from '../crypto/signalStore';
 import { Emitter } from '../lib/emitter';
 import { Mutex } from '../lib/mutex';
-import { utf8, fromBase64Url, sha256, toBase64Url } from '../lib/bytes';
+import { utf8, fromBase64Url, sha256, toArrayBuffer, toBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import { downloadAttachment, prepareFile, uploadAttachment, type PreparedFile, type UploadResume } from './attachments';
 import { replenishPreKeys } from './enrollment';
@@ -52,6 +52,7 @@ import { applyBallot, applyClose, initialState, newPoll, newQuiz } from './polls
 import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { findSticker } from './stickers';
+import { signBinding, verifyBinding, type BindingVerdict } from '../crypto/mlsBinding';
 import { DEFAULT_POLICY, PolicyRejectedError, verifyPolicy, type OrgPolicy, type PolicyRejection, type VerifiedPolicy } from './policy';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
 import { applyPolicy, mayPost, SLOW_MODE_TOLERANCE_MS, type MemberPolicy } from './memberPolicy';
@@ -122,6 +123,8 @@ const TYPING_TTL_SECONDS = 10;
 const OUTBOX_RETRY_MS = 15_000;
 /** How often running devices re-check the organization policy. */
 const POLICY_REFRESH_MS = 15 * 60_000;
+/** How long fetched MLS device bindings are reused before asking the server again. */
+const BINDING_CACHE_MS = 5 * 60_000;
 /** Devices registered this recently take the policy's privacy defaults on their first policy. */
 const NEW_DEVICE_MS = 24 * 3600_000;
 
@@ -169,7 +172,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     this.currentSettings = settings;
     this.socket = new GatewaySocket(async () => (await api.socketTicket()).ticket);
     this.sessions = new SessionManager(api, signal, device);
-    this.groups = new GroupManager(api, repos.store, device);
+    this.groups = new GroupManager(api, repos.store, device, {
+      verify: (accountId, deviceId, key) => this.verifyDeviceBinding(accountId, deviceId, key),
+      publishOwn: (key) => this.publishOwnBinding(key),
+    });
     this.outbox = new Outbox(repos.store, this.sessions, this.groups, api, this.socket, device.accountId, {
       onAccepted: (item) => this.onOutboxAccepted(item),
       onFailed: (item, reason, error) => this.onOutboxFailed(item, reason, error),
@@ -183,6 +189,38 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   get settings(): Settings {
     return this.currentSettings;
+  }
+
+  // --- MLS device bindings (GRP-01) ---------------------------------------------------------------
+
+  private bindingCache = new Map<string, { at: number; bindings: Promise<{ deviceId: number; signatureKey: string; binding: string }[]> }>();
+
+  /**
+   * Whether `signatureKey` is the MLS key `accountId.deviceId` vouched for with its account identity
+   * key. The identity key is the one this device trusts for the account (pinned at first contact /
+   * safety-number verified); a directory key that differs from it makes every binding invalid.
+   */
+  private async verifyDeviceBinding(accountId: string, deviceId: number, signatureKey: Uint8Array): Promise<BindingVerdict> {
+    const identity = accountId === this.accountId
+      ? (await this.signal.localIdentity())?.identityPublic
+      : (await this.lookupAccount(accountId))?.identityKey;
+    if (!identity) return 'unbound';
+    const identityKey = fromBase64Url(identity);
+    if (accountId !== this.accountId && !(await this.signal.isTrustedIdentity(accountId, toArrayBuffer(identityKey), 1))) return 'invalid';
+    const cached = this.bindingCache.get(accountId);
+    const entry = cached && Date.now() - cached.at < BINDING_CACHE_MS ? cached : { at: Date.now(), bindings: this.api.mlsBindings(accountId).catch(() => []) };
+    this.bindingCache.set(accountId, entry);
+    const published = (await entry.bindings).find((b) => b.deviceId === deviceId);
+    return verifyBinding(identityKey, this.device.deploymentId, accountId, deviceId, signatureKey,
+      published && { signatureKey: fromBase64Url(published.signatureKey), binding: fromBase64Url(published.binding) });
+  }
+
+  private async publishOwnBinding(signatureKey: Uint8Array): Promise<void> {
+    const identity = await this.signal.localIdentity();
+    if (!identity) throw new Error('missing account identity');
+    const binding = await signBinding(fromBase64Url(identity.identityPrivate), this.device.deploymentId, this.accountId, this.device.deviceId, signatureKey);
+    await this.api.publishMlsBinding(toBase64Url(signatureKey), toBase64Url(binding));
+    this.bindingCache.delete(this.accountId);
   }
 
   // --- organization policy (specs §19.1, AC-ADM-02) ------------------------------------------------

@@ -115,6 +115,10 @@ export class EnclaveApi {
   /** Authorizes a direct (peer) or group call and returns a LiveKit join token for this device. */
   /** Accounts allowed to receive abuse reports (organization security contacts). */
   reportRecipients(): Promise<{ accountId: string; displayName: string }[]> { return this.signed('GET', '/v1/reports/recipients'); }
+  /** Publishes this device's MLS signature key with its identity-key binding (GRP-01). */
+  publishMlsBinding(signatureKey: string, binding: string): Promise<void> { return this.signed('PUT', '/v1/devices/self/mls-binding', { signatureKey, binding }); }
+  /** Bindings of an account's active devices. */
+  mlsBindings(accountId: string): Promise<{ deviceId: number; signatureKey: string; binding: string }[]> { return this.signed('GET', `/v1/accounts/${encodeURIComponent(accountId)}/mls-bindings`); }
   /** The current signed organization policy; undefined (204) when none was published. */
   policy(): Promise<SignedPolicy | undefined> { return this.signed('GET', '/v1/policy'); }
   createCall(request: { peer?: string; groupId?: string; video: boolean }): Promise<CallJoin> { return this.signed('POST', '/v1/calls', request); }

@@ -309,6 +309,11 @@ export function Thread({
           <span>{t('group.left')}</span>
         </div>
       )}
+      {!!record?.untrustedDevices?.length && (
+        <div className="notice" role="alert" data-testid="untrusted-devices">
+          <span>{t('group.untrustedDevices', { count: record.untrustedDevices.length })}</span>
+        </div>
+      )}
       {conversation.identityChangedAt && (
         <div className="notice" role="alert">
           <span>{t('identity.changed', { name: conversation.title })}</span>

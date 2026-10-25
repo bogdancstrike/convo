@@ -37,9 +37,10 @@ import { portableCryptoProvider } from './mlsProvider';
  * Ed25519 signature key per device, commits sent as PublicMessage (the DS can order them,
  * ADR-006), ratchet tree carried in Welcome (GroupInfo extension).
  *
- * Interim status: like the TS Signal adapter this is an FND-02 stand-in for the Rust OpenMLS core;
- * credential binding to the account identity key (DeviceBinding) and the reviewed role profile
- * (GRP-01) are follow-ups.
+ * Interim status: like the TS Signal adapter this is an FND-02 stand-in for the Rust OpenMLS core.
+ * Device binding (GRP-01) is implemented beside the credential: each device's signature key is
+ * vouched for by the account identity key (`mlsBinding.ts`) and checked at KeyPackage claim and for
+ * every leaf after Welcome/commit (`GroupManager`). The reviewed role profile is a follow-up.
  */
 
 export const MLS_SUITE = 'MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519';
@@ -139,6 +140,22 @@ export function epochOf(state: ClientState): number {
 /** Group ID (base64url). */
 export function groupIdOf(state: ClientState): string {
   return toBase64Url(state.groupContext.groupId);
+}
+
+/** Leaves with their MLS signature public keys (for device-binding checks, GRP-01). */
+export function memberKeys(state: ClientState): { leafIndex: number; identity: string; signatureKey: Uint8Array }[] {
+  const result: { leafIndex: number; identity: string; signatureKey: Uint8Array }[] = [];
+  state.ratchetTree.forEach((node, index) => {
+    if (index % 2 === 0 && node && node.nodeType === 'leaf') {
+      result.push({ leafIndex: index / 2, identity: identityOf(node.leaf.credential), signatureKey: node.leaf.signaturePublicKey });
+    }
+  });
+  return result;
+}
+
+/** MLS signature public key of a KeyPackage's leaf. */
+export function keyPackageSignatureKey(kp: KeyPackage): Uint8Array {
+  return kp.leafNode.signaturePublicKey;
 }
 
 /** Members as leaf index → device address, from the current ratchet tree. */

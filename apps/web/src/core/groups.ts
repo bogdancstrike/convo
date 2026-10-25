@@ -1,3 +1,4 @@
+import type { BindingVerdict } from '../crypto/mlsBinding';
 import { ApiError } from '../api/errors';
 import type { EnclaveApi } from '../api/enclaveApi';
 import type { CreateGroupRequest, DeviceRef, EnvelopeDto, GroupRole } from '../api/types';
@@ -21,9 +22,8 @@ import {
   welcomeTargets,
   type CommitOutput,
   type GeneratedKeyPackage,
-  type MlsSigner,
-} from '../crypto/mls';
-import { randomBytes, toBase64Url } from '../lib/bytes';
+  type MlsSigner, keyPackageSignatureKey, memberKeys } from '../crypto/mls';
+import { fromBase64Url, randomBytes, toBase64Url } from '../lib/bytes';
 import type { EncryptedStore, StoreOp } from '../storage/encryptedStore';
 import type { ClientState } from 'ts-mls';
 
@@ -61,6 +61,24 @@ export interface GroupRecord {
   description?: string;
   /** Community root metadata (E2EE, from root owners/admins). */
   community?: import('../crypto/content').CommunityMeta;
+  /**
+   * Device addresses in the MLS tree whose signature key is not bound to their account (GRP-01):
+   * someone (e.g. the server) put a device in the group that its account never vouched for. Sending
+   * is refused while any are present.
+   */
+  untrustedDevices?: string[];
+}
+
+/** Checks MLS signature keys against published device bindings (GRP-01). */
+export interface LeafVerifier {
+  verify(accountId: string, deviceId: number, signatureKey: Uint8Array): Promise<BindingVerdict>;
+  /** Publishes this device's binding for its MLS signature key (idempotent). */
+  publishOwn(signatureKey: Uint8Array): Promise<void>;
+}
+
+/** The group contains a device that is not bound to its account; nothing is encrypted to it. */
+export class UntrustedGroupMembersError extends Error {
+  constructor(readonly devices: string[]) { super('group contains unverified devices'); this.name = 'UntrustedGroupMembersError'; }
 }
 
 /** Some invited accounts have no device that can be added right now (no KeyPackage). */
@@ -104,6 +122,8 @@ export class GroupManager {
     private readonly api: EnclaveApi,
     private readonly store: EncryptedStore,
     private readonly self: { accountId: string; deviceId: number },
+    /** Device-binding checks; absent only in unit tests of unrelated behaviour. */
+    private readonly bindings?: LeafVerifier,
   ) {}
 
   // --- keys ---------------------------------------------------------------------------------
@@ -119,6 +139,12 @@ export class GroupManager {
 
   /** Tops up server-side KeyPackages (start-up and KEYPACKAGES_LOW). */
   async ensureKeyPackages(): Promise<void> {
+    // Vouch for this device's MLS key first, so members can verify it (GRP-01).
+    const signer = await this.signer();
+    if (this.bindings && (await this.store.get<string>(GroupNs.signer, 'binding-published')) !== signer.publicKey) {
+      await this.bindings.publishOwn(fromBase64Url(signer.publicKey));
+      await this.store.put(GroupNs.signer, 'binding-published', signer.publicKey);
+    }
     const { oneTimePreKeys: remaining } = await this.api.keyPackageStatus();
     if (remaining >= KEY_PACKAGE_MIN) return;
     const generated = await generateKeyPackages(await this.signer(), this.self.accountId, this.self.deviceId, KEY_PACKAGE_BATCH);
@@ -269,6 +295,8 @@ export class GroupManager {
   /** Encrypts padded content for the group's current epoch. */
   async prepareMessage(groupId: string, padded: Uint8Array): Promise<PreparedGroupMessage> {
     const state = await this.requireState(groupId);
+    const untrusted = (await this.record(groupId))?.untrustedDevices;
+    if (untrusted?.length) throw new UntrustedGroupMembersError(untrusted);
     const result = await encrypt(state, padded);
     return { groupId, epoch: result.epoch, message: result.message, ops: [this.stateOp(groupId, result.state)] };
   }
@@ -298,13 +326,14 @@ export class GroupManager {
     const state = await join(envelope.content, await this.signer(), kp);
     const existing = await this.record(groupId);
     const record: GroupRecord = existing ?? { groupId, name: '', metaVersion: 0, members: [], left: false };
+    const untrustedDevices = await this.auditLeaves(state);
     return {
       groupId,
       joined: true,
       ops: [
         this.stateOp(groupId, state),
         { type: 'delete', ns: GroupNs.keyPackage, id: kp.ref },
-        { type: 'put', ns: GroupNs.group, id: groupId, value: { ...record, left: false } },
+        { type: 'put', ns: GroupNs.group, id: groupId, value: { ...record, left: false, untrustedDevices: untrustedDevices.length ? untrustedDevices : undefined } },
       ],
     };
   }
@@ -315,10 +344,15 @@ export class GroupManager {
     if (!state || (envelope.epoch ?? 0) < epochOf(state)) return { groupId, ops: [] }; // not joined yet, or already applied
     const result = await processCommit(state, envelope.content);
     const ops: StoreOp[] = [this.stateOp(groupId, result.state)];
+    const record = await this.record(groupId);
     if (result.kind === 'removed') {
-      const record = await this.record(groupId);
       if (record) ops.push({ type: 'put', ns: GroupNs.group, id: groupId, value: { ...record, left: true } });
       return { groupId, ops, removed: true };
+    }
+    // Every leaf of the new epoch must be vouched for by its account (adds included).
+    const untrustedDevices = await this.auditLeaves(result.state);
+    if (record && (untrustedDevices.length || record.untrustedDevices?.length)) {
+      ops.push({ type: 'put', ns: GroupNs.group, id: groupId, value: { ...record, untrustedDevices: untrustedDevices.length ? untrustedDevices : undefined } });
     }
     return { groupId, ops, changed: true };
   }
@@ -362,11 +396,32 @@ export class GroupManager {
   /** Claims KeyPackages and checks each one's credential matches the device it was claimed for. */
   private async claim(accountIds: string[]) {
     const response = await this.api.claimKeyPackages(accountIds);
-    return response.keyPackages.map((k) => {
+    const claimed = response.keyPackages.map((k) => {
       const keyPackage = decodeKeyPackageMessage(k.keyPackage);
       if (keyPackageIdentity(keyPackage) !== `${k.accountId}.${k.deviceId}`) throw new Error('key package identity mismatch');
       return { keyPackage, device: { accountId: k.accountId, deviceId: k.deviceId } };
     });
+    if (!this.bindings) return claimed;
+    // A KeyPackage whose key its account never vouched for is dropped, as if the device had none.
+    const verdicts = await Promise.all(claimed.map((c) => this.bindings!.verify(c.device.accountId, c.device.deviceId, keyPackageSignatureKey(c.keyPackage))));
+    return claimed.filter((_, i) => verdicts[i] !== 'invalid');
+  }
+
+  /**
+   * Device addresses whose leaf signature key fails its account's binding. Devices that have not
+   * published a binding yet (older app versions) are tolerated; a binding that does not match is
+   * not. This device's own leaf is always trusted.
+   */
+  private async auditLeaves(state: ClientState): Promise<string[]> {
+    if (!this.bindings) return [];
+    const own = `${this.self.accountId}.${this.self.deviceId}`;
+    const out: string[] = [];
+    for (const leaf of memberKeys(state)) {
+      if (leaf.identity === own || !leaf.identity) continue;
+      const [accountId, deviceId] = splitAddress(leaf.identity);
+      if (await this.bindings.verify(accountId, deviceId, leaf.signatureKey) === 'invalid') out.push(leaf.identity);
+    }
+    return out;
   }
 
   private async state(groupId: string): Promise<ClientState | undefined> {

@@ -54,3 +54,10 @@ clients see the expiry as `guestUntil` on directory entries and label the person
 signature, the signing key ID, who published it and when (AC-ADM-02). `policy_signing_key` stores a
 generated private key only when the operator did not configure `enclave.policy.signing-key`;
 production deployments should configure the key so it is not kept in the database.
+
+## V35 — MLS device bindings
+
+`mls_device_bindings` stores each device's MLS signature public key with a 64-byte XEdDSA signature
+by the account identity key (GRP-01). The server cannot create a valid binding; clients verify it
+before accepting a KeyPackage or a group leaf for that device. Only active devices' bindings are
+served (`GET /v1/accounts/{id}/mls-bindings`).
