@@ -5,6 +5,7 @@ import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
 import { ApiError } from '../../web/src/api/errors';
 import { STICKER_PACKS } from '../../web/src/core/stickers';
+import { makeStickerImage } from '../../web/src/core/customStickers';
 import { CallKeyUnavailableError, EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError, SendRestrictedError } from '../../web/src/core/client';
 import { createClient, type LocalContext } from '../../web/src/core/bootstrap';
 import { enrollPrimary } from '../../web/src/core/enrollment';
@@ -61,6 +62,7 @@ async function startClient() {
   // Calls: ring/accept/decline/end events and history changes go to the native call UI.
   client.on('call', (event) => emit('call', event));
   client.on('callLog', () => emit('callLog', {}));
+  client.on('stickers', () => emit('stickers', {}));
   // The title travels with the alert: a brand-new chat is not in the last snapshot yet.
   client.on('reminder', (reminder) => emit('reminder', reminder));
   client.on('alert', (alert) => emit('alert', { ...alert, title: client?.conversations().find((c) => c.id === alert.conversationId)?.title }));
@@ -217,6 +219,17 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     // Bundled stickers: the manifest (with SHA-256 per file) is the core's; files ship in the APK.
     case 'stickerPacks': return STICKER_PACKS;
     case 'sendSticker': return client.sendSticker(String(args.conversationId), String(args.pack), String(args.id), { topic: args.topic ? String(args.topic) : undefined });
+    // Personal stickers (WhatsApp): the collection syncs across own devices; bytes are verified by
+    // SHA-256 (the sticker ID) before use. Images are made square 512 px WebP here, like on the web.
+    case 'stickerCollection': return client.stickerCollection();
+    case 'createSticker': return client.addCustomSticker(await makeStickerImage(new Blob([fromBase64Url(String(args.data))], { type: String(args.mime ?? 'image/*') })));
+    case 'saveSticker': return client.saveSticker(await target(args));
+    case 'removeSticker': return client.removeCustomSticker(String(args.id));
+    case 'favoriteSticker': return client.toggleFavoriteSticker({ pack: String(args.pack), id: String(args.id) });
+    case 'stickerBytes': {
+      const bytes = await client.customStickerBytes({ id: String(args.id), attachment: args.attachment ?? undefined });
+      return bytes ? toBase64Url(bytes) : null;
+    }
     case 'votePoll': return client.votePoll(await target(args), Array.isArray(args.optionIds) ? args.optionIds.map(String) : []);
     case 'closePoll': return client.closePoll(await target(args));
     case 'canClosePoll': return client.canClosePoll(await target(args), client.accountId);

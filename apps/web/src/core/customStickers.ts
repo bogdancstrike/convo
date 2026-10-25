@@ -53,3 +53,22 @@ export async function stickerId(bytes: Uint8Array): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes.slice().buffer as ArrayBuffer));
   return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/**
+ * A square 512 px WebP sticker from an image file: the whole picture, scaled to fit on a transparent
+ * background (like WhatsApp's "create sticker"); quality is lowered until it fits the size limit.
+ */
+export async function makeStickerImage(file: Blob): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = CUSTOM_STICKER_SIZE;
+  const scale = Math.min(CUSTOM_STICKER_SIZE / bitmap.width, CUSTOM_STICKER_SIZE / bitmap.height);
+  const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, (CUSTOM_STICKER_SIZE - w) / 2, (CUSTOM_STICKER_SIZE - h) / 2, w, h);
+  bitmap.close();
+  for (const quality of [0.9, 0.8, 0.65, 0.5]) {
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
+    if (blob && blob.size <= MAX_CUSTOM_STICKER_BYTES) return new Uint8Array(await blob.arrayBuffer());
+  }
+  throw new Error('sticker image too large');
+}

@@ -170,6 +170,7 @@ class MainActivity : FragmentActivity() {
                 "alert" -> { if (BuildConfig.DEBUG) android.util.Log.d("ConvoPush", "alert (foreground=$isInForeground)"); MessageNotifications.show(this, value) }
                 "reminder" -> MessageNotifications.showReminder(this, value)
                 "callLog" -> callLogVersion++
+                "stickers" -> com.convo.android.ui.thread.Stickers.loadCollection(this)
                 "typing" -> value.optString("conversationId").takeIf { it.isNotBlank() }?.let { typingUntil[it] = value.optLong("until") }
                 "snapshot" -> { snapshot = value; applyScreenshotSetting(); PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }

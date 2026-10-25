@@ -362,7 +362,7 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     val attachments = if (viewOnce != null) emptyList() else message.optJSONArray("attachments")?.objects().orEmpty()
                     if (viewOnce != null) ViewOnceTile(app, message, conversation, viewOnce)
                     // Text first only without attachments; with media the caption goes underneath (WhatsApp).
-                    if (message.has("sticker") && !message.isNull("sticker")) message.optJSONObject("sticker")?.let { StickerImage(app, it.optString("pack"), it.optString("id")) }
+                    if (message.has("sticker") && !message.isNull("sticker")) message.optJSONObject("sticker")?.let { StickerImage(app, it.optString("pack"), it.optString("id"), attachment = it.optJSONObject("attachment")) }
                     else if (message.has("report") && !message.isNull("report")) ReportCard(message)
                     else if (message.has("poll") && !message.isNull("poll")) PollCard(app, message, conversation)
                     else if (message.has("event") && !message.isNull("event")) EventCard(app, message, conversation)
@@ -409,6 +409,16 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                                 DropdownMenuItem(text = { Text(if (pinned) "Unpin" else "Pin for everyone") }, leadingIcon = { Icon(Icons.Outlined.PushPin, null) }, onClick = { menu = false; app.call("pin", message.targetArgs(conversation).put("pinned", !pinned)) })
                             }
                             DropdownMenuItem(text = { Text("Reply") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Reply, null) }, onClick = { menu = false; onReply(message) })
+                            // Stickers (WhatsApp): favourite any sticker; save someone's personal sticker to My stickers.
+                            message.optJSONObject("sticker")?.let { st ->
+                                val pack = st.optString("pack"); val sid = st.optString("id")
+                                if (pack == Stickers.CUSTOM && !Stickers.isSaved(sid)) DropdownMenuItem(text = { Text("Save sticker") }, leadingIcon = { Icon(Icons.Outlined.Download, null) }, onClick = {
+                                    menu = false; app.call("saveSticker", message.targetArgs(conversation)) { if (it != null) { Stickers.loadCollection(app); app.notice = tr("Sticker added to My stickers") } }
+                                })
+                                DropdownMenuItem(text = { Text(if (Stickers.isFavorite(pack, sid)) "Remove sticker from favourites" else "Add sticker to favourites") }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }, onClick = {
+                                    menu = false; app.call("favoriteSticker", obj("pack" to pack, "id" to sid)) { Stickers.loadCollection(app) }
+                                })
+                            }
                             if (!message.has("viewOnce")) DropdownMenuItem(text = { Text("Forward") }, leadingIcon = { Icon(Icons.Outlined.Shortcut, null) }, onClick = { menu = false; forwarding = true })
                             DropdownMenuItem(text = { Text(if (message.optBoolean("starred")) "Unstar" else "Star") }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }, onClick = { menu = false; app.call("star", message.targetArgs(conversation).put("value", !message.optBoolean("starred"))) })
                             DropdownMenuItem(text = { Text("Copy text") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Convo message", message.optString("body"))) })

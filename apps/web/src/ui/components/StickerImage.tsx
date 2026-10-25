@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EnclaveClient } from '../../core/client';
-import { CUSTOM_PACK, CUSTOM_STICKER_SIZE, EMPTY_COLLECTION, MAX_CUSTOM_STICKER_BYTES, type StickerCollection } from '../../core/customStickers';
+import { CUSTOM_PACK, EMPTY_COLLECTION, makeStickerImage, type StickerCollection } from '../../core/customStickers';
 import type { AttachmentPointer } from '../../crypto/content';
 import { findSticker, isAnimatedPack, STICKER_PACKS, stickerPath, verifySticker } from '../../core/stickers';
 import { useI18n } from '../i18n/i18n';
@@ -93,25 +93,6 @@ export function useStickerCollection(client: EnclaveClient | undefined): Sticker
     return client.on('stickers', setCollection);
   }, [client]);
   return collection;
-}
-
-/**
- * A square 512 px WebP sticker from an image file: the whole picture, scaled to fit on a transparent
- * background (like WhatsApp's "create sticker"); quality is lowered until it fits the size limit.
- */
-export async function makeStickerImage(file: Blob): Promise<Uint8Array> {
-  const bitmap = await createImageBitmap(file);
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = CUSTOM_STICKER_SIZE;
-  const scale = Math.min(CUSTOM_STICKER_SIZE / bitmap.width, CUSTOM_STICKER_SIZE / bitmap.height);
-  const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, (CUSTOM_STICKER_SIZE - w) / 2, (CUSTOM_STICKER_SIZE - h) / 2, w, h);
-  bitmap.close();
-  for (const quality of [0.9, 0.8, 0.65, 0.5]) {
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
-    if (blob && blob.size <= MAX_CUSTOM_STICKER_BYTES) return new Uint8Array(await blob.arrayBuffer());
-  }
-  throw new Error('sticker image too large');
 }
 
 /**

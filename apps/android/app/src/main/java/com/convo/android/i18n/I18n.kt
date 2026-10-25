@@ -108,6 +108,7 @@ object Strings {
         "Audio" to "Audio",
         "Back" to "Înapoi", "View profile photo" to "Vezi fotografia de profil", "Profile photo" to "Fotografie de profil",
         "Turn speaker on" to "Pornește difuzorul", "typing…" to "scrie…",
+        "Sticker added to My stickers" to "Sticker adăugat la Stickerele mele", "Sticker options" to "Opțiuni sticker", "Remove from favourites" to "Elimină din favorite", "Add to favourites" to "Adaugă la favorite", "Remove from My stickers" to "Elimină din Stickerele mele", "Favourites" to "Favorite", "My stickers" to "Stickerele mele", "Create" to "Creează", "Save sticker" to "Salvează stickerul", "Remove sticker from favourites" to "Elimină stickerul din favorite", "Add sticker to favourites" to "Adaugă stickerul la favorite",
         "Go to the original message" to "Mergi la mesajul original", "Original message unavailable" to "Mesajul original nu este disponibil",
         "More reactions" to "Mai multe reacții",
         "Convo stays connected in the background so messages and calls arrive. For better battery life, set up ntfy in Settings → Notifications." to "Convo rămâne conectat în fundal ca mesajele și apelurile să ajungă. Pentru o baterie mai bună, configurează ntfy în Setări → Notificări.", "Messages arrive only while Convo is open. Tap to set up background delivery." to "Mesajele sosesc doar cât Convo este deschis. Atinge pentru a configura livrarea în fundal.",
