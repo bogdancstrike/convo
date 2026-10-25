@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -92,6 +93,15 @@ class GroupController {
     @GetMapping("/v1/groups/{groupId}")
     GroupDto get(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId) {
         return GroupDto.of(groups.get(me.address(), decode(groupId, "groupId")));
+    }
+
+    record CommitEventDto(long seq, long epoch, String commit) {}
+
+    /** Accepted commits from an epoch on (at most 100 per page), for a device catching up. */
+    @GetMapping("/v1/groups/{groupId}/events")
+    List<CommitEventDto> events(@AuthenticationPrincipal AuthenticatedDevice me, @PathVariable String groupId, @RequestParam("fromEpoch") long fromEpoch) {
+        return groups.commitsFrom(me.address(), decode(groupId, "groupId"), fromEpoch).stream()
+                .map(e -> new CommitEventDto(e.seq(), e.epoch(), encode(e.commit()))).toList();
     }
 
     /**

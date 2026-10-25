@@ -228,6 +228,10 @@ export class EnclaveApi {
   declineJoin(groupId: string, accountId: string): Promise<void> { return this.signed('DELETE', `/v1/groups/${encodeURIComponent(groupId)}/join-requests/${encodeURIComponent(accountId)}`); }
   /** Leaves a group (the server stops fan-out at once; members complete the MLS removal). */
   leaveGroup(groupId: string): Promise<void> { return this.signed('POST', `/v1/groups/${encodeURIComponent(groupId)}/leave`); }
+  /** Accepted commits of a group from an epoch on (catch-up after missed commits; ≤ 100 per page). */
+  groupEvents(groupId: string, fromEpoch: number): Promise<{ seq: number; epoch: number; commit: string }[]> {
+    return this.signed('GET', `/v1/groups/${groupId}/events?fromEpoch=${fromEpoch}`);
+  }
   /** Whether a commit whose response was lost was accepted (404 ApiError when it was not). */
   groupCommitStatus(groupId: string, submissionId: string): Promise<{ epoch: number; seq: number; duplicate: boolean }> {
     return this.signed('GET', `/v1/groups/${groupId}/commits/${submissionId}`);

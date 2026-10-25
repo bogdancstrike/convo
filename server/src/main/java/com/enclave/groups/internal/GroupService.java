@@ -141,6 +141,17 @@ class GroupService {
         return new Accepted(newEpoch, seq, false);
     }
 
+    /**
+     * Catch-up (specs §6): accepted commits from {@code fromEpoch} on, for a member device that missed
+     * some (e.g. its mailbox expired while offline). Commits are MLS PublicMessages that the client
+     * authenticates itself; the server only serves what it accepted, in order.
+     */
+    @Transactional(readOnly = true)
+    List<GroupRepository.CommitEvent> commitsFrom(DeviceAddress caller, byte[] groupId, long fromEpoch) {
+        if (!groups.devices(groupId).contains(caller)) throw new EnclaveException(ErrorCode.NOT_GROUP_MEMBER, "not a member device");
+        return groups.commitsFrom(groupId, Math.max(0, fromEpoch), 100);
+    }
+
     /** The accepted commit with this submission ID, for members resolving a lost response. */
     @Transactional(readOnly = true)
     GroupRepository.EventRow acceptedCommit(DeviceAddress caller, byte[] groupId, byte[] submissionId) {

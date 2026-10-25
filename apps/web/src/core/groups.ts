@@ -47,6 +47,9 @@ interface PendingCommit { groupId: string; submissionId: string; state: string }
 
 /** Network retries of the same commit submission before its outcome is left for later resolution. */
 const COMMIT_RETRIES = 2;
+/** Catch-up page size (server maximum) and how many pages one replay may fetch. */
+const CATCH_UP_PAGE = 100;
+const CATCH_UP_PAGES = 20;
 
 /** Keep at least this many KeyPackages on the server; upload {@link KEY_PACKAGE_BATCH} when below. */
 const KEY_PACKAGE_MIN = 10;
@@ -367,8 +370,18 @@ export class GroupManager {
   private async processCommitEnvelope(envelope: EnvelopeDto): Promise<GroupProcessResult | null> {
     const groupId = envelope.groupId!;
     let state = await this.state(groupId);
-    // A commit for a later epoch than ours: our own earlier commit may have been accepted unseen.
+    // A commit for a later epoch than ours: our own earlier commit may have been accepted unseen, or
+    // we missed commits (e.g. an expired mailbox) — replay the accepted ones first (specs §6).
     if (state && (envelope.epoch ?? 0) > epochOf(state)) { await this.resolvePendingCommit(groupId); state = await this.state(groupId); }
+    if (state && (envelope.epoch ?? 0) > epochOf(state)) {
+      const caught = await this.catchUp(groupId, state);
+      if (caught.removed) {
+        const record = await this.record(groupId);
+        return { groupId, ops: [this.stateOp(groupId, caught.state), ...(record ? [{ type: 'put' as const, ns: GroupNs.group, id: groupId, value: { ...record, left: true } }] : [])], removed: true };
+      }
+      state = caught.state;
+      if ((envelope.epoch ?? 0) < epochOf(state)) return { groupId, ops: [this.stateOp(groupId, state)], changed: true }; // replay covered it
+    }
     if (!state || (envelope.epoch ?? 0) < epochOf(state)) return { groupId, ops: [] }; // not joined yet, or already applied
     const result = await processCommit(state, envelope.content);
     const ops: StoreOp[] = [this.stateOp(groupId, result.state)];
@@ -424,6 +437,26 @@ export class GroupManager {
     // Only an accepted commit advances local state (specs §6.4).
     await this.store.commit([this.stateOp(groupId, output.state)]);
     await this.refreshRecord(groupId);
+  }
+
+  /**
+   * Replays accepted commits the device missed, in order, from its current epoch (bounded pages).
+   * Each commit is authenticated by MLS as usual; the server only supplies them.
+   */
+  private async catchUp(groupId: string, start: ClientState): Promise<{ state: ClientState; removed: boolean }> {
+    let state = start;
+    for (let page = 0; page < CATCH_UP_PAGES; page++) {
+      const events = await this.api.groupEvents(groupId, epochOf(state));
+      for (const event of events) {
+        if (event.epoch < epochOf(state)) continue; // already applied (e.g. our own commit)
+        if (event.epoch > epochOf(state)) return { state, removed: false }; // gap the server cannot fill
+        const result = await processCommit(state, event.commit);
+        if (result.kind === 'removed') return { state: result.state, removed: true };
+        state = result.state;
+      }
+      if (events.length < CATCH_UP_PAGE) break;
+    }
+    return { state, removed: false };
   }
 
   /**

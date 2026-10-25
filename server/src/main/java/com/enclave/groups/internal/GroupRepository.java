@@ -173,6 +173,15 @@ class GroupRepository {
                 .param("a", accountId).query().listOfRows();
     }
 
+    /** Accepted commits created in epoch {@code fromEpoch} or later, in order (bounded page). */
+    List<CommitEvent> commitsFrom(byte[] groupId, long fromEpoch, int limit) {
+        return jdbc.sql("SELECT seq, epoch, payload FROM mls_group_events WHERE group_id = :g AND epoch >= :e ORDER BY seq LIMIT :l")
+                .param("g", groupId).param("e", fromEpoch).param("l", limit)
+                .query((rs, i) -> new CommitEvent(rs.getLong(1), rs.getLong(2), rs.getBytes(3))).list();
+    }
+
+    record CommitEvent(long seq, long epoch, byte[] commit) {}
+
     Optional<EventRow> eventBySubmission(byte[] groupId, byte[] submissionId) {
         return jdbc.sql("SELECT seq, epoch, digest FROM mls_group_events WHERE group_id = :g AND submission_id = :s")
                 .param("g", groupId).param("s", submissionId)
