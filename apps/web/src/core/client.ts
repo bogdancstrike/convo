@@ -52,6 +52,7 @@ import { applyBallot, applyClose, initialState, newPoll, newQuiz } from './polls
 import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { findSticker } from './stickers';
+import { CUSTOM_PACK, EMPTY_COLLECTION, MAX_CUSTOM_STICKER_BYTES, MAX_CUSTOM_STICKERS, MAX_FAVORITE_STICKERS, sanitizeCollection, STICKER_REUPLOAD_AFTER_MS, stickerId, validStickerRef, type StickerCollection, type StickerRef } from './customStickers';
 import { signBinding, verifyBinding, type BindingVerdict } from '../crypto/mlsBinding';
 import { DEFAULT_POLICY, PolicyRejectedError, verifyPolicy, type OrgPolicy, type PolicyRejection, type VerifiedPolicy } from './policy';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
@@ -110,6 +111,8 @@ export interface ClientEvents extends Record<string, unknown> {
   credentials: boolean;
   /** A new incoming message that should alert (see `emitAlert`). */
   alert: { conversationId: string; authorId: string; messageId: string; mention: boolean; body?: string; attachment: boolean };
+  /** The personal sticker collection changed (here or on another own device). */
+  stickers: StickerCollection;
   /** The organization policy in force changed, or a new one was rejected (see `policyIssue`). */
   policy: OrgPolicy;
   /** A local event reminder is due (device-local; see `sweepReminders`). */
@@ -839,7 +842,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   private async sendMessage(
     conversationId: string,
-    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string; sticker?: { pack: string; id: string } },
+    content: { body?: string; quote?: Quote; attachments?: AttachmentPointer[]; forwarded?: boolean; mentions?: string[]; requestAck?: boolean | AckOptions; poll?: PollDefinition; event?: EventDefinition; viewOnce?: boolean; silent?: boolean; report?: AbuseReport; topic?: string; sticker?: { pack: string; id: string; attachment?: AttachmentPointer } },
     /** Reuse an existing ID (offline-queued upload placeholder) so the real message replaces it. */
     messageId?: string,
   ): Promise<void> {
@@ -984,9 +987,107 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Sends a bundled sticker (only its pack and sticker IDs travel, encrypted). */
   async sendSticker(conversationId: string, pack: string, id: string, options: { topic?: string } = {}): Promise<void> {
-    if (!findSticker(pack, id)) throw new Error('unknown sticker');
     if (options.topic) await this.requireOpenTopic(conversationId, options.topic);
+    if (pack === CUSTOM_PACK) {
+      const attachment = await this.freshStickerPointer(id);
+      await this.sendMessage(conversationId, { sticker: { pack, id, attachment }, topic: options.topic });
+      return;
+    }
+    if (!findSticker(pack, id)) throw new Error('unknown sticker');
     await this.sendMessage(conversationId, { sticker: { pack, id }, topic: options.topic });
+  }
+
+  // --- personal stickers (WhatsApp-style: create, save, favourites) ------------------------------
+
+  async stickerCollection(): Promise<StickerCollection> {
+    return (await this.repos.store.get<StickerCollection>(RecordNs.stickers, 'state')) ?? EMPTY_COLLECTION;
+  }
+
+  /**
+   * Adds a custom sticker from image bytes (already a square WebP/PNG, at most 512 KiB): encrypts and
+   * uploads it like an attachment, keeps the bytes locally and syncs the collection. Idempotent: the
+   * same image is one sticker. Returns its ID.
+   */
+  async addCustomSticker(bytes: Uint8Array, contentType: 'image/webp' | 'image/png' = 'image/webp'): Promise<string> {
+    if (bytes.length === 0 || bytes.length > MAX_CUSTOM_STICKER_BYTES) throw new Error('sticker image too large');
+    const id = await stickerId(bytes);
+    const current = await this.stickerCollection();
+    if (current.custom.some((c) => c.id === id)) return id;
+    if (current.custom.length >= MAX_CUSTOM_STICKERS) throw new Error('too many stickers');
+    const pointer = await uploadAttachment(this.api, { data: new Uint8Array(bytes), contentType, fileName: 'sticker.webp' });
+    await this.repos.store.put(RecordNs.stickerData, id, toBase64Url(bytes));
+    const now = Date.now();
+    await this.saveStickerCollection({ ...current, custom: [{ id, pointer, uploadedAt: now, addedAt: now }, ...current.custom] });
+    return id;
+  }
+
+  /** Saves a custom sticker someone sent to this account's collection (its own encrypted copy). */
+  async saveSticker(message: ChatMessage): Promise<string> {
+    if (message.sticker?.pack !== CUSTOM_PACK) throw new Error('only custom stickers can be saved');
+    const bytes = await this.customStickerBytes(message.sticker);
+    if (!bytes) throw new Error('sticker unavailable');
+    return this.addCustomSticker(bytes, message.sticker.attachment?.contentType === 'image/png' ? 'image/png' : 'image/webp');
+  }
+
+  async removeCustomSticker(id: string): Promise<void> {
+    const current = await this.stickerCollection();
+    await this.saveStickerCollection({ ...current, custom: current.custom.filter((c) => c.id !== id),
+      favorites: current.favorites.filter((f) => !(f.pack === CUSTOM_PACK && f.id === id)) });
+  }
+
+  /** Stars or unstars any sticker (bundled or custom); favourites come first in the picker. */
+  async toggleFavoriteSticker(ref: StickerRef): Promise<void> {
+    if (!validStickerRef(ref)) throw new Error('invalid sticker');
+    const current = await this.stickerCollection();
+    const has = current.favorites.some((f) => f.pack === ref.pack && f.id === ref.id);
+    if (!has && current.favorites.length >= MAX_FAVORITE_STICKERS) throw new Error('too many favourites');
+    await this.saveStickerCollection({ ...current, favorites: has ? current.favorites.filter((f) => !(f.pack === ref.pack && f.id === ref.id)) : [{ pack: ref.pack, id: ref.id }, ...current.favorites] });
+  }
+
+  /**
+   * Decrypted bytes of a custom sticker: the local copy, or the attachment (from the message or the
+   * collection), accepted only when its SHA-256 equals the sticker ID. Null when unavailable.
+   */
+  async customStickerBytes(ref: { id: string; attachment?: AttachmentPointer }): Promise<Uint8Array | null> {
+    const local = await this.repos.store.get<string>(RecordNs.stickerData, ref.id);
+    if (local) return fromBase64Url(local);
+    const pointer = ref.attachment ?? (await this.stickerCollection()).custom.find((c) => c.id === ref.id)?.pointer;
+    if (!pointer) return null;
+    try {
+      const bytes = new Uint8Array(await (await downloadAttachment(this.api, pointer)).arrayBuffer());
+      if (await stickerId(bytes) !== ref.id) return null;
+      if ((await this.stickerCollection()).custom.some((c) => c.id === ref.id)) await this.repos.store.put(RecordNs.stickerData, ref.id, toBase64Url(bytes));
+      return bytes;
+    } catch { return null; }
+  }
+
+  /** A pointer recipients can still download: re-uploads from the local copy when it may have expired. */
+  private async freshStickerPointer(id: string): Promise<AttachmentPointer> {
+    const current = await this.stickerCollection();
+    const sticker = current.custom.find((c) => c.id === id);
+    if (!sticker) throw new Error('unknown sticker');
+    if (Date.now() - sticker.uploadedAt < STICKER_REUPLOAD_AFTER_MS) return sticker.pointer;
+    const bytes = await this.customStickerBytes(sticker);
+    if (!bytes) throw new Error('sticker unavailable');
+    const pointer = await uploadAttachment(this.api, { data: new Uint8Array(bytes), contentType: sticker.pointer.contentType, fileName: 'sticker.webp' });
+    await this.saveStickerCollection({ ...current, custom: current.custom.map((c) => (c.id === id ? { ...c, pointer, uploadedAt: Date.now() } : c)) });
+    return pointer;
+  }
+
+  private async saveStickerCollection(next: StickerCollection): Promise<void> {
+    const current = await this.stickerCollection();
+    const state = sanitizeCollection({ ...next, mutation: current.mutation + 1 });
+    await this.repos.store.put(RecordNs.stickers, 'state', state);
+    this.emit('stickers', state);
+    await this.enqueue(this.accountId, { v: CONTENT_VERSION, kind: 'sync', sync: { stickers: state } }, false);
+  }
+
+  private async applyStickersSync(update: { custom: unknown[]; favorites: unknown[]; mutation: number }, ops: StoreOp[]): Promise<(() => void) | undefined> {
+    const current = await this.stickerCollection();
+    if (current.mutation >= update.mutation) return undefined;
+    const state = sanitizeCollection(update);
+    ops.push({ type: 'put', ns: RecordNs.stickers, id: 'state', value: state });
+    return () => this.emit('stickers', state);
   }
 
   /** Sends a quiz: single choice with a correct answer and an optional explanation. */
@@ -1962,6 +2063,7 @@ export class EnclaveClient extends Emitter<ClientEvents> {
         if (content.sync.snooze) this.applySnoozeSync(content.sync.snooze, ops);
         if (content.sync.viewed) { const v = content.sync.viewed; await this.applyViewed(v.conversationId, v.authorId, v.messageId, ops); }
         if (content.sync.folders) { const notify = await this.applyFoldersSync(content.sync.folders, ops); if (notify) followUps.push(async () => notify()); }
+        if (content.sync.stickers) { const notify = await this.applyStickersSync(content.sync.stickers, ops); if (notify) followUps.push(async () => notify()); }
         if (content.sync.read) {
           const c = this.conversationCache.get(content.sync.read.conversationId);
           if (c && (c.unread > 0 || c.revisedUnread?.length)) this.stage(ops, { ...c, unread: 0, revisedUnread: undefined, mentioned: undefined });

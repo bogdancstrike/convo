@@ -2578,3 +2578,11 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 .managed-note { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 0.8125rem; color: var(--c-text-secondary, inherit); }
 .policy-info { margin-top: var(--space-3, 12px); }
 .policy-info h4 { margin: 0 0 4px; }
+
+/* Personal stickers: tiles with a context menu, Create tile (WhatsApp-style). */
+.sticker-tile { position: relative; }
+.sticker-create { width: 80px; height: 80px; border: 2px dashed var(--c-border) !important; border-radius: 12px; font-size: 28px; color: var(--c-text-secondary); }
+.sticker-menu { position: absolute; z-index: 5; top: 70%; left: 0; display: grid; min-width: 180px; padding: 4px; border-radius: 8px; background: var(--c-panel-raised, var(--c-panel)); box-shadow: 0 6px 24px rgb(0 0 0 / 0.18); }
+.sticker-menu button { padding: 8px 10px; border: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; border-radius: 6px; }
+.sticker-menu button:hover { background: var(--c-hover, rgba(0,0,0,.06)); }
+.sticker-menu .danger { color: var(--c-danger-text, #c0392b); }

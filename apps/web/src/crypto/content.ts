@@ -120,8 +120,11 @@ export interface DataMessage {
    * only to the chosen security contact. Never uploaded or stored anywhere else.
    */
   report?: AbuseReport;
-  /** A bundled sticker (pack and sticker IDs only; recipients render their own copy). */
-  sticker?: { pack: string; id: string };
+  /**
+   * A sticker: bundled (pack and sticker IDs only; recipients render their own copy) or custom
+   * (`pack: 'custom'`, ID = hex SHA-256 of the image, `attachment` = the encrypted image).
+   */
+  sticker?: { pack: string; id: string; attachment?: AttachmentPointer };
   /** Group topic this message belongs to (absent = the group's general conversation). */
   topic?: string;
   /** Group event: create/rename/close a topic (owners/admins; highest revision wins). */
@@ -221,6 +224,8 @@ export interface SyncMessage {
   onboarding?: { conversationId: string; itemId: string; done: boolean; counter: number };
   /** A view-once message was opened on another own device: consume it here too. */
   viewed?: { conversationId: string; authorId: string; messageId: string };
+  /** Personal sticker collection (custom stickers + favourites; higher mutation wins; sanitized). */
+  stickers?: { custom: unknown[]; favorites: unknown[]; mutation: number };
   /** Private chat folders (whole list; higher mutation wins; sanitized on receipt). */
   folders?: { folders: unknown[]; mutation: number };
 }
@@ -353,6 +358,7 @@ export function decodeContent(bytes: Uint8Array): Content | UnknownContent {
         if (!isObject(z) || typeof z.conversationId !== 'string' || z.conversationId.length > 80 || !(z.until === null || Number.isSafeInteger(z.until))
           || typeof z.zone !== 'string' || z.zone.length > 64 || !Number.isSafeInteger(z.mutation)) throw new Error('malformed snooze sync');
       }
+      if (parsed.sync.stickers !== undefined && (!isObject(parsed.sync.stickers) || !Array.isArray(parsed.sync.stickers.custom) || !Array.isArray(parsed.sync.stickers.favorites) || !Number.isSafeInteger(parsed.sync.stickers.mutation))) throw new Error('malformed stickers sync');
       if (parsed.sync.folders !== undefined && (!isObject(parsed.sync.folders) || !Array.isArray(parsed.sync.folders.folders) || !Number.isSafeInteger(parsed.sync.folders.mutation))) throw new Error('malformed folders sync');
       if (parsed.sync.viewed !== undefined) {
         const v = parsed.sync.viewed;
@@ -487,8 +493,7 @@ function isDataMessage(value: unknown): value is DataMessage {
     || (value.memberPolicy.slowModeSeconds as number) < 0 || (value.memberPolicy.slowModeSeconds as number) > 86_400
     || !Array.isArray(value.memberPolicy.restricted) || value.memberPolicy.restricted.length > 1000 || !value.memberPolicy.restricted.every((a) => typeof a === 'string' && a.length > 0 && a.length <= 64)
     || !Number.isSafeInteger(value.memberPolicy.revision) || (value.memberPolicy.revision as number) < 1)) return false;
-  if (value.sticker !== undefined && (!isObject(value.sticker) || typeof value.sticker.pack !== 'string' || !/^[a-z0-9-]{1,32}$/.test(value.sticker.pack)
-    || typeof value.sticker.id !== 'string' || !/^[a-z0-9-]{1,32}$/.test(value.sticker.id))) return false;
+  if (value.sticker !== undefined && !isStickerContent(value.sticker)) return false;
   if (value.topic !== undefined && (typeof value.topic !== 'string' || !ID.test(value.topic))) return false;
   if (value.topicDef !== undefined && (!isObject(value.topicDef) || typeof value.topicDef.id !== 'string' || !ID.test(value.topicDef.id) || typeof value.topicDef.name !== 'string'
     || !value.topicDef.name.trim() || value.topicDef.name.length > 48 || typeof value.topicDef.closed !== 'boolean' || !Number.isSafeInteger(value.topicDef.revision) || (value.topicDef.revision as number) < 1)) return false;
@@ -548,6 +553,16 @@ function isPollVote(value: unknown): value is PollVote {
   return isObject(value) && typeof value.targetMessageId === 'string' && typeof value.targetAuthorId === 'string'
     && Array.isArray(value.optionIds) && value.optionIds.length <= POLL_MAX_OPTIONS && value.optionIds.every((id) => typeof id === 'string' && ID.test(id))
     && new Set(value.optionIds).size === value.optionIds.length;
+}
+
+/** Bundled: pack/id slugs, no attachment. Custom: 64-hex ID and a bounded image attachment. */
+function isStickerContent(value: unknown): boolean {
+  if (!isObject(value) || typeof value.pack !== 'string' || typeof value.id !== 'string') return false;
+  if (value.pack === 'custom') {
+    return /^[0-9a-f]{64}$/.test(value.id) && isAttachmentPointer(value.attachment)
+      && /^image\/(webp|png)$/.test((value.attachment as AttachmentPointer).contentType) && (value.attachment as AttachmentPointer).size <= 512 * 1024;
+  }
+  return /^[a-z0-9-]{1,32}$/.test(value.pack) && /^[a-z0-9-]{1,32}$/.test(value.id) && value.attachment === undefined;
 }
 
 function isAttachmentPointer(value: unknown): value is AttachmentPointer {

@@ -8,7 +8,9 @@ import { StickerGrid } from './StickerImage';
  * Searchable emoji picker with category tabs and a Recent section. Keyboard: the search field is
  * focused on open, Escape closes, every emoji is a button.
  */
-export function EmojiPicker({ onPick, onClose, onSticker }: { onPick: (emoji: string) => void; onClose: () => void;
+export function EmojiPicker({ onPick, onClose, onSticker, client }: { onPick: (emoji: string) => void; onClose: () => void;
+  /** Enables personal stickers (favourites, My stickers, create) in the Stickers tab. */
+  client?: import('../../core/client').EnclaveClient;
   /** When given, a Stickers tab sends bundled stickers (composer only, not reactions). */
   onSticker?: (pack: string, id: string) => void }) {
   const { t } = useI18n();
@@ -65,7 +67,7 @@ export function EmojiPicker({ onPick, onClose, onSticker }: { onPick: (emoji: st
           <button type="button" role="tab" aria-selected={mode === 'stickers'} onClick={() => setMode('stickers')} data-testid="picker-stickers">{t('sticker.title')}</button>
         </div>
       )}
-      {mode === 'stickers' && onSticker ? <StickerGrid onPick={(pack, id) => { onSticker(pack, id); onClose(); }} /> : <>
+      {mode === 'stickers' && onSticker ? <StickerGrid client={client} onPick={(pack, id) => { onSticker(pack, id); onClose(); }} /> : <>
       <div className="emoji-tabs" role="tablist">
         {recent.length > 0 && (
           <button type="button" role="tab" title={t('emoji.recent')} onClick={() => sections.current.get('recent')?.scrollIntoView()}>

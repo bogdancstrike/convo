@@ -97,8 +97,8 @@ export interface ChatMessage {
   report?: AbuseReport;
   /** Group topic this message belongs to (absent = general). */
   topic?: string;
-  /** A bundled sticker (`core/stickers.ts`). */
-  sticker?: { pack: string; id: string };
+  /** A sticker: bundled (`core/stickers.ts`) or custom (encrypted image attachment, `core/customStickers.ts`). */
+  sticker?: { pack: string; id: string; attachment?: AttachmentPointer };
 }
 
 export interface Conversation {

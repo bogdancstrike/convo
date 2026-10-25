@@ -29,6 +29,10 @@ export const RecordNs = {
   scheduled: 'scheduled',
   /** Private chat folders (`FolderState`, single record), synced to own devices only. */
   folders: 'folders',
+  /** Personal sticker collection (`StickerCollection`, single record 'state'), synced to own devices. */
+  stickers: 'stickers',
+  /** Decrypted custom sticker images by ID (base64url), device-local cache. */
+  stickerData: 'sticker-data',
   /** Last verified organization policy (`VerifiedPolicy`, single record 'current'; pins the key). */
   policy: 'policy',
   /** Device-local event reminders (`EventReminder`), keyed by event message. */
