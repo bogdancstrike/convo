@@ -35,4 +35,7 @@ Android-side counters (logcat tag `ConvoCallStats`).
 adb reverse tcp:8443 tcp:8443                      # emulator signed in as PK_USER on https://localhost:8443
 PK_USER=droid tests/e2e/android/run-call.sh        # voice, 5 minutes
 PK_USER=droid VIDEO=1 MINUTES=5 tests/e2e/android/run-call.sh
+PK_USER=droid SHARE=1 tests/e2e/android/run-call.sh          # browser shares its screen
+PK_USER=droid EXPECT_SCREEN=1 tests/e2e/android/run-call.sh  # tap "Share screen" on the phone
+PK_USER=droid tests/e2e/android/run-call-link.sh             # Android joins via a member call link
 ```

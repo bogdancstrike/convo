@@ -75,6 +75,8 @@ import org.json.JSONObject
         item { InfoSection {
             ActionRow("Media, links and docs", icon = Icons.Outlined.PermMedia) { app.route = "media" }
             ActionRow("Starred messages", icon = Icons.Outlined.StarOutline) { app.route = "starred" }
+            // Members-only link to this group's call (AC-CALL-07); not for channels.
+            if (isGroup && !c.optBoolean("adminOnly") && !c.optBoolean("left")) ActionRow("Share call link", "Only members of this group can join with it", Icons.Outlined.AddIcCall) { app.shareCallLink(id) }
         } }
         item { InfoSection {
             ActionRow(if (c.optBoolean("muted")) "Unmute notifications" else "Mute notifications", icon = if (c.optBoolean("muted")) Icons.Outlined.VolumeOff else Icons.Outlined.NotificationsNone) {

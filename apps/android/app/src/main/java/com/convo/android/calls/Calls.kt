@@ -154,6 +154,26 @@ class CallManager(private val app: MainActivity) {
         }
     }
 
+    /** Opens a member call link: joins the group's running call with the stored key, or rings the group. */
+    fun joinLink(token: String) {
+        if (call != null && call?.phase != "ended") return
+        withPermissions(false) {
+            call = Active(null, "", false, "in", "connecting")
+            app.call("joinCallLink", obj("token" to token), quiet = true) { value ->
+                val result = value as? JSONObject
+                when {
+                    result == null -> finish("linkUnavailable")
+                    result.optBoolean("keyUnavailable") -> finish("keyUnavailable")
+                    result.optBoolean("start") -> { call = null; start(result.optString("conversationId"), false) }
+                    else -> {
+                        call = Active(result.optString("callId"), result.optString("conversationId"), result.optBoolean("video"), "in", "connecting")
+                        result.optJSONObject("join")?.let { connect(it, result.optString("key"), result.optBoolean("video"), result.optInt("generation")) } ?: finish("failed")
+                    }
+                }
+            }
+        }
+    }
+
     fun accept() {
         val active = call ?: return
         if (active.phase != "incoming") return
@@ -412,7 +432,7 @@ class CallManager(private val app: MainActivity) {
         "outgoing" -> "Calling…"
         "connecting" -> "Connecting…"
         "connected" -> formatDuration(now - (call.connectedAt ?: now))
-        else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; "removed" -> "You are no longer in this group"; "lost" -> "The call couldn’t stay connected. One of you may be on a network that can’t reach the call server."; else -> "Call ended" }
+        else -> when (call.reason) { "declined" -> "Call declined"; "busy" -> "Busy on another call"; "noAnswer" -> "No answer"; "failed" -> "Call failed. Check your connection."; "answeredElsewhere" -> "Answered on another device"; "removed" -> "You are no longer in this group"; "lost" -> "The call couldn’t stay connected. One of you may be on a network that can’t reach the call server."; "linkUnavailable" -> "This call link has expired, was revoked, or isn’t for a group you belong to."; "keyUnavailable" -> "This device didn’t receive the key for the running call. Ask someone in the call to add you."; else -> "Call ended" }
     }
     Surface(Modifier.fillMaxSize(), color = Color(0xFF0B141A), contentColor = Color(0xFFF2F5F7)) {
         Box(Modifier.fillMaxSize()) {

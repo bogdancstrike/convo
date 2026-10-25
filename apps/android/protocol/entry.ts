@@ -4,7 +4,7 @@ import { MAX_ATTACHMENT_BYTES, configureAttachmentLimit } from '../../web/src/co
 import { EnclaveApi } from '../../web/src/api/enclaveApi';
 import { HttpClient } from '../../web/src/api/http';
 import { ApiError } from '../../web/src/api/errors';
-import { EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError } from '../../web/src/core/client';
+import { CallKeyUnavailableError, EditNotAllowedError, EnclaveClient, LogoutRecoveryRequiredError } from '../../web/src/core/client';
 import { createClient, type LocalContext } from '../../web/src/core/bootstrap';
 import { enrollPrimary } from '../../web/src/core/enrollment';
 import { LinkRequest } from '../../web/src/core/linking';
@@ -229,6 +229,13 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'rotateCallKey': return client.rotateCallKey(String(args.conversationId), String(args.callId), Number(args.after));
     case 'endCall': return client.endCall(String(args.callId), String(args.conversationId), Boolean(args.answered));
     case 'callLog': return client.callLog();
+    case 'createCallLink': return client.createCallLink(String(args.id));
+    case 'revokeCallLink': return client.revokeCallLink(String(args.token));
+    // Member call links (AC-CALL-07): join the group's running call with the stored key, or ring it.
+    case 'joinCallLink': {
+      try { return await client.joinViaLink(String(args.token)); }
+      catch (e) { if (e instanceof CallKeyUnavailableError) return { keyUnavailable: true }; throw e; }
+    }
     case 'clearCallLog': return client.clearCallLog();
     case 'privacy': return client.lastSeenPrivacy();
     case 'setPrivacy': return client.setLastSeenPrivacy(Boolean(args.enabled));

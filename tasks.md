@@ -408,7 +408,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 |---|---|
 | Communities: ack withdraw/custom reviewers, membership-operation retries/ownership transfer flow, polls/events | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
-| Calls: open call links on Android (deep link); web call links + screen sharing done (`calls.spec.ts`) | CALL-01 |
+| Calls: verified app links (assetlinks.json) so call links open Convo without a chooser; call links + screen sharing done on web and Android | CALL-01 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
 | Admin: signed policies, aggregate health, platform/compliance roles | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |

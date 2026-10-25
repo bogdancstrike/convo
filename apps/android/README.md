@@ -72,6 +72,13 @@ turns notifications on if granted (previews stay hidden by default).
 Testing locally with the emulator: `adb reverse tcp:8091 tcp:8091`, set ntfy's default server to
 `http://localhost:8091` (allowed by the dev Compose), then go home and send a message from the web.
 
+## Calls
+
+Voice and video calls (frame-encrypted through LiveKit), speaker toggle, screen sharing both ways
+(Android uses the system capture consent and shows an ongoing "sharing your screen" notification),
+and members-only call links: **Share call link** in group info, and `https://<server>/#/call/<token>`
+links open the app and join the group's running call (or ring the group when none is running).
+
 ## Storage and data
 
 Auto-download rules (per network: mobile data, Wi-Fi, roaming × photos, audio, videos, documents)

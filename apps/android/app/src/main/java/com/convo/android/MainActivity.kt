@@ -160,7 +160,7 @@ class MainActivity : FragmentActivity() {
         bridge = ProtocolBridge(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
-                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications() }; if (phase == "welcome") io.execute { mediaCache.clear() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
+                "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications(); pendingCallLink?.let { pendingCallLink = null; calls.joinLink(it) } }; if (phase == "welcome") io.execute { mediaCache.clear() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
                 "call" -> calls.onEvent(value)
                 "alert" -> { if (BuildConfig.DEBUG) android.util.Log.d("ConvoPush", "alert (foreground=$isInForeground)"); MessageNotifications.show(this, value) }
                 "callLog" -> callLogVersion++
@@ -168,6 +168,7 @@ class MainActivity : FragmentActivity() {
                 "snapshot" -> { snapshot = value; PushRegistration.setNotificationsEnabled(this, value.optJSONObject("settings")?.optBoolean("notifications") == true); Strings.locale = value.optJSONObject("settings")?.optString("locale")?.takeIf { it == "ro" } ?: "en"; active = value.optString("active").takeIf { it.isNotBlank() && it != "null" } }
             }
         }
+        handleCallLink(intent)
         setContent { ConvoTheme(snapshot.optJSONObject("settings")?.optString("theme") ?: "system") {
             Box {
                 AndroidView(factory = { bridge.webView }, modifier = Modifier.size(1.dp))
@@ -349,7 +350,30 @@ class MainActivity : FragmentActivity() {
         }
     }
     /** Notification tap: open that chat (lock rules apply in openChat). */
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) } }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION)?.let { if (phase == "ready") openChat(it) }; handleCallLink(intent) }
+
+    /** A call link waiting for sign-in/startup to finish. */
+    private var pendingCallLink: String? = null
+
+    /**
+     * `https://<this server>/#/call/<token>` opens the group's call (members only; the server
+     * decides). Links for other servers are ignored rather than sent anywhere.
+     */
+    private fun handleCallLink(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.host != Uri.parse(server).host) return
+        val token = Regex("^/call/([A-Za-z0-9_-]{43})$").find(data.fragment ?: "")?.groupValues?.get(1) ?: return
+        if (phase == "ready") calls.joinLink(token) else pendingCallLink = token
+    }
+
+    /** Share sheet with a new member call link for a group (any member may create one). */
+    fun shareCallLink(conversationId: String) {
+        call("createCallLink", obj("id" to conversationId)) { value ->
+            val token = (value as? JSONObject)?.optString("token")?.takeIf { it.isNotBlank() } ?: return@call
+            val url = "$server/#/call/$token"
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url), tr("Share call link")))
+        }
+    }
     private var notificationCallback: ((Boolean) -> Unit)? = null
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> notificationCallback?.invoke(granted); notificationCallback = null }
     fun requestNotificationPermission(callback: (Boolean) -> Unit) {
