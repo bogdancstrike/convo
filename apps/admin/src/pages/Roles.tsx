@@ -16,10 +16,12 @@ import type { PageProps } from '../Shell';
 
 const ROLE_HELP: Record<string, string> = {
   'convo-admin': 'Everything, including granting roles. Keep this to very few people.',
-  'convo-security': 'Incidents: accounts, devices, disabling, credentials, recovery kits, audit, health.',
-  'convo-org-admin': 'Membership: create sign-in accounts, disable/enable, credentials, statistics.',
+  'convo-security': 'Incidents: accounts, devices, disabling, credentials, recovery kits, audit, health, policy.',
+  'convo-org-admin': 'Membership and policy: create sign-in accounts, disable/enable, credentials, statistics, organization policy.',
   'convo-helpdesk': 'Support: devices, credentials, lost recovery kits, statistics, health.',
   'convo-auditor': 'Read-only oversight: audit log (verify, export, checkpoint) and statistics.',
+  'convo-platform': 'Infrastructure only: system health and push redrive; no people, sessions or audit.',
+  'convo-compliance': 'Compliance: read and export the audit log, read the organization policy, statistics.',
 };
 const GROUP_COLOR: Record<string, string> = { People: SERIES[0], 'Sign-in': SERIES[2], Audit: SERIES[3], Operations: SERIES[4] };
 

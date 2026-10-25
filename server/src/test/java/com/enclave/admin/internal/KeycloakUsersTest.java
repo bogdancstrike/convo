@@ -21,7 +21,7 @@ import org.springframework.web.client.RestClient;
 
 class KeycloakUsersTest {
     private static final String BASE = "http://kc/auth/admin/realms/enclave";
-    private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("h", "o", "s", "a"), "", Duration.ofMinutes(15),
+    private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("h", "o", "s", "a", "platform", "compliance"), "", Duration.ofMinutes(15),
             Duration.ofMinutes(10), new AdminProperties.Activity(true, Duration.ofDays(90)),
             new AdminProperties.Idp(URI.create("http://kc/auth"), "enclave", "convo-admin-ops", "secret", Duration.ofSeconds(5)));
     private final RestClient.Builder builder = RestClient.builder();

@@ -26,7 +26,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 class AdminConsoleControllerTest {
     private final Instant now = Instant.parse("2026-10-21T12:00:00Z");
     private final Clock clock = Clock.fixed(now, ZoneOffset.UTC);
-    private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor"),
+    private final AdminProperties properties = new AdminProperties("convo-admin", new AdminProperties.Roles("convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor", "platform", "compliance"),
             "", Duration.ofMinutes(15), Duration.ofMinutes(10), new AdminProperties.Activity(true, Duration.ofDays(90)),
             new AdminProperties.Idp(java.net.URI.create("http://kc/auth"), "enclave", "convo-admin-ops", "secret", Duration.ofSeconds(5)));
     private final AuditLog audit = mock(AuditLog.class);

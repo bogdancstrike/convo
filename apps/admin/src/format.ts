@@ -33,7 +33,7 @@ export const ACTION_LABELS: Record<string, string> = {
 };
 export const CREDENTIAL_LABELS: Record<string, string> = { password: 'Password', 'webauthn-passwordless': 'Passkey', otp: 'Authenticator app', webauthn: 'Security key' };
 export const ROLE_LABELS: Record<string, string> = {
-  'convo-admin': 'Administrator (all)', 'convo-helpdesk': 'Helpdesk', 'convo-org-admin': 'Organization admin', 'convo-security': 'Security', 'convo-auditor': 'Auditor',
+  'convo-admin': 'Administrator (all)', 'convo-helpdesk': 'Helpdesk', 'convo-org-admin': 'Organization admin', 'convo-security': 'Security', 'convo-auditor': 'Auditor', 'convo-platform': 'Platform operator', 'convo-compliance': 'Compliance officer',
 };
 
 /** What each permission lets an administrator do, grouped for the roles diagram. */
@@ -51,6 +51,8 @@ export const PERMISSIONS: Record<string, { label: string; group: 'People' | 'Sig
   ALERTS_READ: { label: 'Read security alerts', group: 'Audit' },
   ALERTS_MANAGE: { label: 'Acknowledge and resolve alerts', group: 'Audit' },
   ALERT_RULES_MANAGE: { label: 'Configure security alert rules', group: 'Audit' },
+  POLICY_READ: { label: 'Read the organization policy', group: 'Operations' },
+  POLICY_MANAGE: { label: 'Publish the organization policy', group: 'Operations' },
   AUDIT_READ: { label: 'Read and verify the audit log', group: 'Audit' },
   AUDIT_EXPORT: { label: 'Export the audit log', group: 'Audit' },
   AUDIT_CHECKPOINT: { label: 'Write audit checkpoints', group: 'Audit' },

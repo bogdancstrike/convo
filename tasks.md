@@ -269,6 +269,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   never sees evidence; retry is idempotent (message ID = report ID). Web: Report in the chat menu,
   report card for the recipient. `ReportRecipientsTest`, `report.spec.ts`. Android: Report in the chat menu,
   same dialog and card (verified on the emulator).
+- Platform operator (`convo-platform`: health, push redrive; no people data) and compliance officer
+  (`convo-compliance`: audit read/export, policy read, statistics) admin roles; organization admins
+  now also publish the policy (specs §19 "organization admin (membership/policy)"). Keycloak setup
+  creates the realm roles; console labels/help. `AdminPermissionsTest`, `admin-scoped-roles.spec.ts`.
 - Parity audit (web UI vs Android bridge over the shared core, 2026-10-25): Android gained the
   security-identity-change banner (Review/Dismiss) and community "Membership updates" for managers.
   Intentional differences: screenshots (Android only; browsers cannot block them), Web Push
@@ -496,7 +500,7 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
 | Communities: membership-operation retries/ownership transfer flow | COM-01/02 |
 | FCM fallback (Web Push done); kill-point/Valkey-loss drills for push | MSG-02 |
 | First production deployment on the homelab cluster (charts ready; router UDP forwards + `turn.doncik.ro` for calls) | OPS |
-| Admin: aggregate health, platform/compliance roles | ADM-01 |
+| Admin: aggregate health dashboards beyond component probes | ADM-01 |
 | Kyber/PQ prekeys (needs a libsignal with Kyber support), PQ MLS profile | FND-02, PQ-01 |
 
 ## Web UX refresh (ADR-0003) — 2026-10-20

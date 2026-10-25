@@ -33,7 +33,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Service
 class KeycloakUsers {
     /** Realm roles an administrator may grant or remove (all other realm roles are untouched). */
-    static final Set<String> MANAGED_ROLES = Set.of("convo-admin", "convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor");
+    static final Set<String> MANAGED_ROLES = Set.of("convo-admin", "convo-helpdesk", "convo-org-admin", "convo-security", "convo-auditor", "convo-platform", "convo-compliance");
     /** Required actions an administrator may ask for at next sign-in. */
     static final Set<String> ALLOWED_ACTIONS = Set.of("UPDATE_PASSWORD", "webauthn-register-passwordless", "CONFIGURE_TOTP", "UPDATE_PROFILE", "VERIFY_EMAIL");
 

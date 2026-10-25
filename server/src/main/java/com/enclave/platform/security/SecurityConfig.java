@@ -76,7 +76,9 @@ class SecurityConfig {
             @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.helpdesk:convo-helpdesk}") String helpdeskRole,
             @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.org-admin:convo-org-admin}") String orgAdminRole,
             @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.security:convo-security}") String securityRole,
-            @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.auditor:convo-auditor}") String auditorRole) throws Exception {
+            @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.auditor:convo-auditor}") String auditorRole,
+            @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.platform:convo-platform}") String platformRole,
+            @org.springframework.beans.factory.annotation.Value("${enclave.admin.roles.compliance:convo-compliance}") String complianceRole) throws Exception {
         var converter = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
             Object access = jwt.getClaim("realm_access");
@@ -91,7 +93,7 @@ class SecurityConfig {
                 .cors(c -> {})
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Any admin role gets in; each endpoint enforces its scoped permission (admin module).
-                .authorizeHttpRequests(a -> a.anyRequest().hasAnyRole(adminRole, helpdeskRole, orgAdminRole, securityRole, auditorRole))
+                .authorizeHttpRequests(a -> a.anyRequest().hasAnyRole(adminRole, helpdeskRole, orgAdminRole, securityRole, auditorRole, platformRole, complianceRole))
                 .oauth2ResourceServer(o -> o.authenticationManagerResolver(request -> {
                     String origin = org.springframework.web.servlet.support.ServletUriComponentsBuilder.fromRequest(request)
                             .replacePath(null).replaceQuery(null).build().toUriString();

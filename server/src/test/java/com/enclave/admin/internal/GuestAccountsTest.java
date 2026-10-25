@@ -12,7 +12,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 class GuestAccountsTest {
     private final Instant now = Instant.parse("2026-10-25T12:00:00Z");
     private final Clock clock = Clock.fixed(now, ZoneOffset.UTC);
-    private final AdminProperties props = new AdminProperties("convo-admin", new AdminProperties.Roles("help", "org", "security", "auditor"), "", Duration.ofMinutes(15), Duration.ofMinutes(10),
+    private final AdminProperties props = new AdminProperties("convo-admin", new AdminProperties.Roles("help", "org", "security", "auditor", "platform", "compliance"), "", Duration.ofMinutes(15), Duration.ofMinutes(10),
             new AdminProperties.Activity(true, Duration.ofDays(90)), new AdminProperties.Idp(URI.create("http://idp/auth"), "enclave", "ops", "secret", Duration.ofSeconds(5)));
     private final KeycloakUsers idp = mock(KeycloakUsers.class);
     private final IdentityAdminApi identity = mock(IdentityAdminApi.class);

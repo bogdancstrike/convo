@@ -51,12 +51,16 @@ public record AdminProperties(
      * @param orgAdmin membership: read accounts, disable/enable accounts
      * @param security incidents: accounts, devices, revocation, disable, read audit
      * @param auditor read, verify, export and checkpoint the audit log only
+     * @param platform infrastructure operator: system health and push redrive, no people data
+     * @param compliance compliance officer: read/export the audit log and read the organization policy
      */
     public record Roles(
             @DefaultValue("convo-helpdesk") String helpdesk,
             @DefaultValue("convo-org-admin") String orgAdmin,
             @DefaultValue("convo-security") String security,
-            @DefaultValue("convo-auditor") String auditor) {}
+            @DefaultValue("convo-auditor") String auditor,
+            @DefaultValue("convo-platform") String platform,
+            @DefaultValue("convo-compliance") String compliance) {}
 
     Path checkpointPath() { return checkpointFile.isBlank() ? null : Path.of(checkpointFile); }
 }

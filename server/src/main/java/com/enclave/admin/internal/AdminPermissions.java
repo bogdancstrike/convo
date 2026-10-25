@@ -51,11 +51,13 @@ class AdminPermissions {
                 properties.role(), EnumSet.allOf(Permission.class),
                 r.helpdesk(), EnumSet.of(Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.HEALTH_READ,
                         Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE),
-                r.orgAdmin(), EnumSet.of(Permission.POLICY_READ, Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ, Permission.STATS_READ,
+                r.orgAdmin(), EnumSet.of(Permission.POLICY_READ, Permission.POLICY_MANAGE, Permission.ACCOUNTS_READ, Permission.ACCOUNT_STATUS, Permission.HEALTH_READ, Permission.STATS_READ,
                         Permission.USERS_CREATE, Permission.USERS_CREDENTIALS, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE),
                 r.security(), EnumSet.of(Permission.POLICY_READ, Permission.POLICY_MANAGE, Permission.ACCOUNTS_READ, Permission.DEVICES_READ, Permission.DEVICE_REVOKE, Permission.ACCOUNT_STATUS, Permission.AUDIT_READ,
                         Permission.HEALTH_READ, Permission.PUSH_REDRIVE, Permission.STATS_READ, Permission.USERS_CREDENTIALS, Permission.RECOVERY_RESET, Permission.SESSIONS_READ, Permission.SESSIONS_REVOKE, Permission.ALERTS_READ, Permission.ALERTS_MANAGE, Permission.ALERT_RULES_MANAGE),
-                r.auditor(), EnumSet.of(Permission.POLICY_READ, Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT, Permission.STATS_READ, Permission.ALERTS_READ));
+                r.auditor(), EnumSet.of(Permission.POLICY_READ, Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.AUDIT_CHECKPOINT, Permission.STATS_READ, Permission.ALERTS_READ),
+                r.platform(), EnumSet.of(Permission.HEALTH_READ, Permission.PUSH_REDRIVE),
+                r.compliance(), EnumSet.of(Permission.AUDIT_READ, Permission.AUDIT_EXPORT, Permission.POLICY_READ, Permission.STATS_READ));
     }
 
     /** Admin roles held by this token (realm roles that are known admin roles). */

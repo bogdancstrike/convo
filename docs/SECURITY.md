@@ -374,7 +374,8 @@ messenger origin serves no admin code (`/admin` → 404). Its nginx exposes only
 
 * Sign-in with the `convo-admin` client (PKCE); tokens only in the tab's sessionStorage.
 * Scoped roles enforced by the server on **every** call: `convo-admin` (all), `convo-security`,
-  `convo-org-admin`, `convo-helpdesk`, `convo-auditor`; the permission matrix is in
+  `convo-org-admin`, `convo-helpdesk`, `convo-auditor`, `convo-platform` (infrastructure only) and
+  `convo-compliance` (audit read/export, policy read); the permission matrix is in
   `AdminPermissions` and drawn in the console (Roles & permissions).
 * Every change requires a **reason** and is appended to the **hash-chained audit log** together with
   the action; refused attempts are audited too; admin sessions are recorded. Credential, sign-in and
