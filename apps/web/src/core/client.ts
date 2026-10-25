@@ -122,6 +122,8 @@ const TYPING_TTL_SECONDS = 10;
 const OUTBOX_RETRY_MS = 15_000;
 /** How often running devices re-check the organization policy. */
 const POLICY_REFRESH_MS = 15 * 60_000;
+/** Devices registered this recently take the policy's privacy defaults on their first policy. */
+const NEW_DEVICE_MS = 24 * 3600_000;
 
 /** Optional deadlines for an acknowledgement request (epoch ms). */
 export interface AckOptions {
@@ -200,8 +202,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /**
    * Fetches and verifies the current policy. A rejected document (bad signature, changed key,
-   * rollback) is ignored and reported; the last verified policy keeps applying. The first policy a
-   * device receives also sets its privacy defaults once.
+   * rollback) is ignored and reported; the last verified policy keeps applying. A device registered
+   * within the last day also takes the policy's privacy defaults from its first policy.
    */
   async refreshPolicy(): Promise<void> {
     const signed = await this.api.policy().catch(() => null);
@@ -214,7 +216,10 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       const first = !this.verifiedPolicy;
       this.verifiedPolicy = verified;
       await this.repos.store.put(RecordNs.policy, 'current', verified);
-      if (first) await this.updateSettings({ readReceipts: verified.policy.privacy.readReceiptsDefault, typingIndicators: verified.policy.privacy.typingDefault });
+      // Privacy defaults are for new devices: never override what someone already chose elsewhere.
+      if (first && Date.now() - this.device.registeredAt < NEW_DEVICE_MS) {
+        await this.updateSettings({ readReceipts: verified.policy.privacy.readReceiptsDefault, typingIndicators: verified.policy.privacy.typingDefault });
+      }
     } catch (error) {
       if (!(error instanceof PolicyRejectedError)) throw error;
       this.policyRejection = error.reason;

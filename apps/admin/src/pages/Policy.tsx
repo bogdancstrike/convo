@@ -63,8 +63,8 @@ export function PolicyPage({ can }: PageProps) {
           {row(['security', 'screenshotBlock'], 'Block screenshots on Android', 'Screenshots and screen recordings of Convo show a black screen.')}
         </Card>
         <Card title="Privacy defaults for new devices" size="small" style={{ marginTop: 16 }}>
-          {row(['privacy', 'readReceiptsDefault'], 'Read receipts on', 'Applied once when a device first receives a policy; people can change it.')}
-          {row(['privacy', 'typingDefault'], 'Typing indicators on', 'Applied once when a device first receives a policy; people can change it.')}
+          {row(['privacy', 'readReceiptsDefault'], 'Read receipts on', 'Applied to devices enrolled in the last day when they first receive a policy; people can change it.')}
+          {row(['privacy', 'typingDefault'], 'Typing indicators on', 'Applied to devices enrolled in the last day when they first receive a policy; people can change it.')}
         </Card>
         <Card title="Features" size="small" style={{ marginTop: 16 }}>
           {row(['features', 'chatExport'], 'Chat export', 'Exporting a readable (unencrypted) copy of a chat.')}
