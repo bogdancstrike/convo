@@ -48,7 +48,7 @@ import { isSnoozed, localZone } from './snooze';
 import { EXPIRY_NS, expiryOp, isTimer, startExpiry, type ExpiryEntry } from './disappearing';
 import { newMediaKey, nextStatus, RING_TIMEOUT_MS, supersedes, type CallEvent, type CallInvite, type CallJoin, type CallKey, type CallLogEntry } from './calls';
 import { Outbox, type OutboxItem } from './outbox';
-import { applyBallot, applyClose, initialState, newPoll } from './polls';
+import { applyBallot, applyClose, initialState, newPoll, newQuiz } from './polls';
 import { applyRsvp, applyUpdate, initialEvent, newEvent, reminderAt, type EventState } from './events';
 import { sanitizeFolders, type ChatFolder, type FolderState } from './folders';
 import { applyTopic, canPostInTopic, MAX_TOPIC_NAME, type Topic } from './topics';
@@ -880,6 +880,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
   /** Sends a poll; the question doubles as the message text for previews and search. Not in channels' member replies. */
   async sendPoll(conversationId: string, question: string, options: string[], multiple: boolean): Promise<void> {
     const poll = newPoll(question, options, multiple, newMessageId);
+    await this.sendMessage(conversationId, { body: poll.question, poll });
+  }
+
+  /** Sends a quiz: single choice with a correct answer and an optional explanation. */
+  async sendQuiz(conversationId: string, question: string, options: string[], correctIndex: number, explanation?: string): Promise<void> {
+    const poll = newQuiz(question, options, correctIndex, explanation, newMessageId);
     await this.sendMessage(conversationId, { body: poll.question, poll });
   }
 
@@ -2571,7 +2577,7 @@ const VIEW_ONCE_TTL_MS = 14 * 24 * 3600_000;
 function viewOnceKind(pointer: AttachmentPointer): 'photo' | 'video' { return pointer.contentType.startsWith('video/') ? 'video' : 'photo'; }
 
 function previewOf(data: DataMessage): string {
-  if (data.poll) return `📊 ${data.poll.question}`;
+  if (data.poll) return `${data.poll.correctOptionId ? '❓' : '📊'} ${data.poll.question}`;
   if (data.viewOnce) return data.attachments?.[0]?.contentType.startsWith('video/') ? '🎥 Video (view once)' : '📷 Photo (view once)';
   if (data.event) return `📅 ${data.event.title}`;
   if (data.body) return data.body;

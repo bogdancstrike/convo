@@ -82,7 +82,8 @@ links open the app and join the group's running call (or ring the group when non
 ## Polls and events
 
 The attach sheet (Document, Gallery, Audio, Poll, Event) creates WhatsApp-style polls (1–10
-options, single or multiple choice, visible voters, close by author/admin) and events (date and
+options, single or multiple choice, visible voters, close by author/admin; *Quiz mode* marks a
+correct answer, gives everyone one try and reveals the answer and explanation after answering) and events (date and
 time pickers, location, description, Going/Maybe/Can't go, Add to calendar, edit/cancel by the
 creator or an admin). Events you answer Going or Maybe to remind you on this phone before they
 start (Settings → Notifications → Event reminders; while Convo runs). Group owners/admins can

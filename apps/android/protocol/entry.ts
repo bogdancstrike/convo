@@ -202,6 +202,7 @@ async function command(method: string, args: Record<string, any>): Promise<unkno
     case 'react': return client.react(await target(args), String(args.emoji));
     // Polls (FR-EXT-01): the message snapshot carries poll state; voters' names are resolved here.
     case 'sendPoll': return client.sendPoll(String(args.conversationId), String(args.question), Array.isArray(args.options) ? args.options.map(String) : [], Boolean(args.multiple));
+    case 'sendQuiz': return client.sendQuiz(String(args.conversationId), String(args.question), Array.isArray(args.options) ? args.options.map(String) : [], Number(args.correctIndex), args.explanation ? String(args.explanation) : undefined);
     case 'votePoll': return client.votePoll(await target(args), Array.isArray(args.optionIds) ? args.optionIds.map(String) : []);
     case 'closePoll': return client.closePoll(await target(args));
     case 'canClosePoll': return client.canClosePoll(await target(args), client.accountId);

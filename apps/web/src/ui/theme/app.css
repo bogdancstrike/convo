@@ -2542,3 +2542,11 @@ kbd { font: inherit; font-size: 0.8rem; padding: 1px 6px; border: 1px solid var(
 
 /* Slow mode (specs §30.4). */
 .slow-mode-note { margin: 0; padding: 4px var(--space-3); text-align: center; font-size: 0.8125rem; background: var(--c-panel); }
+
+/* Quizzes (polls with a correct answer). */
+.poll-option-edit { display: flex; align-items: center; gap: 8px; }
+.poll-option-edit input:not([type='radio']) { flex: 1; }
+.poll-option.correct .poll-check { background: var(--c-success, #1fa855); border-color: var(--c-success, #1fa855); color: #fff; }
+.poll-option.wrong .poll-check { background: var(--c-danger, #d93025); border-color: var(--c-danger, #d93025); color: #fff; }
+.quiz-result { display: grid; gap: 4px; padding: 6px 2px; font-size: 0.875rem; }
+.quiz-result p { margin: 0; }

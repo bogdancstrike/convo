@@ -153,7 +153,14 @@ export const POLL_MAX_QUESTION = 300;
 export const POLL_MAX_OPTION_TEXT = 100;
 
 /** Immutable poll definition: stable option IDs; single or multiple choice chosen at creation. */
-export interface PollDefinition { question: string; options: { id: string; text: string }[]; multiple: boolean }
+export interface PollDefinition {
+  question: string; options: { id: string; text: string }[]; multiple: boolean;
+  /** Quiz: the correct option (single choice; the first answer per account is final). */
+  correctOptionId?: string;
+  /** Quiz: shown after answering. */
+  explanation?: string;
+}
+export const QUIZ_MAX_EXPLANATION = 200;
 /** A voter's whole current ballot (an empty list withdraws the vote). */
 export interface PollVote { targetMessageId: string; targetAuthorId: string; optionIds: string[] }
 
@@ -525,6 +532,8 @@ export function isPollDefinition(value: unknown): value is PollDefinition {
     if (typeof option.text !== 'string' || !option.text.trim() || option.text.length > POLL_MAX_OPTION_TEXT) return false;
     ids.add(option.id);
   }
+  if (value.correctOptionId !== undefined && (typeof value.correctOptionId !== 'string' || !ids.has(value.correctOptionId) || value.multiple)) return false;
+  if (value.explanation !== undefined && (value.correctOptionId === undefined || typeof value.explanation !== 'string' || value.explanation.length > QUIZ_MAX_EXPLANATION)) return false;
   return true;
 }
 

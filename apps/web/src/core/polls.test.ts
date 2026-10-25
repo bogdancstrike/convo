@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeContent, encodeContent, CONTENT_VERSION } from '../crypto/content';
-import { applyBallot, applyClose, initialState, newPoll, tally } from './polls';
+import { applyBallot, applyClose, initialState, newPoll, newQuiz, quizScore, tally } from './polls';
 
 let n = 0;
 const id = () => `o${++n}`;
@@ -49,5 +49,31 @@ describe('polls (AC-COL-01)', () => {
     expect(decodeContent(ok)).toMatchObject({ data: { poll } });
     const dup = encodeContent({ v: CONTENT_VERSION, kind: 'data', data: { messageId: 'm', timestamp: 1, poll: { ...poll, options: [{ id: 'a', text: 'A' }, { id: 'a', text: 'B' }] } } });
     expect(() => decodeContent(dup)).toThrow();
+  });
+});
+
+describe('quizzes', () => {
+  let n = 0; const id = () => `o${++n}`;
+  const quiz = initialState(newQuiz('2 + 2?', ['3', '4', '5'], 1, 'Basic arithmetic', id));
+  it('marks the correct option and is single choice', () => {
+    expect(quiz.multiple).toBe(false);
+    expect(quiz.options.find((o) => o.id === quiz.correctOptionId)?.text).toBe('4');
+    expect(() => newQuiz('q', ['a'], 3, undefined, id)).toThrow();
+  });
+  it('first answer is final regardless of delivery order; withdrawing is ignored', () => {
+    const [a, b] = quiz.options;
+    const inOrder = applyBallot(applyBallot(quiz, 'amy', { optionIds: [a!.id] }, 1, 'x'), 'amy', { optionIds: [b!.id] }, 2, 'y');
+    const reversed = applyBallot(applyBallot(quiz, 'amy', { optionIds: [b!.id] }, 2, 'y'), 'amy', { optionIds: [a!.id] }, 1, 'x');
+    expect(inOrder.votes.amy?.optionIds).toEqual([a!.id]);
+    expect(reversed.votes.amy?.optionIds).toEqual([a!.id]);
+    expect(applyBallot(inOrder, 'amy', { optionIds: [] }, 3, 'z')).toBe(inOrder);
+  });
+  it('scores correct answers', () => {
+    const s = applyBallot(applyBallot(quiz, 'amy', { optionIds: [quiz.correctOptionId!] }, 1, 'a'), 'bob', { optionIds: [quiz.options[0]!.id] }, 1, 'b');
+    expect(quizScore(s)).toEqual({ correct: 1, answered: 2 });
+  });
+  it('rejects malformed quizzes on the wire', () => {
+    const bad = encodeContent({ v: CONTENT_VERSION, kind: 'data', data: { messageId: 'm', timestamp: 1, body: 'q', poll: { ...quiz, votes: undefined, correctOptionId: 'missing' } } });
+    expect(() => decodeContent(bad)).toThrow();
   });
 });

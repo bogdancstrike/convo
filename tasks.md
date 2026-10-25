@@ -224,6 +224,10 @@ Legend: ✅ done and verified · 🟡 partial (see notes) · ⬜ not started
   choice), ballots/closes as E2EE data messages converging deterministically (`core/polls.ts`),
   author/admin close enforced on receive; web attach menu + poll card, Android attach sheet + poll
   card. `polls.test.ts`, `polls.spec.ts` (Chromium/Firefox), emulator check both directions.
+- Quizzes (FR-EXT-01): polls with a correct option and optional explanation; single choice, the
+  first answer per account is final (order-independent), results/answer hidden until answered
+  (UI convention: the answer is inside the encrypted poll), author sees results, score shown.
+  Web and Android composer "Quiz mode" + card. `polls.test.ts`, `polls.spec.ts`, emulator check.
 - Events with RSVP (FR-EXT-01): encrypted events (title, UTC start/end, creator zone, location,
   description) with revisions for edits/cancellation by creator or admin, Going/Maybe/Can't go,
   responses closed after cancellation or the end, .ics export; web attach menu + card, Android

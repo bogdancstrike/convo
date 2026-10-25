@@ -50,6 +50,12 @@ private const val MAX_OPTION = 100
     val multiple = poll.optBoolean("multiple")
     val me = app.snapshot.optString("accountId")
     val mine = votes.optJSONObject(me)?.optJSONArray("optionIds")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+    // Quizzes: one final answer; results and the correct option appear once answered, closed, or to the author.
+    val correctId = poll.optString("correctOptionId").ifBlank { null }
+    val quiz = correctId != null
+    val author = message.optString("authorId") == me
+    val revealed = !quiz || author || mine.isNotEmpty() || closed
+    val locked = closed || (quiz && (author || mine.isNotEmpty()))
     val counts = options.associate { o -> o.optString("id") to votes.keys().asSequence().count { voter -> votes.optJSONObject(voter)?.optJSONArray("optionIds")?.let { a -> (0 until a.length()).any { a.optString(it) == o.optString("id") } } == true } }
     val voters = votes.keys().asSequence().count { (votes.optJSONObject(it)?.optJSONArray("optionIds")?.length() ?: 0) > 0 }
     val top = maxOf(1, counts.values.maxOrNull() ?: 0)
@@ -58,7 +64,7 @@ private const val MAX_OPTION = 100
     LaunchedEffect(message.optString("id")) { app.call("canClosePoll", message.targetArgs(conversation), quiet = true) { canClose = it == true } }
     LaunchedEffect(names != null, voters) { if (names != null) app.call("pollVoters", message.targetArgs(conversation), quiet = true) { names = it as? JSONObject ?: JSONObject() } }
     fun vote(optionId: String) {
-        if (closed) return
+        if (locked) return
         val next = if (multiple) (if (optionId in mine) mine - optionId else mine + optionId) else (if (optionId in mine) emptyList() else listOf(optionId))
         app.call("votePoll", message.targetArgs(conversation).put("optionIds", JSONArray(next)), quiet = true)
     }
@@ -67,25 +73,32 @@ private const val MAX_OPTION = 100
             Icon(Icons.Outlined.Poll, null, Modifier.size(18.dp), tint = colors.textSecondary)
             RawText(poll.optString("question"), Modifier.padding(start = 6.dp), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (closed) colors.textSecondary else colors.textPrimary)
         }
-        Text(if (closed) "Poll closed" else if (multiple) "Select one or more" else "Select one", Modifier.padding(top = 2.dp, bottom = 6.dp), fontSize = 13.sp, color = colors.textSecondary)
+        Text(if (closed) "Poll closed" else if (quiz) "Quiz · one try" else if (multiple) "Select one or more" else "Select one", Modifier.padding(top = 2.dp, bottom = 6.dp), fontSize = 13.sp, color = colors.textSecondary)
         options.forEach { option ->
             val id = option.optString("id"); val count = counts[id] ?: 0; val chosen = id in mine
-            Column(Modifier.fillMaxWidth().clickable(enabled = !closed) { vote(id) }.padding(vertical = 6.dp)) {
+            val right = quiz && revealed && id == correctId; val wrong = quiz && revealed && chosen && id != correctId
+            Column(Modifier.fillMaxWidth().clickable(enabled = !locked) { vote(id) }.padding(vertical = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(20.dp).clip(if (multiple) RoundedCornerShape(4.dp) else CircleShape)
-                        .background(if (chosen) colors.accent else Color.Transparent)
+                        .background(if (right) Color(0xFF1FA855) else if (wrong) Color(0xFFD93025) else if (chosen) colors.accent else Color.Transparent)
                         .then(if (chosen) Modifier else Modifier.background(Color.Transparent)), contentAlignment = Alignment.Center) {
-                        if (chosen) Icon(Icons.Outlined.Check, null, Modifier.size(14.dp), tint = Color.White)
+                        if (right || wrong || chosen) Icon(if (wrong) Icons.Outlined.Close else Icons.Outlined.Check, null, Modifier.size(14.dp), tint = Color.White)
                         else Box(Modifier.fillMaxSize().padding(1.dp).clip(if (multiple) RoundedCornerShape(4.dp) else CircleShape).background(colors.textSecondary).padding(2.dp).clip(if (multiple) RoundedCornerShape(3.dp) else CircleShape).background(colors.panel))
                     }
                     RawText(option.optString("text"), Modifier.weight(1f).padding(start = 10.dp), fontSize = 15.sp)
-                    RawText("$count", fontSize = 13.sp, color = colors.textSecondary)
+                    if (revealed) RawText("$count", fontSize = 13.sp, color = colors.textSecondary)
                 }
-                Box(Modifier.padding(start = 30.dp, top = 6.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(colors.border)) {
+                if (revealed) Box(Modifier.padding(start = 30.dp, top = 6.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(colors.border)) {
                     Box(Modifier.fillMaxWidth(count.toFloat() / top).fillMaxHeight().background(if (chosen) colors.accent else colors.accent.copy(alpha = .45f)))
                 }
                 names?.optJSONArray(id)?.takeIf { it.length() > 0 }?.let { a -> RawText((0 until a.length()).joinToString(", ") { tr(a.optString(it)) }, Modifier.padding(start = 30.dp, top = 4.dp), fontSize = 12.sp, color = colors.textSecondary) }
             }
+        }
+        if (quiz && revealed) Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (mine.isNotEmpty()) Text(if (mine.first() == correctId) "Correct!" else "Not quite", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            poll.optString("explanation").takeIf { it.isNotBlank() }?.let { RawText(it, fontSize = 14.sp) }
+            val answered = votes.keys().asSequence().mapNotNull { votes.optJSONObject(it)?.optJSONArray("optionIds")?.optString(0)?.ifBlank { null } }.toList()
+            RawText(tr("{correct} of {answered} answered correctly").replace("{correct}", "${answered.count { it == correctId }}").replace("{answered}", "${answered.size}"), fontSize = 12.sp, color = colors.textSecondary)
         }
         HorizontalDivider(Modifier.padding(top = 4.dp), color = colors.border)
         Row(Modifier.fillMaxWidth()) {
@@ -102,6 +115,7 @@ private const val MAX_OPTION = 100
     var question by remember { mutableStateOf("") }
     val options = remember { mutableStateListOf("", "") }
     var multiple by remember { mutableStateOf(true) }
+    var quiz by remember { mutableStateOf(false) }; var correct by remember { mutableStateOf<Int?>(null) }; var explanation by remember { mutableStateOf("") }
     val filled = options.map { it.trim() }.filter { it.isNotEmpty() }
     fun setOption(index: Int, value: String) {
         options[index] = value.take(MAX_OPTION)
@@ -112,13 +126,25 @@ private const val MAX_OPTION = 100
         Column(Modifier.heightIn(max = 460.dp).verticalScrollable(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(question, { question = it.take(MAX_QUESTION) }, label = { Text("Question") }, modifier = Modifier.fillMaxWidth())
             Text("Options", style = MaterialTheme.typography.labelLarge)
-            options.forEachIndexed { i, o -> OutlinedTextField(o, { setOption(i, it) }, placeholder = { Text("Add option") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Switch(multiple, { multiple = it }); Text("Allow multiple answers", Modifier.padding(start = 10.dp)) }
+            options.forEachIndexed { i, o -> Row(verticalAlignment = Alignment.CenterVertically) {
+                if (quiz) RadioButton(correct == i, { correct = i }, enabled = o.isNotBlank())
+                OutlinedTextField(o, { setOption(i, it) }, placeholder = { Text("Add option") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            } }
+            Row(verticalAlignment = Alignment.CenterVertically) { Switch(quiz, { quiz = it }); Text("Quiz mode", Modifier.padding(start = 10.dp)) }
+            if (quiz) {
+                Text("Pick the correct answer. Everyone gets one try; results appear after answering.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(explanation, { explanation = it.take(200) }, label = { Text("Explanation (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            } else Row(verticalAlignment = Alignment.CenterVertically) { Switch(multiple, { multiple = it }); Text("Allow multiple answers", Modifier.padding(start = 10.dp)) }
             Text("Everyone in this chat can see who voted for what.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }, confirmButton = {
-        Button({ app.call("sendPoll", obj("conversationId" to conversation, "question" to question, "options" to JSONArray(filled), "multiple" to multiple)) { if (it != null) close() } },
-            enabled = question.isNotBlank() && filled.isNotEmpty()) { Text("Send") }
+        Button({
+            if (quiz) {
+                // The correct index counts only non-empty options, as sent.
+                val index = options.take(correct ?: 0).count { it.isNotBlank() }
+                app.call("sendQuiz", obj("conversationId" to conversation, "question" to question, "options" to JSONArray(filled), "correctIndex" to index, "explanation" to explanation)) { if (it != null) close() }
+            } else app.call("sendPoll", obj("conversationId" to conversation, "question" to question, "options" to JSONArray(filled), "multiple" to multiple)) { if (it != null) close() }
+        }, enabled = question.isNotBlank() && filled.isNotEmpty() && (!quiz || correct?.let { options.getOrNull(it)?.isNotBlank() } == true)) { Text("Send") }
     }, dismissButton = { TextButton(close) { Text("Cancel") } })
 }
 
