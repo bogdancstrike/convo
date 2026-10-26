@@ -508,6 +508,8 @@ tests of all kinds and no known bugs.
 | TEST-07 | Locust load test, 1,000 users | open |
 | TEST-08 | Two backend replicas; chaos (replica, Valkey, PostgreSQL restarts) | open |
 | TEST-09 | More Playwright end-to-end and smoke tests | open |
+| TEST-10 | Coverage 90%+ for backend, web and Android (merged unit + API/e2e) | open |
+| REN-01 | After testing: rename "enclave" to "convo" everywhere (Java packages, compose project/services, charts, images, docs) | open |
 
 ## 7. Definition of done and scope discipline
 

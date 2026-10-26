@@ -73,10 +73,15 @@ class TicketHandshakeInterceptor implements HandshakeInterceptor {
             return allowed.contains(origin);
         }
         String host = request.getHeaders().getFirst("Host");
+        // Same origin means same scheme too: the one the client used (the proxy's X-Forwarded-Proto,
+        // otherwise this request's own), so an http:// origin cannot pass for an https:// site.
+        String forwarded = request.getHeaders().getFirst("X-Forwarded-Proto");
+        String scheme = forwarded != null && !forwarded.isBlank() ? forwarded.split(",")[0].strip() : request.getURI().getScheme();
+        String expectedScheme = "wss".equalsIgnoreCase(scheme) ? "https" : "ws".equalsIgnoreCase(scheme) ? "http" : scheme;
         try {
             URI uri = URI.create(origin);
             String authority = uri.getPort() == -1 ? uri.getHost() : uri.getHost() + ":" + uri.getPort();
-            return host != null && host.equalsIgnoreCase(authority);
+            return host != null && host.equalsIgnoreCase(authority) && uri.getScheme() != null && uri.getScheme().equalsIgnoreCase(expectedScheme);
         } catch (IllegalArgumentException e) {
             return false;
         }

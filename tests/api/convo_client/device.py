@@ -84,6 +84,33 @@ class Device:
         device.bearer("POST", "/v1/devices/primary", token, device.registration_body(reservation["reservationId"], transcript, platform, prekeys))
         return device
 
+    @classmethod
+    def link(cls, token: str, existing: "Device", base_url: str = BASE_URL, platform: str = "android", prekeys: int = 20,
+             deliver: bool = True) -> "Device":
+        """Links a second device to `existing`'s account: provisioning session, code from the
+        existing device, registration with the account identity key (the E2EE transfer is simulated)."""
+        device = cls(base_url=base_url, identity_key=existing.identity_key)
+        session = device.bearer("POST", "/v1/provisioning/sessions", token, {"ephemeralPublicKey": b64u(_djb_public()[1:]), "clientLabel": "API test"})
+        device.account_id, device.device_id = session["accountId"], session["deviceId"]
+        code = existing.signed("POST", "/v1/devices/provisioning-code", {"provisioningId": session["provisioningId"]})["code"]
+        if deliver:
+            existing.signed("POST", f"/v1/provisioning/sessions/{session['provisioningId']}/message",
+                            {"ephemeralPublicKey": b64u(_djb_public()[1:]), "message": b64u(os.urandom(96))})
+        transcript = "\n".join(["ENCLAVE-ENROLL-V1", session["deploymentId"], device.address, session["reservationId"],
+                                session["challenge"], b64u(device.identity_key), str(device.registration_id),
+                                b64u(hashlib.sha256(device.spki()).digest())]).encode()
+        body = device.registration_body(session["reservationId"], transcript, platform, prekeys)
+        body.pop("reservationId")
+        device.bearer("POST", "/v1/devices/link", token, {**body, "provisioningId": session["provisioningId"], "provisioningCode": code})
+        return device
+
+    def drain(self, limit: int = 100) -> dict:
+        """HTTP mailbox page (envelopes stay queued until acknowledged)."""
+        return self.signed("GET", f"/v1/messages?limit={limit}")
+
+    def ack(self, guid: str) -> None:
+        self.signed("DELETE", f"/v1/messages/{guid}")
+
     def registration_body(self, reservation_id: str, transcript: bytes, platform: str, prekeys: int) -> dict:
         return {
             "reservationId": reservation_id, "identityKey": b64u(self.identity_key), "registrationId": self.registration_id,
