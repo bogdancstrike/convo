@@ -52,7 +52,9 @@ every new endpoint is automatically covered by:
 `ProtocolBridge`, the core in a headless WebView). Tests install `FakeCore` before the activity
 starts: it answers commands from per-test handlers, records every command, and emits the core's
 events (`phase`, `snapshot`, …), so whole screens run under Robolectric without a WebView or server.
-`Snapshots` builds snapshot JSON shaped like the core's. Assert on **what the UI asks the core to
+`Snapshots` builds snapshot JSON shaped like the core's. Known limit: under Robolectric a text field inside
+a dialog window never reaches idle (Compose test rule times out), so dialogs with inputs are
+asserted up to opening them and covered end to end on the emulator (`tests/e2e/android`). Assert on **what the UI asks the core to
 do** (the recorded commands and their arguments), which is the contract the e2e suites then check
 end to end. `src/test/resources/robolectric.properties` fixes the SDK and a phone-sized screen.
 

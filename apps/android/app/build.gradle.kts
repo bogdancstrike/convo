@@ -24,6 +24,8 @@ android {
         unitTests.isReturnDefaultValues = true
         // Robolectric loads app classes through its own class loader; JaCoCo must still count them.
         unitTests.all { test ->
+            // Robolectric + Compose screens: whole activities per test need more than the default heap.
+            test.maxHeapSize = "3g"
             test.extensions.configure(JacocoTaskExtension::class) {
                 isIncludeNoLocationClasses = true
                 excludes = listOf("jdk.internal.*")
