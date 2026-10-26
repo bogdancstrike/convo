@@ -299,6 +299,21 @@ services:
     depends_on:
       web: { condition: service_healthy }
 
+  # API contract/security tests and Locust load tests (tests/api) against the running stack.
+  api-tests:
+    profiles: ["e2e"]
+    build: ./tests/api
+    image: enclave/api-tests:dev
+    network_mode: host
+    environment:
+      BASE_URL: ${E2E_BASE_URL:-https://localhost:8443}
+      ADMIN_URL: ${E2E_ADMIN_URL:-https://localhost:9443}
+      PYTHONWARNINGS: ignore:Unverified HTTPS request
+    volumes:
+      - ./tests/api:/api
+    depends_on:
+      web: { condition: service_healthy }
+
 volumes:
   kt-witness-data:
   ntfy-cache:

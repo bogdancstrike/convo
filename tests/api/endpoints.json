@@ -1,0 +1,848 @@
+[
+ {
+  "method": "GET",
+  "path": "/v1/account/credentials",
+  "chain": "device",
+  "controller": "CredentialStatusController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/accounts/me",
+  "chain": "device",
+  "controller": "AccountController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/accounts/{accountId}",
+  "chain": "device",
+  "controller": "AccountController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/accounts/{accountId}/devices",
+  "chain": "device",
+  "controller": "AccountController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/accounts/{accountId}/last-seen",
+  "chain": "device",
+  "controller": "LastSeenController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/accounts/{accountId}/mls-bindings",
+  "chain": "device",
+  "controller": "MlsBindingController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/accounts",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/accounts/{accountId}",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/accounts/{accountId}/activity",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/accounts/{accountId}/devices",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/accounts/{accountId}/devices/{deviceId}/revoke",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/accounts/{accountId}/disable",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/accounts/{accountId}/enable",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/accounts/{accountId}/integration",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/admin/accounts/{accountId}/integration",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/accounts/{accountId}/recovery/revoke",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/accounts/{accountId}/sign-in",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/alerts/resolve-all",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/alerts/rules",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/alerts/rules/{id}",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/alerts/summary",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/alerts/{id}",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/alerts/{id}/status",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/audit",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/audit/checkpoint",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/audit/export",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/audit/sources",
+  "chain": "admin",
+  "controller": "AuditSourcesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/audit/verify",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/guests/{id}",
+  "chain": "admin",
+  "controller": "GuestAccounts"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/guests/{id}/extend",
+  "chain": "admin",
+  "controller": "GuestAccounts"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/health",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/health/service",
+  "chain": "admin",
+  "controller": "SystemHealthController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/health/system",
+  "chain": "admin",
+  "controller": "SystemHealthController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/idp/users",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/idp/users/{id}",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users/{id}/enabled",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users/{id}/required-actions",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users/{id}/reset-password",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users/{id}/roles",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users/{id}/sign-out",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/idp/users/{user}/sessions/{session}/end",
+  "chain": "admin",
+  "controller": "AdminSessionsController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/me",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/policy",
+  "chain": "admin",
+  "controller": "OrgPolicies"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/admin/policy",
+  "chain": "admin",
+  "controller": "OrgPolicies"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/admin/push/redrive",
+  "chain": "admin",
+  "controller": "AdminController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/roles",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/stats/levels",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/stats/overview",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/stats/throughput",
+  "chain": "admin",
+  "controller": "ThroughputController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/stats/users",
+  "chain": "admin",
+  "controller": "AdminConsoleController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/activity",
+  "chain": "admin",
+  "controller": "AdminTablesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/alerts",
+  "chain": "admin",
+  "controller": "SecurityAlertsController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/audit",
+  "chain": "admin",
+  "controller": "AdminTablesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/health",
+  "chain": "admin",
+  "controller": "AdminTablesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/people",
+  "chain": "admin",
+  "controller": "AdminTablesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/permissions",
+  "chain": "admin",
+  "controller": "AdminTablesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/role-holders",
+  "chain": "admin",
+  "controller": "AdminTablesController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/admin/tables/sessions",
+  "chain": "admin",
+  "controller": "AdminSessionsController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/attachments/multipart",
+  "chain": "device",
+  "controller": "AttachmentController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/attachments/upload-form",
+  "chain": "device",
+  "controller": "AttachmentController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/attachments/{attachmentId}",
+  "chain": "device",
+  "controller": "AttachmentController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/attachments/{attachmentId}/multipart/complete",
+  "chain": "device",
+  "controller": "AttachmentController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/attachments/{attachmentId}/multipart/parts",
+  "chain": "device",
+  "controller": "AttachmentController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/attachments/{attachmentId}/multipart/status",
+  "chain": "device",
+  "controller": "AttachmentController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/calls",
+  "chain": "device",
+  "controller": "CallController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/calls/links",
+  "chain": "device",
+  "controller": "CallController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/calls/links/{token}",
+  "chain": "device",
+  "controller": "CallController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/calls/links/{token}/resolve",
+  "chain": "device",
+  "controller": "CallController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/calls/{callId}/end",
+  "chain": "device",
+  "controller": "CallController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/calls/{callId}/join",
+  "chain": "device",
+  "controller": "CallController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/communities",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/communities/mine",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/communities/{communityId}/groups",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/communities/{communityId}/groups/{groupId}/join",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/communities/{communityId}/links",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/communities/{communityId}/links/{groupId}",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/communities/{communityId}/links/{groupId}/accept",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/communities/{communityId}/operations",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/communities/{communityId}/operations/retry",
+  "chain": "device",
+  "controller": "CommunityController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/deployment-info",
+  "chain": "device",
+  "controller": "DeploymentInfoController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/device-nonces",
+  "chain": "device",
+  "controller": "DeviceNonceController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/devices/link",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/devices/primary",
+  "chain": "device",
+  "controller": "EnrollmentController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/devices/provisioning-code",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/devices/recover",
+  "chain": "device",
+  "controller": "RecoveryController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/devices/reservations",
+  "chain": "device",
+  "controller": "EnrollmentController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/devices/self",
+  "chain": "device",
+  "controller": "DeviceController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/devices/self/mls-binding",
+  "chain": "device",
+  "controller": "MlsBindingController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/devices/{deviceId}",
+  "chain": "device",
+  "controller": "DeviceController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/directory/search",
+  "chain": "device",
+  "controller": "AccountController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/groups",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/groups/mine",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/groups/{groupId}",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/groups/{groupId}/bans",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/groups/{groupId}/bans/{accountId}",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/groups/{groupId}/bans/{accountId}",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/groups/{groupId}/commits",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/groups/{groupId}/commits/{submissionId}",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/groups/{groupId}/events",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/groups/{groupId}/invites",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/groups/{groupId}/invites",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/groups/{groupId}/join-requests",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/groups/{groupId}/join-requests/{accountId}",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/groups/{groupId}/leave",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/groups/{groupId}/messages",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/history",
+  "chain": "device",
+  "controller": "HistoryController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/history/{id}",
+  "chain": "device",
+  "controller": "HistoryController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/invites/{token}/requests",
+  "chain": "device",
+  "controller": "GroupController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/keypackages",
+  "chain": "device",
+  "controller": "KeyController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/keypackages/claim",
+  "chain": "device",
+  "controller": "KeyController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/keypackages/status",
+  "chain": "device",
+  "controller": "KeyController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/keys",
+  "chain": "device",
+  "controller": "KeyController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/keys/status",
+  "chain": "device",
+  "controller": "KeyController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/keys/{accountId}/claim",
+  "chain": "device",
+  "controller": "KeyController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/kt/accounts/{accountId}",
+  "chain": "device",
+  "controller": "KtController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/kt/consistency",
+  "chain": "device",
+  "controller": "KtController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/kt/cosignatures",
+  "chain": "device",
+  "controller": "KtController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/kt/head",
+  "chain": "device",
+  "controller": "KtController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/kt/leaves",
+  "chain": "device",
+  "controller": "KtController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/messages",
+  "chain": "device",
+  "controller": "MessageController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/messages/{accountId}",
+  "chain": "device",
+  "controller": "MessageController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/messages/{guid}",
+  "chain": "device",
+  "controller": "MessageController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/policy",
+  "chain": "device",
+  "controller": "OrgPolicies"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/privacy/last-seen",
+  "chain": "device",
+  "controller": "LastSeenController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/privacy/last-seen",
+  "chain": "device",
+  "controller": "LastSeenController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/privacy/last-seen/heartbeat",
+  "chain": "device",
+  "controller": "LastSeenController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/provisioning/sessions",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/provisioning/sessions",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/provisioning/sessions/{provisioningId}",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/provisioning/sessions/{provisioningId}",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/provisioning/sessions/{provisioningId}/approval",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/provisioning/sessions/{provisioningId}/message",
+  "chain": "device",
+  "controller": "ProvisioningController"
+ },
+ {
+  "method": "DELETE",
+  "path": "/v1/push/endpoint",
+  "chain": "device",
+  "controller": "PushController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/push/endpoint",
+  "chain": "device",
+  "controller": "PushController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/recovery",
+  "chain": "device",
+  "controller": "RecoveryController"
+ },
+ {
+  "method": "PUT",
+  "path": "/v1/recovery",
+  "chain": "device",
+  "controller": "RecoveryController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/recovery/reservations",
+  "chain": "device",
+  "controller": "RecoveryController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/recovery/status",
+  "chain": "device",
+  "controller": "RecoveryController"
+ },
+ {
+  "method": "GET",
+  "path": "/v1/reports/recipients",
+  "chain": "device",
+  "controller": "ReportRecipientsController"
+ },
+ {
+  "method": "POST",
+  "path": "/v1/ws/tickets",
+  "chain": "device",
+  "controller": "MessageController"
+ }
+]
