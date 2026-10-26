@@ -14,6 +14,7 @@ ADMIN_PASSWORD = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin-dev-password")
 REALM = "enclave"
 # Test-only public client with the password grant. Created on demand in the development stack;
 # never part of the realm import or production setup.
+REDIRECT = "http://localhost/convo-api-tests/callback"
 TEST_CLIENT = "convo-api-tests"
 
 
@@ -57,14 +58,24 @@ class Keycloak:
     def ensure_test_client(self) -> None:
         r = self._admin_call("GET", "/clients", params={"clientId": TEST_CLIENT})
         r.raise_for_status()
-        if r.json():
+        if not r.json():
+            created = self._admin_call("POST", "/clients", json={
+                "clientId": TEST_CLIENT, "enabled": True, "publicClient": True, "standardFlowEnabled": False,
+                "directAccessGrantsEnabled": True, "description": "Convo API tests (development stack only)",
+                "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "phone", "basic", "email"]})
+            if created.status_code not in (201, 409):
+                created.raise_for_status()
+            r = self._admin_call("GET", "/clients", params={"clientId": TEST_CLIENT})
+        self._ensure_auth_time(r.json()[0]["id"])
+
+    def _ensure_auth_time(self, client_uuid: str) -> None:
+        """Interactive sign-in for step-up tests (see user_token_interactive): standard flow with a
+        local redirect URI on this test-only client."""
+        client = self._admin_call("GET", f"/clients/{client_uuid}").json()
+        if client.get("standardFlowEnabled") and REDIRECT in client.get("redirectUris", []):
             return
-        created = self._admin_call("POST", "/clients", json={
-            "clientId": TEST_CLIENT, "enabled": True, "publicClient": True, "standardFlowEnabled": False,
-            "directAccessGrantsEnabled": True, "description": "Convo API tests (development stack only)",
-            "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "phone", "basic", "email"]})
-        if created.status_code not in (201, 409):
-            created.raise_for_status()
+        client.update({"standardFlowEnabled": True, "redirectUris": sorted(set(client.get("redirectUris", [])) | {REDIRECT})})
+        self._admin_call("PUT", f"/clients/{client_uuid}", json=client).raise_for_status()
 
     def create_user(self, prefix: str = "api", realm_roles: list[str] | None = None, phone: bool = True) -> TestUser:
         suffix = _random()
@@ -81,6 +92,23 @@ class Keycloak:
             rep = self._admin_call("GET", f"/roles/{role}").json()
             self._admin_call("POST", f"/users/{user.id}/role-mappings/realm", json=[rep]).raise_for_status()
         return user
+
+    def user_token_interactive(self, user: TestUser) -> str:
+        """Signs in through the login form (authorization code flow), like the admin console. Unlike a
+        password grant, the token then carries auth_time, which the admin API's step-up check needs."""
+        import html as _html
+        import re as _re
+        browser = requests.Session(); browser.verify = False
+        auth = f"{self.base}/auth/realms/{REALM}/protocol/openid-connect"
+        page = browser.get(f"{auth}/auth", params={"client_id": TEST_CLIENT, "response_type": "code", "scope": "openid", "redirect_uri": REDIRECT})
+        action = _html.unescape(_re.search(r'<form[^>]*id="kc-form-login"[^>]*action="([^"]+)"', page.text).group(1))
+        done = browser.post(action, data={"username": user.username, "password": user.password}, allow_redirects=False)
+        location = done.headers.get("Location", "")
+        assert location.startswith(REDIRECT.rstrip("*")), f"login for {user.username}: {done.status_code} {location or done.text[:200]}"
+        code = _re.search(r"[?&]code=([^&]+)", location).group(1)
+        token = browser.post(f"{auth}/token", data={"grant_type": "authorization_code", "client_id": TEST_CLIENT, "code": code, "redirect_uri": REDIRECT})
+        assert token.status_code == 200, token.text
+        return token.json()["access_token"]
 
     def user_token(self, user: TestUser) -> str:
         r = self.http.post(f"{self.base}/auth/realms/{REALM}/protocol/openid-connect/token",

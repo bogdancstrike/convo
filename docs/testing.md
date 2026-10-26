@@ -105,5 +105,19 @@ dropping the agent and the instrumented web build. Check with
 
 ## Progress
 
+Coverage on 2026-10-27 (lines; backend = JUnit + API + e2e against the instrumented server; web =
+Vitest + instrumented e2e, merged):
+
+| App | Lines | Branches | Tests |
+|---|---|---|---|
+| Backend | 92.9% | 76.9% | 176 JUnit, 2,212 API, 119 e2e |
+| Android (JVM) | 52.8% | 26.0% | ~1,000 |
+| Web | 74.0% (merged) | 53.1% | 411 Vitest + e2e |
+| Admin console | 18.3% (unit) | 10.1% | 157 Vitest + e2e |
+
+Admin API step-up checks need `auth_time`, which password grants do not carry: the functional
+admin suite (`test_admin_api.py`) signs in through the login form with the test-only client
+(`Keycloak.user_token_interactive`).
+
 Tracked in `tasks.md` (TEST-*). Every bug found by these suites gets a regression test in the layer
 that would have caught it first.
