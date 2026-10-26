@@ -466,7 +466,15 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (id) await this.markRead(id);
   }
 
-  async markRead(conversationId: string): Promise<void> {
+  /**
+   * Clears a chat's unread state and sends read receipts. Runs under the client mutex: it rewrites
+   * the conversation and messages, and an envelope processed in between must not be overwritten.
+   */
+  markRead(conversationId: string): Promise<void> {
+    return this.mutex.run(() => this.markReadLocked(conversationId));
+  }
+
+  private async markReadLocked(conversationId: string): Promise<void> {
     const conversation = this.conversationCache.get(conversationId);
     if (!conversation || (conversation.unread === 0 && !conversation.revisedUnread?.length)) return;
     // System notices (e.g. timer changes) are not counted as unread; skip them when collecting.
@@ -1318,14 +1326,17 @@ export class EnclaveClient extends Emitter<ClientEvents> {
 
   /** Adds or removes the current account's reaction. */
   async react(target: ChatMessage, emoji: string): Promise<void> {
-    const remove = (target.reactions[emoji] ?? []).includes(this.accountId);
-    const data: DataMessage = {
-      messageId: newMessageId(),
-      timestamp: Date.now(),
-      reaction: { targetMessageId: target.id, targetAuthorId: target.authorId, emoji, remove },
-    };
-    const updated = applyReaction(target, this.accountId, emoji, remove);
-    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage(updated)]);
+    // Applied to the stored message under the mutex: the UI's copy may predate reactions or edits received since.
+    await this.mutex.run(async () => {
+      const current = await this.repos.message(target.conversationId, target.authorId, target.id) ?? target;
+      const remove = (current.reactions[emoji] ?? []).includes(this.accountId);
+      const data: DataMessage = {
+        messageId: newMessageId(),
+        timestamp: Date.now(),
+        reaction: { targetMessageId: current.id, targetAuthorId: current.authorId, emoji, remove },
+      };
+      await this.enqueue(current.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [this.repos.putMessage(applyReaction(current, this.accountId, emoji, remove))]);
+    });
     this.emit('messages', target.conversationId);
   }
 
@@ -1599,6 +1610,12 @@ export class EnclaveClient extends Emitter<ClientEvents> {
    * revision separately. Unchanged or empty text is a no-op.
    */
   async edit(target: ChatMessage, body: string): Promise<void> {
+    // Read-modify-write under the mutex: a receipt or status update applied meanwhile must not undo the edit.
+    await this.mutex.run(() => this.editLocked(target, body));
+    this.emit('messages', target.conversationId);
+  }
+
+  private async editLocked(target: ChatMessage, body: string): Promise<void> {
     const current = await this.repos.message(target.conversationId, target.authorId, target.id) ?? target;
     if (!this.canEdit(current)) throw new EditNotAllowedError();
     const text = normalizeEditBody(current, body);
@@ -1613,16 +1630,18 @@ export class EnclaveClient extends Emitter<ClientEvents> {
       ...(preview && preview !== conversation ? [this.repos.putConversation(preview)] : []),
     ]);
     if (preview && preview !== conversation) { this.conversationCache.set(preview.id, preview); this.emitConversations(); }
-    this.emit('messages', current.conversationId);
   }
 
   /** Delete for everyone (author only); leaves a tombstone. */
   async deleteForEveryone(target: ChatMessage): Promise<void> {
     if (target.authorId !== this.accountId) throw new Error('only the author can delete for everyone');
     const data: DataMessage = { messageId: newMessageId(), timestamp: Date.now(), delete: { targetMessageId: target.id } };
-    await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [
-      this.repos.putMessage(tombstone(target)),
-    ]);
+    await this.mutex.run(async () => {
+      const current = await this.repos.message(target.conversationId, target.authorId, target.id) ?? target;
+      await this.enqueue(target.conversationId, { v: CONTENT_VERSION, kind: 'data', data }, true, undefined, [
+        this.repos.putMessage(tombstone(current)),
+      ]);
+    });
     this.emit('messages', target.conversationId);
   }
 
