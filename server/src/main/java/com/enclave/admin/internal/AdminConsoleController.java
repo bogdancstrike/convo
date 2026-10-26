@@ -119,7 +119,7 @@ class AdminConsoleController {
         } else {
             List<ActivityStore.AccountActivity> top = activity.top(from, limit);
             Map<UUID, AccountSummary> accounts = identity.accounts(top.stream().map(ActivityStore.AccountActivity::accountId).toList()).stream()
-                    .collect(Collectors.toMap(AccountSummary::accountId, a -> a));
+                    .collect(Collectors.toMap(AccountSummary::accountId, a -> a, (first, duplicate) -> first));
             out = top.stream().filter(t -> accounts.containsKey(t.accountId())).map(t -> level(accounts.get(t.accountId()), t, window)).toList();
         }
         return noStore(out);

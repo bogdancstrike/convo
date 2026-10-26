@@ -29,10 +29,23 @@ class AdminTablesController {
     private final com.enclave.push.PushApi push;
     private final ActivityStore activity;
     AdminTablesController(AdminGuard guard, IdentityAdminApi identity, KeycloakUsers idp, AuditLog audit, AuditNames names, AdminPermissions permissions, com.enclave.push.PushApi push, ActivityStore activity) { this.guard = guard; this.identity = identity; this.idp = idp; this.audit = audit; this.names = names; this.permissions = permissions; this.push = push; this.activity = activity; }
+    /**
+     * Every account, read in pages of 1,000. Accounts created meanwhile shift the offsets, so a row can
+     * appear on two pages: keep the first copy (it is the same account).
+     */
+    private List<AccountSummary> allAccounts() {
+        var byId = new java.util.LinkedHashMap<UUID, AccountSummary>();
+        for (int offset = 0; ; offset += 1000) {
+            var page = identity.accountDirectory(offset, 1000);
+            for (var account : page) byId.putIfAbsent(account.accountId(), account);
+            if (page.size() < 1000) break;
+        }
+        return new ArrayList<>(byId.values());
+    }
+
     @GetMapping("/people") ResponseEntity<AdminTableQuery.Page<Person>> people(@AuthenticationPrincipal Jwt admin, @RequestParam Map<String, String> params) {
         guard.require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
-        var accounts = new ArrayList<AccountSummary>();
-        for (int offset = 0; ; offset += 1000) { var page = identity.accountDirectory(offset, 1000); accounts.addAll(page); if (page.size() < 1000) break; }
+        var accounts = allAccounts();
         Map<UUID, AccountSummary> byId = accounts.stream().collect(Collectors.toMap(AccountSummary::accountId, Function.identity()));
         List<Person> people = new ArrayList<>(); var matched = new HashSet<UUID>(); var warnings = new ArrayList<String>();
         try {
@@ -90,8 +103,7 @@ class AdminTablesController {
         guard.require(admin, AdminPermissions.Permission.STATS_READ); guard.require(admin, AdminPermissions.Permission.ACCOUNTS_READ);
         int days; try { days = Math.max(1, Math.min(3660, Integer.parseInt(params.getOrDefault("days", "30")))); } catch (NumberFormatException e) { days = 30; }
         var range = StatsRange.of(days, StatsRange.parse(params.get("from")), StatsRange.parse(params.get("to")), activity.today());
-        var accounts = new ArrayList<AccountSummary>();
-        for (int offset = 0; ; offset += 1000) { var page = identity.accountDirectory(offset, 1000); accounts.addAll(page); if (page.size() < 1000) break; }
+        var accounts = allAccounts();
         var totals = new HashMap<UUID, ActivityStore.AccountActivity>();
         for (int offset = 0; offset < accounts.size(); offset += 1000) for (var a : activity.of(accounts.subList(offset, Math.min(accounts.size(), offset + 1000)).stream().map(AccountSummary::accountId).toList(), range.from(), range.to())) totals.put(a.accountId(), a);
         final int window = range.days();
