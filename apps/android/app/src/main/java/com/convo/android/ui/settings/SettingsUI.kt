@@ -1,5 +1,7 @@
 package com.convo.android.ui.settings
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import com.convo.android.R
 import com.convo.android.BuildConfig
 import com.convo.android.*
@@ -144,8 +146,15 @@ import org.json.JSONObject
             settings.optBoolean("allowScreenshots") && !policyBlocks, enabled = !policyBlocks) { app.call("settings", obj("patch" to obj("allowScreenshots" to it))) }
     }
 }
+/**
+ * A labelled on/off row. The whole row is one switch: tapping the text toggles it, and accessibility
+ * services announce the title with the state (the bare Switch used to be read without a name).
+ */
 @Composable fun PrivacySwitch(title: String, hint: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f).padding(end = 12.dp)) { Text(title); Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked, onChange, enabled = enabled) }
+    Row(Modifier.fillMaxWidth().toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) { Text(title); Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Switch(checked, null, enabled = enabled)
+    }
 }
 @Composable fun DevicesEditor(app: MainActivity) {
     var devices by remember { mutableStateOf<List<JSONObject>>(emptyList()) }; var requests by remember { mutableStateOf<List<JSONObject>>(emptyList()) }; var confirm by remember { mutableStateOf<JSONObject?>(null) }
