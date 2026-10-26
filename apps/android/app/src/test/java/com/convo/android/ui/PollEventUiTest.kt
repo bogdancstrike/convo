@@ -48,12 +48,12 @@ abstract class CardUiBase(private val messages: List<JSONObject>, canModerate: B
     protected fun last(method: String): JSONObject = core().commands.last { it.first == method }.second
     protected fun has(text: String) = compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
     /**
-     * Activates the innermost clickable control showing [text]. Under Robolectric, injected touches
+     * Activates the innermost clickable control showing exactly [text] (a substring could match a timestamp). Under Robolectric, injected touches
      * inside chat bubbles do not reach nested controls (verified working on a device), so this
      * invokes the control's click action — the same handler a tap runs.
      */
     protected fun tap(text: String) {
-        val matches = compose.onAllNodes(hasClickAction() and isEnabled() and (hasText(text, substring = true) or hasAnyDescendant(hasText(text, substring = true))), useUnmergedTree = true)
+        val matches = compose.onAllNodes(hasClickAction() and isEnabled() and (hasText(text) or hasAnyDescendant(hasText(text))), useUnmergedTree = true)
         matches[matches.fetchSemanticsNodes().size - 1].performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
     }
