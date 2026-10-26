@@ -61,7 +61,7 @@ class MainActivity : FragmentActivity() {
         callPermissionCallback = callback
         callPermissions.launch(if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO))
     }
-    private lateinit var bridge: ProtocolBridge
+    private lateinit var bridge: CoreTransport
     private lateinit var auth: AuthorizationService
     private val io = Executors.newSingleThreadExecutor()
     var snapshot by mutableStateOf(JSONObject()); private set
@@ -162,7 +162,7 @@ class MainActivity : FragmentActivity() {
         MessageNotifications.createChannel(this)
         auth = AuthorizationService(this, AppAuthConfiguration.Builder().setConnectionBuilder(DevelopmentTls(this)).build())
         PushRegistration.activity = java.lang.ref.WeakReference(this)
-        bridge = ProtocolBridge(this, server) { type, value ->
+        bridge = CoreTransports.factory(this, server) { type, value ->
             if (BuildConfig.DEBUG && type == "diagnostic") android.util.Log.d("ConvoCore", value.toString())
             when (type) {
                 "phase" -> { phase = value.optString("name"); linkCode = value.optString("code"); if (phase == "ready") { refreshCredentialStatus(); syncPush(); offerNotifications(); pendingCallLink?.let { pendingCallLink = null; calls.joinLink(it) } }; if (phase == "welcome") io.execute { mediaCache.clear() }; ConnectionService.sync(this, stayConnected && phase == "ready") }
@@ -178,7 +178,7 @@ class MainActivity : FragmentActivity() {
         handleCallLink(intent)
         setContent { ConvoTheme(snapshot.optJSONObject("settings")?.optString("theme") ?: "system") {
             Box {
-                AndroidView(factory = { bridge.webView }, modifier = Modifier.size(1.dp))
+                bridge.view?.let { core -> AndroidView(factory = { core }, modifier = Modifier.size(1.dp)) }
                 // A minimized call shows a "tap to return" bar above the app (WhatsApp).
                 val miniCall = calls.call != null && calls.minimized
                 androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {

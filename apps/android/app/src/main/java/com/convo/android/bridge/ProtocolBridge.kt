@@ -106,8 +106,9 @@ class DevelopmentTls(private val context: Context) : ConnectionBuilder {
 
 /** Hidden packaged protocol runtime. Navigation is blocked; only same-origin API/media IO is allowed. */
 @SuppressLint("SetJavaScriptEnabled")
-class ProtocolBridge(context: Context, private val origin: String, private val receive: (String, JSONObject) -> Unit) {
+class ProtocolBridge(context: Context, private val origin: String, private val receive: (String, JSONObject) -> Unit) : CoreTransport {
     val webView = WebView(context)
+    override val view: android.view.View get() = webView
     private val tls = DevelopmentTls(context)
     private var nextId = 1
     private val callbacks = mutableMapOf<Int, (JSONObject) -> Unit>()
@@ -157,10 +158,10 @@ class ProtocolBridge(context: Context, private val origin: String, private val r
         webView.loadUrl("$origin/__convo_native__/index.html")
     }
     private fun blocked() = WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(byteArrayOf()))
-    fun command(method: String, args: JSONObject = JSONObject(), callback: (JSONObject) -> Unit = {}) {
+    override fun command(method: String, args: JSONObject, callback: (JSONObject) -> Unit) {
         val id = nextId++; callbacks[id] = callback
         val payload = JSONObject().put("id", id).put("method", method).put("args", args).toString()
         webView.evaluateJavascript("window.ConvoCore && window.ConvoCore.command(${JSONObject.quote(payload)})", null)
     }
-    fun destroy() { callbacks.clear(); webView.removeJavascriptInterface("NativeConvo"); webView.destroy() }
+    override fun destroy() { callbacks.clear(); webView.removeJavascriptInterface("NativeConvo"); webView.destroy() }
 }
