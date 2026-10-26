@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 import type { EnclaveApi } from '../api/enclaveApi';
 import { ApiError } from '../api/errors';
 import type {
-  AccountDto, ClaimResponse, DeviceMessageDto, Directive, EnvelopeDto, PreKeyDto, PrimaryRegistrationRequest, RegistrationResponse,
+  AccountDto, ClaimResponse, CreateGroupRequest, DeviceRef, GroupCommitRequest, GroupDto, GroupMessageRequest, GroupRole, DeviceMessageDto, Directive, EnvelopeDto, PreKeyDto, PrimaryRegistrationRequest, RegistrationResponse,
   RosterDto, SendRequestDto, SendResultDto, SignedPreKeyDto,
 } from '../api/types';
 import { SignalStore } from '../crypto/signalStore';
@@ -28,8 +28,23 @@ interface FakeDevice {
   signedPreKey: SignedPreKeyDto;
   preKeys: PreKeyDto[];
   mailbox: EnvelopeDto[];
+  keyPackages: { ref: string; keyPackage: string }[];
+  binding?: { signatureKey: string; binding: string };
   socket?: FakeServerSocket;
   revoked?: boolean;
+}
+
+interface FakeGroup {
+  groupId: string;
+  epoch: number;
+  nextSeq: number;
+  adminOnly: boolean;
+  members: Map<string, GroupRole>;
+  devices: DeviceRef[];
+  departed: Set<string>;
+  bans: Set<string>;
+  events: { seq: number; epoch: number; commit: string; submissionId: string; digest: string }[];
+  submissions: Map<string, string>;
 }
 
 interface FakeAccount {
@@ -48,6 +63,7 @@ let instance: FakeServer | undefined;
 
 export class FakeServer {
   readonly accounts = new Map<string, FakeAccount>();
+  readonly groups = new Map<string, FakeGroup>();
   private readonly tickets = new Map<string, { accountId: string; deviceId: number }>();
   private readonly handlers = new Map<string, Handler>();
   /** Every call the server received, as `method` names, for assertions. */
@@ -98,11 +114,26 @@ export class FakeServer {
       history: () => [],
       putHistory: () => undefined,
       policy: () => ({ version: 0 }),
-      mlsBindings: () => [],
-      publishMlsBinding: () => undefined,
-      keyPackageStatus: () => ({ available: 100 }),
-      uploadKeyPackages: () => undefined,
-      myGroups: () => [],
+      mlsBindings: (id: unknown) => self.active(self.accounts.get(id as string)!).filter((d) => d.binding).map((d) => ({ deviceId: d.deviceId, ...d.binding! })),
+      publishMlsBinding: (signatureKey: unknown, binding: unknown) => { self.device(current!).binding = { signatureKey: signatureKey as string, binding: binding as string }; },
+      keyPackageStatus: () => ({ oneTimePreKeys: self.device(current!).keyPackages.length }),
+      uploadKeyPackages: (list: unknown) => { self.device(current!).keyPackages.push(...(list as { ref: string; keyPackage: string }[])); },
+      claimKeyPackages: (ids: unknown) => self.claimKeyPackages(current!, ids as string[]),
+      createGroup: (request: unknown) => self.createGroup(current!, request as CreateGroupRequest),
+      group: (id: unknown) => self.groupDto(current!, id as string),
+      myGroups: () => [...self.groups.values()].filter((g) => g.members.has(current!.accountId)).map((g) => ({ groupId: g.groupId, epoch: g.epoch, adminOnly: g.adminOnly, role: g.members.get(current!.accountId)!, members: g.members.size })),
+      groupCommit: (id: unknown, request: unknown) => self.commit(current!, id as string, request as GroupCommitRequest),
+      groupEvents: (id: unknown, from: unknown) => self.memberGroup(current!, id as string, true).events.filter((e) => e.epoch >= (from as number)).slice(0, 100).map((e) => ({ seq: e.seq, epoch: e.epoch, commit: e.commit })),
+      groupCommitStatus: (id: unknown, submissionId: unknown) => {
+        const e = self.memberGroup(current!, id as string, false).events.find((x) => x.submissionId === submissionId);
+        if (!e) throw new ApiError(404, 'NOT_FOUND', 'commit not accepted');
+        return { epoch: e.epoch + 1, seq: e.seq, duplicate: true };
+      },
+      groupMessage: (id: unknown, request: unknown) => self.groupMessage(current!, id as string, request as GroupMessageRequest),
+      leaveGroup: (id: unknown) => self.leave(current!, id as string),
+      groupBans: (id: unknown) => [...self.memberGroup(current!, id as string, false).bans],
+      banMember: (id: unknown, accountId: unknown) => { const g = self.memberGroup(current!, id as string, false); g.bans.add(accountId as string); },
+      unbanMember: (id: unknown, accountId: unknown) => { self.memberGroup(current!, id as string, false).bans.delete(accountId as string); },
       recoveryStatus: () => ({ configured: false }),
       ktAccount: () => { throw new ApiError(404, 'NOT_FOUND', 'NOT_FOUND'); },
       lastSeenHeartbeat: () => undefined,
@@ -155,12 +186,12 @@ export class FakeServer {
     if (account.identityKey && account.identityKey !== request.identityKey) throw new ApiError(409, 'ACCOUNT_HAS_DEVICES', 'ACCOUNT_HAS_DEVICES');
     account.identityKey = request.identityKey;
     const deviceId = account.devices.size + 1;
-    account.devices.set(deviceId, { deviceId, registrationId: request.registrationId, signedPreKey: request.signedPreKey, preKeys: [...request.preKeys], mailbox: [] });
+    account.devices.set(deviceId, { deviceId, registrationId: request.registrationId, signedPreKey: request.signedPreKey, preKeys: [...request.preKeys], mailbox: [], keyPackages: [] });
     account.deviceListVersion++;
     return { accountId: account.accountId, deviceId, deviceListVersion: account.deviceListVersion };
   }
 
-  private device(caller: { accountId: string; deviceId: number }): FakeDevice {
+  device(caller: { accountId: string; deviceId: number }): FakeDevice {
     const device = this.accounts.get(caller.accountId)?.devices.get(caller.deviceId);
     if (!device || device.revoked) throw new ApiError(401, 'DEVICE_REVOKED', 'DEVICE_REVOKED');
     return device;
@@ -172,7 +203,7 @@ export class FakeServer {
     return { accountId: a.accountId, username: a.username, displayName: a.displayName, identityKey: a.identityKey };
   }
 
-  private active(a: FakeAccount): FakeDevice[] { return [...a.devices.values()].filter((d) => !d.revoked); }
+  active(a: FakeAccount): FakeDevice[] { return [...a.devices.values()].filter((d) => !d.revoked); }
 
   private roster(accountId: string): RosterDto {
     const a = this.accounts.get(accountId);
@@ -211,6 +242,120 @@ export class FakeServer {
       d.socket?.frame({ requestId: 0, envelope });
     }
     return { ok: true };
+  }
+
+  // --- groups: the GroupService contract (epoch compare-and-set, roster, roles, fan-out) ----------
+
+  private push(to: DeviceRef[], envelope: Omit<EnvelopeDto, 'guid' | 'serverTimestamp' | 'expiresAt'>): void {
+    for (const ref of to) {
+      const device = this.accounts.get(ref.accountId)?.devices.get(ref.deviceId);
+      if (!device || device.revoked) continue;
+      const e: EnvelopeDto = { ...envelope, guid: `g${this.nextGuid++}`, serverTimestamp: this.now(), expiresAt: 0 };
+      device.mailbox.push(e);
+      device.socket?.frame({ requestId: 0, envelope: e });
+    }
+  }
+
+  private same(a: DeviceRef, b: DeviceRef): boolean { return a.accountId === b.accountId && a.deviceId === b.deviceId; }
+
+  /** A group the caller is a member (or, with `device`, a member device) of. */
+  memberGroup(caller: DeviceRef, groupId: string, device: boolean): FakeGroup {
+    this.device(caller);
+    const g = this.groups.get(groupId);
+    if (!g || !g.members.has(caller.accountId) || (device && !g.devices.some((d) => this.same(d, caller)))) throw new ApiError(403, 'NOT_GROUP_MEMBER', 'not a member');
+    return g;
+  }
+
+  private groupDto(caller: DeviceRef, groupId: string): GroupDto {
+    const g = this.memberGroup(caller, groupId, false);
+    return { groupId, epoch: g.epoch, adminOnly: g.adminOnly, members: [...g.members].map(([accountId, role]) => ({ accountId, role })), devices: [...g.devices], departed: [...g.departed] };
+  }
+
+  private claimKeyPackages(caller: DeviceRef, accountIds: string[]) {
+    this.device(caller);
+    const keyPackages: { accountId: string; deviceId: number; keyPackage: string }[] = [];
+    const unavailable: DeviceRef[] = [];
+    for (const accountId of accountIds) {
+      const a = this.accounts.get(accountId);
+      if (!a) continue;
+      for (const d of this.active(a)) {
+        if (accountId === caller.accountId && d.deviceId === caller.deviceId) continue;
+        const kp = d.keyPackages.shift();
+        if (kp) keyPackages.push({ accountId, deviceId: d.deviceId, keyPackage: kp.keyPackage }); else unavailable.push({ accountId, deviceId: d.deviceId });
+      }
+    }
+    return { keyPackages, unavailable };
+  }
+
+  private createGroup(caller: DeviceRef, request: CreateGroupRequest): GroupDto {
+    this.device(caller);
+    if (this.groups.has(request.groupId)) {
+      const existing = this.groups.get(request.groupId)!;
+      if (existing.members.get(caller.accountId) === 'owner') return this.groupDto(caller, request.groupId);
+      throw new ApiError(400, 'INVALID_REQUEST', 'group ID already used');
+    }
+    const members = new Map<string, GroupRole>([[caller.accountId, 'owner']]);
+    for (const m of request.members) if (m !== caller.accountId) members.set(m, 'member');
+    for (const d of request.devices) if (!members.has(d.accountId) || this.same(d, caller)) throw new ApiError(400, 'INVALID_REQUEST', 'invalid initial device');
+    const g: FakeGroup = { groupId: request.groupId, epoch: request.epoch, nextSeq: 1, adminOnly: !!request.adminOnly, members,
+      devices: [{ accountId: caller.accountId, deviceId: caller.deviceId }, ...request.devices], departed: new Set(), bans: new Set(), events: [], submissions: new Map() };
+    this.groups.set(g.groupId, g);
+    if (request.welcome && request.devices.length) this.push(request.devices, { type: 'MLS_WELCOME', groupId: g.groupId, epoch: g.epoch, sourceAccount: caller.accountId, sourceDevice: caller.deviceId, urgent: false, content: request.welcome });
+    return this.groupDto(caller, g.groupId);
+  }
+
+  private commit(caller: DeviceRef, groupId: string, request: GroupCommitRequest) {
+    const g = this.memberGroup(caller, groupId, true);
+    const digest = `${request.commit}|${request.welcome ?? ''}`;
+    const prior = g.events.find((e) => e.submissionId === request.submissionId);
+    if (prior) {
+      if (prior.digest !== digest) throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'submission ID reused with different content');
+      return { epoch: prior.epoch + 1, seq: prior.seq, duplicate: true };
+    }
+    if (request.epoch !== g.epoch) throw new ApiError(409, 'EPOCH_CONFLICT', 'commit is not for the current epoch', { currentEpoch: g.epoch });
+    const role = g.members.get(caller.accountId)!;
+    const manages = role === 'owner' || role === 'admin';
+    const ownDevicesOnly = [...(request.addDevices ?? []), ...(request.removeDevices ?? [])].every((d) => d.accountId === caller.accountId || g.departed.has(d.accountId));
+    if (((request.addMembers ?? []).length || (request.removeMembers ?? []).some((a) => !g.departed.has(a)) || !ownDevicesOnly) && !manages) throw new ApiError(403, 'FORBIDDEN_ROLE', 'only admins can change membership');
+    if (Object.keys(request.roleChanges ?? {}).length && role !== 'owner') throw new ApiError(403, 'FORBIDDEN_ROLE', 'only owners can change roles');
+    if ((request.addMembers ?? []).some((a) => g.bans.has(a))) throw new ApiError(403, 'FORBIDDEN', 'account is banned from this group; unban first');
+    const roster = [...g.devices];
+    const seq = g.nextSeq++;
+    g.events.push({ seq, epoch: g.epoch, commit: request.commit, submissionId: request.submissionId, digest });
+    const fromEpoch = g.epoch;
+    g.epoch++;
+    for (const a of request.addMembers ?? []) g.members.set(a, 'member');
+    for (const d of request.addDevices ?? []) if (!g.devices.some((x) => this.same(x, d))) g.devices.push(d);
+    g.devices = g.devices.filter((x) => !(request.removeDevices ?? []).some((d) => this.same(x, d)));
+    for (const a of request.removeMembers ?? []) { g.members.delete(a); g.departed.delete(a); }
+    for (const [a, r] of Object.entries(request.roleChanges ?? {})) g.members.set(a, r);
+    this.push(roster.filter((d) => !this.same(d, caller)), { type: 'MLS_COMMIT', groupId, epoch: fromEpoch, groupSeq: seq, sourceAccount: caller.accountId, sourceDevice: caller.deviceId, urgent: false, content: request.commit });
+    if (request.welcome && (request.addDevices ?? []).length) this.push(request.addDevices!, { type: 'MLS_WELCOME', groupId, epoch: g.epoch, sourceAccount: caller.accountId, sourceDevice: caller.deviceId, urgent: false, content: request.welcome });
+    return { epoch: g.epoch, seq, duplicate: false };
+  }
+
+  private groupMessage(caller: DeviceRef, groupId: string, request: GroupMessageRequest) {
+    const g = this.memberGroup(caller, groupId, true);
+    if (g.adminOnly && !request.interaction && g.members.get(caller.accountId) === 'member') throw new ApiError(403, 'FORBIDDEN_ROLE', 'only admins can post in this channel');
+    const key = `${caller.accountId}.${caller.deviceId}/${request.submissionId}`;
+    if (g.submissions.has(key)) {
+      if (g.submissions.get(key) !== request.message) throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'submission ID reused');
+      return { ok: true, duplicate: true };
+    }
+    if (request.epoch !== g.epoch) throw new ApiError(409, 'EPOCH_CONFLICT', 'message is not for the current epoch', { currentEpoch: g.epoch });
+    g.submissions.set(key, request.message);
+    this.push(g.devices.filter((d) => !this.same(d, caller) && !g.departed.has(d.accountId)),
+      { type: 'MLS_PRIVATE', groupId, epoch: request.epoch, sourceAccount: caller.accountId, sourceDevice: caller.deviceId, urgent: !!request.urgent, content: request.message });
+    return { ok: true, duplicate: false };
+  }
+
+  private leave(caller: DeviceRef, groupId: string): void {
+    const g = this.memberGroup(caller, groupId, false);
+    const owners = [...g.members.values()].filter((r) => r === 'owner').length;
+    if (g.members.get(caller.accountId) === 'owner' && owners === 1 && g.members.size > 1) throw new ApiError(403, 'FORBIDDEN_ROLE', 'make another member owner before leaving');
+    g.members.delete(caller.accountId);
+    g.departed.add(caller.accountId);
+    for (const d of g.devices.filter((x) => x.accountId !== caller.accountId)) this.accounts.get(d.accountId)?.devices.get(d.deviceId)?.socket?.frame({ requestId: 0, directive: { type: 'GROUPS_CHANGED' } });
   }
 
   /** Socket side: a ticket opens the device's mailbox. */
