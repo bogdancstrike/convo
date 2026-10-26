@@ -252,8 +252,8 @@ fun JSONObject.targetArgs(conversation: String) = obj("conversationId" to conver
                     var ackDue by remember(id) { mutableStateOf(0) }; var ackExpires by remember(id) { mutableStateOf(0) }
                     var ackReviewers by remember(id) { mutableStateOf<List<String>?>(null) } // null = publisher + owners
                     LaunchedEffect(id) { if (id.startsWith("g:")) app.call("canRequestAck", obj("id" to id), quiet = true) { canAck = it == true } }
-                    if (canAck) Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(requestAck, { requestAck = it }); Text("Ask members to acknowledge this announcement", style = MaterialTheme.typography.bodySmall)
+                    if (canAck) CheckboxRow(requestAck, { requestAck = it }, Modifier.padding(horizontal = 12.dp)) {
+                        Text("Ask members to acknowledge this announcement", style = MaterialTheme.typography.bodySmall)
                     }
                     if (canAck && requestAck) Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AckDeadlinePicker("Due", ackDue, listOf(0, 1, 3, 7), noneLabel = "No deadline") { ackDue = it; if (ackExpires in 1 until it) ackExpires = it }

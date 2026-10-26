@@ -151,8 +151,8 @@ import org.json.JSONObject
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Alerts pause until the time you choose. Messages still arrive and count as unread; calls still ring. Afterwards your current notification setting resumes.", style = MaterialTheme.typography.bodySmall)
             options.forEachIndexed { i, (label, time) ->
-                Row(Modifier.fillMaxWidth().clickable { picked = i }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(picked == i, { picked = i }); Column { Text(label); RawText(format.format(java.util.Date(time)), style = MaterialTheme.typography.bodySmall) }
+                RadioRow(picked == i, { picked = i }, Modifier.fillMaxWidth()) {
+                    Column { Text(label); RawText(format.format(java.util.Date(time)), style = MaterialTheme.typography.bodySmall) }
                 }
             }
             RawText(tr("Snoozed until {when} ({zone})").replace("{when}", format.format(java.util.Date(options[picked].second))).replace("{zone}", zone), style = MaterialTheme.typography.bodyMedium)

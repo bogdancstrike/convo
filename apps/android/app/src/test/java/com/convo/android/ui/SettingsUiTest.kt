@@ -154,4 +154,40 @@ class SettingsUiTest {
         compose.onNodeWithText("Clear status").performClick(); compose.waitForIdle()
         assertEquals("", last("profile").getJSONObject("patch").getString("status"))
     }
+
+    /** Every checkbox, switch and radio button on screen carries a name for screen readers. */
+    private fun assertTogglesAreNamed() {
+        val toggles = compose.onAllNodes(androidx.compose.ui.test.isToggleable() or androidx.compose.ui.test.isSelectable()).fetchSemanticsNodes()
+        assertTrue("no toggles found", toggles.isNotEmpty())
+        toggles.forEach { node ->
+            val named = node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null }?.isNotEmpty() == true ||
+                node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription) { null }?.isNotEmpty() == true
+            assertTrue("unnamed toggle: ${node.config}", named)
+        }
+    }
+
+    @Test fun privacyTogglesAreNamed() { open("Privacy"); assertTogglesAreNamed() }
+
+    @Test fun storageTogglesAreNamed() { open("Storage and data"); assertTogglesAreNamed() }
+
+    @Test fun notificationTogglesAreNamed() { open("Notifications"); assertTogglesAreNamed() }
+
+    @Test fun autoDownloadRulesAreSaved() {
+        open("Storage and data")
+        compose.onAllNodes(androidx.compose.ui.test.isToggleable() and hasText("Documents", substring = true))[0].performClick(); compose.waitForIdle()
+        assertTrue(last("settings").toString().contains("autoDownload"))
+    }
+
+    @Test fun notificationPreviewChoiceIsSaved() {
+        open("Notifications")
+        compose.onNodeWithText("Sender and text").performClick(); compose.waitForIdle()
+        assertEquals("full", last("settings").getJSONObject("patch").getString("notificationPreview"))
+    }
+
+    @Test fun eventReminderLeadTimeIsSaved() {
+        open("Notifications")
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("30 min"))
+        compose.onNodeWithText("30 min").performClick(); compose.waitForIdle()
+        assertEquals(30, last("settings").getJSONObject("patch").getInt("eventReminderMinutes"))
+    }
 }

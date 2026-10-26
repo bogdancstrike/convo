@@ -136,13 +136,10 @@ class GallerySaver(private val context: Context) {
                 Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 MediaPolicy.kinds.forEach { (kind, label) ->
                     val checked = kind in rules.getValue(network)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked, { on ->
-                            val next = rules + (network to MediaPolicy.kinds.map { it.first }.filter { if (it == kind) on else it in rules.getValue(network) })
-                            rules = next; app.call("settings", MediaPolicy.patch(next))
-                        })
-                        Text(label)
-                    }
+                    CheckboxRow(checked, { on ->
+                        val next = rules + (network to MediaPolicy.kinds.map { it.first }.filter { if (it == kind) on else it in rules.getValue(network) })
+                        rules = next; app.call("settings", MediaPolicy.patch(next))
+                    }, Modifier.fillMaxWidth()) { Text(label) }
                 }
             }
         }

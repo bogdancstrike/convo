@@ -120,12 +120,11 @@ import org.json.JSONObject
     TextButton({ open = true }) { Text(if (value == null) "Responses go to you and the owners" else "Responses go to you and selected admins") }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text("Responses go to") }, text = {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(value == null, { onChange(null) }); Text("You and the community owners") }
-            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(value != null, { onChange(emptyList()) }); Text("You and selected owners/admins") }
+            RadioRow(value == null, { onChange(null) }) { Text("You and the community owners") }
+            RadioRow(value != null, { onChange(emptyList()) }) { Text("You and selected owners/admins") }
             if (value != null) candidates.forEach { c ->
                 val id = c.optString("accountId"); val chosen = id in value
-                Row(Modifier.padding(start = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(chosen, { on -> onChange(if (on) value + id else value - id) }, enabled = chosen || value.size < 9)
+                CheckboxRow(chosen, { on -> onChange(if (on) value + id else value - id) }, Modifier.padding(start = 24.dp), enabled = chosen || value.size < 9) {
                     RawText(c.optString("name"))
                 }
             }

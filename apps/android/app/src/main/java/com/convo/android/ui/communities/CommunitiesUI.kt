@@ -175,7 +175,7 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
             }
             ListItem(headlineContent = { RawText(g.optString("name").ifBlank { tr("Private group") }) },
                 supportingContent = { Column { Text(status); if (g.optString("status") == "active" && g.optBoolean("delegation")) Text("Follows community removals", style = MaterialTheme.typography.bodySmall)
-                    if (g.optBoolean("canAccept")) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(follow[groupId] ?: true, { follow[groupId] = it }); Text("Remove people here when they leave the community", style = MaterialTheme.typography.bodySmall) } } },
+                    if (g.optBoolean("canAccept")) CheckboxRow(follow[groupId] ?: true, { follow[groupId] = it }) { Text("Remove people here when they leave the community", style = MaterialTheme.typography.bodySmall) } } },
                 leadingContent = { PersonAvatar(app, conversation, g.optString("name").ifBlank { "?" }, 40, group = true) },
                 trailingContent = {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -202,7 +202,7 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
                 listOf("discoverable" to "Community members can see it and ask to join", "private" to "Hidden; members join by invitation").forEach { (value, label) ->
                     Row(Modifier.fillMaxWidth().selectable(visibility == value) { visibility = value }, verticalAlignment = Alignment.CenterVertically) { RadioButton(visibility == value, { visibility = value }); Text(label) }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delegation, { delegation = it }); Text("Also remove people from the group when they leave the community (groups you own)", style = MaterialTheme.typography.bodySmall) }
+                CheckboxRow(delegation, { delegation = it }) { Text("Also remove people from the group when they leave the community (groups you own)", style = MaterialTheme.typography.bodySmall) }
                 HorizontalDivider()
                 if (candidates.isEmpty()) Text("You’re not in any other groups that can be added.")
                 candidates.forEach { conv ->
@@ -237,8 +237,7 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
             if (members?.isEmpty() == true) item { Text("No other members yet. Invite people to the community first; they can ask to join the group later.", style = MaterialTheme.typography.bodySmall) }
             items(members.orEmpty(), key = { it.optString("accountId") }) { m ->
                 val id = m.optString("accountId")
-                Row(Modifier.fillMaxWidth().clickable { if (id in picked) picked.remove(id) else picked.add(id) }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(id in picked, { if (it) picked.add(id) else picked.remove(id) })
+                CheckboxRow(id in picked, { if (it) picked.add(id) else picked.remove(id) }, Modifier.fillMaxWidth()) {
                     PersonAvatar(app, id, m.optString("name"), 28); Spacer(Modifier.width(8.dp)); RawText(m.optString("name"))
                 }
             }
@@ -246,7 +245,7 @@ private fun roleLabel(role: String) = when (role) { "owner" -> "You own this com
             items(listOf("discoverable" to "Visible in the community — members can see it and ask to join", "private" to "Hidden — members join by invitation")) { (value, label) ->
                 Row(Modifier.fillMaxWidth().selectable(visibility == value) { visibility = value }, verticalAlignment = Alignment.CenterVertically) { RadioButton(visibility == value, { visibility = value }); Text(label, style = MaterialTheme.typography.bodySmall) }
             }
-            item { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delegation, { delegation = it }); Text("Also remove people from this group when they leave the community", style = MaterialTheme.typography.bodySmall) } }
+            item { CheckboxRow(delegation, { delegation = it }) { Text("Also remove people from this group when they leave the community", style = MaterialTheme.typography.bodySmall) } }
         }
     }, confirmButton = {
         Button(enabled = !busy && name.isNotBlank(), onClick = {
@@ -314,8 +313,7 @@ internal val presetItems = mapOf("read-description" to "Read the community descr
                 Text("Getting started", style = MaterialTheme.typography.titleSmall)
                 checklist.forEach { item ->
                     val id = item.optString("id")
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(done(id), { value -> ticks[id] = value; app.call("setChecklistItem", obj("id" to communityId, "itemId" to id, "done" to value), quiet = true) }, enabled = id != "ack-rules")
+                    CheckboxRow(done(id), { value -> ticks[id] = value; app.call("setChecklistItem", obj("id" to communityId, "itemId" to id, "done" to value), quiet = true) }, enabled = id != "ack-rules") {
                         RawText(presetItems[id]?.let { tr(it) } ?: item.optString("label"), Modifier.weight(1f))
                         Text(if (item.optBoolean("required")) "Required" else "Optional", style = MaterialTheme.typography.labelSmall)
                     }
@@ -354,7 +352,7 @@ internal val presetItems = mapOf("read-description" to "Read the community descr
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { OutlinedTextField(welcome, { welcome = it.take(4000) }, label = { Text("Welcome message") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) }
         item { OutlinedTextField(rules, { rules = it.take(8000) }, label = { Text("Community rules") }, minLines = 4, modifier = Modifier.fillMaxWidth()) }
-        item { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ackRequired, { ackRequired = it }); Text("Ask members to acknowledge the rules") } }
+        item { CheckboxRow(ackRequired, { ackRequired = it }) { Text("Ask members to acknowledge the rules") } }
         view?.let { v -> val r = v.optJSONObject("pkg")?.optJSONObject("rules")
             if (v.optBoolean("reviewer") && r?.optBoolean("ackRequired") == true) item {
                 RawText(tr("Rules version {version}: acknowledged by {done} of {total}").replace("{version}", "${r.optInt("version")}")
@@ -364,12 +362,11 @@ internal val presetItems = mapOf("read-description" to "Read the community descr
         if (discoverable.isNotEmpty()) {
             item { Text("Recommended groups", style = MaterialTheme.typography.titleSmall) }
             items(discoverable, key = { "rec-" + it.optString("groupId") }) { g -> val id = g.optString("groupId")
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(id in recommended, { if (it) recommended.add(id) else recommended.remove(id) }); RawText(g.optString("name").ifBlank { tr("Private group") }) } }
+                CheckboxRow(id in recommended, { if (it) recommended.add(id) else recommended.remove(id) }) { RawText(g.optString("name").ifBlank { tr("Private group") }) } }
         }
         item { Text("Getting started", style = MaterialTheme.typography.titleSmall) }
         items(presetItems.keys.toList(), key = { "preset-$it" }) { id ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checklist.any { it.optString("id") == id }, { on -> if (on) checklist.add(JSONObject().put("id", id).put("label", tr(presetItems.getValue(id))).put("required", false)) else checklist.removeAll { it.optString("id") == id } })
+            CheckboxRow(checklist.any { it.optString("id") == id }, { on -> if (on) checklist.add(JSONObject().put("id", id).put("label", tr(presetItems.getValue(id))).put("required", false)) else checklist.removeAll { it.optString("id") == id } }) {
                 Text(presetItems.getValue(id))
             }
         }
