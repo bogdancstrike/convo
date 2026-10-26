@@ -192,13 +192,13 @@ test('Back restores graph scope and filters; diagram details and sidebar control
     await adminGo(page, 'roles');
     await page.getByRole('tab', { name: 'Organization chart' }).click();
     const graph = page.getByTestId('role-organigram');
-    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    await expect(graph.locator('.react-flow__node')).toHaveCount(8);
     await graph.locator('.react-flow__node[data-id="role:convo-helpdesk"]').click();
     await expect(page.getByTestId('organization-details')).toContainText('Helpdesk');
     await expect(page).toHaveURL(/chartRole=convo-helpdesk/);
     await page.goBack();
     await expect(page.getByRole('tab', { name: 'Organization chart' })).toHaveAttribute('aria-selected', 'true');
-    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    await expect(graph.locator('.react-flow__node')).toHaveCount(8);
     await page.getByRole('tab', { name: 'Permission map' }).click();
     const map = page.getByTestId('permission-map');
     await map.locator('[data-id="convo-helpdesk"]').hover();
@@ -228,7 +228,7 @@ test('organization details scroll internally without enlarging the page', async 
     await page.setViewportSize({ width: 1500, height: 900 });
     await adminSignIn(page, user); await adminGo(page, 'roles?tab=organization');
     const graph = page.getByTestId('role-organigram');
-    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    await expect(graph.locator('.react-flow__node')).toHaveCount(8);
     const before = await page.evaluate(() => document.documentElement.scrollHeight);
     await graph.locator('[data-id="role:convo-admin"]').click();
     const inspector = page.getByTestId('organization-details');
@@ -387,7 +387,7 @@ test('data charts and diagrams can switch to inspectable tables and back', async
     await diagramSwitch.click();
     await expect(graph.getByRole('columnheader', { name: /Connections/ })).toBeVisible();
     await graph.getByRole('button', { name: 'Show diagram', exact: true }).click();
-    await expect(graph.locator('.react-flow__node')).toHaveCount(6);
+    await expect(graph.locator('.react-flow__node')).toHaveCount(8);
   } finally { await closeAll(page); }
 });
 

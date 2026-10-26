@@ -17,12 +17,12 @@ test('send a bundled sticker; recipients render it and refuse an altered file', 
     await send(amy, 'stickers incoming');
     await amy.getByTestId('emoji-button').click();
     await amy.getByTestId('picker-stickers').click();
-    await amy.getByTestId('sticker-thumbs-up').click();
+    await amy.getByTestId('sticker-basics-thumbs-up').click();
     await expect(amy.getByTestId('emoji-picker')).toHaveCount(0);
     await expect(amy.getByTestId('message').getByTestId('sticker-image')).toHaveCount(1);
 
     await amy.getByTestId('emoji-button').click(); await amy.getByTestId('picker-stickers').click();
-    await amy.getByTestId('sticker-heart').click();
+    await amy.getByTestId('sticker-basics-heart').click();
 
     await bob.getByTestId('nav-chats').click();
     await expect(bob.locator('.chat-row').filter({ hasText: 'Sticker' })).toBeVisible({ timeout: 20_000 }); // list preview

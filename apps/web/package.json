@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:android-core": "vite build -c ../android/protocol/vite.config.mjs"
   },
   "dependencies": {
     "@floating-ui/react-dom": "2.1.9",

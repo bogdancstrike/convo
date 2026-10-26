@@ -19,7 +19,7 @@ scripts/count-tests.py --no-docker
 | Shared vectors | `contracts/vectors` (device auth, key transparency) | Java and TypeScript against an independent Python generator | part of the unit suites |
 | Web core and UI | `apps/web/src/**/*.test.ts(x)` (Vitest) | encryption core, stores, reducers, components | `cd apps/web && npx vitest run` |
 | Admin console | `apps/admin/src/**/*.test.ts(x)` (Vitest) | console logic and components | `cd apps/admin && npx vitest run` |
-| Android | `apps/android/app/src/test` (JUnit, JVM) | Kotlin helpers, translations | `cd apps/android && ./gradlew testDebugUnitTest` |
+| Android | `apps/android/app/src/test` (JUnit, Robolectric, Compose UI test; JVM) | Kotlin helpers, translations, whole screens against a fake core | `cd apps/android && ./gradlew testDebugUnitTest` |
 | API contract, security, robustness | `tests/api` (pytest, Python device client) | the running Compose stack, real devices and signatures | `docker compose --profile e2e run --rm api-tests` |
 | End-to-end | `tests/e2e/tests` (Playwright, Chromium + Firefox) | the running stack through real browsers | `docker compose --profile e2e run --rm e2e` |
 | Android end-to-end | `tests/e2e/android` | the emulator driven by adb plus a browser peer | see `tests/e2e/android/*.sh` |
@@ -46,6 +46,16 @@ every new endpoint is automatically covered by:
 * `test_robustness.py` — hostile bodies, path values and query strings on every endpoint; any 5xx
   is a bug (ASVS V5).
 
+### Android screens on the JVM
+
+`MainActivity` talks to the shared encryption core through `CoreTransport` (production:
+`ProtocolBridge`, the core in a headless WebView). Tests install `FakeCore` before the activity
+starts: it answers commands from per-test handlers, records every command, and emits the core's
+events (`phase`, `snapshot`, …), so whole screens run under Robolectric without a WebView or server.
+`Snapshots` builds snapshot JSON shaped like the core's. Assert on **what the UI asks the core to
+do** (the recorded commands and their arguments), which is the contract the e2e suites then check
+end to end. `src/test/resources/robolectric.properties` fixes the SDK and a phone-sized screen.
+
 ## Coverage
 
 ### Backend
@@ -59,15 +69,27 @@ JaCoCo measures two things and merges them:
 ```sh
 cd server && ./gradlew test coverageServer && cd ..
 docker compose -f docker-compose.yaml -f docker-compose.coverage.yaml up -d server
-docker compose --profile e2e run --rm api-tests          # and/or the e2e suite
+docker compose -f docker-compose.yaml -f docker-compose.coverage.yaml --profile e2e run --rm api-tests   # and/or e2e
 docker compose -f docker-compose.yaml -f docker-compose.coverage.yaml stop server   # flushes coverage
 (cd server && ./gradlew jacocoCombinedReport)            # build/reports/jacoco/combined/html
 docker compose up -d server                              # back to the normal image
 ```
 
+Pass **both** compose files to every command in the run, including `run`: a `run` with only
+`docker-compose.yaml` recreates `server` (and `web`) from the plain configuration, silently
+dropping the agent and the instrumented web build. Check with
+`docker inspect enclave-server-1 --format '{{.Config.Env}}' | grep -c jacoco` (1 = agent attached).
+
 ### Clients
 
-`npx vitest run --coverage` in `apps/web` and `apps/admin` (V8 provider; reports in `coverage/`).
+* Unit: `npx vitest run --coverage` in `apps/web` and `apps/admin` (V8 provider; reports in
+  `coverage/`).
+* Web end to end: the coverage override builds an Istanbul-instrumented web app
+  (`COVERAGE=1`); with `COVERAGE_DIR` set the e2e support saves each page's `window.__coverage__`.
+  `node apps/web/scripts/merge-coverage.mjs` merges it with the unit coverage into
+  `apps/web/coverage-merged/`.
+* Android: `./gradlew createDebugUnitTestCoverageReport`
+  (`app/build/reports/coverage/test/debug`).
 
 ## Load, scalability and chaos
 

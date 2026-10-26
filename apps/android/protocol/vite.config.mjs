@@ -1,6 +1,8 @@
 import { defineConfig } from '../../web/node_modules/vite/dist/node/index.js';
 import { fileURLToPath } from 'node:url';
 export default defineConfig({
+  // Only core.js goes into the APK assets; the web app's public/ files must not be copied there.
+  publicDir: false,
   build: { target: 'es2022', sourcemap: false, emptyOutDir: false,
     outDir: fileURLToPath(new URL('../app/src/main/assets', import.meta.url)),
     lib: { entry: fileURLToPath(new URL('./entry.ts', import.meta.url)), name: 'ConvoProtocol', formats: ['iife'], fileName: () => 'core.js' },

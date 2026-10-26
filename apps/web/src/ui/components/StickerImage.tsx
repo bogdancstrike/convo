@@ -110,7 +110,7 @@ export function StickerGrid({ client, onPick }: { client?: EnclaveClient; onPick
   const tile = (pack: string, id: string, title: string, image: React.ReactNode) => (
     <div key={`${pack}/${id}`} className="sticker-tile">
       <button type="button" title={title} aria-label={t('sticker.send', { name: title })} onClick={() => onPick(pack, id)}
-        onContextMenu={(e) => { if (!client) return; e.preventDefault(); setMenu({ pack, id }); }} data-testid={`sticker-${id.slice(0, 32)}`}>{image}</button>
+        onContextMenu={(e) => { if (!client) return; e.preventDefault(); setMenu({ pack, id }); }} data-testid={`sticker-${pack === CUSTOM_PACK ? 'custom' : pack}-${id.slice(0, 32)}`}>{image}</button>
       {menu?.pack === pack && menu.id === id && client && (
         <div className="sticker-menu" role="menu">
           <button type="button" role="menuitem" onClick={() => { setMenu(null); void client.toggleFavoriteSticker({ pack, id }); }} data-testid="sticker-favorite">

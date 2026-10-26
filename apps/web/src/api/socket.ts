@@ -214,8 +214,12 @@ function defaultSocketUrl(): string {
   return `${protocol === 'https:' ? 'wss' : 'ws'}://${host}/v1/ws`;
 }
 
-/** The device can never connect again: revoked, or its account was disabled (local data is wiped). */
-function isRevoked(error: unknown): boolean {
+/**
+ * The device can never connect again (local data is wiped). Only DEVICE_REVOKED qualifies: a disabled
+ * account (ACCOUNT_DISABLED) is a reversible organization decision, so the device keeps its keys and
+ * history and keeps retrying with backoff until an admin enables the account again.
+ */
+export function isRevoked(error: unknown): boolean {
   const code = typeof error === 'object' && error !== null ? (error as { code?: string }).code : undefined;
-  return code === 'DEVICE_REVOKED' || code === 'ACCOUNT_DISABLED';
+  return code === 'DEVICE_REVOKED';
 }
