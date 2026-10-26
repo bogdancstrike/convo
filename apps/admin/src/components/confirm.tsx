@@ -9,21 +9,24 @@ export function useReason() {
   const { modal } = App.useApp();
   return (title: string, body: string, danger = false, { optional = false, okText = 'Confirm' }: { optional?: boolean; okText?: string } = {}) => new Promise<string | null>((resolve) => {
     let reason = '';
-    modal.confirm({
+    const content = (missing: boolean) => (
+      <div style={{ display: 'grid', gap: 8 }}>
+        <Typography.Text type="secondary">{body}</Typography.Text>
+        <Input.TextArea autoFocus rows={3} maxLength={500} placeholder={optional ? 'Reason (optional, recorded in the audit log)' : 'Reason (recorded in the audit log)'} data-testid="reason-input"
+          status={missing ? 'error' : undefined} onChange={(e) => { reason = e.target.value; }} />
+        {missing && <Typography.Text type="danger" role="alert" data-testid="reason-required">Enter a reason: it is recorded in the audit log.</Typography.Text>}
+      </div>
+    );
+    const dialog = modal.confirm({
       title,
-      content: (
-        <div style={{ display: 'grid', gap: 8 }}>
-          <Typography.Text type="secondary">{body}</Typography.Text>
-          <Input.TextArea autoFocus rows={3} maxLength={500} placeholder={optional ? 'Reason (optional, recorded in the audit log)' : 'Reason (recorded in the audit log)'} data-testid="reason-input"
-            onChange={(e) => { reason = e.target.value; }} />
-        </div>
-      ),
+      content: content(false),
       okText,
       okButtonProps: { danger, 'data-testid': 'reason-confirm' } as never,
-      onOk: () => {
-        if (!reason.trim() && !optional) return Promise.reject(new Error('A reason is required'));
+      // Taking `close` keeps the dialog open until we close it, so a missing reason is explained in place.
+      onOk: (close: () => void) => {
+        if (!reason.trim() && !optional) { dialog.update({ content: content(true) }); return; }
         resolve(reason.trim());
-        return undefined;
+        close();
       },
       onCancel: () => resolve(null),
     });

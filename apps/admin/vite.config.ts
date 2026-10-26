@@ -10,5 +10,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
     rollupOptions: { output: { manualChunks: { charts: ['echarts', 'echarts-for-react'], antd: ['antd', '@ant-design/icons'] } } },
   },
-  test: { environment: 'node' },
+  test: {
+    environment: 'node',
+    setupFiles: ['src/test/setup.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    coverage: { provider: 'v8', include: ['src/**/*.{ts,tsx}'], exclude: ['src/**/*.test.*', 'src/test/**', 'src/main.tsx'], reporter: ['text-summary', 'html', 'json'] },
+  },
 });
