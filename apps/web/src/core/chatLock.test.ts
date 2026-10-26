@@ -1,8 +1,11 @@
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnclaveClient } from './client';
 import { SignalStore } from '../crypto/signalStore';
 import { FakeServer, until, type TestDevice } from '../test/fakeServer';
+
+// Real clients (key generation, Signal and MLS) are slow under the full parallel run.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 /**
  * "Require authentication" per chat (passwordless on): every kind of chat — 1:1, note to self,
