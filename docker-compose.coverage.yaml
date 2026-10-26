@@ -1,0 +1,15 @@
+# Backend coverage of API/e2e/load runs (docs/testing.md): the dev server runs the locally built jar
+# (server/build/libs, same class files as the report) with the JaCoCo agent attached.
+#   (cd server && ./gradlew coverageServer)
+#   docker compose -f docker-compose.yaml -f docker-compose.coverage.yaml up -d server
+#   ... run suites ...
+#   docker compose -f docker-compose.yaml -f docker-compose.coverage.yaml stop server   # flushes the .exec
+#   (cd server && ./gradlew jacocoCombinedReport)
+services:
+  server:
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -javaagent:/jacoco/jacocoagent.jar=destfile=/jacoco-out/server-it.exec,append=true,includes=com.enclave.*"
+    volumes:
+      - ./server/build/coverage/enclave-server.jar:/app/enclave-server.jar:ro
+      - ./server/build/jacoco-agent:/jacoco:ro
+      - ./server/build/jacoco-it:/jacoco-out

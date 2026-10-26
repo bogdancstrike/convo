@@ -324,9 +324,19 @@ This sequence describes internal development milestones, not partial public rele
 | [docs/sources.md](docs/sources.md) | Primary technical references, assumptions, and external-conversation access status |
 | [docs/decisions/](docs/decisions) | Implementation ADRs: interim browser crypto, directory names/phones, messenger UX and brand |
 | [docs/development.md](docs/development.md), [docs/configuration.md](docs/configuration.md) | Developer setup, tests, conventions; every backend setting |
+| [docs/testing.md](docs/testing.md) | Test layers, coverage, load/scalability/chaos runs and how to run each |
 | [docs/SECURITY.md](docs/SECURITY.md) | Passwordless/passkey configuration and flows, device authentication, admin roles, public surface, security tests |
 | [deploy/k8s.md](deploy/k8s.md) | Kubernetes deployment, release procedure and production smoke tests |
 | [tasks.md](tasks.md) | Implementation progress against the task IDs |
+
+## Testing
+
+Convo is tested at every layer against the real running stack: backend unit tests with JaCoCo
+coverage (unit plus the running server), web/admin Vitest, Android JVM tests, a Python API suite that
+enrolls real devices and attacks every endpoint (authentication, tampering, replay, hostile input),
+Playwright end-to-end in Chromium and Firefox, production smoke tests, and Locust load, two-replica
+and chaos runs. Target: 3,000–4,000 tests and no known bugs. `scripts/count-tests.py` counts them;
+[docs/testing.md](docs/testing.md) explains every suite and how to run it.
 
 ## Working on Convo
 

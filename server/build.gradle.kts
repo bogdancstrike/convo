@@ -7,6 +7,7 @@
  */
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -58,6 +59,44 @@ tasks.withType<JavaCompile> {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+// --- coverage (docs/testing.md) ------------------------------------------------------------------
+jacoco { toolVersion = "0.8.13" }
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports { xml.required = true; html.required = true }
+}
+
+/** The JaCoCo agent jar, mounted into the dev server container for coverage of API/e2e runs. */
+val jacocoAgentJar by tasks.registering(Copy::class) {
+    from(zipTree(configurations.jacocoAgent.get().singleFile)) { include("jacocoagent.jar") }
+    into(layout.buildDirectory.dir("jacoco-agent"))
+}
+
+/** The boot jar at a fixed path for docker-compose.coverage.yaml (same classes as the report). */
+val coverageServer by tasks.registering(Copy::class) {
+    dependsOn(tasks.bootJar, jacocoAgentJar)
+    from(tasks.bootJar.flatMap { it.archiveFile })
+    into(layout.buildDirectory.dir("coverage"))
+    rename { "enclave-server.jar" }
+}
+
+/**
+ * Combined backend coverage: JUnit plus the running server exercised by the API, e2e and load
+ * suites (the .exec files in build/jacoco-it, written by the agent; see docker-compose.coverage.yaml).
+ */
+val jacocoCombinedReport by tasks.registering(JacocoReport::class) {
+    executionData(fileTree(layout.buildDirectory) { include("jacoco/test.exec", "jacoco-it/*.exec") })
+    sourceSets(sourceSets.main.get())
+    reports {
+        xml.required = true
+        html.required = true
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/combined/html")
+        xml.outputLocation = layout.buildDirectory.file("reports/jacoco/combined/jacoco.xml")
+    }
 }
 
 tasks.bootJar {

@@ -492,6 +492,23 @@ Every **Launch** row is P0 and feeds REL-01. Dependencies reference implementati
 | IOS-02 | Client follow-on | iOS app, native storage/lifecycle, accessibility, ReplayKit screen share | IOS-01, CALL-02, FEAT-03 | Complete §31 feature catalogue on iOS when that client ships; no reduced feature interpretation. |
 | DESK-01 | Client follow-on | Signed native desktop packaging, native keystore/update/trust model | CORE-02, WEB-03, BUILD-01 | AC-PLAT-04; certify packaging separately from browser mode and repeat applicable feature catalogue. |
 
+## 6a. Testing programme (from 2026-10-26)
+
+Features are frozen; the main task is testing and bug fixing (docs/testing.md). Goal: 3,000–4,000
+tests of all kinds and no known bugs.
+
+| ID | Work | Status |
+|---|---|---|
+| TEST-01 | Python device client; API security and robustness suites for every endpoint | done (1,617) |
+| TEST-02 | Backend coverage: JaCoCo for JUnit plus the running server (API/e2e/load) | done (49.7% lines after TEST-01) |
+| TEST-03 | API functional contract suites (messaging, keys, groups, attachments, history, KT, calls, communities, admin) | in progress |
+| TEST-04 | Backend unit/integration tests targeted at uncovered code | open |
+| TEST-05 | Android JVM unit tests | open |
+| TEST-06 | Web and admin Vitest additions, client coverage | open |
+| TEST-07 | Locust load test, 1,000 users | open |
+| TEST-08 | Two backend replicas; chaos (replica, Valkey, PostgreSQL restarts) | open |
+| TEST-09 | More Playwright end-to-end and smoke tests | open |
+
 ## 7. Definition of done and scope discipline
 
 A completed implementation issue includes its exact changed paths, contract/schema change, relevant behavioral/failure evidence, privacy implications, and docs/diagram updates. Tests must demonstrate meaningful protocol/user invariants; avoid snapshotting implementation details or re-running unrelated suites without a reason. A passing happy-path demo does not close a security/reliability task.
