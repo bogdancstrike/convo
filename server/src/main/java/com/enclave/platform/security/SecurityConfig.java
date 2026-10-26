@@ -132,7 +132,7 @@ class SecurityConfig {
     @Bean
     @Order(2)
     SecurityFilterChain deviceChain(HttpSecurity http, DeviceRequestAuthenticator authenticator,
-            ProblemWriter problems, SecurityProperties properties) throws Exception {
+            ProblemWriter problems, SecurityProperties properties, RateLimitProperties rateLimits, TokenBuckets buckets) throws Exception {
         return http
                 .securityMatcher("/v1/**")
                 .csrf(c -> c.disable())
@@ -140,6 +140,8 @@ class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new DeviceSignatureFilter(authenticator, problems, properties.maxBodyBytes()),
                         AbstractPreAuthenticatedProcessingFilter.class)
+                // Per-device rate limits (specs §20), once the device is known.
+                .addFilterAfter(new RateLimitFilter(rateLimits, buckets, problems), DeviceSignatureFilter.class)
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.OPTIONS, "/v1/**").permitAll()
                         .requestMatchers(PUBLIC_ROUTES).permitAll()

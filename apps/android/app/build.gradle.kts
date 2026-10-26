@@ -18,8 +18,14 @@ android {
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
+    }
     buildTypes {
         debug {
+            // Unit-test coverage (JaCoCo): ./gradlew createDebugUnitTestCoverageReport
+            enableUnitTestCoverage = true
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -51,4 +57,13 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("net.openid:appauth:0.11.1")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.55")
+
+    // JVM unit tests (docs/testing.md): JUnit 4, the real org.json (Android's is a stub on the JVM),
+    // Robolectric + Compose UI tests for screens.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

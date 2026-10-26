@@ -63,7 +63,8 @@ server {
         proxy_set_header X-Forwarded-Port "";
         proxy_set_header X-Forwarded-Proto $convo_proto;
         add_header Cache-Control "no-store" always;
-        add_header X-Content-Type-Options "nosniff" always;
+        # X-Content-Type-Options comes from the server on every API response (sending it twice
+        # produced "nosniff, nosniff").
     }
 
     # Encrypted attachment objects (presigned S3 URLs). Host is preserved because it is part of

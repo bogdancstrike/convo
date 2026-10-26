@@ -311,6 +311,8 @@ services:
       PYTHONWARNINGS: ignore:Unverified HTTPS request
     volumes:
       - ./tests/api:/api
+      # Static checks (dangerous sinks) read the server source.
+      - ./server/src/main/java:/server-src:ro
     depends_on:
       web: { condition: service_healthy }
 
