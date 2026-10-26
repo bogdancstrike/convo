@@ -4,7 +4,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-RUN npm run build
+# COVERAGE=1: Istanbul-instrumented build for e2e coverage runs (docker-compose.coverage.yaml).
+ARG COVERAGE=0
+RUN VITE_COVERAGE=$COVERAGE npm run build
 
 FROM nginx:1.29-alpine
 RUN apk add --no-cache openssl

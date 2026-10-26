@@ -42,11 +42,11 @@ export class EnclaveApi {
   }
 
   history(after: number): Promise<{ seq: number; id: string; ciphertext: string }[]> {
-    return this.signed('GET', `/v1/history?after=${after}`);
+    return this.signed('GET', `/v1/history?after=${encodeURIComponent(String(after))}`);
   }
 
   putHistory(id: string, ciphertext: string): Promise<void> {
-    return this.signed('PUT', `/v1/history/${id}`, { ciphertext });
+    return this.signed('PUT', `/v1/history/${encodeURIComponent(String(id))}`, { ciphertext });
   }
 
   recoveryStatus(): Promise<{ configured: boolean }> { return this.signed('GET', '/v1/recovery/status'); }
@@ -163,11 +163,11 @@ export class EnclaveApi {
   /** Key transparency: the account's log entry with proofs (core/keyTransparency.ts). */
   /** Key transparency: consistency proof between two log sizes (split-view checks of gossiped heads). */
   ktConsistency(from: number, to: number): Promise<{ proof: string[] }> {
-    return this.signed('GET', `/v1/kt/consistency?from=${from}&to=${to}`);
+    return this.signed('GET', `/v1/kt/consistency?from=${encodeURIComponent(String(from))}&to=${encodeURIComponent(String(to))}`);
   }
 
   ktAccount(accountId: string, since: number): Promise<KtAccountProof> {
-    return this.signed('GET', `/v1/kt/accounts/${encodeURIComponent(accountId)}?since=${since}`);
+    return this.signed('GET', `/v1/kt/accounts/${encodeURIComponent(accountId)}?since=${encodeURIComponent(String(since))}`);
   }
 
   roster(accountId: string): Promise<RosterDto> {
@@ -195,7 +195,7 @@ export class EnclaveApi {
   }
 
   unlinkDevice(deviceId: number): Promise<void> {
-    return this.signed('DELETE', `/v1/devices/${deviceId}`);
+    return this.signed('DELETE', `/v1/devices/${encodeURIComponent(String(deviceId))}`);
   }
 
   unregisterSelf(): Promise<void> {
@@ -230,7 +230,7 @@ export class EnclaveApi {
   }
 
   group(groupId: string): Promise<GroupDto> {
-    return this.signed('GET', `/v1/groups/${groupId}`);
+    return this.signed('GET', `/v1/groups/${encodeURIComponent(String(groupId))}`);
   }
 
   createInvite(groupId: string): Promise<{ token: string; expiresAt: string }> { return this.signed('POST', `/v1/groups/${encodeURIComponent(groupId)}/invites`); }
@@ -245,18 +245,18 @@ export class EnclaveApi {
   leaveGroup(groupId: string): Promise<void> { return this.signed('POST', `/v1/groups/${encodeURIComponent(groupId)}/leave`); }
   /** Accepted commits of a group from an epoch on (catch-up after missed commits; ≤ 100 per page). */
   groupEvents(groupId: string, fromEpoch: number): Promise<{ seq: number; epoch: number; commit: string }[]> {
-    return this.signed('GET', `/v1/groups/${groupId}/events?fromEpoch=${fromEpoch}`);
+    return this.signed('GET', `/v1/groups/${encodeURIComponent(String(groupId))}/events?fromEpoch=${encodeURIComponent(String(fromEpoch))}`);
   }
   /** Whether a commit whose response was lost was accepted (404 ApiError when it was not). */
   groupCommitStatus(groupId: string, submissionId: string): Promise<{ epoch: number; seq: number; duplicate: boolean }> {
-    return this.signed('GET', `/v1/groups/${groupId}/commits/${submissionId}`);
+    return this.signed('GET', `/v1/groups/${encodeURIComponent(String(groupId))}/commits/${encodeURIComponent(String(submissionId))}`);
   }
   groupCommit(groupId: string, request: GroupCommitRequest): Promise<{ epoch: number; seq: number; duplicate: boolean }> {
-    return this.signed('POST', `/v1/groups/${groupId}/commits`, request);
+    return this.signed('POST', `/v1/groups/${encodeURIComponent(String(groupId))}/commits`, request);
   }
 
   groupMessage(groupId: string, request: GroupMessageRequest): Promise<{ ok: boolean; duplicate: boolean }> {
-    return this.signed('PUT', `/v1/groups/${groupId}/messages`, request);
+    return this.signed('PUT', `/v1/groups/${encodeURIComponent(String(groupId))}/messages`, request);
   }
 
   /** Registers an attachment of exactly `size` encrypted bytes; returns a presigned PUT URL. */
@@ -287,7 +287,7 @@ export class EnclaveApi {
   }
 
   private signed<T>(method: string, path: string, body?: unknown): Promise<T> {
-    if (!this.device) throw new Error('device credentials not configured');
+    if (!this.device) return Promise.reject(new Error('device credentials not configured'));
     return this.http.signed<T>(method, path, this.device, body);
   }
 }

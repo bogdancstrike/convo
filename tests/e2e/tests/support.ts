@@ -1,4 +1,6 @@
-import { expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 /**
  * Shared helpers: provision throwaway Keycloak users through the admin API (so every run starts
@@ -90,6 +92,7 @@ export async function enroll(page: Page, user: TestUser): Promise<void> {
 /** Opens a fresh, isolated browser profile with a page. Close it with `page.context().close()`. */
 export async function newPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  await collectCoverage(context);
   const page = await context.newPage();
   // Surface client-side warnings/errors in the test log; they are the first clue on failures.
   page.on('console', (m) => {
@@ -101,7 +104,35 @@ export async function newPage(browser: Browser): Promise<Page> {
 
 /** Closes the browser profiles of the given pages (keeps failure snapshots focused). */
 export async function closeAll(...pages: Page[]): Promise<void> {
-  await Promise.all(pages.map((p) => p.context().close().catch(() => undefined)));
+  await Promise.all(pages.map(async (p) => { await saveCoverage(p); await p.context().close().catch(() => undefined); }));
+}
+
+// --- e2e coverage of the web app (docs/testing.md): only with an instrumented build and COVERAGE_DIR set ---
+
+const COVERAGE_DIR = process.env.COVERAGE_DIR;
+
+function writeCoverage(json: string | null | undefined): void {
+  if (!COVERAGE_DIR || !json) return;
+  mkdirSync(COVERAGE_DIR, { recursive: true });
+  writeFileSync(`${COVERAGE_DIR}/${randomUUID()}.json`, json);
+}
+
+/** Saves the page's Istanbul counters (window.__coverage__) before it closes. */
+async function saveCoverage(page: Page): Promise<void> {
+  if (!COVERAGE_DIR || page.isClosed()) return;
+  writeCoverage(await page.evaluate(() => JSON.stringify((window as unknown as { __coverage__?: unknown }).__coverage__ ?? null)).catch(() => null));
+}
+
+/** Also keeps counters across reloads and navigations, which reset window.__coverage__. */
+async function collectCoverage(context: BrowserContext): Promise<void> {
+  if (!COVERAGE_DIR) return;
+  await context.exposeBinding('__convoSaveCoverage', (_source, json: string) => writeCoverage(json));
+  await context.addInitScript(() => {
+    addEventListener('pagehide', () => {
+      const cov = (window as unknown as { __coverage__?: unknown }).__coverage__;
+      if (cov) void (window as unknown as { __convoSaveCoverage: (json: string) => Promise<void> }).__convoSaveCoverage(JSON.stringify(cov));
+    });
+  });
 }
 
 /** Starts a direct chat by searching the directory (by handle, name or phone). */

@@ -1,5 +1,8 @@
-# Backend coverage of API/e2e/load runs (docs/testing.md): the dev server runs the locally built jar
-# (server/build/libs, same class files as the report) with the JaCoCo agent attached.
+# Coverage runs (docs/testing.md):
+# - backend: the dev server runs the locally built jar (same class files as the report) with the
+#   JaCoCo agent attached;
+# - web: an Istanbul-instrumented build of the web app; e2e runs save window.__coverage__ to
+#   tests/e2e/test-results/coverage when COVERAGE_DIR is set (see the e2e service below).
 #   (cd server && ./gradlew coverageServer)
 #   docker compose -f docker-compose.yaml -f docker-compose.coverage.yaml up -d server
 #   ... run suites ...
@@ -13,3 +16,12 @@ services:
       - ./server/build/coverage/enclave-server.jar:/app/enclave-server.jar:ro
       - ./server/build/jacoco-agent:/jacoco:ro
       - ./server/build/jacoco-it:/jacoco-out
+  web:
+    build:
+      context: ./apps/web
+      args:
+        COVERAGE: "1"
+    image: enclave/web:coverage
+  e2e:
+    environment:
+      COVERAGE_DIR: /e2e/test-results/coverage
