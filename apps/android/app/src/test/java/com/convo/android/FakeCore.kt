@@ -34,10 +34,10 @@ class FakeCore(private val receive: (String, JSONObject) -> Unit) : CoreTranspor
         lateinit var current: FakeCore
 
         /**
-         * Installs the fake for the next activity, starting it "ready" with [snapshot], as a returning
+         * Installs the fake for the next activity, starting it in [phase] (default "ready") with [snapshot], as a returning
          * user: first-run notices (background delivery, notification offer) are already behind them.
          */
-        fun install(snapshot: JSONObject = Snapshots.basic(), setup: FakeCore.() -> Unit = {}) {
+        fun install(snapshot: JSONObject = Snapshots.basic(), phase: JSONObject = JSONObject().put("name", "ready"), setup: FakeCore.() -> Unit = {}) {
             androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
                 .getSharedPreferences("MainActivity", android.content.Context.MODE_PRIVATE).edit()
                 .putBoolean("backgroundDefaultApplied", true).putBoolean("notificationsOffered", true).commit()
@@ -45,7 +45,7 @@ class FakeCore(private val receive: (String, JSONObject) -> Unit) : CoreTranspor
                 FakeCore(receive).also { core ->
                     current = core
                     core.setup()
-                    core.emit("phase", JSONObject().put("name", "ready"))
+                    core.emit("phase", phase)
                     core.emit("snapshot", snapshot)
                 }
             }
