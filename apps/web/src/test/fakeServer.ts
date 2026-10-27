@@ -64,6 +64,11 @@ let instance: FakeServer | undefined;
 export class FakeServer {
   readonly accounts = new Map<string, FakeAccount>();
   readonly groups = new Map<string, FakeGroup>();
+  /** Device-linking sessions (provisioning), by ID. */
+  readonly provisioning = new Map<string, { id: string; account: FakeAccount; deviceId: number; challenge: string; eph: string; label: string;
+    status: 'pending' | 'approved' | 'completed' | 'cancelled'; code?: string; reply?: { ephemeralPublicKey: string; message: string } }>();
+  /** Calls created through the API. */
+  readonly callsCreated: { callId: string; peer?: string; groupId?: string; video: boolean }[] = [];
   /** Object storage behind the presigned URLs (encrypted blobs only, like S3/MinIO). */
   readonly objects = new Map<string, Uint8Array>();
   private nextObject = 1;
@@ -159,6 +164,23 @@ export class FakeServer {
         if (!self.objects.has(id as string)) throw new ApiError(404, 'NOT_FOUND', 'NOT_FOUND');
         return { downloadUrl: `https://objects.test/${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
       },
+      openProvisioning: (_t: unknown, eph: unknown, label: unknown) => {
+        const id = `prov${self.provisioning.size + 1}`; const deviceId = account.devices.size + 1 + [...self.provisioning.values()].filter((p) => p.account === account).length;
+        self.provisioning.set(id, { id, account, deviceId, challenge: `ch-${id}`, eph: eph as string, label: label as string, status: 'pending' });
+        return { provisioningId: id, reservationId: `r-${id}`, accountId: account.accountId, deviceId, challenge: `ch-${id}`, deploymentId: DEPLOYMENT, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+      },
+      provisioningStatus: (_t: unknown, id: unknown) => { const p = self.provisioning.get(id as string)!; return { status: p.status, ...p.reply }; },
+      cancelProvisioning: (_t: unknown, id: unknown) => { self.provisioning.get(id as string)!.status = 'cancelled'; },
+      pendingProvisioning: () => [...self.provisioning.values()].filter((p) => p.account.accountId === current!.accountId && p.status === 'pending')
+        .map((p) => ({ provisioningId: p.id, deviceId: p.deviceId, ephemeralPublicKey: p.eph, clientLabel: p.label, challenge: p.challenge, deploymentId: DEPLOYMENT, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 600_000).toISOString() })),
+      provisioningCode: (id: unknown) => { const p = self.provisioning.get(id as string)!; p.code = `code-${id}`; return { code: p.code }; },
+      deliverProvisioning: (id: unknown, eph: unknown, message: unknown) => { const p = self.provisioning.get(id as string)!; p.status = 'approved'; p.reply = { ephemeralPublicKey: eph as string, message: message as string }; },
+      declineProvisioning: (id: unknown) => { self.provisioning.get(id as string)!.status = 'cancelled'; },
+      linkDevice: (_t: unknown, request: unknown) => self.link(account, request as PrimaryRegistrationRequest & { provisioningId: string; provisioningCode: string }),
+      unlinkDevice: (deviceId: unknown) => { self.revoke(self.accounts.get(current!.accountId)!, deviceId as number); },
+      createCall: (request: unknown) => { const r = request as { peer?: string; groupId?: string; video: boolean }; const callId = `00000000-0000-4000-b000-${String(self.callsCreated.length + 1).padStart(12, "0")}`; self.callsCreated.push({ callId, ...r }); return { callId, room: callId, token: 'lk-token', path: '/rtc', video: r.video }; },
+      joinCall: (callId: unknown) => ({ callId, room: callId, token: 'lk-token', path: '/rtc', video: false }),
+      endCall: () => undefined,
       reportRecipients: () => [...self.accounts.values()].filter((a) => a.username.startsWith('security')).map((a) => ({ accountId: a.accountId, displayName: a.displayName })),
       lastSeenHeartbeat: () => undefined,
     };
@@ -190,6 +212,27 @@ export class FakeServer {
     return result;
   }
 
+  /**
+   * Links a new browser to `existing`'s account through the real flow: the new device opens a
+   * provisioning session, the existing device approves it (sealed identity transfer), the new device
+   * completes enrollment. Returns the new device's (not yet started) client.
+   */
+  async linkDevice(existing: TestDevice, label = 'Firefox on Linux'): Promise<TestDevice> {
+    const { LinkRequest } = await import('../core/linking');
+    const store = await EncryptedStore.open(`fake-${existing.account.username}-linked-${Math.random()}`);
+    const repos = new Repositories(store);
+    const api = this.api(existing.account);
+    const request = await LinkRequest.start(api, 'token', label);
+    const [incoming] = await existing.client.incomingLinkRequests();
+    await existing.client.approveLink(incoming!);
+    await until(async () => (await request.poll()) === 'approved');
+    const device = await request.complete(repos);
+    const client = new EnclaveClient(device, api, repos, new SignalStore(store), await repos.settings());
+    const result: TestDevice = { account: existing.account, client, store, repos, api, connection: 'offline' };
+    client.on('connection', (state) => { result.connection = state; });
+    return result;
+  }
+
   /** Sends a server directive (DEVICE_LIST_CHANGED, KEYS_LOW, …) to one device's socket. */
   directive(account: FakeAccount, deviceId: number, type: Directive): void {
     account.devices.get(deviceId)?.socket?.frame({ requestId: 0, directive: { type } });
@@ -213,6 +256,17 @@ export class FakeServer {
     account.devices.set(deviceId, { deviceId, registrationId: request.registrationId, signedPreKey: request.signedPreKey, preKeys: [...request.preKeys], mailbox: [], keyPackages: [] });
     account.deviceListVersion++;
     return { accountId: account.accountId, deviceId, deviceListVersion: account.deviceListVersion };
+  }
+
+  private link(account: FakeAccount, request: PrimaryRegistrationRequest & { provisioningId: string; provisioningCode: string }): RegistrationResponse {
+    const p = this.provisioning.get(request.provisioningId);
+    if (!p || p.status !== 'approved' || p.code !== request.provisioningCode) throw new ApiError(403, 'FORBIDDEN', 'provisioning not approved');
+    if (request.identityKey !== account.identityKey) throw new ApiError(400, 'INVALID_REQUEST', 'identity key differs from the account');
+    p.status = 'completed';
+    account.devices.set(p.deviceId, { deviceId: p.deviceId, registrationId: request.registrationId, signedPreKey: request.signedPreKey, preKeys: [...request.preKeys], mailbox: [], keyPackages: [] });
+    account.deviceListVersion++;
+    for (const d of this.active(account)) if (d.deviceId !== p.deviceId) d.socket?.frame({ requestId: 0, directive: { type: 'DEVICE_LIST_CHANGED' } });
+    return { accountId: account.accountId, deviceId: p.deviceId, deviceListVersion: account.deviceListVersion };
   }
 
   device(caller: { accountId: string; deviceId: number }): FakeDevice {

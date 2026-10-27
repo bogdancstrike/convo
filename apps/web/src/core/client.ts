@@ -1424,6 +1424,8 @@ export class EnclaveClient extends Emitter<ClientEvents> {
     if (!conversation || conversation.kind === 'note' || conversation.left || conversation.adminOnly || conversation.blocked) throw new Error('calls unavailable here');
     const groupId = groupIdOf(conversationId);
     const join = await this.api.createCall(groupId ? { groupId, video } : { peer: conversationId, video });
+    // Recipients accept only UUID call IDs; a malformed one would leave the caller ringing nobody.
+    if (!/^[0-9a-f-]{36}$/.test(join.callId)) throw new Error('server returned an invalid call ID');
     const key = newMediaKey();
     await this.logCall({ callId: join.callId, conversationId, direction: 'out', peer: conversationId, video, startedAt: Date.now(), status: 'ringing',
       ...(groupId ? { mediaKey: key, keyGeneration: 0 } : {}) });
