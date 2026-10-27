@@ -30,6 +30,6 @@ export default defineConfig({
     environment: 'node',
     // Component tests (.test.tsx) opt into jsdom with a `// @vitest-environment jsdom` comment.
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    coverage: { provider: 'v8', include: ['src/**'], exclude: ['src/**/*.test.*'], reporter: ['text-summary', 'json', 'html'] },
+    coverage: { provider: 'v8', include: ['src/**/*.{ts,tsx}'], exclude: ['src/**/*.test.*', 'src/test/**'], reporter: ['text-summary', 'json', 'html'] },
   },
 });

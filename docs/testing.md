@@ -88,8 +88,10 @@ dropping the agent and the instrumented web build. Check with
   `coverage/`).
 * Web end to end: the coverage override builds an Istanbul-instrumented web app
   (`COVERAGE=1`); with `COVERAGE_DIR` set the e2e support saves each page's `window.__coverage__`.
-  `node apps/web/scripts/merge-coverage.mjs` merges it with the unit coverage into
-  `apps/web/coverage-merged/`.
+  `npm run coverage:merged` (in `apps/web`) runs Vitest with the Istanbul provider and merges it
+  with the e2e files into `apps/web/coverage-merged/`. The e2e build is instrumented after
+  transpilation, so its coverage is first mapped back to source lines through the embedded source
+  maps; merging without that step double-counts lines.
 * Android: tests run against the `qa` build type (debug without minification, so the test seams
   keep their names). `./gradlew testQaUnitTest connectedQaAndroidTest mergedCoverageReport` merges
   JVM and on-device coverage into `app/build/reports/jacoco/mergedCoverageReport`; without a device
@@ -117,7 +119,7 @@ Vitest + instrumented e2e, merged):
 |---|---|---|---|
 | Backend | 92.9% | 76.9% | 176 JUnit, 2,212 API, 119 e2e |
 | Android (JVM) | 69.2% | 36.4% | 1,073 |
-| Web | 74.0% (merged) | 53.1% | 411 Vitest + e2e |
+| Web | 84.7% (merged) | 68.6% | 421 Vitest + e2e |
 | Admin console | 18.3% (unit) | 10.1% | 157 Vitest + e2e |
 
 Admin API step-up checks need `auth_time`, which password grants do not carry: the functional
