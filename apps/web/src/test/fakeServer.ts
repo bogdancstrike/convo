@@ -54,6 +54,8 @@ interface FakeAccount {
   identityKey?: string;
   deviceListVersion: number;
   devices: Map<number, FakeDevice>;
+  /** Visible archive/bot mark set by an administrator. */
+  integration?: { kind: 'archive' | 'bot'; retention: string };
 }
 
 type Handler = (caller: { accountId: string; deviceId: number }, ...args: unknown[]) => unknown;
@@ -319,7 +321,7 @@ export class FakeServer {
   private accountDto(accountId: string): AccountDto {
     const a = this.accounts.get(accountId);
     if (!a) throw new ApiError(404, 'NOT_FOUND', 'NOT_FOUND');
-    return { accountId: a.accountId, username: a.username, displayName: a.displayName, identityKey: a.identityKey };
+    return { accountId: a.accountId, username: a.username, displayName: a.displayName, identityKey: a.identityKey, ...(a.integration ? { integration: a.integration } : {}) };
   }
 
   active(a: FakeAccount): FakeDevice[] { return [...a.devices.values()].filter((d) => !d.revoked); }
