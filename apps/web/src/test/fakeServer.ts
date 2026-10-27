@@ -67,6 +67,9 @@ export class FakeServer {
   /** Device-linking sessions (provisioning), by ID. */
   readonly provisioning = new Map<string, { id: string; account: FakeAccount; deviceId: number; challenge: string; eph: string; label: string;
     status: 'pending' | 'approved' | 'completed' | 'cancelled'; code?: string; reply?: { ephemeralPublicKey: string; message: string } }>();
+  /** Communities: an announcement (root) group plus linked groups; roles come from the root. */
+  readonly communities = new Map<string, { communityId: string; rootGroupId: string; version: number;
+    links: Map<string, { visibility: 'discoverable' | 'private'; status: 'proposed' | 'active'; delegation: boolean }>; joinRequests: string[] }>();
   /** Calls created through the API. */
   readonly callsCreated: { callId: string; peer?: string; groupId?: string; video: boolean }[] = [];
   /** Object storage behind the presigned URLs (encrypted blobs only, like S3/MinIO). */
@@ -181,6 +184,44 @@ export class FakeServer {
       createCall: (request: unknown) => { const r = request as { peer?: string; groupId?: string; video: boolean }; const callId = `00000000-0000-4000-b000-${String(self.callsCreated.length + 1).padStart(12, "0")}`; self.callsCreated.push({ callId, ...r }); return { callId, room: callId, token: 'lk-token', path: '/rtc', video: r.video }; },
       joinCall: (callId: unknown) => ({ callId, room: callId, token: 'lk-token', path: '/rtc', video: false }),
       endCall: () => undefined,
+      createCommunity: (rootGroupId: unknown) => {
+        const g = self.memberGroup(current!, rootGroupId as string, false);
+        if (g.members.get(current!.accountId) !== 'owner' || !g.adminOnly) throw new ApiError(403, 'FORBIDDEN_ROLE', 'only the owner of an announcement group');
+        const communityId = `00000000-0000-4000-c000-${String(self.communities.size + 1).padStart(12, '0')}`;
+        self.communities.set(communityId, { communityId, rootGroupId: rootGroupId as string, version: 1, links: new Map(), joinRequests: [] });
+        return { communityId, rootGroupId, role: 'owner', version: 1 };
+      },
+      myCommunities: () => [...self.communities.values()].flatMap((c) => {
+        const role = self.groups.get(c.rootGroupId)?.members.get(current!.accountId);
+        return role ? [{ communityId: c.communityId, rootGroupId: c.rootGroupId, role, version: c.version }] : [];
+      }),
+      communityGroups: (id: unknown) => {
+        const c = self.community(current!, id as string);
+        return [...c.links].flatMap(([groupId, link]) => {
+          const g = self.groups.get(groupId)!;
+          const member = g.members.has(current!.accountId);
+          const owner = g.members.get(current!.accountId) === 'owner';
+          if (!member && (link.visibility === 'private' || link.status !== 'active')) return [];
+          return [{ groupId, visibility: link.visibility, status: link.status, member, canAccept: link.status === 'proposed' && owner, version: c.version, delegation: link.delegation }];
+        });
+      },
+      linkCommunityGroup: (id: unknown, groupId: unknown, visibility: unknown, delegation: unknown) => {
+        const c = self.community(current!, id as string, true);
+        const g = self.memberGroup(current!, groupId as string, false);
+        const owner = g.members.get(current!.accountId) === 'owner';
+        const link = { visibility: visibility as 'discoverable' | 'private', status: owner ? 'active' as const : 'proposed' as const, delegation: owner && !!delegation };
+        c.links.set(groupId as string, link); c.version++;
+        return { groupId, ...link, member: true, canAccept: false, version: c.version };
+      },
+      acceptCommunityLink: (id: unknown, groupId: unknown, delegation: unknown) => {
+        const c = self.community(current!, id as string);
+        if (self.groups.get(groupId as string)?.members.get(current!.accountId) !== 'owner') throw new ApiError(403, 'FORBIDDEN_ROLE', 'only the group owner accepts');
+        const link = c.links.get(groupId as string)!; link.status = 'active'; link.delegation = !!delegation; c.version++;
+      },
+      unlinkCommunityGroup: (id: unknown, groupId: unknown) => { const c = self.community(current!, id as string, true); c.links.delete(groupId as string); c.version++; },
+      requestCommunityGroup: (id: unknown, groupId: unknown) => { self.community(current!, id as string).joinRequests.push(`${groupId}:${current!.accountId}`); },
+      communityOperations: (id: unknown) => { self.community(current!, id as string, true); return []; },
+      retryCommunityOperations: (id: unknown) => { self.community(current!, id as string, true); return { unblocked: 0 }; },
       reportRecipients: () => [...self.accounts.values()].filter((a) => a.username.startsWith('security')).map((a) => ({ accountId: a.accountId, displayName: a.displayName })),
       lastSeenHeartbeat: () => undefined,
     };
@@ -342,6 +383,15 @@ export class FakeServer {
     const g = this.groups.get(groupId);
     if (!g || !g.members.has(caller.accountId) || (device && !g.devices.some((d) => this.same(d, caller)))) throw new ApiError(403, 'NOT_GROUP_MEMBER', 'not a member');
     return g;
+  }
+
+  /** A community the caller belongs to (through its root group); `manage` requires owner/admin there. */
+  private community(caller: DeviceRef, communityId: string, manage = false) {
+    const c = this.communities.get(communityId);
+    const role = c && this.groups.get(c.rootGroupId)?.members.get(caller.accountId);
+    if (!c || !role) throw new ApiError(403, 'NOT_GROUP_MEMBER', 'not a community member');
+    if (manage && role === 'member') throw new ApiError(403, 'FORBIDDEN_ROLE', 'community admins only');
+    return c;
   }
 
   private groupDto(caller: DeviceRef, groupId: string): GroupDto {
