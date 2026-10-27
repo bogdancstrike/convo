@@ -20,7 +20,7 @@ function fakeServer(options: { failPartOnce?: number; forget?: boolean } = {}) {
   let failed = false;
   let size = 0;
   const api = {
-    attachmentMultipart: vi.fn(async (s: number) => { size = s; return { attachmentId: 'att-1', uploadSecret: 'sec', partSize: PART, partCount: Math.ceil(s / PART), expiresAt: '' }; }),
+    attachmentMultipart: vi.fn(async (s: number) => { size = s; return { attachmentId: '00000000-0000-4000-a000-000000000001', uploadSecret: 'sec', partSize: PART, partCount: Math.ceil(s / PART), expiresAt: '' }; }),
     attachmentUploadedParts: vi.fn(async () => {
       if (options.forget) throw new ApiError(404, 'NOT_FOUND', 'upload unknown');
       return { uploadedParts: [...stored.keys()] };
