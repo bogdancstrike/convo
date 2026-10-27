@@ -19,7 +19,7 @@ scripts/count-tests.py --no-docker
 | Shared vectors | `contracts/vectors` (device auth, key transparency) | Java and TypeScript against an independent Python generator | part of the unit suites |
 | Web core and UI | `apps/web/src/**/*.test.ts(x)` (Vitest) | encryption core, stores, reducers, components | `cd apps/web && npx vitest run` |
 | Admin console | `apps/admin/src/**/*.test.ts(x)` (Vitest) | console logic and components | `cd apps/admin && npx vitest run` |
-| Android | `apps/android/app/src/test` (JUnit, Robolectric, Compose UI test; JVM) | Kotlin helpers, translations, whole screens against a fake core | `cd apps/android && ./gradlew testDebugUnitTest` |
+| Android | `apps/android/app/src/test` (JUnit, Robolectric, Compose UI test; JVM) and `src/androidTest` (on device) | Kotlin helpers, translations, whole screens against a fake core | `cd apps/android && ./gradlew testQaUnitTest` |
 | API contract, security, robustness | `tests/api` (pytest, Python device client) | the running Compose stack, real devices and signatures | `docker compose --profile e2e run --rm api-tests` |
 | End-to-end | `tests/e2e/tests` (Playwright, Chromium + Firefox) | the running stack through real browsers | `docker compose --profile e2e run --rm e2e` |
 | Android end-to-end | `tests/e2e/android` | the emulator driven by adb plus a browser peer | see `tests/e2e/android/*.sh` |
@@ -90,8 +90,13 @@ dropping the agent and the instrumented web build. Check with
   (`COVERAGE=1`); with `COVERAGE_DIR` set the e2e support saves each page's `window.__coverage__`.
   `node apps/web/scripts/merge-coverage.mjs` merges it with the unit coverage into
   `apps/web/coverage-merged/`.
-* Android: `./gradlew createDebugUnitTestCoverageReport`
-  (`app/build/reports/coverage/test/debug`).
+* Android: tests run against the `qa` build type (debug without minification, so the test seams
+  keep their names). `./gradlew testQaUnitTest connectedQaAndroidTest mergedCoverageReport` merges
+  JVM and on-device coverage into `app/build/reports/jacoco/mergedCoverageReport`; without a device
+  it reports the JVM tests. On-device tests (`src/androidTest`, sharing `FakeCore` from
+  `src/sharedTest`) cover what Robolectric cannot drive: dialogs with text fields, media, audio.
+  Run them on a dedicated emulator: `connectedAndroidTest` reinstalls and then uninstalls the app,
+  which would wipe a signed-in development install.
 
 ## Load, scalability and chaos
 
@@ -111,7 +116,7 @@ Vitest + instrumented e2e, merged):
 | App | Lines | Branches | Tests |
 |---|---|---|---|
 | Backend | 92.9% | 76.9% | 176 JUnit, 2,212 API, 119 e2e |
-| Android (JVM) | 52.8% | 26.0% | ~1,000 |
+| Android (JVM) | 69.2% | 36.4% | 1,073 |
 | Web | 74.0% (merged) | 53.1% | 411 Vitest + e2e |
 | Admin console | 18.3% (unit) | 10.1% | 157 Vitest + e2e |
 
