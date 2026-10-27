@@ -180,6 +180,9 @@ export async function uploadAttachment(
     await put(form.uploadUrl, encrypted.blob);
     attachmentId = form.attachmentId;
   }
+  // Recipients accept only UUID attachment IDs (crypto/content.ts); refuse anything else here, or a
+  // misbehaving server would make the message unreadable for everyone while it shows as sent.
+  if (!/^[0-9a-f-]{36}$/.test(attachmentId)) throw new Error('server returned an invalid attachment ID');
   options.onProgress?.(1);
   return {
     attachmentId,

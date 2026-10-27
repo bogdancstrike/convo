@@ -64,6 +64,9 @@ let instance: FakeServer | undefined;
 export class FakeServer {
   readonly accounts = new Map<string, FakeAccount>();
   readonly groups = new Map<string, FakeGroup>();
+  /** Object storage behind the presigned URLs (encrypted blobs only, like S3/MinIO). */
+  readonly objects = new Map<string, Uint8Array>();
+  private nextObject = 1;
   private readonly tickets = new Map<string, { accountId: string; deviceId: number }>();
   private readonly handlers = new Map<string, Handler>();
   /** Every call the server received, as `method` names, for assertions. */
@@ -74,6 +77,21 @@ export class FakeServer {
   constructor() {
     instance = this;
     vi.stubGlobal('WebSocket', FakeServerSocket);
+    // Presigned object URLs (https://objects.test/<id>) are served from memory; nothing else is reachable.
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (!url.startsWith('https://objects.test/')) return realFetch(input, init);
+      const id = url.slice('https://objects.test/'.length).split('?')[0]!;
+      if ((init?.method ?? 'GET') === 'PUT') {
+        const body = init!.body;
+        const bytes: Uint8Array = body instanceof Uint8Array ? body : body instanceof Blob ? new Uint8Array(await body.arrayBuffer()) : new Uint8Array(body as ArrayBuffer);
+        this.objects.set(id, bytes.slice());
+        return new Response(null, { status: 200, headers: { ETag: '"etag"' } });
+      }
+      const stored = this.objects.get(id);
+      return stored ? new Response(stored.slice(), { status: 200 }) : new Response(null, { status: 404 });
+    });
     // Node environment (WebCrypto rejects jsdom's ArrayBuffers): only the browser globals the core touches.
     if (typeof window === 'undefined') {
       vi.stubGlobal('window', { location: { protocol: 'https:', host: 'convo.test', origin: 'https://convo.test' }, addEventListener: () => undefined, removeEventListener: () => undefined });
@@ -136,6 +154,12 @@ export class FakeServer {
       unbanMember: (id: unknown, accountId: unknown) => { self.memberGroup(current!, id as string, false).bans.delete(accountId as string); },
       recoveryStatus: () => ({ configured: false }),
       ktAccount: () => { throw new ApiError(404, 'NOT_FOUND', 'NOT_FOUND'); },
+      attachmentUploadForm: () => { const id = `00000000-0000-4000-a000-${String(self.nextObject++).padStart(12, '0')}`; return { attachmentId: id, uploadUrl: `https://objects.test/${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString() }; },
+      attachmentDownload: (id: unknown) => {
+        if (!self.objects.has(id as string)) throw new ApiError(404, 'NOT_FOUND', 'NOT_FOUND');
+        return { downloadUrl: `https://objects.test/${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+      },
+      reportRecipients: () => [...self.accounts.values()].filter((a) => a.username.startsWith('security')).map((a) => ({ accountId: a.accountId, displayName: a.displayName })),
       lastSeenHeartbeat: () => undefined,
     };
     return new Proxy({} as EnclaveApi, {
@@ -372,6 +396,7 @@ export class FakeServer {
 
   /** Socket side: frames from a client. */
   receive(socket: FakeServerSocket, device: FakeDevice, frame: Record<string, unknown>): void {
+    this.calls.push(`ws:${Object.keys(frame).find((k) => k !== 'requestId') ?? '?'}`);
     if ('ack' in frame) {
       const guids = new Set((frame.ack as { guids: string[] }).guids);
       device.mailbox = device.mailbox.filter((e) => !guids.has(e.guid));
