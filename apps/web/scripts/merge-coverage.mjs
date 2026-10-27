@@ -38,5 +38,5 @@ if (existsSync(unit)) { map.merge(await store.transformCoverage(libCoverage.crea
 
 map.filter((file) => file.startsWith(`${web}/src/`) && !/\.test\.tsx?$/.test(file));
 const context = libReport.createContext({ dir: join(web, 'coverage-merged'), coverageMap: map, defaultSummarizer: 'nested' });
-for (const kind of ['text-summary', 'html', 'json-summary']) reports.create(kind).execute(context);
+for (const kind of ['text-summary', 'html', 'json-summary', 'json']) reports.create(kind).execute(context);
 console.log(`merged ${files} coverage files`);
