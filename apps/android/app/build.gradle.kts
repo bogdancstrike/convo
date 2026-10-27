@@ -3,6 +3,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    jacoco
 }
 android {
     namespace = "com.convo.android"
@@ -16,6 +17,15 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "com.convo.android"
         // Certified targets (docs/mobile.md §9): arm64 phones and x86_64 emulators. Keeps WebRTC native libs small.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    // Tests run against "qa": debug without minification, so the test seams (CoreTransports, FakeCore)
+    // keep their names, with coverage for both JVM and on-device tests. ./gradlew mergedCoverageReport
+    testBuildType = "qa"
+    sourceSets {
+        // FakeCore and snapshot builders serve both the JVM (Robolectric) and the on-device tests.
+        getByName("test").java.srcDir("src/sharedTest/java")
+        getByName("androidTest").java.srcDir("src/sharedTest/java")
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -41,6 +51,14 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+        create("qa") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            enableUnitTestCoverage = true
+            enableAndroidTestCoverage = true
+            matchingFallbacks += "debug"
+        }
     }
 }
 kotlin { jvmToolchain(17) }
@@ -76,4 +94,31 @@ dependencies {
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    "qaImplementation"("androidx.compose.ui:ui-test-manifest")
+
+    // On-device tests (emulator): screens Robolectric cannot drive — dialogs with text fields, media,
+    // audio, biometrics — against the same FakeCore.
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}
+
+/**
+ * One coverage report for JVM and on-device tests of the qa build:
+ *   ./gradlew testQaUnitTest connectedQaAndroidTest mergedCoverageReport
+ * (on-device data is optional: without a device the report shows the JVM tests only).
+ */
+tasks.register<JacocoReport>("mergedCoverageReport") {
+    group = "verification"
+    description = "Merged JaCoCo report of the qa JVM and on-device tests."
+    dependsOn("compileQaKotlin")
+    mustRunAfter("testQaUnitTest", "connectedQaAndroidTest")
+    val excludes = listOf("**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*", "**/*\$\$serializer.class")
+    classDirectories.setFrom(fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/qa")) { exclude(excludes) })
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(fileTree(layout.buildDirectory) { include("outputs/unit_test_code_coverage/qaUnitTest/*.exec", "outputs/code_coverage/qaAndroidTest/connected/**/*.ec") })
+    reports { xml.required.set(true); html.required.set(true) }
 }
